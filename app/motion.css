@@ -1,0 +1,17 @@
+/*
+ * Keeping the profile effects cheap in chat. A busy channel repeats the same animated names and picture
+ * frames on every message, so inside a chat (.kq-calm) they hold still on their first frame and play only
+ * while you hover or focus that message. Everywhere else they animate as normal.
+ * !important: each effect's own `animation` shorthand would otherwise reset the play state.
+ */
+.kq-calm :is(.kq-name, .kq-ring, .kq-glow, .kq-orbit),
+.kq-calm .kq-name::before,
+.kq-calm .kq-name::after {
+  animation-play-state: paused !important;
+}
+
+.kq-calm :is(li, .kq-live):is(:hover, :focus-within) :is(.kq-name, .kq-ring, .kq-glow, .kq-orbit),
+.kq-calm :is(li, .kq-live):is(:hover, :focus-within) .kq-name::before,
+.kq-calm :is(li, .kq-live):is(:hover, :focus-within) .kq-name::after {
+  animation-play-state: running !important;
+}

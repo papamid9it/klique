@@ -1,0 +1,38 @@
+import ApiClient from "@/app/ApiCore";
+import type { BoardDTO, Envelope, Paginated, TopicCommentDTO, TopicDTO, TopicDetailDTO, TopicMediaDTO, TopicSort } from "@/lib/types";
+
+const api = new ApiClient();
+const base = (slug: string) => `/api/communities/${slug}/topics`;
+
+export interface TopicInput {
+  /** board slug; the first board when left out */
+  board?: string;
+  title: string;
+  body?: string;
+  media?: TopicMediaDTO[];
+}
+
+/** A community's Reddit-style board: topics, threaded comments and likes. Same service for web, mobile and desktop. */
+export const TopicService = {
+  list: (slug: string, params: { board?: string; sort?: TopicSort; q?: string; page?: number } = {}) => api.get<Envelope<Paginated<TopicDTO>>>(base(slug), { ...params }),
+  boards: (slug: string) => api.get<Envelope<BoardDTO[]>>(`/api/communities/${slug}/boards`, undefined, { ttl: 30 }),
+  createBoard: (slug: string, input: { name: string; description?: string; postPolicy?: "members" | "admins" }) => api.post<Envelope<BoardDTO>>(`/api/communities/${slug}/boards`, input),
+  updateBoard: (slug: string, boardId: string, patch: { name?: string; description?: string; postPolicy?: "members" | "admins" }) => api.patch<Envelope<BoardDTO>>(`/api/communities/${slug}/boards/${boardId}`, patch),
+  removeBoard: (slug: string, boardId: string) => api.delete<Envelope<{ deleted: boolean }>>(`/api/communities/${slug}/boards/${boardId}`),
+  get: (slug: string, topicId: string) => api.get<Envelope<TopicDetailDTO>>(`${base(slug)}/${topicId}`),
+  create: (slug: string, input: TopicInput) => api.post<Envelope<TopicDTO>>(base(slug), input),
+  /** content edits (author) and pin / lock (owners and admins) */
+  update: (slug: string, topicId: string, patch: Partial<TopicInput> & { pinned?: boolean; locked?: boolean }) => api.patch<Envelope<TopicDTO>>(`${base(slug)}/${topicId}`, patch),
+  remove: (slug: string, topicId: string) => api.delete<Envelope<{ deleted: boolean }>>(`${base(slug)}/${topicId}`),
+  like: (slug: string, topicId: string) => api.post<Envelope<{ liked: boolean; likeCount: number }>>(`${base(slug)}/${topicId}/like`),
+
+  comment: (slug: string, topicId: string, body: string, parentId?: string) => api.post<Envelope<TopicCommentDTO>>(`${base(slug)}/${topicId}/comments`, { body, parentId }),
+  editComment: (slug: string, topicId: string, commentId: string, body: string) => api.patch<Envelope<TopicCommentDTO>>(`${base(slug)}/${topicId}/comments/${commentId}`, { body }),
+  removeComment: (slug: string, topicId: string, commentId: string) => api.delete<Envelope<{ deleted: boolean }>>(`${base(slug)}/${topicId}/comments/${commentId}`),
+  likeComment: (slug: string, topicId: string, commentId: string) => api.post<Envelope<{ liked: boolean; likeCount: number }>>(`${base(slug)}/${topicId}/comments/${commentId}/like`),
+
+  /** topics from the communities you've joined (home feed) */
+  feed: () => api.get<Envelope<TopicDTO[]>>("/api/me/topics", undefined, { ttl: 20 }),
+  /** the most commented topics (30+ comments); an empty list means the home page shows no trending section */
+  trending: () => api.get<Envelope<TopicDTO[]>>("/api/topics/trending", undefined, { ttl: 60 }),
+};

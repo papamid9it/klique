@@ -1,0 +1,6 @@
+{
+  "crons": [
+    { "path": "/api/cron/media-cleanup", "schedule": "30 3 * * *" },
+    { "path": "/api/cron/event-sources", "schedule": "0 4 * * *" }
+  ]
+}

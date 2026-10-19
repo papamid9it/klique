@@ -1,0 +1,80 @@
+"use client";
+
+import { ProfileTrigger } from "@/components/providers/ProfileCardProvider";
+import Link from "next/link";
+import { ChannelService } from "@/app/services/ChannelService";
+import { ShareButton } from "@/components/domain/ShareButton";
+import { RoleBadge } from "@/components/domain/space/parts";
+import { Avatar } from "@/components/ui/Avatar";
+import { Button } from "@/components/ui/Button";
+import { Chip } from "@/components/ui/Chip";
+import { Icon } from "@/components/ui/Icon";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { useApi } from "@/lib/hooks/useApi";
+import type { SubcommunityDTO } from "@/lib/types";
+import { UserName } from "@/components/ui/UserName";
+
+/** Right pane while you're inside a group: what it is, whose it is, who runs it. */
+export function GroupInfo({ group: g, onJoin, joining, onLeave, onNavigate }: { group: SubcommunityDTO; onJoin: () => void; joining: boolean; onLeave: () => void; onNavigate?: () => void }) {
+  const parentHref = `/communities/${g.parent.slug}`;
+  const base = `${parentHref}?g=${g.slug}`;
+  const canSeeStaff = g.viewer.canView && !g.moderationOnly;
+  const staff = useApi(canSeeStaff ? () => ChannelService.staff({ slug: g.parent.slug, sub: g.slug }) : null, [g.slug, g.viewer.role, canSeeStaff]);
+  const v = g.viewer;
+  const isPrivate = g.visibility === "private";
+
+  return (
+    <div className="flex flex-col gap-6 px-5 py-5 pt-14 lg:pt-5">
+      <section>
+        <Link href={parentHref} onClick={onNavigate} className="inline-flex items-center gap-1.5 text-[13px] font-medium text-accent-text hover:underline">
+          <Icon name="arrow-left" size={13} /> Group of {g.parent.name}
+        </Link>
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          <Chip>
+            <Icon name={isPrivate ? "lock" : "users"} size={11} /> {isPrivate ? "Invite-only" : "Open to community members"}
+          </Chip>
+          {v.role && <RoleBadge role={v.role} />}
+        </div>
+        <h2 className="mt-3 text-xl font-semibold tracking-[-0.03em] break-words">{g.name}</h2>
+        <p className="mt-1.5 inline-flex items-center gap-1 text-[13px] text-ink-muted">
+          <Icon name="users" size={13} /> {g.memberCount === null ? "Members hidden" : `${g.memberCount} ${g.memberCount === 1 ? "member" : "members"}`}
+        </p>
+        <p className={g.description ? "mt-3 text-sm leading-relaxed whitespace-pre-wrap text-ink" : "mt-3 text-sm text-ink-muted"}>{g.description || "No description yet."}</p>
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          {v.isMember ? (
+            v.role === "owner" ? <Chip tone="accent">You own this</Chip> : <Button size="sm" onClick={onLeave}>Leave</Button>
+          ) : v.canView && !isPrivate ? (
+            <Button size="sm" variant="primary" onClick={onJoin} loading={joining}>
+              <Icon name="plus" size={13} /> Join group
+            </Button>
+          ) : null}
+          <ShareButton path={base} text={`${g.name} — ${g.parent.name} on klique`} label="Share" />
+        </div>
+      </section>
+
+      {canSeeStaff && (
+        <section>
+          <h3 className="eyebrow mb-3">Admins</h3>
+          {staff.loading ? (
+            <Skeleton className="h-10" />
+          ) : (
+            <ul className="space-y-1">
+              {(staff.data ?? []).map((s) => (
+                <li key={s.user.id}>
+                  <ProfileTrigger handle={s.user.handle} className="flex items-center gap-3 rounded-control p-1.5 hover:bg-raised text-left">
+                    <Avatar name={s.user.displayName} src={s.user.avatarUrl} frame={s.user.avatarFrame} size={36} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold"><UserName name={s.user.displayName} effect={s.user.nameEffect} /></span>
+                      <span className="block truncate font-mono text-[11px] text-ink-muted">@{s.user.handle}</span>
+                    </span>
+                    <RoleBadge role={s.role} />
+                  </ProfileTrigger>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+    </div>
+  );
+}
