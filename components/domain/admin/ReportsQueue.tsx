@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
 import { AdminService } from "@/app/services/AdminService";
-import { PillTabs } from "@/components/layout/PageTitle";
 import { useToast } from "@/components/providers/ToastProvider";
+import { Segmented } from "./AdminParts";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { TextArea } from "@/components/ui/Field";
@@ -201,7 +201,7 @@ export function ReportsQueue({ counts, onChanged }: { counts: Record<ReportStatu
   const [status, setStatus] = useState<ReportStatus>("open");
   return (
     <div className="space-y-5">
-      <PillTabs label="Report status" active={status} onChange={setStatus} items={STATUSES.map((s) => ({ ...s, count: counts?.[s.id] ?? null }))} />
+      <Segmented label="Report status" value={status} onChange={setStatus} options={STATUSES.map((s) => ({ ...s, count: counts?.[s.id] ?? null }))} />
       <List key={status} status={status} onChanged={onChanged} />
     </div>
   );

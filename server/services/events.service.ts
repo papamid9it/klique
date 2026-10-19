@@ -326,9 +326,14 @@ export async function deleteEvent(viewer: IUser, id: string) {
   }
   if (!allowed) throw forbidden("Only the host or a community admin can delete this event.");
 
+  await purgeEvent(event);
+  return { deleted: true };
+}
+
+/** Delete an event with its RSVPs and saves (no permission check: callers do that). */
+export async function purgeEvent(event: Pick<IEvent, "_id" | "coverImage">) {
   await Promise.all([Event.deleteOne({ _id: event._id }), Rsvp.deleteMany({ eventId: event._id }), SavedEvent.deleteMany({ eventId: event._id })]);
   deleteUploads([event.coverImage]);
-  return { deleted: true };
 }
 
 /* ------------------------------------------------------------------ */

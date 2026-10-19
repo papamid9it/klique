@@ -313,7 +313,7 @@ export async function updateDraft(id: string, patch: DraftPatch): Promise<DraftD
 }
 
 /** Publish a draft as a real public event, hosted by the approving admin and credited to its organiser. */
-export async function approveDraft(admin: IUser, id: string, patch: DraftPatch = {}): Promise<{ eventId: string }> {
+export async function approveDraft(admin: IUser, id: string, patch: DraftPatch = {}): Promise<{ eventId: string; title: string }> {
   const d = await EventDraft.findOneAndUpdate({ _id: id, status: "pending" }, { $set: cleanPatch(patch) }, { new: true }).lean<IEventDraft>();
   if (!d) throw notFound("That draft is gone or was already reviewed.");
   const input = eventCreateSchema.parse({
@@ -334,13 +334,13 @@ export async function approveDraft(admin: IUser, id: string, patch: DraftPatch =
   const ev = await createEvent(admin, input);
   await Event.updateOne({ _id: ev.id }, { organizerName: d.organizerName || d.sourceName || null, sourceUrl: d.sourceUrl });
   await EventDraft.updateOne({ _id: d._id }, { status: "approved", eventId: ev.id as unknown as Types.ObjectId, reviewedBy: admin._id });
-  return { eventId: ev.id };
+  return { eventId: ev.id, title: ev.title };
 }
 
 export async function rejectDraft(admin: IUser, id: string) {
-  const res = await EventDraft.updateOne({ _id: id, status: "pending" }, { status: "rejected", reviewedBy: admin._id });
-  if (!res.matchedCount) throw notFound("That draft is gone or was already reviewed.");
-  return { rejected: true };
+  const d = await EventDraft.findOneAndUpdate({ _id: id, status: "pending" }, { status: "rejected", reviewedBy: admin._id }).lean<IEventDraft>();
+  if (!d) throw notFound("That draft is gone or was already reviewed.");
+  return { rejected: true, title: d.title };
 }
 
 /* ------------------------------ sources ----------------------------- */
@@ -362,9 +362,9 @@ export async function addSource(url: string, name: string): Promise<SourceDTO> {
   return sourceDto(s!);
 }
 
-export async function removeSource(id: string) {
-  await EventSource.deleteOne({ _id: id });
-  return { removed: true };
+export async function removeSource(id: string): Promise<SourceDTO | null> {
+  const s = await EventSource.findOneAndDelete({ _id: id }).lean<IEventSource>();
+  return s ? sourceDto(s) : null;
 }
 
 /** Check every source page (the nightly run, or "Check now" in the admin page). */

@@ -140,12 +140,16 @@ export async function deleteCommunity(viewer: IUser, slug: string) {
   const space = await resolveSpace(slug);
   const access = await spaceAccess(space, viewer);
   if (access.role !== "owner") throw forbidden("Only the owner can delete a community.");
-
-  const subs = await Subcommunity.find({ communityId: space.community._id }).select("_id").lean<Pick<ISubcommunity, "_id">[]>();
-  await purgeSpaceData(space.community._id, null);
-  for (const s of subs) await purgeSpaceData(space.community._id, s._id);
-  await Subcommunity.deleteMany({ communityId: space.community._id });
-  await Community.deleteOne({ _id: space.community._id });
-  deleteUploads([space.community.coverImage]);
+  await purgeCommunity(space.community);
   return { deleted: true };
+}
+
+/** Delete a community with its groups and everything in them (no permission check: callers do that). */
+export async function purgeCommunity(community: Pick<ICommunity, "_id" | "coverImage">) {
+  const subs = await Subcommunity.find({ communityId: community._id }).select("_id").lean<Pick<ISubcommunity, "_id">[]>();
+  await purgeSpaceData(community._id, null);
+  for (const s of subs) await purgeSpaceData(community._id, s._id);
+  await Subcommunity.deleteMany({ communityId: community._id });
+  await Community.deleteOne({ _id: community._id });
+  deleteUploads([community.coverImage]);
 }

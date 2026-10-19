@@ -5,7 +5,7 @@ import { Icon } from "./Icon";
 import { cx } from "./cx";
 
 /** Side drawer for small screens (channel list on the left, community info on the right). Esc / backdrop close it. */
-export function SlideOver({ open, onClose, side, title, children }: { open: boolean; onClose: () => void; side: "left" | "right"; title: string; children: ReactNode }) {
+export function SlideOver({ open, onClose, side, title, children, wide }: { open: boolean; onClose: () => void; side: "left" | "right"; title: string; children: ReactNode; wide?: boolean }) {
   const panel = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -29,7 +29,7 @@ export function SlideOver({ open, onClose, side, title, children }: { open: bool
         aria-modal="true"
         aria-label={title}
         tabIndex={-1}
-        className={cx("absolute inset-y-0 flex w-[min(340px,88vw)] flex-col bg-canvas shadow-2xl outline-none", side === "left" ? "left-0 border-r border-line" : "right-0 border-l border-line")}
+        className={cx("absolute inset-y-0 flex flex-col", wide ? "w-[min(520px,100vw)]" : "w-[min(340px,88vw)]", "bg-canvas shadow-2xl outline-none", side === "left" ? "left-0 border-r border-line" : "right-0 border-l border-line")}
       >
         <button type="button" onClick={onClose} aria-label="Close panel" className="absolute top-3 right-3 z-10 inline-flex size-9 items-center justify-center rounded-full text-ink-muted hover:bg-raised hover:text-ink">
           <Icon name="x" />

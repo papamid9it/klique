@@ -1,21 +1,41 @@
 import "server-only";
 import type { Types } from "mongoose";
-import type { AdminSummaryDTO, AdminUserDTO, ReportAction, ReportDTO, ReportStatus, ReportTargetDTO, UserBrief } from "@/lib/types";
-import { eventHostMinMembers } from "../env";
+import type {
+  AdminCommunityRow,
+  AdminEventFilter,
+  AdminEventRow,
+  AdminOverviewDTO,
+  AdminSummaryDTO,
+  AdminUserDTO,
+  AdminUserDetailDTO,
+  AdminUserFilter,
+  AuditEntryDTO,
+  Paginated,
+  ReportAction,
+  ReportDTO,
+  ReportStatus,
+  ReportTargetDTO,
+  SystemStatusDTO,
+  UserBrief,
+} from "@/lib/types";
+import { ablyKey, adminEmails, appUrl, cloudinaryAccount, cronSecret, eventHostMinMembers, googleConfig, isProd, livekitConfig, smtpConfig } from "../env";
 import { badRequest, forbidden, notFound } from "../http/errors";
 import { Channel, ChannelMessage, type IChannel, type IChannelMessage } from "../models/Channel";
 import { Community, type ICommunity } from "../models/Community";
 import { Event, type IEvent } from "../models/Event";
+import { AdminAction, type IAdminAction } from "../models/AdminAction";
 import { EventDraft } from "../models/EventDraft";
+import { Membership } from "../models/Membership";
 import { Message, type IMessage } from "../models/Message";
 import { Post, type IPost } from "../models/Post";
-import { Rsvp, SavedEvent } from "../models/Rsvp";
 import { Report, type IReport } from "../models/Safety";
 import { Subcommunity, type ISubcommunity } from "../models/Subcommunity";
 import { User, type IUser } from "../models/User";
 import { isSiteAdmin } from "../policies/hosting";
 import { loadBriefs, toBrief } from "../serializers";
 import { escapeRegex, sid } from "./helpers";
+import { purgeCommunity } from "./communities.service";
+import { purgeEvent } from "./events.service";
 import { deleteUploads } from "./media.service";
 
 /** Everything here is for site admins only (ADMIN_EMAILS). */
@@ -131,9 +151,7 @@ async function removeTarget(r: IReport, admin: IUser) {
     }
     case "event": {
       const e = await Event.findById(r.targetId).lean<IEvent>();
-      if (!e) return;
-      await Promise.all([Event.deleteOne({ _id: e._id }), Rsvp.deleteMany({ eventId: e._id }), SavedEvent.deleteMany({ eventId: e._id })]);
-      deleteUploads([e.coverImage]);
+      if (e) await purgeEvent(e);
       return;
     }
     case "channelMessage": {
@@ -179,15 +197,21 @@ async function authorOf(r: IReport): Promise<Types.ObjectId | null> {
 export async function actOnReport(admin: IUser, id: string, action: ReportAction, note = "") {
   const r = await Report.findById(id).lean<IReport>();
   if (!r) throw notFound("That report is gone.");
+  const target = await describeTarget(r, new Map());
+  const label = target.title.slice(0, 200);
   if (action === "reviewing") {
     await Report.updateOne({ _id: r._id }, { status: "reviewing" });
     return { status: "reviewing" as const };
   }
   if (action === "dismiss") {
     await closeAll(r, "dismissed");
+    await logAction(admin, "report.dismiss", r.targetType, r.targetId, label, note || r.reason, target.gone ? null : target.href);
     return { status: "dismissed" as const };
   }
-  if (action === "remove" || action === "remove-and-suspend") await removeTarget(r, admin);
+  if (action === "remove" || action === "remove-and-suspend") {
+    await removeTarget(r, admin);
+    await logAction(admin, "content.delete", r.targetType, r.targetId, label, note || `Reported for ${r.reason}`, null);
+  }
   if (action === "suspend" || action === "remove-and-suspend") {
     const who = await authorOf(r);
     if (!who) throw notFound("We couldn't find who's responsible.");
@@ -197,11 +221,50 @@ export async function actOnReport(admin: IUser, id: string, action: ReportAction
   return { status: "actioned" as const };
 }
 
+/* ----------------------------- audit log ---------------------------- */
+
+export async function logAction(
+  admin: IUser,
+  action: string,
+  targetType: IAdminAction["targetType"],
+  targetId: Types.ObjectId | string | null,
+  targetLabel: string,
+  note = "",
+  href: string | null = null,
+) {
+  await AdminAction.create({ adminId: admin._id, action, targetType, targetId, targetLabel: targetLabel.slice(0, 200), note: note.slice(0, 300), href });
+}
+
+async function toAudit(rows: IAdminAction[]): Promise<AuditEntryDTO[]> {
+  const admins = await loadBriefs(rows.map((r) => r.adminId));
+  return rows.map((r) => ({
+    id: sid(r._id),
+    admin: admins.get(sid(r.adminId)) ?? null,
+    action: r.action,
+    targetType: r.targetType,
+    targetId: r.targetId ? sid(r.targetId) : null,
+    targetLabel: r.targetLabel,
+    note: r.note,
+    createdAt: r.createdAt.toISOString(),
+    href: r.href ?? null,
+  }));
+}
+
+export async function listAudit(q: { page: number; action?: string; q?: string }): Promise<Paginated<AuditEntryDTO>> {
+  const size = 30;
+  const filter: Record<string, unknown> = {};
+  if (q.action) filter.action = new RegExp(`^${escapeRegex(q.action)}`);
+  if (q.q) filter.targetLabel = new RegExp(escapeRegex(q.q), "i");
+  const rows = await AdminAction.find(filter).sort({ createdAt: -1 }).skip((q.page - 1) * size).limit(size + 1).lean<IAdminAction[]>();
+  return { items: await toAudit(rows.slice(0, size)), page: q.page, hasMore: rows.length > size };
+}
+
 /* ------------------------------ people ------------------------------ */
 
 const toAdminUser = (u: IUser): AdminUserDTO => ({
   ...toBrief(u),
   email: u.email,
+  emailVerified: !!u.emailVerifiedAt,
   isAdmin: isSiteAdmin(u),
   canHostPublic: !!u.canHostPublic,
   suspended: !!u.suspendedAt,
@@ -209,26 +272,70 @@ const toAdminUser = (u: IUser): AdminUserDTO => ({
   createdAt: u.createdAt.toISOString(),
 });
 
-/** Search people by name, handle or email; with no query, the verified hosts. */
-export async function searchUsers(q: string): Promise<AdminUserDTO[]> {
-  const query = q.trim();
-  const filter = query
-    ? { $or: [{ handle: new RegExp(escapeRegex(query.replace(/^@/, "")), "i") }, { displayName: new RegExp(escapeRegex(query), "i") }, { email: new RegExp(escapeRegex(query), "i") }] }
-    : { $or: [{ canHostPublic: true }, { suspendedAt: { $ne: null } }] };
-  const rows = await User.find(filter).sort({ displayName: 1 }).limit(50).lean<IUser[]>();
-  return rows.map(toAdminUser);
+const DAY = 24 * 60 * 60 * 1000;
+
+/** Everyone, newest first, narrowed by a filter and a name / handle / email search. */
+export async function listUsers(q: { filter: AdminUserFilter; q: string; page: number }): Promise<Paginated<AdminUserDTO>> {
+  const size = 25;
+  const and: Record<string, unknown>[] = [];
+  const text = q.q.trim();
+  if (text) {
+    const rx = new RegExp(escapeRegex(text.replace(/^@/, "")), "i");
+    and.push({ $or: [{ handle: rx }, { displayName: rx }, { email: rx }] });
+  }
+  if (q.filter === "new") and.push({ createdAt: { $gte: new Date(Date.now() - 7 * DAY) } });
+  if (q.filter === "admins") and.push({ email: { $in: [...adminEmails()] } });
+  if (q.filter === "hosts") and.push({ canHostPublic: true });
+  if (q.filter === "suspended") and.push({ suspendedAt: { $ne: null } });
+  if (q.filter === "unverified") and.push({ emailVerifiedAt: null });
+  const rows = await User.find(and.length ? { $and: and } : {})
+    .sort({ createdAt: -1 })
+    .skip((q.page - 1) * size)
+    .limit(size + 1)
+    .lean<IUser[]>();
+  return { items: rows.slice(0, size).map(toAdminUser), page: q.page, hasMore: rows.length > size };
 }
 
-export async function setCanHostPublic(userId: string, on: boolean): Promise<AdminUserDTO> {
-  const u = await User.findByIdAndUpdate(userId, { canHostPublic: on }, { new: true }).lean<IUser>();
+export async function userDetail(userId: string): Promise<AdminUserDetailDTO> {
+  const u = await User.findById(userId).lean<IUser>();
   if (!u) throw notFound("We couldn't find that person.");
-  return toAdminUser(u);
+  const [communities, communitiesOwned, memberships, events, eventsHosted, reportsAgainst, reportsFiled, history] = await Promise.all([
+    Community.find({ ownerId: u._id }).sort({ memberCount: -1 }).limit(5).select("slug name memberCount").lean<Pick<ICommunity, "slug" | "name" | "memberCount">[]>(),
+    Community.countDocuments({ ownerId: u._id }),
+    Membership.countDocuments({ userId: u._id, status: "active", subcommunityId: null }),
+    Event.find({ hostId: u._id }).sort({ startsAt: -1 }).limit(5).select("title startsAt cancelled").lean<Pick<IEvent, "_id" | "title" | "startsAt" | "cancelled">[]>(),
+    Event.countDocuments({ hostId: u._id }),
+    Report.countDocuments({ targetType: "user", targetId: u._id }),
+    Report.countDocuments({ reporterId: u._id }),
+    AdminAction.find({ targetType: "user", targetId: u._id }).sort({ createdAt: -1 }).limit(10).lean<IAdminAction[]>(),
+  ]);
+  return {
+    user: toAdminUser(u),
+    googleLinked: !!u.googleId,
+    hasPassword: u.hasPassword !== false,
+    stats: { communitiesOwned, memberships, eventsHosted, reportsAgainst, reportsFiled },
+    communities: communities.map((c) => ({ slug: c.slug, name: c.name, memberCount: c.memberCount })),
+    events: events.map((e) => ({ id: sid(e._id), title: e.title, startsAt: e.startsAt.toISOString(), cancelled: e.cancelled })),
+    history: await toAudit(history),
+  };
+}
+
+async function findUser(userId: string): Promise<IUser> {
+  const u = await User.findById(userId).lean<IUser>();
+  if (!u) throw notFound("We couldn't find that person.");
+  return u;
+}
+
+export async function setCanHostPublic(admin: IUser, userId: string, on: boolean): Promise<AdminUserDTO> {
+  await findUser(userId);
+  const u = await User.findByIdAndUpdate(userId, { canHostPublic: on }, { new: true }).lean<IUser>();
+  await logAction(admin, on ? "host.grant" : "host.revoke", "user", u!._id, `@${u!.handle}`, "", `/people/${u!.handle}`);
+  return toAdminUser(u!);
 }
 
 export async function setSuspended(admin: IUser, userId: string, on: boolean, reason = ""): Promise<AdminUserDTO> {
   if (userId === sid(admin._id)) throw badRequest("You can't suspend yourself.");
-  const target = await User.findById(userId).lean<IUser>();
-  if (!target) throw notFound("We couldn't find that person.");
+  const target = await findUser(userId);
   if (on && isSiteAdmin(target)) throw forbidden("Admins can't be suspended from here. Remove them from ADMIN_EMAILS first.");
   // Suspending also signs them out everywhere (tokenVersion bump invalidates every session).
   const u = await User.findByIdAndUpdate(
@@ -236,13 +343,196 @@ export async function setSuspended(admin: IUser, userId: string, on: boolean, re
     on ? { suspendedAt: new Date(), suspendedReason: reason.slice(0, 300), $inc: { tokenVersion: 1 } } : { suspendedAt: null, suspendedReason: "" },
     { new: true },
   ).lean<IUser>();
+  await logAction(admin, on ? "user.suspend" : "user.restore", "user", u!._id, `@${u!.handle}`, on ? reason : "", `/people/${u!.handle}`);
   return toAdminUser(u!);
 }
 
-/* ------------------------------ summary ----------------------------- */
+/** Sign someone out on every device (e.g. a stolen phone). */
+export async function revokeSessions(admin: IUser, userId: string): Promise<AdminUserDTO> {
+  await findUser(userId);
+  const u = await User.findByIdAndUpdate(userId, { $inc: { tokenVersion: 1 } }, { new: true }).lean<IUser>();
+  await logAction(admin, "user.signout", "user", u!._id, `@${u!.handle}`, "", `/people/${u!.handle}`);
+  return toAdminUser(u!);
+}
 
-/** The tab counts on /admin. */
+/* ------------------------------ events ------------------------------ */
+
+export async function listAdminEvents(q: { filter: AdminEventFilter; q: string; page: number }): Promise<Paginated<AdminEventRow>> {
+  const size = 25;
+  const now = new Date();
+  const and: Record<string, unknown>[] = [];
+  if (q.q.trim()) and.push({ title: new RegExp(escapeRegex(q.q.trim()), "i") });
+  if (q.filter === "upcoming") and.push({ cancelled: false, startsAt: { $gte: now } });
+  if (q.filter === "past") and.push({ cancelled: false, startsAt: { $lt: now } });
+  if (q.filter === "cancelled") and.push({ cancelled: true });
+  if (q.filter === "imported") and.push({ sourceUrl: { $nin: [null, ""] } });
+  const rows = await Event.find(and.length ? { $and: and } : {})
+    .sort(q.filter === "upcoming" ? { startsAt: 1 } : { startsAt: -1 })
+    .skip((q.page - 1) * size)
+    .limit(size + 1)
+    .lean<IEvent[]>();
+  const list = rows.slice(0, size);
+  const [hosts, communities] = await Promise.all([
+    loadBriefs(list.map((e) => e.hostId)),
+    Community.find({ _id: { $in: list.map((e) => e.communityId).filter(Boolean) } }).select("slug name").lean<Pick<ICommunity, "_id" | "slug" | "name">[]>(),
+  ]);
+  const cById = new Map(communities.map((c) => [sid(c._id), { slug: c.slug, name: c.name }]));
+  return {
+    items: list.map((e) => ({
+      id: sid(e._id),
+      title: e.title,
+      startsAt: e.startsAt.toISOString(),
+      cancelled: e.cancelled,
+      audience: e.audience,
+      coverImage: e.coverImage,
+      goingCount: e.goingCount,
+      country: e.country,
+      city: e.city,
+      online: e.online,
+      host: hosts.get(sid(e.hostId)) ?? null,
+      community: e.communityId ? (cById.get(sid(e.communityId)) ?? null) : null,
+      imported: !!e.sourceUrl,
+      createdAt: e.createdAt.toISOString(),
+    })),
+    page: q.page,
+    hasMore: rows.length > size,
+  };
+}
+
+export async function setEventCancelled(admin: IUser, id: string, cancelled: boolean, note = "") {
+  const e = await Event.findByIdAndUpdate(id, { cancelled }, { new: true }).lean<IEvent>();
+  if (!e) throw notFound("That event is gone.");
+  await logAction(admin, cancelled ? "event.cancel" : "event.restore", "event", e._id, e.title, note, `/events/${sid(e._id)}`);
+  return { cancelled: e.cancelled };
+}
+
+export async function adminDeleteEvent(admin: IUser, id: string, note = "") {
+  const e = await Event.findById(id).lean<IEvent>();
+  if (!e) throw notFound("That event is gone.");
+  await purgeEvent(e);
+  await logAction(admin, "event.delete", "event", e._id, e.title, note, null);
+  return { deleted: true };
+}
+
+/* ---------------------------- communities --------------------------- */
+
+export async function listAdminCommunities(q: { q: string; sort: "members" | "new"; page: number }): Promise<Paginated<AdminCommunityRow>> {
+  const size = 25;
+  const filter = q.q.trim() ? { $or: [{ name: new RegExp(escapeRegex(q.q.trim()), "i") }, { slug: new RegExp(escapeRegex(q.q.trim()), "i") }] } : {};
+  const rows = await Community.find(filter)
+    .sort(q.sort === "new" ? { createdAt: -1 } : { memberCount: -1, createdAt: -1 })
+    .skip((q.page - 1) * size)
+    .limit(size + 1)
+    .lean<ICommunity[]>();
+  const list = rows.slice(0, size);
+  const owners = await loadBriefs(list.map((c) => c.ownerId));
+  const min = eventHostMinMembers();
+  return {
+    items: list.map((c) => ({
+      id: sid(c._id),
+      slug: c.slug,
+      name: c.name,
+      interest: c.interest,
+      privacy: c.privacy,
+      memberCount: c.memberCount,
+      coverImage: c.coverImage,
+      country: c.country,
+      city: c.city,
+      owner: owners.get(sid(c.ownerId)) ?? null,
+      hostsPublic: c.memberCount >= min,
+      createdAt: c.createdAt.toISOString(),
+    })),
+    page: q.page,
+    hasMore: rows.length > size,
+  };
+}
+
+export async function adminDeleteCommunity(admin: IUser, id: string, note = "") {
+  const c = await Community.findById(id).lean<ICommunity>();
+  if (!c) throw notFound("That community is gone.");
+  await purgeCommunity(c);
+  await logAction(admin, "community.delete", "community", c._id, c.name, note, null);
+  return { deleted: true };
+}
+
+/* ----------------------------- overview ----------------------------- */
+
+/** The tab counts in the admin menu. */
 export async function adminSummary(): Promise<AdminSummaryDTO> {
   const [reports, pendingDrafts] = await Promise.all([reportCounts(), EventDraft.countDocuments({ status: "pending" })]);
   return { reports, pendingDrafts, hostMinMembers: eventHostMinMembers() };
+}
+
+export async function adminOverview(): Promise<AdminOverviewDTO> {
+  const now = Date.now();
+  const d7 = new Date(now - 7 * DAY);
+  const d14 = new Date(now - 14 * DAY);
+  const start = new Date(new Date(now - 29 * DAY).toISOString().slice(0, 10));
+  const min = eventHostMinMembers();
+  const [
+    total, new7d, newPrev7d, suspended, verifiedHosts, unverified,
+    upcoming, thisWeek, created7d, imported,
+    communities, communitiesNew7d, large,
+    openReports, pendingDrafts, perDay, recent,
+  ] = await Promise.all([
+    User.countDocuments({}),
+    User.countDocuments({ createdAt: { $gte: d7 } }),
+    User.countDocuments({ createdAt: { $gte: d14, $lt: d7 } }),
+    User.countDocuments({ suspendedAt: { $ne: null } }),
+    User.countDocuments({ canHostPublic: true }),
+    User.countDocuments({ emailVerifiedAt: null }),
+    Event.countDocuments({ cancelled: false, startsAt: { $gte: new Date(now) } }),
+    Event.countDocuments({ cancelled: false, startsAt: { $gte: new Date(now), $lt: new Date(now + 7 * DAY) } }),
+    Event.countDocuments({ createdAt: { $gte: d7 } }),
+    Event.countDocuments({ sourceUrl: { $nin: [null, ""] } }),
+    Community.countDocuments({}),
+    Community.countDocuments({ createdAt: { $gte: d7 } }),
+    Community.countDocuments({ memberCount: { $gte: min } }),
+    Report.countDocuments({ status: "open" }),
+    EventDraft.countDocuments({ status: "pending" }),
+    User.aggregate<{ _id: string; n: number }>([
+      { $match: { createdAt: { $gte: start } } },
+      { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }, n: { $sum: 1 } } },
+    ]),
+    AdminAction.find().sort({ createdAt: -1 }).limit(8).lean<IAdminAction[]>(),
+  ]);
+  const byDay = new Map(perDay.map((d) => [d._id, d.n]));
+  const signups = Array.from({ length: 30 }, (_, i) => {
+    const day = new Date(+start + i * DAY).toISOString().slice(0, 10);
+    return { day, count: byDay.get(day) ?? 0 };
+  });
+  return {
+    people: { total, new7d, newPrev7d, suspended, verifiedHosts, unverified },
+    events: { upcoming, thisWeek, created7d, imported },
+    communities: { total: communities, new7d: communitiesNew7d, large },
+    queue: { openReports, pendingDrafts },
+    signups,
+    recent: await toAudit(recent),
+    hostMinMembers: min,
+  };
+}
+
+/* ------------------------------ system ------------------------------ */
+
+/** What's switched on, for the System page. Never returns a secret, only whether one is set. */
+export function systemStatus(): SystemStatusDTO {
+  const photos = cloudinaryAccount("photo");
+  const avatars = cloudinaryAccount("avatar");
+  const smtp = smtpConfig();
+  const redis = !!(process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL);
+  return {
+    checks: [
+      { id: "email", label: "Email sending", ok: !!smtp, detail: smtp ? `Sending through ${smtp.host}` : "SMTP isn't set up: emails are printed to the server log and email verification is off." },
+      { id: "google", label: "Sign in with Google", ok: !!googleConfig(), detail: googleConfig() ? "Google sign-in is on." : "GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET aren't set.", optional: true },
+      { id: "uploads", label: "Image uploads", ok: !!(photos && avatars), detail: photos && avatars ? "Cloudinary accounts are set for avatars and photos." : "Cloudinary isn't fully set up, so picture uploads won't work." },
+      { id: "realtime", label: "Live chat updates", ok: !!ablyKey(), detail: ablyKey() ? "Ably is connected." : "ABLY_API_KEY isn't set: chats refresh by polling.", optional: true },
+      { id: "voice", label: "Voice channels", ok: !!livekitConfig(), detail: livekitConfig() ? "LiveKit is connected." : "LiveKit isn't set up, so voice channels are off.", optional: true },
+      { id: "cache", label: "Shared cache & rate limits", ok: redis, detail: redis ? "Upstash Redis is connected." : "No Redis: rate limits are per server instance.", optional: true },
+      { id: "cron", label: "Scheduled jobs", ok: !!cronSecret(), detail: cronSecret() ? "CRON_SECRET is set: reminders, cleanup and the nightly event finder can run." : "CRON_SECRET isn't set, so reminders, cleanup and the nightly event finder won't run." },
+    ],
+    admins: [...adminEmails()],
+    hostMinMembers: eventHostMinMembers(),
+    appUrl: appUrl(),
+    environment: isProd() ? "production" : "development",
+  };
 }

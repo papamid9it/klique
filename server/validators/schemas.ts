@@ -354,15 +354,39 @@ export const adminReportActionSchema = z.object({
   note: z.string().trim().max(300).default(""),
 });
 
-export const adminUsersQuery = z.object({ q: z.string().trim().max(100).default("") });
+export const adminUsersQuery = pageQuery.extend({
+  q: z.string().trim().max(100).default(""),
+  filter: z.enum(["all", "new", "admins", "hosts", "suspended", "unverified"]).default("all"),
+});
+
+export const adminEventsQuery = pageQuery.extend({
+  q: z.string().trim().max(100).default(""),
+  filter: z.enum(["upcoming", "past", "cancelled", "imported"]).default("upcoming"),
+});
+
+export const adminCommunitiesQuery = pageQuery.extend({
+  q: z.string().trim().max(100).default(""),
+  sort: z.enum(["members", "new"]).default("members"),
+});
+
+export const adminAuditQuery = pageQuery.extend({
+  q: z.string().trim().max(100).default(""),
+  action: z.string().trim().max(40).regex(/^[a-z.]*$/).default(""),
+});
+
+export const adminNoteSchema = z.object({ note: z.string().trim().max(300).default("") });
+
+export const adminEventUpdateSchema = z.object({ cancelled: z.boolean(), note: z.string().trim().max(300).default("") });
 
 export const adminUserUpdateSchema = z
   .object({
     canHostPublic: z.boolean().optional(),
     suspended: z.boolean().optional(),
+    /** sign them out on every device */
+    signOut: z.literal(true).optional(),
     reason: z.string().trim().max(300).default(""),
   })
-  .refine((v) => v.canHostPublic !== undefined || v.suspended !== undefined, "Nothing to change");
+  .refine((v) => v.canHostPublic !== undefined || v.suspended !== undefined || v.signOut, "Nothing to change");
 
 export const adminDraftsQuery = z.object({ status: z.enum(["pending", "approved", "rejected"]).default("pending") });
 

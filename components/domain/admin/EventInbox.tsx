@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
 import { AdminService } from "@/app/services/AdminService";
-import { PillTabs } from "@/components/layout/PageTitle";
 import { useToast } from "@/components/providers/ToastProvider";
+import { Segmented } from "./AdminParts";
 import { PlaceFields } from "@/components/domain/places/PlaceFields";
 import { Button } from "@/components/ui/Button";
 import { InterestChip } from "@/components/ui/Chip";
@@ -383,11 +383,11 @@ export function EventInbox({ pending, onChanged }: { pending: number | null; onC
     <div className="space-y-5">
       <ImportBox onImported={refresh} />
       <section className="space-y-4">
-        <PillTabs
+        <Segmented
           label="Draft status"
-          active={status}
+          value={status}
           onChange={setStatus}
-          items={[
+          options={[
             { id: "pending", label: "Pending", count: pending },
             { id: "approved", label: "Approved" },
             { id: "rejected", label: "Rejected" },

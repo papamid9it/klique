@@ -24,6 +24,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   // Settings is a full-screen surface of its own (categories · page), like Discord's.
   if (pathname === "/settings" || pathname === "/settings/") return <>{children}</>;
+  // So is the admin console, with its own menu.
+  if (pathname === "/admin" || pathname.startsWith("/admin/")) return <>{children}</>;
 
   if (isWorkspace(pathname)) {
     return (

@@ -1,5 +1,26 @@
 import ApiClient from "@/app/ApiCore";
-import type { AdminSummaryDTO, AdminUserDTO, DraftDTO, DraftPatch, DraftStatus, Envelope, ImportResult, Paginated, ReportAction, ReportDTO, ReportStatus, SourceDTO } from "@/lib/types";
+import type {
+  AdminCommunityRow,
+  AdminEventFilter,
+  AdminEventRow,
+  AdminOverviewDTO,
+  AdminSummaryDTO,
+  AdminUserDTO,
+  AdminUserDetailDTO,
+  AdminUserFilter,
+  AuditEntryDTO,
+  DraftDTO,
+  DraftPatch,
+  DraftStatus,
+  Envelope,
+  ImportResult,
+  Paginated,
+  ReportAction,
+  ReportDTO,
+  ReportStatus,
+  SourceDTO,
+  SystemStatusDTO,
+} from "@/lib/types";
 
 const api = new ApiClient();
 
@@ -10,8 +31,20 @@ export const AdminService = {
   reports: (status: ReportStatus, page = 1) => api.get<Envelope<Paginated<ReportDTO>>>("/api/admin/reports", { status, page }),
   actOnReport: (id: string, action: ReportAction, note?: string) => api.post<Envelope<{ status: ReportStatus }>>(`/api/admin/reports/${id}`, { action, note }),
 
-  users: (q = "") => api.get<Envelope<AdminUserDTO[]>>("/api/admin/users", { q }),
-  updateUser: (id: string, patch: { canHostPublic?: boolean; suspended?: boolean; reason?: string }) => api.patch<Envelope<AdminUserDTO>>(`/api/admin/users/${id}`, patch),
+  overview: () => api.get<Envelope<AdminOverviewDTO>>("/api/admin/overview"),
+  system: () => api.get<Envelope<SystemStatusDTO>>("/api/admin/system"),
+  audit: (params: { page?: number; q?: string; action?: string }) => api.get<Envelope<Paginated<AuditEntryDTO>>>("/api/admin/audit", params),
+
+  users: (params: { filter?: AdminUserFilter; q?: string; page?: number }) => api.get<Envelope<Paginated<AdminUserDTO>>>("/api/admin/users", params),
+  user: (id: string) => api.get<Envelope<AdminUserDetailDTO>>(`/api/admin/users/${id}`),
+  updateUser: (id: string, patch: { canHostPublic?: boolean; suspended?: boolean; signOut?: true; reason?: string }) => api.patch<Envelope<AdminUserDTO>>(`/api/admin/users/${id}`, patch),
+
+  events: (params: { filter?: AdminEventFilter; q?: string; page?: number }) => api.get<Envelope<Paginated<AdminEventRow>>>("/api/admin/events", params),
+  setEventCancelled: (id: string, cancelled: boolean, note = "") => api.patch<Envelope<{ cancelled: boolean }>>(`/api/admin/events/${id}`, { cancelled, note }),
+  deleteEvent: (id: string, note = "") => api.delete<Envelope<{ deleted: boolean }>>(`/api/admin/events/${id}`, { note }),
+
+  communities: (params: { sort?: "members" | "new"; q?: string; page?: number }) => api.get<Envelope<Paginated<AdminCommunityRow>>>("/api/admin/communities", params),
+  deleteCommunity: (id: string, note = "") => api.delete<Envelope<{ deleted: boolean }>>(`/api/admin/communities/${id}`, { note }),
 
   drafts: (status: DraftStatus) => api.get<Envelope<DraftDTO[]>>("/api/admin/drafts", { status }),
   importLink: (url: string) => api.post<Envelope<ImportResult>>("/api/admin/drafts", { url }),

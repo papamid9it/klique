@@ -703,6 +703,7 @@ export interface ReportDTO {
 
 export interface AdminUserDTO extends UserBrief {
   email: string;
+  emailVerified: boolean;
   isAdmin: boolean;
   canHostPublic: boolean;
   suspended: boolean;
@@ -761,4 +762,85 @@ export interface AdminSummaryDTO {
   reports: Record<ReportStatus, number>;
   pendingDrafts: number;
   hostMinMembers: number;
+}
+
+export type AdminUserFilter = "all" | "new" | "admins" | "hosts" | "suspended" | "unverified";
+
+/** One line of the audit log. */
+export interface AuditEntryDTO {
+  id: Id;
+  admin: UserBrief | null;
+  action: string;
+  targetType: string;
+  targetId: Id | null;
+  targetLabel: string;
+  note: string;
+  createdAt: ISODate;
+  /** where the target lives in the app, while it still exists */
+  href: string | null;
+}
+
+export interface AdminOverviewDTO {
+  people: { total: number; new7d: number; newPrev7d: number; suspended: number; verifiedHosts: number; unverified: number };
+  events: { upcoming: number; thisWeek: number; created7d: number; imported: number };
+  communities: { total: number; new7d: number; large: number };
+  queue: { openReports: number; pendingDrafts: number };
+  /** sign-ups per day, oldest first, the last 30 days (YYYY-MM-DD, UTC) */
+  signups: { day: string; count: number }[];
+  recent: AuditEntryDTO[];
+  hostMinMembers: number;
+}
+
+export interface AdminUserDetailDTO {
+  user: AdminUserDTO;
+  googleLinked: boolean;
+  hasPassword: boolean;
+  stats: { communitiesOwned: number; memberships: number; eventsHosted: number; reportsAgainst: number; reportsFiled: number };
+  communities: { slug: string; name: string; memberCount: number }[];
+  events: { id: Id; title: string; startsAt: ISODate; cancelled: boolean }[];
+  history: AuditEntryDTO[];
+}
+
+export type AdminEventFilter = "upcoming" | "past" | "cancelled" | "imported";
+
+export interface AdminEventRow {
+  id: Id;
+  title: string;
+  startsAt: ISODate;
+  cancelled: boolean;
+  audience: "public" | "community" | "subcommunity";
+  coverImage: string | null;
+  goingCount: number;
+  country: string;
+  city: string;
+  online: boolean;
+  host: UserBrief | null;
+  community: { slug: string; name: string } | null;
+  /** came in through the event finder */
+  imported: boolean;
+  createdAt: ISODate;
+}
+
+export interface AdminCommunityRow {
+  id: Id;
+  slug: string;
+  name: string;
+  interest: InterestId;
+  privacy: CommunityPrivacy;
+  memberCount: number;
+  coverImage: string | null;
+  country: string;
+  city: string;
+  owner: UserBrief | null;
+  /** big enough that its owner can post public events */
+  hostsPublic: boolean;
+  createdAt: ISODate;
+}
+
+export interface SystemStatusDTO {
+  checks: { id: string; label: string; ok: boolean; detail: string; optional?: boolean }[];
+  admins: string[];
+  hostMinMembers: number;
+  appUrl: string;
+  environment: string;
 }
