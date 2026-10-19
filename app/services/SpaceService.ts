@@ -30,6 +30,9 @@ export const SpaceService = {
     api.get<Envelope<Paginated<MemberDTO>>>(`${base(slug, subSlug)}/members`, { page, q }),
   changeRole: (slug: string, userId: string, role: Exclude<Role, "owner">, subSlug?: string) =>
     api.patch<Envelope<{ userId: string; role: Role }>>(`${base(slug, subSlug)}/members/${userId}`, { role }),
+  /** Owner only: make this member the owner (you become an admin). */
+  transferOwnership: (slug: string, userId: string, subSlug?: string) =>
+    api.post<Envelope<{ ownerId: string }>>(`${base(slug, subSlug)}/members/${userId}/owner`),
   removeMember: (slug: string, userId: string, opts: { ban?: boolean; subSlug?: string } = {}) =>
     api.delete<Envelope<{ removed: boolean }>>(`${base(slug, opts.subSlug)}/members/${userId}`, { ban: opts.ban ? "true" : undefined }),
 

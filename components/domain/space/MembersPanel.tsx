@@ -24,6 +24,8 @@ export function MembersPanel({ slug, subSlug }: { slug: string; subSlug?: string
   const [removing, setRemoving] = useState<{ m: MemberDTO; ban: boolean } | null>(null);
   const [reporting, setReporting] = useState<MemberDTO | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [handingOver, setHandingOver] = useState<MemberDTO | null>(null);
+  const iOwn = !!user && items.some((x) => x.user.id === user.id && x.role === "owner");
 
   async function changeRole(m: MemberDTO, role: Exclude<Role, "owner">) {
     setBusyId(m.user.id);
@@ -72,6 +74,11 @@ export function MembersPanel({ slug, subSlug }: { slug: string; subSlug?: string
                   <option value="admin">Admin</option>
                 </select>
               )}
+              {iOwn && m.user.id !== user?.id && (
+                <Button size="sm" variant="ghost" onClick={() => setHandingOver(m)}>
+                  Make owner
+                </Button>
+              )}
               {m.canRemove && (
                 <>
                   <Button size="sm" variant="ghost" onClick={() => setRemoving({ m, ban: false })}>
@@ -98,6 +105,21 @@ export function MembersPanel({ slug, subSlug }: { slug: string; subSlug?: string
           </Button>
         </div>
       )}
+
+      <ConfirmModal
+        open={!!handingOver}
+        onClose={() => setHandingOver(null)}
+        title={`Make ${handingOver?.user.displayName ?? ""} the owner?`}
+        description="They get full control, including deleting it. You stay on as an admin and can't undo this yourself."
+        confirmLabel="Hand over ownership"
+        onConfirm={async () => {
+          if (!handingOver) return;
+          await SpaceService.transferOwnership(slug, handingOver.user.id, subSlug);
+          setItems((prev) => prev.map((x) => (x.user.id === handingOver.user.id ? { ...x, role: "owner" } : x.user.id === user?.id ? { ...x, role: "admin" } : x)));
+          toast(`${handingOver.user.displayName} is now the owner`, "success");
+          setHandingOver(null);
+        }}
+      />
 
       <ConfirmModal
         open={!!removing}

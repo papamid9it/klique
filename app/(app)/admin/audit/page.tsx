@@ -3,12 +3,13 @@
 import { useState } from "react";
 import { AdminService } from "@/app/services/AdminService";
 import { AdminHeader, AUDIT_FILTERS, AuditRow, LoadMore, Panel, SearchBox, Segmented, Toolbar } from "@/components/domain/admin/AdminParts";
+import { AdminGate } from "@/components/domain/admin/AdminShell";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { ErrorState } from "@/components/ui/States";
 import { useDebounced, usePaged } from "@/lib/hooks/useApi";
 import type { AuditEntryDTO } from "@/lib/types";
 
-export default function AdminAuditPage() {
+function AdminAuditPageContent() {
   const [action, setAction] = useState("");
   const [q, setQ] = useState("");
   const query = useDebounced(q.trim(), 300);
@@ -44,5 +45,13 @@ export default function AdminAuditPage() {
         <LoadMore hasMore={hasMore} loading={loadingMore} onClick={() => void loadMore()} />
       </Panel>
     </>
+  );
+}
+
+export default function AdminAuditPage() {
+  return (
+    <AdminGate>
+      <AdminAuditPageContent />
+    </AdminGate>
   );
 }

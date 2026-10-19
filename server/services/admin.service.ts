@@ -18,7 +18,7 @@ import type {
   SystemStatusDTO,
   UserBrief,
 } from "@/lib/types";
-import { ablyKey, adminEmails, appUrl, cloudinaryAccount, cronSecret, eventHostMinMembers, googleConfig, isProd, livekitConfig, smtpConfig } from "../env";
+import { ablyKey, adminEmails, appUrl, cloudinaryAccount, cronSecret, eventHostMinMembers, googleConfig, isProd, livekitConfig, smtpConfig, webPushConfig } from "../env";
 import { badRequest, forbidden, notFound } from "../http/errors";
 import { Channel, ChannelMessage, type IChannel, type IChannelMessage } from "../models/Channel";
 import { Community, type ICommunity } from "../models/Community";
@@ -528,6 +528,8 @@ export function systemStatus(): SystemStatusDTO {
       { id: "realtime", label: "Live chat updates", ok: !!ablyKey(), detail: ablyKey() ? "Ably is connected." : "ABLY_API_KEY isn't set: chats refresh by polling.", optional: true },
       { id: "voice", label: "Voice channels", ok: !!livekitConfig(), detail: livekitConfig() ? "LiveKit is connected." : "LiveKit isn't set up, so voice channels are off.", optional: true },
       { id: "cache", label: "Shared cache & rate limits", ok: redis, detail: redis ? "Upstash Redis is connected." : "No Redis: rate limits are per server instance.", optional: true },
+      { id: "webpush", label: "Browser notifications", ok: !!webPushConfig(), detail: webPushConfig() ? "Desktop and web-app notifications are on." : "VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY aren't set, so desktop and browser notifications are off." },
+      { id: "support", label: "Support email", ok: !!process.env.NEXT_PUBLIC_SUPPORT_EMAIL?.trim(), detail: process.env.NEXT_PUBLIC_SUPPORT_EMAIL?.trim() ? `Shown on Terms and Privacy: ${process.env.NEXT_PUBLIC_SUPPORT_EMAIL.trim()}` : "NEXT_PUBLIC_SUPPORT_EMAIL isn't set, so Terms and Privacy have no contact address." },
       { id: "cron", label: "Scheduled jobs", ok: !!cronSecret(), detail: cronSecret() ? "CRON_SECRET is set: reminders, cleanup and the nightly event finder can run." : "CRON_SECRET isn't set, so reminders, cleanup and the nightly event finder won't run." },
     ],
     admins: [...adminEmails()],

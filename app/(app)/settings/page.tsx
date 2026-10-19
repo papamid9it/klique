@@ -20,6 +20,8 @@ import { EmptyState, ErrorState } from "@/components/ui/States";
 import { cx } from "@/components/ui/cx";
 import { PlaceFields } from "@/components/domain/places/PlaceFields";
 import { PasswordBlock } from "@/components/domain/account/PasswordBlock";
+import { DeleteAccount } from "@/components/domain/account/DeleteAccount";
+import { DeviceSettings } from "@/components/domain/account/DeviceSettings";
 import { ResendButton } from "@/components/domain/account/EmailStatus";
 import { StylePicker, type StyleDraft } from "@/components/domain/account/StylePicker";
 import { UserName } from "@/components/ui/UserName";
@@ -349,6 +351,18 @@ function AccountTab({ me, go, onSignOut, onEverywhere, busy }: { me: UserMe; go:
           </Button>
         </div>
       </Block>
+
+      <Block title="Notifications" intro="For the browser you're using now.">
+        <DeviceSettings />
+      </Block>
+
+      <Block title="Delete account" intro="Permanently remove your account and personal data from klique.">
+        <DeleteAccount me={me} />
+      </Block>
+
+      <p className="text-xs text-ink-muted">
+        Read our <Link href="/terms" className="underline hover:text-ink">Terms</Link> and <Link href="/privacy" className="underline hover:text-ink">Privacy Policy</Link>.
+      </p>
     </div>
   );
 }

@@ -237,6 +237,18 @@ export async function changeRole(viewer: IUser, space: Space, access: SpaceAcces
   return { userId, role };
 }
 
+/** The owner hands the space to another member; they stay on as an admin. */
+export async function transferOwnership(viewer: IUser, space: Space, access: SpaceAccess, userId: string) {
+  if (access.role !== "owner") throw forbidden("Only the owner can hand this over.");
+  const target = await targetMembership(space, userId);
+  if (sid(target.userId) === sid(viewer._id)) throw conflict("You already own this.");
+  await Membership.updateOne({ _id: target._id }, { role: "owner" });
+  await Membership.updateOne({ userId: viewer._id, ...spaceFilter(space) }, { role: "admin" });
+  if (space.sub) await Subcommunity.updateOne({ _id: space.sub._id }, { ownerId: target.userId });
+  else await Community.updateOne({ _id: space.community._id }, { ownerId: target.userId });
+  return { ownerId: userId };
+}
+
 export async function removeMember(viewer: IUser, space: Space, access: SpaceAccess, userId: string, ban: boolean) {
   assertCanManage(access);
   const target = await targetMembership(space, userId);

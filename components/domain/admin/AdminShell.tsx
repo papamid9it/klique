@@ -156,8 +156,20 @@ function Console({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * The layout always renders its page (so Next.js can validate every admin route); the console chrome only
+ * appears for admins, and each page guards its own content with <AdminGate>.
+ */
 export function AdminShell({ children }: { children: ReactNode }) {
+  const { status, user } = useAuth();
+  if (status === "authed" && user?.isAdmin) return <Console>{children}</Console>;
+  return <>{children}</>;
+}
+
+/** Shows the page only to site admins; everyone else gets a loading state, a sign-in prompt or "Admins only". */
+export function AdminGate({ children }: { children: ReactNode }) {
   const { status, user, requireAuth } = useAuth();
+  if (status === "authed" && user?.isAdmin) return <>{children}</>;
   if (status === "loading") {
     return (
       <div className="mx-auto max-w-[1200px] space-y-4 px-4 py-10 sm:px-8">
@@ -166,28 +178,25 @@ export function AdminShell({ children }: { children: ReactNode }) {
       </div>
     );
   }
-  if (status === "anon" || !user?.isAdmin) {
-    return (
-      <div className="mx-auto flex min-h-dvh max-w-md items-center px-4">
-        <div className="w-full">
-          <EmptyState
-            icon="lock"
-            title={status === "anon" ? "Sign in first" : "Admins only"}
-            action={
-              status === "anon" ? (
-                <Button variant="primary" onClick={() => requireAuth()}>
-                  Sign in
-                </Button>
-              ) : (
-                <Button href="/">Back to Klique</Button>
-              )
-            }
-          >
-            {status === "anon" ? "The admin console is for Klique's site admins." : "This page is for Klique's site admins."}
-          </EmptyState>
-        </div>
+  return (
+    <div className="mx-auto flex min-h-dvh max-w-md items-center px-4">
+      <div className="w-full">
+        <EmptyState
+          icon="lock"
+          title={status === "anon" ? "Sign in first" : "Admins only"}
+          action={
+            status === "anon" ? (
+              <Button variant="primary" onClick={() => requireAuth()}>
+                Sign in
+              </Button>
+            ) : (
+              <Button href="/">Back to Klique</Button>
+            )
+          }
+        >
+          {status === "anon" ? "The admin console is for Klique's site admins." : "This page is for Klique's site admins."}
+        </EmptyState>
       </div>
-    );
-  }
-  return <Console>{children}</Console>;
+    </div>
+  );
 }

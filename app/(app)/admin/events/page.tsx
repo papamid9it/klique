@@ -5,6 +5,7 @@ import { useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
 import { AdminService } from "@/app/services/AdminService";
 import { AdminHeader, Badge, ConfirmDialog, LoadMore, Panel, SearchBox, Segmented, TableHead, Toolbar } from "@/components/domain/admin/AdminParts";
+import { AdminGate } from "@/components/domain/admin/AdminShell";
 import { useToast } from "@/components/providers/ToastProvider";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
@@ -26,7 +27,7 @@ const AUDIENCE: Record<AdminEventRow["audience"], string> = { public: "Public", 
 
 type Pending = { kind: "cancel" | "restore" | "delete"; e: AdminEventRow } | null;
 
-export default function AdminEventsPage() {
+function AdminEventsPageContent() {
   const toast = useToast();
   const [filter, setFilter] = useState<AdminEventFilter>("upcoming");
   const [q, setQ] = useState("");
@@ -150,5 +151,13 @@ export default function AdminEventsPage() {
         onConfirm={run}
       />
     </>
+  );
+}
+
+export default function AdminEventsPage() {
+  return (
+    <AdminGate>
+      <AdminEventsPageContent />
+    </AdminGate>
   );
 }

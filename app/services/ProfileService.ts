@@ -27,6 +27,10 @@ export interface ProfileUpdate {
 export const ProfileService = {
   me: () => api.get<Envelope<UserMe>>("/api/me"),
   updateMe: (patch: ProfileUpdate) => api.patch<Envelope<UserMe>>("/api/me", patch),
+  /** Communities you still own (they block deleting your account). */
+  deleteCheck: () => api.get<Envelope<{ ownedCommunities: { slug: string; name: string }[] }>>("/api/me/delete"),
+  /** Permanently delete your account; signs you out. */
+  deleteAccount: (input: { password?: string; confirm: string }) => api.post<Envelope<{ signedOut: boolean }>>("/api/me/delete", input),
   get: (handle: string) => api.get<Envelope<ProfileView>>(`/api/people/${encodeURIComponent(handle)}`, undefined, { ttl: 30 }),
   people: (params: { where?: string; interest?: InterestId; q?: string; page?: number } = {}) =>
     api.get<Envelope<Paginated<UserBrief>>>("/api/people", params),

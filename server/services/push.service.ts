@@ -1,12 +1,15 @@
 import { after } from "next/server";
 import type { Types } from "mongoose";
-import { expoAccessToken } from "../env";
+import webpush from "web-push";
+import { expoAccessToken, webPushConfig } from "../env";
 import { PushToken } from "../models/PushToken";
+import { WebPushSubscription, type IWebPushSubscription } from "../models/WebPushSubscription";
 import type { IUser } from "../models/User";
 import { sid } from "./helpers";
 
 /**
- * Phone notifications through Expo's push service (it talks to Apple and Google for us, no keys in this app).
+ * Notifications to phones (the mobile app, through Expo's push service: it talks to Apple and Google for us)
+ * and to browsers (desktop and phone browsers and the installed web app, through standard Web Push).
  * Everything here is fire-and-forget: a failed push never fails the request that caused it, and with no
  * registered phones it does nothing.
  */
@@ -34,9 +37,71 @@ export async function removePushToken(viewer: IUser, token: string) {
 
 const clip = (s: string, n = 140) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
+/** Where tapping the notification takes you in the web app. */
+export function urlFor(data: Record<string, string>): string {
+  switch (data.type) {
+    case "event":
+      return `/events/${data.id}`;
+    case "dm":
+      return `/messages/${data.conversationId}`;
+    case "channel":
+      return `/communities/${data.communitySlug}?${new URLSearchParams({ ...(data.subSlug ? { g: data.subSlug } : {}), c: data.channelSlug })}`;
+    default:
+      return "/";
+  }
+}
+
+/* --------------------------- browsers ---------------------------- */
+
+const LABEL_MAX = 80;
+
+export function webPushPublicKey(): string | null {
+  return webPushConfig()?.publicKey ?? null;
+}
+
+export async function registerWebPush(viewer: IUser, sub: { endpoint: string; keys: { p256dh: string; auth: string } }, label: string) {
+  if (!webPushConfig()) return { registered: false };
+  // a browser belongs to whoever is signed in on it now
+  await WebPushSubscription.updateOne({ endpoint: sub.endpoint }, { $set: { userId: viewer._id, keys: sub.keys, label: label.slice(0, LABEL_MAX) } }, { upsert: true });
+  return { registered: true };
+}
+
+export async function removeWebPush(viewer: IUser, endpoint: string) {
+  await WebPushSubscription.deleteOne({ endpoint, userId: viewer._id });
+  return { removed: true };
+}
+
+async function deliverWeb(ids: string[], p: PushPayload) {
+  const cfg = webPushConfig();
+  if (!cfg) return;
+  const subs = await WebPushSubscription.find({ userId: { $in: ids } }).lean<IWebPushSubscription[]>();
+  if (!subs.length) return;
+  const payload = JSON.stringify({ title: clip(p.title, 60), body: clip(p.body), url: urlFor(p.data), tag: `${p.data.type}:${p.data.id ?? p.data.conversationId ?? p.data.channelSlug ?? ""}` });
+  const dead: string[] = [];
+  await Promise.all(
+    subs.map(async (s) => {
+      try {
+        await webpush.sendNotification({ endpoint: s.endpoint, keys: s.keys }, payload, { vapidDetails: cfg, TTL: 60 * 60 * 6, urgency: "high" });
+      } catch (err) {
+        const status = (err as { statusCode?: number }).statusCode;
+        // the browser unsubscribed or the subscription expired: forget it
+        if (status === 404 || status === 410) dead.push(s.endpoint);
+        else console.warn("[push] web send failed:", status ?? (err as Error)?.message);
+      }
+    }),
+  );
+  if (dead.length) await WebPushSubscription.deleteMany({ endpoint: { $in: dead } });
+}
+
+/* ---------------------------- phones ----------------------------- */
+
 async function deliver(userIds: (Types.ObjectId | string)[], p: PushPayload) {
   const ids = [...new Set(userIds.map(sid))];
   if (!ids.length) return;
+  await Promise.all([deliverPhones(ids, p), deliverWeb(ids, p)]);
+}
+
+async function deliverPhones(ids: string[], p: PushPayload) {
   const rows = await PushToken.find({ userId: { $in: ids } }).select("token").lean<{ token: string }[]>();
   if (!rows.length) return;
   const headers: Record<string, string> = { "Content-Type": "application/json", Accept: "application/json" };

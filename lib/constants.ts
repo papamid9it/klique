@@ -1,5 +1,8 @@
 export const APP_NAME = "klique";
 
+/** Where people can reach you about their data or the rules (shown on /terms and /privacy). Set NEXT_PUBLIC_SUPPORT_EMAIL. */
+export const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL?.trim() || "";
+
 /** City slugs are open now (see lib/places.ts); kept as an alias so signatures read well. */
 export type CityId = string;
 

@@ -4,6 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { AdminService } from "@/app/services/AdminService";
 import { AdminHeader, LoadMore, Panel, SearchBox, Segmented, TableHead, Toolbar } from "@/components/domain/admin/AdminParts";
+import { AdminGate } from "@/components/domain/admin/AdminShell";
 import { PersonDrawer, UserBadges } from "@/components/domain/admin/PersonDrawer";
 import { Avatar } from "@/components/ui/Avatar";
 import { Icon } from "@/components/ui/Icon";
@@ -88,10 +89,18 @@ function People() {
   );
 }
 
-export default function AdminPeoplePage() {
+function AdminPeoplePageContent() {
   return (
     <Suspense fallback={null}>
       <People />
     </Suspense>
+  );
+}
+
+export default function AdminPeoplePage() {
+  return (
+    <AdminGate>
+      <AdminPeoplePageContent />
+    </AdminGate>
   );
 }

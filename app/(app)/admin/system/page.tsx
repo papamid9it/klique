@@ -2,13 +2,14 @@
 
 import { AdminService } from "@/app/services/AdminService";
 import { AdminHeader, Badge, Panel } from "@/components/domain/admin/AdminParts";
+import { AdminGate } from "@/components/domain/admin/AdminShell";
 import { Icon } from "@/components/ui/Icon";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { ErrorState } from "@/components/ui/States";
 import { cx } from "@/components/ui/cx";
 import { useApi } from "@/lib/hooks/useApi";
 
-export default function AdminSystemPage() {
+function AdminSystemPageContent() {
   const { data: s, loading, error, reload } = useApi(() => AdminService.system(), []);
   const needed = s ? s.checks.filter((c) => !c.ok && !c.optional).length : 0;
 
@@ -68,5 +69,13 @@ export default function AdminSystemPage() {
         </div>
       )}
     </>
+  );
+}
+
+export default function AdminSystemPage() {
+  return (
+    <AdminGate>
+      <AdminSystemPageContent />
+    </AdminGate>
   );
 }

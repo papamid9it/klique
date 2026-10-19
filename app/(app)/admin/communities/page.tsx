@@ -5,6 +5,7 @@ import { useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
 import { AdminService } from "@/app/services/AdminService";
 import { AdminHeader, Badge, ConfirmDialog, LoadMore, Panel, SearchBox, Segmented, TableHead, Toolbar } from "@/components/domain/admin/AdminParts";
+import { AdminGate } from "@/components/domain/admin/AdminShell";
 import { useToast } from "@/components/providers/ToastProvider";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
@@ -19,7 +20,7 @@ import type { AdminCommunityRow } from "@/lib/types";
 
 const COLS = "md:grid-cols-[minmax(0,2.4fr)_minmax(0,1.3fr)_88px_96px_112px]";
 
-export default function AdminCommunitiesPage() {
+function AdminCommunitiesPageContent() {
   const toast = useToast();
   const [sort, setSort] = useState<"members" | "new">("members");
   const [q, setQ] = useState("");
@@ -131,5 +132,13 @@ export default function AdminCommunitiesPage() {
         }}
       />
     </>
+  );
+}
+
+export default function AdminCommunitiesPage() {
+  return (
+    <AdminGate>
+      <AdminCommunitiesPageContent />
+    </AdminGate>
   );
 }

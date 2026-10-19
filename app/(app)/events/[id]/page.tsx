@@ -10,6 +10,7 @@ import { DateChip, PriceTag } from "@/components/domain/EventCard";
 import { PersonRow } from "@/components/domain/PersonRow";
 import { ReportDialog } from "@/components/domain/ReportDialog";
 import { ShareButton } from "@/components/domain/ShareButton";
+import { ReminderPrompt } from "@/components/domain/events/ReminderPrompt";
 import { useToast } from "@/components/providers/ToastProvider";
 import { Avatar } from "@/components/ui/Avatar";
 import { ImageField } from "@/components/ui/ImageField";
@@ -375,6 +376,7 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
                     "I'm going"
                   )}
                 </Button>
+                {going && <ReminderPrompt />}
                 {event.viewer.rsvp && (
                   <button type="button" onClick={() => rsvp(event.viewer.rsvp!)} className="w-full text-center text-xs text-ink-muted underline hover:text-ink" disabled={busy === "rsvp"}>
                     Cancel my RSVP

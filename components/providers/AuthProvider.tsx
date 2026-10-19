@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { isApiError } from "@/app/ApiCore";
 import { AuthService } from "@/app/services/AuthService";
+import { NotificationService } from "@/app/services/NotificationService";
 import { ProfileService } from "@/app/services/ProfileService";
 import type { UserMe } from "@/lib/types";
 
@@ -50,6 +51,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // Browsers rotate notification subscriptions now and then; tell the server about this one once per visit.
+  useEffect(() => {
+    if (status === "authed") void NotificationService.refresh();
+  }, [status]);
 
   // Keep the unread-message badge fresh.
   useEffect(() => {

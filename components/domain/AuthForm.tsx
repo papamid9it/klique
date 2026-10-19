@@ -228,6 +228,17 @@ function SignupCard({ next, google }: { next: string; google: boolean }) {
             <Button type="submit" variant="primary" size="lg" loading={busy} className="h-12 w-full">
               Create account
             </Button>
+            <p className="text-center text-xs text-ink-muted">
+              By creating an account you agree to our{" "}
+              <Link href="/terms" target="_blank" className="underline hover:text-ink">
+                Terms
+              </Link>{" "}
+              and{" "}
+              <Link href="/privacy" target="_blank" className="underline hover:text-ink">
+                Privacy Policy
+              </Link>
+              .
+            </p>
             <button type="button" onClick={() => setStep(1)} className="mx-auto flex items-center gap-1.5 text-sm font-medium text-ink-muted hover:text-ink">
               <span aria-hidden="true">&larr;</span> Back
             </button>

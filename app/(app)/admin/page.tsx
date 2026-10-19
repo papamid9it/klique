@@ -2,6 +2,7 @@
 
 import { AdminService } from "@/app/services/AdminService";
 import { AdminHeader, AuditRow, Panel, StatCard, Trend } from "@/components/domain/admin/AdminParts";
+import { AdminGate } from "@/components/domain/admin/AdminShell";
 import { SignupChart } from "@/components/domain/admin/SignupChart";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
@@ -10,7 +11,7 @@ import { ErrorState } from "@/components/ui/States";
 import { pluralize } from "@/lib/format";
 import { useApi } from "@/lib/hooks/useApi";
 
-export default function AdminOverviewPage() {
+function AdminOverviewPageContent() {
   const { data: o, loading, error, reload } = useApi(() => AdminService.overview(), []);
 
   return (
@@ -78,5 +79,13 @@ export default function AdminOverviewPage() {
         </div>
       )}
     </>
+  );
+}
+
+export default function AdminOverviewPage() {
+  return (
+    <AdminGate>
+      <AdminOverviewPageContent />
+    </AdminGate>
   );
 }

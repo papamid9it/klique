@@ -1,4 +1,4 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 import { ZodError, type ZodType } from "zod";
 import { connectDb } from "../db";
 import { allowedOrigins } from "../env";
@@ -6,6 +6,7 @@ import { tokenFromRequest, verifySession } from "../auth/session";
 import { User, type IUser } from "../models/User";
 import { ApiError, unauthorized } from "./errors";
 import { rateLimitShared } from "./rate-limit";
+import { maybeRunReminders } from "../services/reminders.service";
 import type { Envelope } from "@/lib/types";
 
 /* ------------------------------------------------------------------ */
@@ -151,6 +152,12 @@ export function withApi<P = Record<string, never>, A extends AuthMode = "optiona
 
       const params = (await routeCtx.params) as P;
       const out = await handler({ req, params, viewer: viewer as ApiContext<P, A>["viewer"], ip });
+      // background jobs that piggyback on traffic (event reminders); never slows or fails the response
+      try {
+        after(() => maybeRunReminders().catch((err) => console.warn("[reminders]", (err as Error)?.message)));
+      } catch {
+        /* outside a request scope (tests): skip */
+      }
       const res = out instanceof Response ? out : respond(out);
       if (opts.publicCache && req.method === "GET" && !tok && res.ok) {
         res.headers.set("Cache-Control", `public, max-age=${Math.min(opts.publicCache, 15)}, s-maxage=${opts.publicCache}, stale-while-revalidate=${opts.publicCache * 4}`);

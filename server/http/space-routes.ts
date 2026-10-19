@@ -22,6 +22,7 @@ import {
   removeMember,
   resolveSpaceFor,
   revokeInvite,
+  transferOwnership,
 } from "../services/spaces.service";
 import { created, readJson, readQuery, withApi } from "./api";
 
@@ -65,6 +66,11 @@ export const memberRemove = withApi<WithUser, "required">({ auth: "required" }, 
   const { ban } = readQuery(req, banQuery);
   const { space, access } = await resolveSpaceFor(viewer, params.slug, params.subSlug);
   return removeMember(viewer, space, access, params.userId, ban);
+});
+
+export const memberTransfer = withApi<WithUser, "required">({ auth: "required" }, async ({ params, viewer }) => {
+  const { space, access } = await resolveSpaceFor(viewer, params.slug, params.subSlug);
+  return transferOwnership(viewer, space, access, params.userId);
 });
 
 export const requests = withApi<Base, "required">({ auth: "required" }, async ({ params, viewer }) => {

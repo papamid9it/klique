@@ -128,3 +128,15 @@ export const eventHostMinMembers = (): number => {
   const n = Number(process.env.EVENT_HOST_MIN_MEMBERS);
   return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 100;
 };
+
+/**
+ * Browser notifications (desktop and phone browsers, and klique installed as an app). Generate a key pair once
+ * with `npx web-push generate-vapid-keys` and keep it: changing it cuts off everyone who already said yes.
+ */
+export function webPushConfig(): { publicKey: string; privateKey: string; subject: string } | null {
+  const publicKey = process.env.VAPID_PUBLIC_KEY?.trim();
+  const privateKey = process.env.VAPID_PRIVATE_KEY?.trim();
+  if (!publicKey || !privateKey) return null;
+  const subject = process.env.VAPID_SUBJECT?.trim() || (process.env.NEXT_PUBLIC_SUPPORT_EMAIL ? `mailto:${process.env.NEXT_PUBLIC_SUPPORT_EMAIL.trim()}` : appUrl());
+  return { publicKey, privateKey, subject };
+}
