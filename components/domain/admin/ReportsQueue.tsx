@@ -32,6 +32,7 @@ const KIND: Record<ReportDTO["targetType"], string> = {
   subcommunity: "Group",
   channelMessage: "Channel message",
   message: "Direct message",
+  ad: "Ad",
 };
 const reasonLabel = (id: string) => REPORT_REASONS.find((r) => r.id === id)?.label ?? id;
 
@@ -127,7 +128,7 @@ function ReportCard({ r, onDone }: { r: ReportDTO; onDone: (id: string) => void 
           )}
           {r.target.removable && !r.target.gone && (
             <Button size="sm" variant="danger" onClick={() => act("remove")} loading={busy === "remove"} disabled={!!busy}>
-              <Icon name="trash" size={14} /> Delete content
+              <Icon name="trash" size={14} /> {r.targetType === "ad" ? "Pause ad" : "Delete content"}
             </Button>
           )}
           {author && (

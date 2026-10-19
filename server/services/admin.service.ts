@@ -18,11 +18,12 @@ import type {
   SystemStatusDTO,
   UserBrief,
 } from "@/lib/types";
-import { ablyKey, adminEmails, appUrl, cloudinaryAccount, cronSecret, eventHostMinMembers, googleConfig, isProd, livekitConfig, smtpConfig, webPushConfig } from "../env";
+import { ablyKey, adminEmails, appUrl, cronSecret, eventHostMinMembers, googleConfig, isProd, livekitConfig, paystackConfig, promotionPricePerDay, promotionReview, r2Config, smtpConfig, webPushConfig } from "../env";
 import { badRequest, forbidden, notFound } from "../http/errors";
 import { Channel, ChannelMessage, type IChannel, type IChannelMessage } from "../models/Channel";
 import { Community, type ICommunity } from "../models/Community";
 import { Event, type IEvent } from "../models/Event";
+import { Ad, type IAd } from "../models/Ad";
 import { AdminAction, type IAdminAction } from "../models/AdminAction";
 import { EventDraft } from "../models/EventDraft";
 import { Membership } from "../models/Membership";
@@ -85,6 +86,11 @@ async function describeTarget(r: IReport, briefs: Map<string, UserBrief>): Promi
       const [ch, c] = await Promise.all([Channel.findById(m.channelId).select("slug name").lean<Pick<IChannel, "slug" | "name">>(), Community.findById(m.communityId).select("slug name").lean<Pick<ICommunity, "slug" | "name">>()]);
       const author = (await loadBriefs([m.authorId])).get(sid(m.authorId)) ?? null;
       return { title: `Message in ${c?.name ?? "a community"} #${ch?.name ?? "channel"}`, body: m.deletedAt ? "" : m.body, images: m.deletedAt ? [] : (m.images ?? []), author, href: c && ch ? `/communities/${c.slug}?c=${ch.slug}` : null, gone: !!m.deletedAt, removable: !m.deletedAt };
+    }
+    case "ad": {
+      const a = await Ad.findById(r.targetId).lean<IAd>();
+      if (!a) return none;
+      return { title: `Ad: ${a.name}${a.status === "paused" ? " · paused" : ""}`, body: [a.advertiser, a.title, a.body].filter(Boolean).join(" · "), images: a.imageUrl ? [a.imageUrl] : [], author: null, href: "/admin/ads", gone: false, removable: a.status === "active" };
     }
     case "message": {
       const m = await Message.findById(r.targetId).lean<IMessage>();
@@ -168,6 +174,10 @@ async function removeTarget(r: IReport, admin: IUser) {
       deleteUploads(m.images ?? []);
       return;
     }
+    case "ad":
+      // reported ads are paused, not deleted, so the advertiser's record and numbers survive
+      await Ad.updateOne({ _id: r.targetId }, { status: "paused" });
+      return;
     default:
       throw badRequest("That can't be removed from here. Suspend the person responsible instead, or open it and deal with it there.");
   }
@@ -191,6 +201,8 @@ async function authorOf(r: IReport): Promise<Types.ObjectId | null> {
       return (await ChannelMessage.findById(r.targetId).select("authorId").lean<Pick<IChannelMessage, "authorId">>())?.authorId ?? null;
     case "message":
       return (await Message.findById(r.targetId).select("senderId").lean<Pick<IMessage, "senderId">>())?.senderId ?? null;
+    case "ad":
+      return null;
   }
 }
 
@@ -516,20 +528,20 @@ export async function adminOverview(): Promise<AdminOverviewDTO> {
 
 /** What's switched on, for the System page. Never returns a secret, only whether one is set. */
 export function systemStatus(): SystemStatusDTO {
-  const photos = cloudinaryAccount("photo");
-  const avatars = cloudinaryAccount("avatar");
+  const r2 = r2Config();
   const smtp = smtpConfig();
   const redis = !!(process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL);
   return {
     checks: [
       { id: "email", label: "Email sending", ok: !!smtp, detail: smtp ? `Sending through ${smtp.host}` : "SMTP isn't set up: emails are printed to the server log and email verification is off." },
       { id: "google", label: "Sign in with Google", ok: !!googleConfig(), detail: googleConfig() ? "Google sign-in is on." : "GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET aren't set.", optional: true },
-      { id: "uploads", label: "Image uploads", ok: !!(photos && avatars), detail: photos && avatars ? "Cloudinary accounts are set for avatars and photos." : "Cloudinary isn't fully set up, so picture uploads won't work." },
+      { id: "uploads", label: "Picture & video uploads", ok: !!r2, detail: r2 ? `Stored in Cloudflare R2 (bucket “${r2.bucket}”), resized and compressed on the device first.` : "R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET and R2_PUBLIC_URL aren't all set, so uploads are off (people can still paste picture links)." },
       { id: "realtime", label: "Live chat updates", ok: !!ablyKey(), detail: ablyKey() ? "Ably is connected." : "ABLY_API_KEY isn't set: chats refresh by polling.", optional: true },
       { id: "voice", label: "Voice channels", ok: !!livekitConfig(), detail: livekitConfig() ? "LiveKit is connected." : "LiveKit isn't set up, so voice channels are off.", optional: true },
       { id: "cache", label: "Shared cache & rate limits", ok: redis, detail: redis ? "Upstash Redis is connected." : "No Redis: rate limits are per server instance.", optional: true },
       { id: "webpush", label: "Browser notifications", ok: !!webPushConfig(), detail: webPushConfig() ? "Desktop and web-app notifications are on." : "VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY aren't set, so desktop and browser notifications are off." },
       { id: "support", label: "Support email", ok: !!process.env.NEXT_PUBLIC_SUPPORT_EMAIL?.trim(), detail: process.env.NEXT_PUBLIC_SUPPORT_EMAIL?.trim() ? `Shown on Terms and Privacy: ${process.env.NEXT_PUBLIC_SUPPORT_EMAIL.trim()}` : "NEXT_PUBLIC_SUPPORT_EMAIL isn't set, so Terms and Privacy have no contact address." },
+      { id: "paystack", label: "Paid promotions (Paystack)", ok: !!paystackConfig(), detail: paystackConfig() ? `Hosts can pay to promote events (₦${promotionPricePerDay().toLocaleString()}/day for a city${promotionReview() ? ", approved by you first" : ""}).` : "PAYSTACK_SECRET_KEY isn't set, so hosts can't buy promotions. You can still create promoted events yourself in Ads.", optional: true },
       { id: "cron", label: "Scheduled jobs", ok: !!cronSecret(), detail: cronSecret() ? "CRON_SECRET is set: reminders, cleanup and the nightly event finder can run." : "CRON_SECRET isn't set, so reminders, cleanup and the nightly event finder won't run." },
     ],
     admins: [...adminEmails()],

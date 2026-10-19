@@ -285,7 +285,7 @@ export const messageListQuery = z.object({
 /* -------------------------------- safety ---------------------------- */
 
 export const reportSchema = z.object({
-  targetType: z.enum(["user", "post", "event", "community", "subcommunity", "message", "channelMessage"]),
+  targetType: z.enum(["user", "post", "event", "community", "subcommunity", "message", "channelMessage", "ad"]),
   targetId: objectId,
   reason: z.enum(REPORT_REASONS.map((r) => r.id) as [string, ...string[]]),
   details: optText(LIMITS.reportDetails),
@@ -341,7 +341,13 @@ export const friendRespondSchema = z.object({ action: z.enum(["accept", "decline
 
 /* -------------------------------- uploads --------------------------- */
 
-export const uploadSignSchema = z.object({ kind: z.enum(["avatar", "photo", "video"]) });
+export const uploadSignSchema = z.object({
+  kind: z.enum(["avatar", "photo", "video"]),
+  files: z
+    .array(z.object({ variant: z.enum(["main", "sm", "poster"]), type: z.string().max(40), size: z.number().int().min(1).max(200 * 1024 * 1024) }))
+    .min(1)
+    .max(3),
+});
 
 /* ------------------------------- admin ------------------------------ */
 
@@ -415,3 +421,38 @@ export const adminSourceSchema = z.object({
   url: z.string().trim().min(1, "Paste a link").max(1000),
   name: z.string().trim().max(120).default(""),
 });
+
+/* --------------------------------- ads ------------------------------ */
+
+const adSlot = z.enum(["home-feed", "home-rail", "events-list", "event-page", "search"]);
+
+export const adServeQuery = z.object({
+  slot: adSlot,
+  where: z.preprocess(blankToUndef, z.string().max(80).optional()),
+  interest: z.preprocess(blankToUndef, interestId.optional()),
+  q: z.string().max(100).optional(),
+  exclude: z.preprocess(blankToUndef, objectId.optional()),
+  count: z.coerce.number().int().min(1).max(3).default(1),
+});
+
+export const adInputSchema = z.object({
+  name: z.string().trim().min(1, "Give the ad a name").max(120),
+  kind: z.enum(["event", "brand"]),
+  eventId: z.union([objectId, z.null()]).optional(),
+  advertiser: z.string().max(80).optional(),
+  title: z.string().max(120).optional(),
+  body: z.string().max(200).optional(),
+  imageUrl: z.union([httpUrl, z.literal(""), z.null()]).optional(),
+  ctaLabel: z.string().max(24).optional(),
+  url: z.string().max(1000).optional(),
+  slots: z.array(adSlot).min(1, "Pick at least one spot on the site for this ad").max(5),
+  places: z.array(z.string().max(80)).max(20).default([]),
+  interests: z.array(interestId).max(20).default([]),
+  keywords: z.array(z.string().max(40)).max(20).default([]),
+  startsAt: z.union([z.string().refine((v) => !Number.isNaN(Date.parse(v)), "Enter a valid date"), z.null()]).optional(),
+  endsAt: z.union([z.string().refine((v) => !Number.isNaN(Date.parse(v)), "Enter a valid date"), z.null()]).optional(),
+  weight: z.number().int().min(1).max(10).default(5),
+  status: z.enum(["active", "paused"]).optional(),
+});
+
+export const adStatusSchema = z.object({ status: z.enum(["active", "paused"]) });

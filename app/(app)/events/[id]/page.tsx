@@ -11,6 +11,7 @@ import { PersonRow } from "@/components/domain/PersonRow";
 import { ReportDialog } from "@/components/domain/ReportDialog";
 import { ShareButton } from "@/components/domain/ShareButton";
 import { ReminderPrompt } from "@/components/domain/events/ReminderPrompt";
+import { SponsoredBox, useAds } from "@/components/domain/ads/Sponsored";
 import { useToast } from "@/components/providers/ToastProvider";
 import { Avatar } from "@/components/ui/Avatar";
 import { ImageField } from "@/components/ui/ImageField";
@@ -209,6 +210,7 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
   const [working, setWorking] = useState(false);
 
   const going = event.viewer.rsvp === "going";
+  const [partnerAd] = useAds("event-page", { interest: event.interest, exclude: event.id });
   const isHost = event.viewer.isHost;
   const cancelled = (event as EventDTO & { cancelled?: boolean }).cancelled === true;
   const spots = event.capacity ? `${event.goingCount} of ${event.capacity} spots` : `${event.goingCount} going`;
@@ -349,9 +351,16 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
         <aside className="space-y-3 lg:sticky lg:top-6 lg:self-start">
           <div className="space-y-3 rounded-card border border-line bg-surface p-4">
             {isHost ? (
-              <p className="flex items-center gap-2 text-sm font-semibold">
-                <Icon name="check" className="text-accent-text" /> You&apos;re hosting
-              </p>
+              <>
+                <p className="flex items-center gap-2 text-sm font-semibold">
+                  <Icon name="check" className="text-accent-text" /> You&apos;re hosting
+                </p>
+                {event.audience === "public" && !event.isPast && !cancelled && (
+                  <Button href={`/events/${event.id}/promote`} variant="secondary" className="w-full">
+                    <Icon name="megaphone" size={15} /> Promote this event
+                  </Button>
+                )}
+              </>
             ) : cancelled ? (
               <p className="text-sm font-medium text-danger">This event was cancelled.</p>
             ) : event.isPast ? (
@@ -388,6 +397,7 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
               <Icon name="bookmark" /> {event.viewer.saved ? "Saved" : "Save for later"}
             </Button>
           </div>
+          {!event.isPast && !event.viewer.isHost && partnerAd && <SponsoredBox ad={partnerAd} image={false} />}
           <div className="flex flex-wrap gap-2">
             <ShareButton path={`/events/${event.id}`} text={`${event.title} — ${formatDateShort(event.startsAt)}`} />
             {event.viewer.canEdit || isHost ? (

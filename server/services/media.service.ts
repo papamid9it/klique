@@ -1,63 +1,38 @@
 import "server-only";
-import { createHash } from "node:crypto";
 import { after } from "next/server";
-import { cloudinaryAccount, type UploadKind } from "../env";
+import { deleteObject, keyFromUrl } from "./r2";
 
 /**
- * Deleting our own uploads from Cloudinary once nothing points at them any more
- * (a replaced profile picture or banner, the photos and videos of a deleted message).
+ * Deleting our own uploads from R2 once nothing points at them any more (a replaced profile picture or banner,
+ * the photos and videos of a deleted message). Each upload's small copy and still frame go with it.
  *
- * Only files in one of our configured accounts AND inside the `klique/` folder are touched,
- * so sample pictures, other people's links and anything uploaded by hand are left alone.
- * Fire-and-forget: a failed delete never fails the request that caused it, it only leaves a stray file.
+ * Only files under our R2 public address AND inside `klique/` are touched, so sample pictures, other people's
+ * links and old Cloudinary links are left alone. Fire-and-forget: a failed delete never fails the request that
+ * caused it; the nightly sweep picks up anything left behind.
  */
 
-// https://res.cloudinary.com/<cloud>/<image|video>/upload/[transformations/][v123/]klique/<folder>/<id>.<ext>
-const CLOUDINARY_URL = /^https:\/\/res\.cloudinary\.com\/([^/]+)\/(image|video)\/upload\/(.+)$/;
+/** "klique/photos/2026-10/abc_sm.webp" → "klique/photos/2026-10/abc": one upload, whatever the variant. */
+export const uploadBase = (key: string) => key.replace(/(_sm|_poster)?\.[a-z0-9]+$/i, "");
 
-export interface Asset {
-  cloudName: string;
-  resource: "image" | "video";
-  publicId: string;
+/** The upload a URL belongs to, or null when it isn't one of ours. */
+export function parseUpload(url: string): { key: string; base: string } | null {
+  const key = keyFromUrl(url);
+  return key ? { key, base: uploadBase(key) } : null;
 }
 
-export function parseUpload(url: string): Asset | null {
-  const m = CLOUDINARY_URL.exec(url.split("?")[0]);
-  if (!m) return null;
-  const [, cloudName, resource, rest] = m;
-  const at = rest.indexOf("klique/");
-  if (at === -1) return null;
-  const publicId = rest.slice(at).replace(/\.[a-z0-9]+$/i, "");
-  return { cloudName, resource: resource as Asset["resource"], publicId };
+/** Every file one upload may have: the original plus its small copy or still frame. */
+export function variantKeys(key: string): string[] {
+  const base = uploadBase(key);
+  if (key.includes("/videos/")) return [key, `${base}_poster.webp`, `${base}_poster.jpg`];
+  return [key, `${base}_sm.webp`, `${base}_sm.jpg`];
 }
 
-const KINDS: UploadKind[] = ["avatar", "photo", "video"];
-
-async function destroy(asset: Asset) {
-  const account = KINDS.map(cloudinaryAccount).find((a) => a?.cloudName === asset.cloudName);
-  if (!account) return; // not one of ours
-  const params: Record<string, string> = { invalidate: "true", public_id: asset.publicId, timestamp: String(Math.floor(Date.now() / 1000)) };
-  const toSign = Object.keys(params)
-    .sort()
-    .map((k) => `${k}=${params[k]}`)
-    .join("&");
-  const signature = createHash("sha1").update(toSign + account.apiSecret).digest("hex");
-  const res = await fetch(`https://api.cloudinary.com/v1_1/${account.cloudName}/${asset.resource}/destroy`, {
-    method: "POST",
-    body: new URLSearchParams({ ...params, api_key: account.apiKey, signature }),
-  });
-  const out = (await res.json().catch(() => null)) as { result?: string } | null;
-  if (!res.ok || (out?.result !== "ok" && out?.result !== "not found")) {
-    console.warn("[media] delete failed:", asset.publicId, res.status, out?.result);
-  }
-}
-
-/** Delete these uploads once the response is on its way. Non-Cloudinary and foreign URLs are skipped. */
+/** Delete these uploads once the response is on its way. Foreign URLs are skipped. */
 export function deleteUploads(urls: (string | null | undefined)[]) {
-  const assets = [...new Set(urls.filter((u): u is string => !!u))].map(parseUpload).filter((a): a is Asset => !!a);
-  if (!assets.length) return;
+  const keys = [...new Set(urls.filter((u): u is string => !!u).map((u) => keyFromUrl(u)).filter((k): k is string => !!k).flatMap(variantKeys))];
+  if (!keys.length) return;
   const run = async () => {
-    await Promise.all(assets.map((a) => destroy(a).catch((err: unknown) => console.warn("[media] delete failed:", a.publicId, (err as Error)?.message))));
+    await Promise.all(keys.map((k) => deleteObject(k).catch((err: unknown) => console.warn("[media] delete failed:", k, (err as Error)?.message))));
   };
   try {
     after(run);

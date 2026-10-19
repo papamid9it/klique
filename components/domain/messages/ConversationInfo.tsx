@@ -99,17 +99,17 @@ export function ConversationInfo({
           <section className="px-5">
             <h3 className="eyebrow mb-2">{mutual.length ? `${mutual.length} ${mutual.length === 1 ? "community" : "communities"} in common` : "Communities in common"}</h3>
             {mutual.length ? (
-              <ul className="space-y-1">
-                {mutual.slice(0, 6).map((c) => (
+              <ul className="flex gap-2">
+                {mutual.slice(0, 5).map((c) => (
                   <li key={c.id}>
-                    <Link href={`/communities/${c.slug}`} onClick={onNavigate} className="flex items-center gap-3 rounded-control p-1.5 hover:bg-raised">
-                      <span className="relative block size-9 shrink-0 overflow-hidden rounded-[10px]">
-                        <Cover src={c.coverImage} seed={c.id} interest={c.interest} className="size-full" />
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block truncate text-sm font-semibold">{c.name}</span>
-                        <span className="block truncate text-[11px] text-ink-muted">{c.memberCount ?? "—"} members</span>
-                      </span>
+                    <Link
+                      href={`/communities/${c.slug}`}
+                      onClick={onNavigate}
+                      title={c.name}
+                      aria-label={c.name}
+                      className="relative block size-12 overflow-hidden rounded-[12px] ring-1 ring-line transition hover:-translate-y-0.5 hover:ring-2 hover:ring-ink-muted focus-visible:ring-2 focus-visible:ring-accent-text"
+                    >
+                      <Cover src={c.coverImage} seed={c.id} interest={c.interest} className="size-full" />
                     </Link>
                   </li>
                 ))}

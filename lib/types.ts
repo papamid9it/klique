@@ -321,6 +321,15 @@ export interface DiscoverDTO {
   newCommunities: CommunityCardDTO[];
   suggestedCommunities: CommunityCardDTO[];
   yourScenes: { interest: InterestId; count: number }[];
+  /** signed in: your next events you're going to (any place) */
+  yourPlans: EventDTO[];
+  /** events per day for the next 7 days here, starting today (YYYY-MM-DD, Lagos time) */
+  week: { day: string; count: number }[];
+  thisWeekend: EventDTO[];
+  /** upcoming events in communities you've joined */
+  fromCommunities: EventDTO[];
+  free: EventDTO[];
+  online: EventDTO[];
 }
 
 export interface SearchResultsDTO {
@@ -385,7 +394,7 @@ export interface ConversationDetailDTO {
 
 /* ------------------------------ safety ------------------------------ */
 
-export type ReportTargetType = "user" | "post" | "event" | "community" | "subcommunity" | "message" | "channelMessage";
+export type ReportTargetType = "user" | "post" | "event" | "community" | "subcommunity" | "message" | "channelMessage" | "ad";
 
 export interface ReportInput {
   targetType: ReportTargetType;
@@ -616,21 +625,16 @@ export interface UploadStatusDTO {
   video: boolean;
 }
 
-/** One signed, short-lived permission to upload a file straight to Cloudinary. */
+/** Short-lived permission to put one upload (and its small copy or still frame) straight into storage. */
 export interface UploadSignatureDTO {
   kind: "avatar" | "photo" | "video";
-  uploadUrl: string;
-  /** form fields to send along with the file */
-  fields: Record<string, string>;
-  maxBytes: number;
-  formats: string[];
   resource: "image" | "video";
+  items: { variant: "main" | "sm" | "poster"; uploadUrl: string; headers: Record<string, string>; url: string }[];
 }
 
-/** What Cloudinary reports back once a file has arrived. */
+/** A finished upload. */
 export interface UploadedFileDTO {
   url: string;
-  publicId: string;
   width: number | null;
   height: number | null;
   /** seconds, videos only */
@@ -843,4 +847,93 @@ export interface SystemStatusDTO {
   hostMinMembers: number;
   appUrl: string;
   environment: string;
+}
+
+/* -------------------------------- ads ------------------------------- */
+
+export type AdSlot = "home-feed" | "home-rail" | "events-list" | "event-page" | "search";
+
+/** An ad as the app shows it. Always rendered with a "Sponsored" label. */
+export interface AdDTO {
+  id: Id;
+  kind: "event" | "brand";
+  advertiser: string;
+  title: string;
+  body: string;
+  imageUrl: string | null;
+  ctaLabel: string;
+  /** brand ads: where the button goes (opens in a new tab) */
+  url: string | null;
+  /** promoted events: the event itself */
+  event: EventDTO | null;
+}
+
+export interface AdInput {
+  name: string;
+  kind: "event" | "brand";
+  eventId?: string | null;
+  advertiser?: string;
+  title?: string;
+  body?: string;
+  imageUrl?: string | null;
+  ctaLabel?: string;
+  url?: string;
+  slots: AdSlot[];
+  places: string[];
+  interests: InterestId[];
+  keywords: string[];
+  startsAt?: ISODate | null;
+  endsAt?: ISODate | null;
+  weight: number;
+  status?: "active" | "paused";
+}
+
+/** An ad in the admin console, with its numbers. */
+export interface AdminAdDTO extends Required<Omit<AdInput, "eventId" | "status">> {
+  id: Id;
+  status: "active" | "paused";
+  /** shown now: active and inside its dates */
+  live: boolean;
+  event: { id: Id; title: string; startsAt: ISODate; cancelled: boolean } | null;
+  eventId: Id | null;
+  impressions: number;
+  clicks: number;
+  reports: number;
+  /** bought by a host through Paystack */
+  paid: { by: UserBrief | null; amount: number; currency: string; days: number } | null;
+  /** a paid promotion waiting for your approval; resuming it approves it and starts its run */
+  pendingReview: boolean;
+  createdAt: ISODate;
+}
+
+/* ---------------------------- promotions ---------------------------- */
+
+export interface PromotionDTO {
+  id: Id;
+  days: number;
+  reach: string;
+  reachLabel: string;
+  /** major units (naira) */
+  amount: number;
+  currency: string;
+  status: "pending" | "paid" | "failed";
+  paidAt: ISODate | null;
+  /** the ad it became, once paid */
+  ad: { live: boolean; pendingReview: boolean; startsAt: ISODate | null; endsAt: ISODate | null; impressions: number; clicks: number } | null;
+  createdAt: ISODate;
+}
+
+/** What a host can buy for one event. */
+export interface PromoteOptionsDTO {
+  /** false when payments aren't set up, or the event can't be promoted */
+  available: boolean;
+  reason: string | null;
+  event: { id: Id; title: string; startsAt: ISODate };
+  currency: string;
+  days: number[];
+  reaches: { scope: string; label: string; hint: string }[];
+  /** prices[scope][days] in major units */
+  prices: Record<string, Record<string, number>>;
+  review: boolean;
+  promotions: PromotionDTO[];
 }

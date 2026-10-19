@@ -1,47 +1,53 @@
 import "server-only";
-import { createHash } from "node:crypto";
-import { cloudinaryAccount, type UploadKind } from "../env";
+import { randomBytes } from "node:crypto";
+import { r2Config, type UploadKind } from "../env";
 import { ApiError } from "../http/errors";
 import { rateLimit } from "../http/rate-limit";
 import type { IUser } from "../models/User";
 import type { UploadSignatureDTO, UploadStatusDTO } from "@/lib/types";
-import { UPLOAD_SPECS } from "@/lib/uploads";
+import { UPLOAD_SPECS, VARIANT_SUFFIX, type UploadVariant } from "@/lib/uploads";
+import { presignPut, publicUrlFor } from "./r2";
 
 const sid = (v: unknown) => String(v);
+const EXT: Record<string, string> = { "image/webp": "webp", "image/jpeg": "jpg", "image/gif": "gif", "video/mp4": "mp4", "video/webm": "webm" };
 
 export function uploadStatus(): UploadStatusDTO {
-  return { avatar: !!cloudinaryAccount("avatar"), photo: !!cloudinaryAccount("photo"), video: !!cloudinaryAccount("video") };
+  const on = !!r2Config();
+  return { avatar: on, photo: on, video: on };
 }
 
 /**
- * A short-lived, signed permission to upload ONE file straight to Cloudinary. The secret stays here;
- * the signature covers the folder, the allowed formats and any transformation, so a client can't change them.
+ * Short-lived permission to put one upload (its main file plus its small copy or still frame) straight into R2.
+ * The device has already resized and compressed the files; this checks their declared types and sizes against
+ * the rules for that kind and signs a link for each, locked to that type and exact size.
  * Works the same for the web app, a phone app or a desktop app.
  */
-export function signUpload(viewer: IUser, kind: UploadKind): UploadSignatureDTO {
-  const account = cloudinaryAccount(kind);
-  if (!account) throw new ApiError(503, `${UPLOAD_SPECS[kind].label} uploads aren't set up yet.`, { code: "uploads_not_configured" });
+export async function signUpload(viewer: IUser, kind: UploadKind, files: { variant: UploadVariant; type: string; size: number }[]): Promise<UploadSignatureDTO> {
+  const cfg = r2Config();
+  if (!cfg) throw new ApiError(503, `${UPLOAD_SPECS[kind].label} uploads aren't set up yet.`, { code: "uploads_not_configured" });
   rateLimit(`upload:${sid(viewer._id)}`, 40, 10 * 60_000);
 
   const spec = UPLOAD_SPECS[kind];
-  const params: Record<string, string> = {
-    allowed_formats: spec.formats.join(","),
-    folder: `klique/${spec.folder}`,
-    timestamp: String(Math.floor(Date.now() / 1000)),
-    ...(spec.transformation ? { transformation: spec.transformation } : {}),
-  };
-  const toSign = Object.keys(params)
-    .sort()
-    .map((k) => `${k}=${params[k]}`)
-    .join("&");
-  const signature = createHash("sha1").update(toSign + account.apiSecret).digest("hex");
+  if (!files.some((f) => f.variant === "main")) throw new ApiError(422, "Nothing to upload.");
+  const seen = new Set<string>();
+  for (const f of files) {
+    const rule = spec.variants[f.variant];
+    if (!rule || seen.has(f.variant)) throw new ApiError(422, "That upload isn't allowed.", { code: "invalid_file" });
+    seen.add(f.variant);
+    if (!rule.types.includes(f.type)) throw new ApiError(422, "That file type isn't allowed.", { code: "invalid_file" });
+    if (!Number.isInteger(f.size) || f.size <= 0 || f.size > rule.maxBytes) {
+      throw new ApiError(413, `That ${spec.resource} is still over ${Math.round(rule.maxBytes / 1024 / 1024)} MB after compressing. Try a shorter or smaller one.`, { code: "too_large" });
+    }
+  }
 
-  return {
-    kind,
-    uploadUrl: `https://api.cloudinary.com/v1_1/${account.cloudName}/${spec.resource}/upload`,
-    fields: { ...params, api_key: account.apiKey, signature },
-    maxBytes: spec.maxBytes,
-    formats: [...spec.formats],
-    resource: spec.resource,
-  };
+  const month = new Date().toISOString().slice(0, 7);
+  const base = `klique/${spec.folder}/${month}/${randomBytes(12).toString("base64url")}`;
+  const items = await Promise.all(
+    files.map(async (f) => {
+      const key = `${base}${VARIANT_SUFFIX[f.variant]}.${EXT[f.type]}`;
+      const put = await presignPut(key, f.type, f.size);
+      return { variant: f.variant, uploadUrl: put.url, headers: put.headers, url: publicUrlFor(cfg, key) };
+    }),
+  );
+  return { kind, resource: spec.resource, items };
 }

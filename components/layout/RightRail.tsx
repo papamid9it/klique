@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { DiscoverService } from "@/app/services/DiscoverService";
 import { CommunityRow } from "@/components/domain/CommunityRow";
+import { SponsoredBox, useAds } from "@/components/domain/ads/Sponsored";
 import { usePlace } from "@/components/providers/PlaceProvider";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
@@ -17,6 +18,7 @@ export function RightRail() {
   const [q, setQ] = useState("");
   const { data, loading, error } = useApi(() => DiscoverService.discover(where), [where]);
 
+  const [railAd] = useAds("home-rail");
   const picks = data?.suggestedCommunities.filter((c) => !c.viewer.isMember).slice(0, 4) ?? [];
 
   return (
@@ -64,6 +66,8 @@ export function RightRail() {
           <p className="text-sm text-ink-muted">You&apos;re in every community here. Start a new one?</p>
         )}
       </section>
+
+      {railAd && <SponsoredBox ad={railAd} />}
 
       <section className="rounded-card bg-raised p-5" aria-labelledby="rail-crew">
         <p className="eyebrow">Got a crew?</p>

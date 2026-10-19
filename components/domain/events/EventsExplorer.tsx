@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Fragment, useState } from "react";
 import { EventService } from "@/app/services/EventService";
 import { ScopeButton } from "@/components/domain/places/ScopeButton";
 import { usePlace } from "@/components/providers/PlaceProvider";
@@ -9,13 +10,14 @@ import { Icon } from "@/components/ui/Icon";
 import { cx } from "@/components/ui/cx";
 import { RowSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/States";
-import { INTERESTS, type InterestId } from "@/lib/constants";
-import type { DateFilter } from "@/lib/dates";
+import { INTERESTS, isInterestId, type InterestId } from "@/lib/constants";
+import { isDateFilter, type DateFilter } from "@/lib/dates";
 import { formatDateLong } from "@/lib/format";
 import { useApi, useDebounced, useNow, usePaged } from "@/lib/hooks/useApi";
 import { CONTINENTS, countryName, getCountry, parseScope, scopeFlag, scopeLabel, scopeParent, scopeToString, type Scope } from "@/lib/places";
 import type { EventDTO } from "@/lib/types";
 import { EventRow } from "./EventRow";
+import { SponsoredRow, useAds } from "@/components/domain/ads/Sponsored";
 import { MiniCalendar } from "./MiniCalendar";
 
 const WHEN: { id: DateFilter; label: string }[] = [
@@ -50,11 +52,13 @@ function Pill({ on, onClick, children, className }: { on: boolean; onClick: () =
 export function EventsExplorer() {
   const place = usePlace();
   const now = useNow(60_000);
-  const [interest, setInterest] = useState<InterestId | "">("");
-  const [date, setDate] = useState<DateFilter>("any");
-  const [day, setDay] = useState("");
-  const [free, setFree] = useState(false);
-  const [format, setFormat] = useState<"any" | "in-person" | "online">("any");
+  // Links can open the page pre-filtered: ?interest=skate&date=weekend&day=2026-10-24&free=1&format=online
+  const sp = useSearchParams();
+  const [interest, setInterest] = useState<InterestId | "">(() => (isInterestId(sp.get("interest")) ? (sp.get("interest") as InterestId) : ""));
+  const [date, setDate] = useState<DateFilter>(() => (isDateFilter(sp.get("date")) ? (sp.get("date") as DateFilter) : "any"));
+  const [day, setDay] = useState(() => (/^\d{4}-\d{2}-\d{2}$/.test(sp.get("day") ?? "") ? sp.get("day")! : ""));
+  const [free, setFree] = useState(() => sp.get("free") === "1");
+  const [format, setFormat] = useState<"any" | "in-person" | "online">(() => (sp.get("format") === "online" || sp.get("format") === "in-person" ? (sp.get("format") as "online" | "in-person") : "any"));
   const [q, setQ] = useState("");
   const dq = useDebounced(q);
 
@@ -64,6 +68,10 @@ export function EventsExplorer() {
     (page) => EventService.list({ where, interest: interest || undefined, price: free ? "free" : "any", format, date: day ? "any" : date, day: day || undefined, q: dq || undefined, page }),
     [where, interest, free, format, date, day, dq],
   );
+
+  // Ads: a promoted row on top and one further down; none when looking at a single day, so that list stays as asked.
+  const ads = useAds("events-list", { interest: interest || undefined, count: 2 }, !day);
+  const position = new Map(items.map((e, i) => [e.id, i]));
 
   const o = overview.data;
   const counts = Object.fromEntries((o?.places ?? []).map((p) => [p.scope, p.count]));
@@ -209,6 +217,7 @@ export function EventsExplorer() {
             </EmptyState>
           ) : (
             <div className="space-y-8">
+              {ads[0] && <SponsoredRow ad={ads[0]} />}
               {groups.map((g) => (
                 <section key={g.key} aria-label={dayHeading(g.key, g.iso)}>
                   <h2 className="mb-3 flex items-baseline gap-2.5 text-lg font-semibold tracking-[-0.02em]">
@@ -217,7 +226,11 @@ export function EventsExplorer() {
                   </h2>
                   <div className="space-y-2.5">
                     {g.events.map((e) => (
-                      <EventRow key={e.id} event={e} onChange={patch} />
+                      <Fragment key={e.id}>
+                        <EventRow event={e} onChange={patch} />
+                        {/* a second ad well down the list, never more than one every ~8 events */}
+                        {ads[1] && position.get(e.id) === 7 && <SponsoredRow ad={ads[1]} />}
+                      </Fragment>
                     ))}
                   </div>
                 </section>

@@ -226,6 +226,11 @@ const ACTION_LABEL: Record<string, { label: string; icon: IconName }> = {
   "draft.reject": { label: "Rejected imported event", icon: "x" },
   "source.add": { label: "Added event source", icon: "link" },
   "source.remove": { label: "Removed event source", icon: "link" },
+  "ad.create": { label: "Created ad", icon: "megaphone" },
+  "ad.update": { label: "Edited ad", icon: "edit" },
+  "ad.pause": { label: "Paused ad", icon: "megaphone" },
+  "ad.resume": { label: "Resumed ad", icon: "megaphone" },
+  "ad.delete": { label: "Deleted ad", icon: "trash" },
 };
 
 export const AUDIT_FILTERS: { id: string; label: string }[] = [
@@ -237,6 +242,7 @@ export const AUDIT_FILTERS: { id: string; label: string }[] = [
   { id: "event.", label: "Events" },
   { id: "community.", label: "Communities" },
   { id: "draft.", label: "Event inbox" },
+  { id: "ad.", label: "Ads" },
 ];
 
 export function AuditRow({ e, compact }: { e: AuditEntryDTO; compact?: boolean }) {

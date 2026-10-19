@@ -50,6 +50,7 @@ export default function TermsPage() {
           <li>Hosts are responsible for their events: accurate details, safety, permits, refunds and anything sold. klique isn&apos;t the organiser and isn&apos;t a party to any deal between hosts and attendees.</li>
           <li>Some public events are listed from other websites and credited to their organiser with a link to the original. Check details with the organiser before you go or pay.</li>
           <li>Go to events with care. Meet in public places and tell someone where you&apos;re going.</li>
+          <li>Some events and cards are paid placements, labelled &ldquo;Promoted&rdquo; or &ldquo;Sponsored&rdquo;. Advertisers are responsible for their offers; a placement isn&apos;t an endorsement by klique.</li>
         </ul>
       </Section>
 

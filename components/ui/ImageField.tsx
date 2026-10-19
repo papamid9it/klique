@@ -109,7 +109,7 @@ export function ImageField({
               {shown}
             </p>
           ) : (
-            <p className="text-xs text-ink-muted">{hint ?? (enabled ? `JPG, PNG or WebP, up to ${Math.round(spec.maxBytes / 1048576)} MB.` : "Uploads aren't set up yet, so paste a link instead.")}</p>
+            <p className="text-xs text-ink-muted">{hint ?? (enabled ? `JPG, PNG, WebP or HEIC, up to ${Math.round(spec.maxPickBytes / 1048576)} MB. We resize it for you.` : "Uploads aren't set up yet, so paste a link instead.")}</p>
           )}
         </div>
       </div>

@@ -1,9 +1,9 @@
 "use client";
 
 import { DiscoverService } from "@/app/services/DiscoverService";
-import { EventCard } from "@/components/domain/EventCard";
 import { EventHero } from "@/components/domain/EventHero";
-import { SectionHeader } from "@/components/domain/SectionHeader";
+import { useAds } from "@/components/domain/ads/Sponsored";
+import { BrowseScenes, EventSection, WeekStrip, YourPlans } from "@/components/domain/home/HomeSections";
 import { ScopeButton } from "@/components/domain/places/ScopeButton";
 import { usePlace } from "@/components/providers/PlaceProvider";
 import { Button } from "@/components/ui/Button";
@@ -20,16 +20,23 @@ export default function DiscoverPage() {
   const now = useNow(600_000);
   const { data, loading, error, reload, setData } = useApi(() => DiscoverService.discover(where), [where]);
 
-  const patchEvent = (next: EventDTO) =>
+  const patchEvent = (next: EventDTO) => {
+    const swap = (list: EventDTO[]) => list.map((e) => (e.id === next.id ? next : e));
     setData((d) =>
       d
         ? {
             ...d,
             featured: d.featured?.id === next.id ? next : d.featured,
-            eventsNearYou: d.eventsNearYou.map((e) => (e.id === next.id ? next : e)),
+            eventsNearYou: swap(d.eventsNearYou),
+            yourPlans: swap(d.yourPlans),
+            thisWeekend: swap(d.thisWeekend),
+            fromCommunities: swap(d.fromCommunities),
+            free: swap(d.free),
+            online: swap(d.online),
           }
         : d,
     );
+  };
 
   return (
     <div>
@@ -64,6 +71,7 @@ export default function DiscoverPage() {
 
 function ForYou({ data, onEvent }: { data: DiscoverDTO; onEvent: (e: EventDTO) => void }) {
   const place = scopeLabel(parseScope(data.where) ?? WORLD);
+  const [feedAd] = useAds("home-feed");
   if (!data.featured && !data.eventsNearYou.length) {
     return (
       <EmptyState icon="calendar" title={`Nothing on in ${place} yet`} action={<><Button href="/events/new" variant="primary">Host an event</Button><Button href="/communities/new">Start a community</Button></>}>
@@ -73,19 +81,19 @@ function ForYou({ data, onEvent }: { data: DiscoverDTO; onEvent: (e: EventDTO) =
   }
   return (
     <div className="space-y-12">
+      <YourPlans events={data.yourPlans} />
+
       {data.featured && <EventHero event={data.featured} />}
 
-      {data.eventsNearYou.length > 0 && (
-        <section aria-labelledby="near-h">
-          <SectionHeader title="Happening around you" href="/events" />
-          <h2 id="near-h" className="sr-only">Happening around you</h2>
-          <div className="grid gap-4 sm:grid-cols-2">
-            {data.eventsNearYou.slice(0, 4).map((e) => (
-              <EventCard key={e.id} event={e} onChange={onEvent} />
-            ))}
-          </div>
-        </section>
-      )}
+      <WeekStrip week={data.week} />
+
+      <EventSection id="near-h" title="Happening around you" href="/events" events={data.eventsNearYou} onChange={onEvent} ad={feedAd} />
+      <EventSection id="weekend-h" title="This weekend" href="/events?date=weekend" hrefLabel="All this weekend" events={data.thisWeekend} onChange={onEvent} />
+      <EventSection id="communities-h" title="From your communities" events={data.fromCommunities} onChange={onEvent} />
+      <EventSection id="free-h" title="Free to attend" href="/events?free=1" hrefLabel="All free events" events={data.free} onChange={onEvent} />
+      <EventSection id="online-h" title="Online" href="/events?format=online" hrefLabel="All online events" events={data.online} onChange={onEvent} />
+
+      <BrowseScenes scenes={data.yourScenes} />
     </div>
   );
 }

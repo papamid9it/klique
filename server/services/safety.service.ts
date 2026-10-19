@@ -7,6 +7,7 @@ import { rateLimit } from "../http/rate-limit";
 import { Channel, ChannelMember, ChannelMessage, type IChannel, type IChannelMessage } from "../models/Channel";
 import { Community, type ICommunity } from "../models/Community";
 import { Conversation } from "../models/Conversation";
+import { Ad } from "../models/Ad";
 import { Event, type IEvent } from "../models/Event";
 import { Message, type IMessage } from "../models/Message";
 import { Post, type IPost } from "../models/Post";
@@ -71,6 +72,10 @@ export async function createReport(viewer: IUser, input: z.infer<typeof reportSc
       const space = await loadSpace(post.communityId, post.subcommunityId);
       if (!(await spaceAccess(space, viewer)).canView) throw notFound();
       communityId = post.communityId;
+      break;
+    }
+    case "ad": {
+      if (!(await Ad.exists({ _id: input.targetId }))) throw notFound();
       break;
     }
     case "event": {

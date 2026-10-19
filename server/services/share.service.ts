@@ -1,4 +1,5 @@
 import "server-only";
+import { connection } from "next/server";
 import { formatDateShort, isFree } from "@/lib/format";
 import { getInterest } from "@/lib/constants";
 import { placeLabel } from "@/lib/places";
@@ -22,6 +23,8 @@ export interface ShareInfo {
 const priceForCard = (amount: number, currency: string) => (isFree(amount) ? "Free" : `${currency} ${amount.toLocaleString("en-US")}`);
 
 export async function eventShare(id: string): Promise<ShareInfo | null> {
+  // built per request from live data (dates, "past event"), never baked into the prerendered shell
+  await connection();
   await connectDb();
   try {
     const e = await getEvent(null, id);
@@ -40,6 +43,7 @@ export async function eventShare(id: string): Promise<ShareInfo | null> {
 }
 
 export async function communityShare(slug: string): Promise<ShareInfo | null> {
+  await connection();
   await connectDb();
   try {
     const c = await getCommunity(null, slug);

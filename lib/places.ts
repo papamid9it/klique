@@ -321,3 +321,25 @@ export function validatePlace(p: { country: string; region?: string; city: strin
   if (!SLUG.test(p.city)) return "Enter a city or town.";
   return null;
 }
+
+/** Does scope `outer` include all of `inner`? (world ⊇ continent ⊇ country ⊇ region ⊇ city) */
+export function scopeContains(outer: Scope, inner: Scope): boolean {
+  if (outer.level === "world") return true;
+  if (inner.level === "world") return false;
+  const innerCountry = inner.level === "continent" ? null : inner.country;
+  switch (outer.level) {
+    case "continent":
+      return inner.level === "continent" ? inner.continent === outer.continent : getCountry(innerCountry)?.continent === outer.continent;
+    case "country":
+      return innerCountry === outer.country;
+    case "region":
+      if (inner.level === "region") return inner.country === outer.country && inner.region === outer.region;
+      if (inner.level === "city") return inner.country === outer.country && getCityEntry(inner.country, inner.city)?.region === outer.region;
+      return false;
+    case "city":
+      return inner.level === "city" && inner.country === outer.country && inner.city === outer.city;
+  }
+}
+
+/** Two places overlap when either one contains the other. */
+export const scopesOverlap = (a: Scope, b: Scope) => scopeContains(a, b) || scopeContains(b, a);

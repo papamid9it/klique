@@ -45,7 +45,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   // The suggestions rail belongs to the home feed only; every other page gets the room instead.
   const home = pathname === "/";
-  const wide = ["/events", "/saved", "/communities"].includes(pathname.replace(/\/$/, "")) || pathname.startsWith("/people/");
+  const wide = ["/events", "/saved", "/communities", "/search"].includes(pathname.replace(/\/$/, "")) || pathname.startsWith("/people/");
 
   return (
     <div className={home ? "min-h-dvh lg:grid lg:grid-cols-[272px_minmax(0,1fr)] xl:grid-cols-[272px_minmax(0,1fr)_320px]" : "min-h-dvh lg:grid lg:grid-cols-[272px_minmax(0,1fr)]"}>

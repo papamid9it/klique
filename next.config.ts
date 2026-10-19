@@ -3,6 +3,8 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   /* config options here */
   cacheComponents: true,
+  // where uploaded pictures and videos are served from, for picking the right stored copy in the browser
+  env: { NEXT_PUBLIC_MEDIA_URL: (process.env.R2_PUBLIC_URL ?? "").trim().replace(/\/$/, "") },
   partialPrefetching: true,
   // Pictures that never change under the same name are cached for a year; the browser never re-asks.
   async headers() {

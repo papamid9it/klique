@@ -42,24 +42,19 @@ export const isProd = () => process.env.NODE_ENV === "production";
 
 /* ----------------------------- Cloudinary ---------------------------- */
 
-/** Which Cloudinary account holds what. Three accounts keep quotas and billing separate. */
-export type UploadKind = "avatar" | "photo" | "video";
+export type { UploadKind } from "@/lib/uploads";
 
-export interface CloudinaryAccount {
-  cloudName: string;
-  apiKey: string;
-  apiSecret: string;
-}
-
-const CLOUDINARY_PREFIX: Record<UploadKind, string> = { avatar: "CLOUDINARY_AVATARS", photo: "CLOUDINARY_PHOTOS", video: "CLOUDINARY_VIDEOS" };
-
-/** The account for an upload kind, or null when it isn't configured (uploads then stay off for that kind). */
-export function cloudinaryAccount(kind: UploadKind): CloudinaryAccount | null {
-  const p = CLOUDINARY_PREFIX[kind];
-  const cloudName = process.env[`${p}_CLOUD_NAME`]?.trim();
-  const apiKey = process.env[`${p}_API_KEY`]?.trim();
-  const apiSecret = process.env[`${p}_API_SECRET`]?.trim();
-  return cloudName && apiKey && apiSecret ? { cloudName, apiKey, apiSecret } : null;
+/**
+ * Cloudflare R2, where every uploaded picture and video is stored (resized and compressed on the device first).
+ * Null until all five values are set; uploads stay off and people can paste picture links instead.
+ */
+export function r2Config(): { accountId: string; accessKeyId: string; secretAccessKey: string; bucket: string; publicUrl: string } | null {
+  const accountId = process.env.R2_ACCOUNT_ID?.trim();
+  const accessKeyId = process.env.R2_ACCESS_KEY_ID?.trim();
+  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY?.trim();
+  const bucket = process.env.R2_BUCKET?.trim();
+  const publicUrl = process.env.R2_PUBLIC_URL?.trim().replace(/\/$/, "");
+  return accountId && accessKeyId && secretAccessKey && bucket && publicUrl ? { accountId, accessKeyId, secretAccessKey, bucket, publicUrl } : null;
 }
 
 /** Realtime pings (Ably). Null until ABLY_API_KEY is set; the app then falls back to polling. */
@@ -140,3 +135,19 @@ export function webPushConfig(): { publicKey: string; privateKey: string; subjec
   const subject = process.env.VAPID_SUBJECT?.trim() || (process.env.NEXT_PUBLIC_SUPPORT_EMAIL ? `mailto:${process.env.NEXT_PUBLIC_SUPPORT_EMAIL.trim()}` : appUrl());
   return { publicKey, privateKey, subject };
 }
+
+/** Paystack, for hosts paying to promote their events. Null until PAYSTACK_SECRET_KEY is set. */
+export function paystackConfig(): { secretKey: string; baseUrl: string } | null {
+  const secretKey = process.env.PAYSTACK_SECRET_KEY?.trim();
+  if (!secretKey) return null;
+  return { secretKey, baseUrl: (process.env.PAYSTACK_API_URL?.trim() || "https://api.paystack.co").replace(/\/$/, "") };
+}
+
+/** Promotion pricing: naira per day for a city; wider reach multiplies it. */
+export const promotionPricePerDay = (): number => {
+  const n = Number(process.env.PROMOTION_PRICE_PER_DAY);
+  return Number.isFinite(n) && n >= 100 ? Math.round(n) : 1500;
+};
+
+/** "1" = paid promotions wait for an admin to approve them before they show. */
+export const promotionReview = (): boolean => process.env.PROMOTION_REVIEW === "1";

@@ -1,34 +1,38 @@
 /**
- * Delivery helpers for Cloudinary URLs. Anything that isn't a Cloudinary URL (sample files, other links)
- * passes through untouched, so these are safe to call on every image.
+ * Delivery helpers for uploaded pictures and videos. Uploads live in Cloudflare R2 at NEXT_PUBLIC_MEDIA_URL
+ * (set from R2_PUBLIC_URL at build time). Every photo is stored twice, full size and a 640px copy
+ * ("…_sm.webp"); videos have a still frame next to them ("…_poster.webp"). Anything that isn't one of our
+ * uploads (sample files, other links, old Cloudinary links) passes through untouched.
  */
-const isCloudinary = (url: string) => /^https:\/\/res\.cloudinary\.com\/[^/]+\/(image|video)\/upload\//.test(url);
+const MEDIA = (process.env.NEXT_PUBLIC_MEDIA_URL ?? "").replace(/\/$/, "");
+const isOurs = (url: string) => !!MEDIA && url.startsWith(`${MEDIA}/klique/`);
 
 export interface CdnOptions {
   w?: number;
   h?: number;
-  /** "fill" crops to the box, "limit" only shrinks; "face" crops to fill around a face */
+  /** kept for callers; pictures are already cropped and sized when they're uploaded */
   fit?: "fill" | "limit" | "face";
 }
 
-/** Same picture, resized and in the best format for the device (WebP/AVIF), cached by the CDN. */
+const SMALL_ENOUGH = 720;
+
+/** The best stored copy for the size it's shown at: the 640px copy for thumbnails, the full picture otherwise. */
 export function cdn(url: string | null | undefined, o: CdnOptions = {}): string {
-  if (!url || !isCloudinary(url)) return url ?? "";
-  const t = ["f_auto", "q_auto"];
-  if (o.w) t.push(`w_${Math.round(o.w)}`);
-  if (o.h) t.push(`h_${Math.round(o.h)}`);
-  if (o.fit === "fill" || o.fit === "face") t.push("c_fill", ...(o.fit === "face" ? ["g_face"] : ["g_auto"]));
-  else if (o.w || o.h) t.push("c_limit");
-  return url.replace("/upload/", `/upload/${t.join(",")}/`);
+  if (!url) return "";
+  if (!isOurs(url) || !url.includes("/klique/photos/")) return url;
+  const box = Math.max(o.w ?? 0, o.h ?? 0);
+  // GIFs keep their animation and have no small copy
+  if (box && box <= SMALL_ENOUGH && /\.(webp|jpg)$/i.test(url) && !/_sm\.(webp|jpg)$/i.test(url)) return url.replace(/\.(webp|jpg)$/i, "_sm.$1");
+  return url;
 }
 
-/** A still frame from a Cloudinary video, used before it plays. */
+/** The still frame stored next to one of our videos. */
 export function videoPoster(url: string): string | null {
-  if (!isCloudinary(url) || !url.includes("/video/upload/")) return null;
-  return url.replace("/video/upload/", "/video/upload/so_0,f_jpg,w_1280,c_limit/").replace(/\.[a-z0-9]+(\?.*)?$/i, ".jpg");
+  if (!isOurs(url) || !url.includes("/klique/videos/")) return null;
+  return url.replace(/\.(mp4|webm)$/i, "_poster.webp");
 }
 
-/** Optimised video delivery (smaller file, right codec for the device). */
+/** Videos are already compressed on upload. */
 export function videoSrc(url: string): string {
-  return isCloudinary(url) ? url.replace("/video/upload/", "/video/upload/f_auto,q_auto/") : url;
+  return url;
 }
