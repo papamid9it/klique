@@ -466,6 +466,13 @@ export interface MentionDTO {
 }
 
 /** One community in the switcher rail. */
+/** One community's left side, for preloading (GET /api/me/sidebars). Locked communities have no channels/boards. */
+export interface SidebarDTO {
+  community: CommunityDTO;
+  channels: ChannelsDTO | null;
+  boards: BoardDTO[] | null;
+}
+
 export interface MyCommunityDTO {
   id: Id;
   slug: string;

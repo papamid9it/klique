@@ -20,6 +20,7 @@ import { GroupInfo } from "@/components/domain/chat/GroupInfo";
 import { GroupSettings } from "@/components/domain/space/GroupSettings";
 import { PostsPanel } from "@/components/domain/space/PostsPanel";
 import { CommunityRail } from "@/components/layout/CommunityRail";
+import { noteCommunityOpened } from "@/components/layout/prefetchCommunity";
 import { JoinButton } from "@/components/domain/JoinButton";
 import { ReportDialog } from "@/components/domain/ReportDialog";
 import { SectionHeader } from "@/components/domain/SectionHeader";
@@ -81,6 +82,10 @@ function CommunityWorkspace({ slug }: { slug: string }) {
   useEffect(() => {
     if (communityName) document.title = `${communityName} · klique.`;
   }, [communityName]);
+  // remembered so it's among the first preloaded next time
+  useEffect(() => {
+    if (c?.viewer.isMember) noteCommunityOpened(slug);
+  }, [slug, c?.viewer.isMember]);
   const canUse = !!c && !c.locked;
   const channels = useApi(canUse ? () => ChannelService.list({ slug }) : null, [slug, user?.id, c?.id, c?.viewer.isMember, c?.locked], { key: `channels:${slug}` });
 

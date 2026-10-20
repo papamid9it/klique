@@ -12,7 +12,7 @@ import { cx } from "@/components/ui/cx";
 import { useRealtime, useRealtimeEvent } from "@/components/providers/RealtimeProvider";
 import { useApi } from "@/lib/hooks/useApi";
 import type { MyCommunityDTO } from "@/lib/types";
-import { prefetchCommunities, prefetchCommunity } from "./prefetchCommunity";
+import { prefetchCommunity } from "./prefetchCommunity";
 
 /**
  * Your communities, one tile each, so you can hop between them without going back to a list.
@@ -37,17 +37,6 @@ export function CommunityRail({ activeSlug, horizontal, onNavigate }: { activeSl
   // activity in any of your communities: refresh the unread dots
   useRealtimeEvent(() => void reload(), { filter: (e) => e.type === "channel", debounceMs: 1500 });
 
-  // Have every community ready before it's opened (quietly, a couple at a time, when the browser is idle);
-  // ones with something new go first. Runs again as the list refreshes; recently loaded ones are skipped.
-  useEffect(() => {
-    if (!data?.length || horizontal) return;
-    const signal = { cancelled: false };
-    const order = [...data].sort((a, b) => Number(b.mentions > 0 || b.unread) - Number(a.mentions > 0 || a.unread));
-    prefetchCommunities(order.map((c) => c.slug).filter((x) => x !== activeSlug), signal);
-    return () => {
-      signal.cancelled = true;
-    };
-  }, [data, horizontal, activeSlug]);
 
   if (status === "loading" || (authed && loading && !data)) {
     // Same tile + label shape as the real thing, so nothing jumps when it loads.

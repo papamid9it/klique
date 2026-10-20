@@ -6,6 +6,7 @@ import { MobileNav } from "./MobileNav";
 import { MobileTopBar } from "./MobileTopBar";
 import { RightRail } from "./RightRail";
 import { VerifyBanner } from "./VerifyBanner";
+import { CommunityPreloader } from "./CommunityPreloader";
 import { Sidebar } from "./Sidebar";
 
 /** /communities/<slug> (not /communities/new) is the chat workspace and owns its own panes. */
@@ -20,6 +21,15 @@ const SKIP =
  * content, not a fixed rail, so it can show whatever that page needs.
  */
 export function AppShell({ children }: { children: ReactNode }) {
+  return (
+    <>
+      <CommunityPreloader />
+      <Shell>{children}</Shell>
+    </>
+  );
+}
+
+function Shell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
   // Settings is a full-screen surface of its own (categories · page), like Discord's.

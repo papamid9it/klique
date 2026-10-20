@@ -455,3 +455,13 @@ export const adInputSchema = z.object({
 });
 
 export const adStatusSchema = z.object({ status: z.enum(["active", "paused"]) });
+
+/** ?slugs=a,b,c for the batched community sidebars */
+export const sidebarsQuery = z.object({
+  slugs: z
+    .string()
+    .trim()
+    .max(2000)
+    .transform((v) => v.split(",").map((x) => x.trim().toLowerCase()).filter((x) => /^[a-z0-9-]{1,80}$/.test(x)))
+    .pipe(z.array(z.string()).min(1, "Pass at least one community").max(20)),
+});

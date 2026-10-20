@@ -1,6 +1,6 @@
 import ApiClient from "@/app/ApiCore";
 import type { CityId, InterestId } from "@/lib/constants";
-import type { CommunityCardDTO, CommunityDTO, CommunityPrivacy, Envelope, GroupPolicy, MyCommunityDTO, Paginated } from "@/lib/types";
+import type { CommunityCardDTO, CommunityDTO, CommunityPrivacy, Envelope, GroupPolicy, MyCommunityDTO, Paginated, SidebarDTO } from "@/lib/types";
 
 const api = new ApiClient();
 
@@ -31,6 +31,8 @@ export const CommunityService = {
   list: (params: CommunityListParams = {}) => api.get<Envelope<Paginated<CommunityCardDTO>>>("/api/communities", { ...params }, { ttl: 30 }),
   /** the switcher rail: communities you belong to, with unread + mention counts */
   mine: () => api.get<Envelope<MyCommunityDTO[]>>("/api/me/communities", undefined, { ttl: 20 }),
+  /** header, channels and boards of up to 20 communities in one request (preloading) */
+  sidebars: (slugs: string[]) => api.get<Envelope<Record<string, SidebarDTO | null>>>("/api/me/sidebars", { slugs: slugs.join(",") }),
   get: (slug: string) => api.get<Envelope<CommunityDTO>>(`/api/communities/${slug}`, undefined, { ttl: 15 }),
   create: (input: CommunityInput) => api.post<Envelope<CommunityDTO>>("/api/communities", input),
   update: (slug: string, patch: Partial<CommunityInput>) => api.patch<Envelope<CommunityDTO>>(`/api/communities/${slug}`, patch),
