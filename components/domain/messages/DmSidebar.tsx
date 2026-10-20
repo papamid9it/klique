@@ -26,8 +26,8 @@ export function DmSidebar({ onNavigate }: { onNavigate?: () => void }) {
   const now = useNow();
   const [q, setQ] = useState("");
   const { connected } = useRealtime();
-  const inbox = useApi(authed ? () => MessageService.inbox() : null, [authed]);
-  const summary = useApi(authed ? () => FriendService.summary() : null, [authed]);
+  const inbox = useApi(authed ? () => MessageService.inbox() : null, [authed], { key: "dm-inbox" });
+  const summary = useApi(authed ? () => FriendService.summary() : null, [authed], { key: "friends-summary" });
 
   const reloadInbox = inbox.reload;
   const reloadSummary = summary.reload;

@@ -27,6 +27,7 @@ import { AttachmentStrip } from "@/components/domain/chat/AttachmentStrip";
 import { ChatImages } from "@/components/domain/chat/ChatImages";
 import { ReplyingTo, ReplyQuote } from "@/components/domain/chat/ReplyQuote";
 import { useAttachments } from "@/lib/hooks/useAttachments";
+import { recallApi, rememberApi } from "@/lib/hooks/useApi";
 import { EditedTag, MessageEditor } from "@/components/domain/chat/MessageEditor";
 import { ConfirmModal } from "@/components/domain/space/parts";
 import { StickerPicker, StickerView, ReactButton, ReactionBar } from "@/components/domain/chat/Reactions";
@@ -35,6 +36,7 @@ import type { ConversationDetailDTO, MessageDTO } from "@/lib/types";
 import { UserName } from "@/components/ui/UserName";
 
 type Local = MessageDTO & { pending?: boolean; failed?: boolean };
+type Snapshot = { detail: ConversationDetailDTO; messages: Local[]; hasMore: boolean };
 
 function merge(prev: Local[], incoming: MessageDTO[]): Local[] {
   const map = new Map<string, Local>();
@@ -49,10 +51,13 @@ export default function ConversationPage() {
   const toast = useToast();
   const authed = status === "authed";
 
-  const [detail, setDetail] = useState<ConversationDetailDTO | null>(null);
-  const [messages, setMessages] = useState<Local[]>([]);
-  const [hasMore, setHasMore] = useState(false);
-  const [loading, setLoading] = useState(true);
+  // the conversation as you last saw it paints at once; the server's copy merges in behind it
+  const cacheKey = `dm:${id}`;
+  const [initial] = useState(() => recallApi<Snapshot>(cacheKey));
+  const [detail, setDetail] = useState<ConversationDetailDTO | null>(initial?.detail ?? null);
+  const [messages, setMessages] = useState<Local[]>(initial?.messages ?? []);
+  const [hasMore, setHasMore] = useState(initial?.hasMore ?? false);
+  const [loading, setLoading] = useState(!initial);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -103,10 +108,18 @@ export default function ConversationPage() {
   useEffect(() => {
     if (!authed) return;
     let live = true;
-    setLoading(true);
     setNotFound(false);
-    setMessages([]);
-    setHasMore(false);
+    const cached = recallApi<Snapshot>(cacheKey);
+    if (cached) {
+      setDetail(cached.detail);
+      setMessages(cached.messages);
+      setHasMore(cached.hasMore);
+      setLoading(false);
+    } else {
+      setLoading(true);
+      setMessages([]);
+      setHasMore(false);
+    }
     void load().then((ok) => {
       if (!live) return;
       setLoading(false);
@@ -115,7 +128,12 @@ export default function ConversationPage() {
     return () => {
       live = false;
     };
-  }, [authed, load, refresh]);
+  }, [authed, load, refresh, cacheKey]);
+  useEffect(() => {
+    if (loading || !detail) return;
+    const real = messages.filter((m) => !m.pending && !m.failed);
+    rememberApi(cacheKey, { detail, messages: real.slice(-60), hasMore: hasMore || real.length > 60 });
+  }, [loading, detail, messages, hasMore, cacheKey]);
 
   // New messages arrive as live pings; polling (8s, or 45s while the live connection is up) is the safety net. It merges, never replaces.
   const { connected, on } = useRealtime();
@@ -391,7 +409,7 @@ export default function ConversationPage() {
             <div className="flex items-end gap-2">
             {attach.enabled && (
               <>
-                <input ref={fileInput} type="file" hidden multiple accept=".jpg,.jpeg,.png,.webp,.gif,.avif" onChange={(e) => (void attach.add(e.target.files), (e.target.value = ""))} aria-label="Choose pictures" />
+                <input ref={fileInput} type="file" hidden multiple accept=".jpg,.jpeg,.png,.webp,.gif,.avif,.heic,.heif" onChange={(e) => (void attach.add(e.target.files), (e.target.value = ""))} aria-label="Choose pictures" />
                 <button type="button" onClick={() => fileInput.current?.click()} disabled={attach.full || attach.uploading} aria-label="Add pictures" title="Add pictures" className="inline-flex size-11 items-center justify-center rounded-full text-ink-muted transition hover:bg-raised hover:text-ink disabled:opacity-40">
                   <Icon name="image" size={21} />
                 </button>

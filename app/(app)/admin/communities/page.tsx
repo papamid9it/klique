@@ -30,7 +30,7 @@ function AdminCommunitiesPageContent() {
 
   return (
     <>
-      <AdminHeader title="Communities">Every community on Klique. Ones above the member threshold let their owner post public events.</AdminHeader>
+      <AdminHeader title="Communities">Every community on Klique.</AdminHeader>
       <Toolbar>
         <SearchBox value={q} onChange={setQ} placeholder="Search communities" />
         <Segmented
@@ -79,7 +79,6 @@ function AdminCommunitiesPageContent() {
                     <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
                       <InterestChip id={c.interest} short />
                       {c.privacy === "private" && <Badge>Private</Badge>}
-                      {c.hostsPublic && <Badge tone="good">Can host public</Badge>}
                       <span className="text-xs text-ink-muted">{placeShort(c)}</span>
                     </div>
                   </div>

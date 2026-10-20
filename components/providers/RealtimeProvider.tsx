@@ -46,7 +46,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // communities you belong to decide which channels you may listen on
-  const mine = useApi(authed ? () => CommunityService.mine() : null, [authed, user?.id]);
+  const mine = useApi(authed ? () => CommunityService.mine() : null, [authed, user?.id], { key: "my-communities" });
   const membershipKey = (mine.data ?? []).map((c) => c.id).sort().join(",");
 
   useEffect(() => {

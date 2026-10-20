@@ -1,3 +1,4 @@
+import { unstable_rethrow } from "next/navigation";
 import { after, NextResponse, type NextRequest } from "next/server";
 import { ZodError, type ZodType } from "zod";
 import { connectDb } from "../db";
@@ -165,6 +166,9 @@ export function withApi<P = Record<string, never>, A extends AuthMode = "optiona
       }
       return res;
     } catch (err) {
+      // Next.js signals (a route reading the request while being prerendered at build time, notFound, redirect…)
+      // aren't errors: hand them back to Next instead of logging them and answering 500
+      unstable_rethrow(err);
       return toErrorResponse(err);
     }
   };

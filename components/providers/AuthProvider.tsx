@@ -7,6 +7,7 @@ import { AuthService } from "@/app/services/AuthService";
 import { NotificationService } from "@/app/services/NotificationService";
 import { ProfileService } from "@/app/services/ProfileService";
 import type { UserMe } from "@/lib/types";
+import { setApiCacheScope } from "@/lib/hooks/useApi";
 
 type Status = "loading" | "authed" | "anon";
 
@@ -29,6 +30,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [user, setUserState] = useState<UserMe | null>(null);
   const [status, setStatus] = useState<Status>("loading");
+  // remembered API results belong to whoever is signed in; a different person starts with none
+  setApiCacheScope(user?.id ?? null);
 
   const lastRun = useRef(0);
   const refresh = useCallback(async () => {

@@ -20,8 +20,6 @@ export interface ICommunity {
   channelsReady?: boolean;
   /** who may create groups inside this community */
   groupPolicy: "admins" | "members" | "off";
-  /** who may post events in this community (and its groups' admins always can in their group) */
-  eventPolicy?: "admins" | "members";
   createdAt: Date;
   updatedAt: Date;
 }
@@ -42,7 +40,6 @@ const CommunitySchema = new Schema<ICommunity>(
     memberCount: { type: Number, default: 0 },
     channelsReady: { type: Boolean, default: false },
     groupPolicy: { type: String, enum: ["admins", "members", "off"], default: "admins" },
-    eventPolicy: { type: String, enum: ["admins", "members"], default: "admins" },
   },
   { timestamps: true },
 );

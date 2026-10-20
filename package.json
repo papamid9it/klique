@@ -14,7 +14,8 @@
     "check:contrast": "tsx scripts/check-contrast.ts",
     "check:policies": "tsx scripts/check-policies.ts",
     "seed": "tsx --conditions=react-server scripts/seed.ts",
-    "seed:reset": "tsx scripts/seed.ts --reset",
+    "seed:reset": "tsx --conditions=react-server scripts/seed.ts --reset",
+    "migrate:groups": "tsx scripts/migrate-private-groups.ts",
     "check:unfurl": "tsx scripts/check-unfurl.ts"
   },
   "dependencies": {

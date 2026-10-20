@@ -7,7 +7,7 @@ import { AdminService } from "@/app/services/AdminService";
 import { useToast } from "@/components/providers/ToastProvider";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
-import { Switch, TextArea } from "@/components/ui/Field";
+import { TextArea } from "@/components/ui/Field";
 import { Icon } from "@/components/ui/Icon";
 import { Modal } from "@/components/ui/Modal";
 import { SlideOver } from "@/components/ui/SlideOver";
@@ -24,7 +24,6 @@ export function UserBadges({ u }: { u: AdminUserDTO }) {
     <>
       {u.isAdmin && <Badge tone="accent">Admin</Badge>}
       {u.suspended && <Badge tone="bad">Suspended</Badge>}
-      {u.canHostPublic && <Badge tone="good">Verified host</Badge>}
       {!u.emailVerified && <Badge>Unverified email</Badge>}
     </>
   );
@@ -119,19 +118,6 @@ export function PersonDrawer({ userId, onClose, onChange }: { userId: string | n
             <Stat label="Reported" value={d.stats.reportsAgainst} />
             <Stat label="Reports filed" value={d.stats.reportsFiled} />
           </div>
-
-          <section>
-            <h3 className="eyebrow mb-2">Permissions</h3>
-            <div className="rounded-control border border-line p-3">
-              <Switch
-                label="Can post public events"
-                hint={u.isAdmin ? "Admins always can." : "Events that aren't tied to a community, shown to everyone."}
-                checked={u.isAdmin || u.canHostPublic}
-                disabled={u.isAdmin || busy}
-                onChange={(v) => update({ canHostPublic: v }, v ? `@${u.handle} is now a verified host` : `@${u.handle} is no longer a verified host`)}
-              />
-            </div>
-          </section>
 
           <section>
             <h3 className="eyebrow mb-2">Actions</h3>

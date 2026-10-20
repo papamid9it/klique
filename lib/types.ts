@@ -145,6 +145,8 @@ export interface ViewerAccess {
   canView: boolean;
   /** may create posts / events here */
   canPost: boolean;
+  /** groups: the community's owner or a site admin (sees and manages every group, may delete it) */
+  canModerate?: boolean;
 }
 
 export interface CommunityCardDTO {
@@ -173,8 +175,7 @@ export interface CommunityDTO extends CommunityCardDTO {
   groupPolicy: GroupPolicy;
   /** the viewer may start a group here (server-computed from the policy and their role) */
   canCreateGroup: boolean;
-  eventPolicy: "admins" | "members";
-  /** the viewer may post events in this community */
+  /** the viewer may post events in this community (its owner and admins) */
   canHostEvents: boolean;
   owner: UserBrief | null;
   subcommunityCount: number | null;
@@ -299,7 +300,8 @@ export interface EventDTO {
 
 /** Where the signed-in person may host events. */
 export interface HostingOptionsDTO {
-  public: { allowed: boolean; reason: "admin" | "verified" | "big-community" | "not-yet"; minMembers: number };
+  /** site admins may post anywhere, including public events outside any community */
+  siteAdmin: boolean;
   communities: { slug: string; name: string; privacy: CommunityPrivacy; groupsOnly: boolean }[];
 }
 
@@ -709,7 +711,6 @@ export interface AdminUserDTO extends UserBrief {
   email: string;
   emailVerified: boolean;
   isAdmin: boolean;
-  canHostPublic: boolean;
   suspended: boolean;
   suspendedReason: string;
   createdAt: ISODate;
@@ -765,10 +766,9 @@ export interface SourceDTO {
 export interface AdminSummaryDTO {
   reports: Record<ReportStatus, number>;
   pendingDrafts: number;
-  hostMinMembers: number;
 }
 
-export type AdminUserFilter = "all" | "new" | "admins" | "hosts" | "suspended" | "unverified";
+export type AdminUserFilter = "all" | "new" | "admins" | "suspended" | "unverified";
 
 /** One line of the audit log. */
 export interface AuditEntryDTO {
@@ -785,13 +785,14 @@ export interface AuditEntryDTO {
 }
 
 export interface AdminOverviewDTO {
-  people: { total: number; new7d: number; newPrev7d: number; suspended: number; verifiedHosts: number; unverified: number };
+  people: { total: number; new7d: number; newPrev7d: number; suspended: number; unverified: number };
   events: { upcoming: number; thisWeek: number; created7d: number; imported: number };
   communities: { total: number; new7d: number; large: number };
   queue: { openReports: number; pendingDrafts: number };
   /** sign-ups per day, oldest first, the last 30 days (YYYY-MM-DD, UTC) */
   signups: { day: string; count: number }[];
   recent: AuditEntryDTO[];
+  /** the size from which a community counts as large */
   hostMinMembers: number;
 }
 
@@ -836,15 +837,12 @@ export interface AdminCommunityRow {
   country: string;
   city: string;
   owner: UserBrief | null;
-  /** big enough that its owner can post public events */
-  hostsPublic: boolean;
   createdAt: ISODate;
 }
 
 export interface SystemStatusDTO {
   checks: { id: string; label: string; ok: boolean; detail: string; optional?: boolean }[];
   admins: string[];
-  hostMinMembers: number;
   appUrl: string;
   environment: string;
 }

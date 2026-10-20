@@ -66,7 +66,7 @@ Native clients send `Authorization: Bearer <token>`; the web app uses an httpOnl
 ## Privacy, communities & messages — enforced on the server
 
 - **Private communities** never appear in discovery/search; non-members get a minimal locked card (no description, count, posts, members or events). Entry is by invite link or admin approval.
-- **Subcommunities** belong to one parent, with their own members/posts/events. Visibility is *open to parent members* or *invite-only*; invite-only groups return 404 to everyone else (parent admins may only moderate/delete, not read).
+- **Groups (subcommunities)** belong to one parent, with their own members/posts/events. Every group is private and holds at most 50 people: nobody joins, the group's owner and admins add people who are already in the community (`POST …/groups/[subSlug]/members/add`). Only its members, the community's owner and site admins can see a group; to everyone else it returns 404, and its events stay inside it. The Groups folder only appears once you're in a group. Run `npm run migrate:groups` once on an existing database.
 - **Roles**: owner / admin / member; admins handle requests, invites, removals and bans; only owners change roles or privacy.
 - **Events** carry an audience (`public`/`community`/`subcommunity`) applied in every list, search, profile and report query.
 - **Direct messages**: one conversation per pair (unique key), readable only by its two participants on every request, unread counts, DM policy (everyone / shared communities / nobody), block and report. Message content never appears on profiles, feeds, search or event pages.
@@ -130,7 +130,7 @@ Ten moods in `lib/moods.ts` set canvas, surface, ink, line and two accents as CS
 
 - Chat is polling-based (4 s), with no typing indicators, reactions, replies, attachments or channel reordering yet. For true realtime, add a WebSocket/SSE layer or a service such as Ably/Pusher on top of `postMessage`.
 
-- **Images**: no upload service. Avatars and covers take an `http(s)` URL; without one the app draws generative cover art in the current mood. Plug in Cloudinary/S3 for uploads.
+- **Images**: avatars and covers take an upload (Cloudflare R2, see below) or an `http(s)` URL; without one the app draws generative cover art in the current mood.
 - **Payments**: prices (₦) are displayed; there is no ticketing or checkout.
 - **Rate limiting** is in-memory (one process). Use a shared store (Redis/Upstash) for multi-instance deployments.
 - **Real-time DMs** use polling, not WebSockets. No email/push notifications.
@@ -159,9 +159,9 @@ Ten moods in `lib/moods.ts` set canvas, surface, ink, line and two accents as CS
 - Re-run `npm run seed:reset` to get sample topics, comments and likes.
 - **Topic media:** topics can carry up to 6 pictures (swipeable gallery) or one video. Uploads aren't built yet, so the form offers sample files (`public/mock/`) and pasted links. The seed adds a gallery, a video and a single picture.
 
-## Uploads (Cloudinary), voice (LiveKit), pictures/replies/pins in chat
+## Uploads (Cloudflare R2), voice (LiveKit), pictures/replies/pins in chat
 
-**Cloudinary, three accounts.** Profile pictures, photos and videos each use their own account (`CLOUDINARY_AVATARS_*`, `CLOUDINARY_PHOTOS_*`, `CLOUDINARY_VIDEOS_*` in `.env.local`, see `.env.example`). The app never holds a secret: `POST /api/uploads/sign {kind}` returns a short-lived signature (folder, allowed formats and any crop are part of it), and the client uploads straight to Cloudinary, then saves the returned URL. Leave a kind unconfigured and its upload buttons fall back to pasting a link (topics also offer sample files). Images are delivered resized and in WebP/AVIF through `lib/cdn.ts`.
+**Cloudflare R2, compressed on the device.** Pictures and videos are resized and compressed in the browser before upload (`lib/media-compress.ts`): profile pictures become a 512px square, photos at most 1920px plus a 640px copy for thumbnails (WebP, JPEG where WebP isn't available, GIFs kept as they are), videos at most 1280px H.264 MP4 (VP9 WebM where the browser can't encode H.264, via mediabunny) plus a still frame. `POST /api/uploads/sign {kind, files}` checks each file's type and size and returns one short-lived signed PUT link per file (type, exact size and cache header are part of the signature), and the client uploads straight to R2. Set the five `R2_*` values (see `.env.example`, including the bucket's CORS policy); leave them empty and upload buttons fall back to pasting a link. `lib/cdn.ts` picks the small copy for thumbnails.
 - Service: `app/services/UploadService.ts` (`status`, `sign`, `upload(kind, file, {onProgress})`). A phone or desktop app calls the same three functions; only the file object differs (wrap a picked file as a Blob with a `name`).
 - Used for: profile picture (Settings → Profile), community and event covers, topic pictures and video, pictures in channel chat and private chat (paste or attach, up to 4).
 

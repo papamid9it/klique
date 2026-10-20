@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { SoftLink } from "@/components/ui/SoftLink";
 import { ProfileTrigger } from "@/components/providers/ProfileCardProvider";
 import { TopicService } from "@/app/services/TopicService";
 import { Avatar } from "@/components/ui/Avatar";
@@ -12,20 +13,21 @@ import type { TopicDTO } from "@/lib/types";
 import { LikeButton } from "./parts";
 import { TopicMedia } from "./TopicMedia";
 import { TopicMenu, topicHref } from "./TopicMenu";
+import { seedTopic } from "./TopicThread";
 import { UserName } from "@/components/ui/UserName";
 
 /**
  * One topic in a list: likes, title, a taste of the text, who and when, comment count.
  * `showCommunity` is for the home feed, where topics from several communities mix with events.
  */
-export function TopicRow({ topic: t, onChange, onRemoved, showCommunity, scroll }: { topic: TopicDTO; onChange: (t: TopicDTO) => void; onRemoved: () => void; showCommunity?: boolean; scroll?: boolean }) {
+export function TopicRow({ topic: t, onChange, onRemoved, showCommunity, scroll, active }: { topic: TopicDTO; onChange: (t: TopicDTO) => void; onRemoved: () => void; showCommunity?: boolean; scroll?: boolean; active?: boolean }) {
   const now = useNow();
   const href = topicHref(t);
   const when = now ? relativeStamp(t.createdAt, now) : "";
   const excerpt = t.body.length > 280 ? `${t.body.slice(0, 280).trimEnd()}…` : t.body;
 
   return (
-    <article className={cx("rounded-card border bg-surface p-4 transition hover:border-ink-muted/40 sm:p-5", t.pinned ? "border-accent/40" : "border-line")} aria-label={t.title}>
+    <article aria-current={active || undefined} className={cx("rounded-card border bg-surface p-4 transition hover:border-ink-muted/40 sm:p-5", active ? "border-accent-text ring-2 ring-accent/20" : t.pinned ? "border-accent/40" : "border-line")} aria-label={t.title}>
       <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-ink-muted">
         {showCommunity && (
           <Link href={`/communities/${t.community.slug}`} className="inline-flex items-center gap-1.5 font-semibold text-ink hover:underline">
@@ -62,9 +64,9 @@ export function TopicRow({ topic: t, onChange, onRemoved, showCommunity, scroll 
 
       <div className="min-w-0">
         <h3 className="text-[17px] leading-snug font-semibold tracking-[-0.02em] break-words">
-          <Link href={href} scroll={scroll} className="hover:underline">
+          <SoftLink href={href} scroll={scroll} onClick={() => seedTopic(t)} className="hover:underline">
             {t.title}
-          </Link>
+          </SoftLink>
         </h3>
         {excerpt && <p className="mt-1.5 line-clamp-3 text-sm leading-relaxed break-words whitespace-pre-line text-ink-muted">{excerpt}</p>}
       </div>
@@ -72,10 +74,10 @@ export function TopicRow({ topic: t, onChange, onRemoved, showCommunity, scroll 
 
       <div className="mt-3 flex items-center gap-1">
         <LikeButton liked={t.liked} count={t.likeCount} canLike={t.canLike} onToggle={async () => (await TopicService.like(t.community.slug, t.id)).data} onChange={(n) => onChange({ ...t, liked: n.liked, likeCount: n.likeCount })} />
-        <Link href={href} scroll={scroll} className="inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[13px] font-semibold text-ink-muted transition hover:bg-raised hover:text-ink" aria-label={`${t.commentCount} comments`}>
+        <SoftLink href={href} scroll={scroll} onClick={() => seedTopic(t)} className="inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[13px] font-semibold text-ink-muted transition hover:bg-raised hover:text-ink" aria-label={`${t.commentCount} comments`}>
           <Icon name="message" size={16} />
           <span className="font-mono tabular-nums">{compactCount(t.commentCount)}</span>
-        </Link>
+        </SoftLink>
         <span className="ml-auto">
           <TopicMenu topic={t} onChange={onChange} onRemoved={onRemoved} />
         </span>

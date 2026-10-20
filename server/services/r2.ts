@@ -16,7 +16,7 @@ function client(cfg: Config) {
   return cached.client;
 }
 
-const objectUrl = (cfg: Config, key: string) => `https://${cfg.accountId}.r2.cloudflarestorage.com/${cfg.bucket}/${key.split("/").map(encodeURIComponent).join("/")}`;
+const objectUrl = (cfg: Config, key: string) => `${cfg.endpoint}/${cfg.bucket}/${key.split("/").map(encodeURIComponent).join("/")}`;
 
 export const publicUrlFor = (cfg: Config, key: string) => `${cfg.publicUrl}/${key}`;
 
@@ -61,7 +61,7 @@ export async function listObjects(prefix: string): Promise<{ key: string; lastMo
   const out: { key: string; lastModified: number; size: number }[] = [];
   let token: string | null = null;
   do {
-    const u = new URL(`https://${cfg.accountId}.r2.cloudflarestorage.com/${cfg.bucket}`);
+    const u = new URL(`${cfg.endpoint}/${cfg.bucket}`);
     u.searchParams.set("list-type", "2");
     u.searchParams.set("prefix", prefix);
     u.searchParams.set("max-keys", "1000");

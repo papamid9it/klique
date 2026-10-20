@@ -14,7 +14,7 @@ import { INTERESTS, isInterestId, type InterestId } from "@/lib/constants";
 import { isDateFilter, type DateFilter } from "@/lib/dates";
 import { formatDateLong } from "@/lib/format";
 import { useApi, useDebounced, useNow, usePaged } from "@/lib/hooks/useApi";
-import { CONTINENTS, countryName, getCountry, parseScope, scopeFlag, scopeLabel, scopeParent, scopeToString, type Scope } from "@/lib/places";
+import { CONTINENTS, getCountry, parseScope, scopeFlag, scopeLabel, scopeParent, scopeToString, type Scope } from "@/lib/places";
 import type { EventDTO } from "@/lib/types";
 import { EventRow } from "./EventRow";
 import { SponsoredRow, useAds } from "@/components/domain/ads/Sponsored";
@@ -63,10 +63,11 @@ export function EventsExplorer() {
   const dq = useDebounced(q);
 
   const { where, scope } = place;
-  const overview = useApi(() => EventService.overview({ where, interest: interest || undefined }), [where, interest]);
+  const overview = useApi(() => EventService.overview({ where, interest: interest || undefined }), [where, interest], { key: `events-overview:${where}:${interest}` });
   const { items, loading, loadingMore, error, hasMore, loadMore, reload, setItems } = usePaged<EventDTO>(
     (page) => EventService.list({ where, interest: interest || undefined, price: free ? "free" : "any", format, date: day ? "any" : date, day: day || undefined, q: dq || undefined, page }),
     [where, interest, free, format, date, day, dq],
+    { keepPrevious: true, key: `events:${where}:${interest}:${free}:${format}:${date}:${day}:${dq}` },
   );
 
   // Ads: a promoted row on top and one further down; none when looking at a single day, so that list stays as asked.
@@ -139,9 +140,6 @@ export function EventsExplorer() {
               )}
             </p>
           </div>
-          <Button href="/events/new" variant="primary" size="lg">
-            <Icon name="plus" size={15} /> Host a thing
-          </Button>
         </header>
 
         <div className="no-bar -mx-4 mt-5 flex gap-2 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0" role="group" aria-label="Quick places">
@@ -197,7 +195,7 @@ export function EventsExplorer() {
 
         {/* ------------------------------ results ------------------------------ */}
         <div className="mt-7">
-          {loading ? (
+          {loading && items.length === 0 ? (
             <RowSkeleton rows={4} />
           ) : error ? (
             <ErrorState message={error} onRetry={reload} />
@@ -209,14 +207,13 @@ export function EventsExplorer() {
                 <>
                   {filtered && <Button onClick={clear}>Clear filters</Button>}
                   {!filtered && parent && <Button onClick={() => place.setScope(parent)}>Look in {scopeLabel(parent)}</Button>}
-                  <Button href="/events/new" variant="primary">Host the first one</Button>
                 </>
               }
             >
-              {filtered ? "Try a wider date range, or another kind of event." : "Widen the search to the whole country or continent, or put the first thing on the calendar."}
+              {filtered ? "Try a wider date range, or another kind of event." : "Widen the search to the whole country or continent."}
             </EmptyState>
           ) : (
-            <div className="space-y-8">
+            <div className={`space-y-8 transition-opacity duration-200 ${loading ? "opacity-60" : ""}`} aria-busy={loading || undefined}>
               {ads[0] && <SponsoredRow ad={ads[0]} />}
               {groups.map((g) => (
                 <section key={g.key} aria-label={dayHeading(g.key, g.iso)}>
@@ -281,8 +278,8 @@ export function EventsExplorer() {
 
           <section className="rounded-card border border-line bg-raised/50 p-4">
             <h3 className="text-sm font-semibold tracking-tight">Hosting something?</h3>
-            <p className="mt-1 text-[13px] text-ink-muted">Anywhere in the world: a skate session in {countryName("GH")}, a watch party online. It shows up for everyone looking in that place.</p>
-            <Button href="/events/new" size="sm" variant="primary" className="mt-3">Host a thing</Button>
+            <p className="mt-1 text-[13px] text-ink-muted">Events live in communities: a community&apos;s owner and admins post them from its Events page. Start one for your crew and put your first event on the calendar.</p>
+            <Button href="/communities/new" size="sm" variant="primary" className="mt-3">Start a community</Button>
           </section>
         </div>
       </aside>

@@ -132,14 +132,16 @@ export async function compressVideo(file: Blob & { name?: string }, onProgress?:
     const avc = await mb.canEncodeVideo("avc", { width, height });
     const vcodec = avc ? "avc" : (await mb.canEncodeVideo("vp9", { width, height })) ? "vp9" : null;
     if (!vcodec) throw new CompressError("This browser can't compress videos. Try Chrome, Edge or Safari.");
-    const acodec = avc ? ((await mb.canEncodeAudio("aac")) ? "aac" : "opus") : "opus";
+    // AAC plays everywhere (older iPhones included). Where the browser can't encode it (Linux), keep the original
+    // audio track untouched when the container allows it; phone videos are already AAC.
+    const aac = avc && (await mb.canEncodeAudio("aac"));
 
     const output = new mb.Output({ format: avc ? new mb.Mp4OutputFormat({ fastStart: "in-memory" }) : new mb.WebMOutputFormat(), target: new mb.BufferTarget() });
     const conversion = await mb.Conversion.init({
       input,
       output,
       video: { width, height, fit: "contain", codec: vcodec, quality: mb.QUALITY_MEDIUM, forceTranscode: true },
-      audio: { codec: acodec, quality: mb.QUALITY_MEDIUM },
+      audio: aac ? { codec: "aac", quality: mb.QUALITY_MEDIUM } : avc ? undefined : { codec: "opus", quality: mb.QUALITY_MEDIUM },
       showWarnings: false,
     });
     if (!conversion.isValid) throw new CompressError("That video's format isn't supported. Try an MP4 from your phone's camera.");

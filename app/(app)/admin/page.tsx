@@ -48,7 +48,7 @@ function AdminOverviewPageContent() {
             <StatCard icon="users" label="People" value={o.people.total} href="/admin/people" hint={<>{o.people.new7d} new this week · <Trend now={o.people.new7d} before={o.people.newPrev7d} unit="" /></>} />
             <StatCard icon="calendar" label="Upcoming events" value={o.events.upcoming} href="/admin/events" hint={`${o.events.thisWeek} in the next 7 days · ${o.events.created7d} posted this week`} />
             <StatCard icon="hash" label="Communities" value={o.communities.total} href="/admin/communities" hint={`${o.communities.new7d} new this week · ${o.communities.large} with ${o.hostMinMembers}+ members`} />
-            <StatCard icon="shield" label="Suspended accounts" value={o.people.suspended} href="/admin/people?filter=suspended" hint={`${pluralize(o.people.verifiedHosts, "verified host")} · ${pluralize(o.people.unverified, "unverified email")}`} />
+            <StatCard icon="shield" label="Suspended accounts" value={o.people.suspended} href="/admin/people?filter=suspended" hint={pluralize(o.people.unverified, "unverified email")} />
           </div>
 
           <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">

@@ -10,14 +10,14 @@ import { Icon } from "@/components/ui/Icon";
 import { RowSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/States";
 import { useApi } from "@/lib/hooks/useApi";
+import { LIMITS } from "@/lib/constants";
 import type { CommunityDTO } from "@/lib/types";
-import { GroupJoinButton } from "./GroupJoinButton";
 import { GroupFormModal } from "./GroupFormModal";
 import { SpaceError } from "./parts";
 
 export function GroupsView({ c }: { c: CommunityDTO }) {
   const router = useRouter();
-  const { data, loading, error, status, reload } = useApi(() => SubcommunityService.list(c.slug), [c.slug]);
+  const { data, loading, error, status, reload } = useApi(() => SubcommunityService.list(c.slug), [c.slug], { key: `groups:${c.slug}` });
   const [open, setOpen] = useState(false);
   const canCreate = c.canCreateGroup;
 
@@ -39,20 +39,22 @@ export function GroupsView({ c }: { c: CommunityDTO }) {
         <SpaceError status={status} message={error} onRetry={reload} />
       ) : !(data ?? []).length ? (
         <EmptyState icon="folder" title="No groups yet" compact>
-          {canCreate ? "Groups are smaller spaces inside this community, like a beginners crew or a Saturday ride." : c.groupPolicy === "off" ? "Groups are turned off in this community." : c.groupPolicy === "admins" ? "Only admins can create groups here." : "Join the community to start a group."}
+          {canCreate ? `Groups are small private spaces inside this community, like a beginners crew or a Saturday ride. You add people yourself, up to ${LIMITS.groupMembers}.` : "You're not in any group here. A group's admins can add you."}
         </EmptyState>
       ) : (
         <ul className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
           {(data ?? []).map((g) => (
             <li key={g.id} className="flex flex-col rounded-card border border-line bg-surface p-4">
               <Link href={`/communities/${c.slug}?g=${g.slug}`} className="flex items-center gap-1.5 text-base font-semibold hover:underline">
+                <Icon name="lock" size={13} className="shrink-0 text-ink-muted" />
                 <span className="truncate">{g.name}</span>
-                {g.visibility === "private" && <Icon name="lock" size={13} className="shrink-0 text-ink-muted" />}
               </Link>
-              <p className="mt-1 line-clamp-2 min-h-10 text-[13px] text-ink-muted">{g.locked ? "An invite-only group." : g.description || "No description yet."}</p>
+              <p className="mt-1 line-clamp-2 min-h-10 text-[13px] text-ink-muted">{g.description || "No description yet."}</p>
               <div className="mt-3 flex items-center justify-between gap-3 border-t border-line pt-3">
-                <span className="font-mono text-[11px] text-ink-muted">{g.memberCount === null ? "Invite-only" : `${g.memberCount} members`}</span>
-                <GroupJoinButton group={g} parentSlug={c.slug} parentMember={c.viewer.isMember} onJoined={reload} />
+                <span className="font-mono text-[11px] text-ink-muted">
+                  {g.memberCount ?? 0}/{LIMITS.groupMembers} members
+                </span>
+                {g.viewer.role ? <span className="font-mono text-[11px] text-ink-muted capitalize">{g.viewer.role}</span> : <span className="font-mono text-[11px] text-ink-muted">Not in it</span>}
               </div>
             </li>
           ))}

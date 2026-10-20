@@ -160,8 +160,8 @@ const COMMUNITIES: SeedCommunity[] = [
     members: ["tobi", "amara", "kunle", "dami", "yusuf", "folake", "sade"],
     age: 320,
     groups: [
-      { key: "waf-beginners", name: "Beginner sessions", description: "Never stepped on a board? Start here. Slow, patient, spare boards and pads on hand.", visibility: "parent", owner: "kunle", members: ["kunle", "tobi", "amara", "dami"] },
-      { key: "waf-filmers", name: "Filmers & photographers", description: "Who's filming Sunday's session? Share clips, gear tips and shoot days.", visibility: "parent", owner: "tobi", members: ["tobi", "dami", "folake"] },
+      { key: "waf-beginners", name: "Beginner sessions", description: "Never stepped on a board? Start here. Slow, patient, spare boards and pads on hand.", visibility: "private", owner: "kunle", members: ["kunle", "tobi", "amara", "dami"] },
+      { key: "waf-filmers", name: "Filmers & photographers", description: "Who's filming Sunday's session? Share clips, gear tips and shoot days.", visibility: "private", owner: "tobi", members: ["tobi", "dami", "folake"] },
       { key: "waf-night", name: "Night riders", description: "Invite-only late sessions. Locations shared in the group.", visibility: "private", owner: "kunle", members: ["kunle", "tobi"] },
     ],
     posts: [
@@ -183,7 +183,7 @@ const COMMUNITIES: SeedCommunity[] = [
     admins: ["sade"],
     members: ["amara", "sade", "tobi", "emeka", "folake", "ngozi", "dami"],
     age: 410,
-    groups: [{ key: "alte-vinyl", name: "Vinyl diggers", description: "Crate-digging trips, record swaps and what's on the turntable.", visibility: "parent", owner: "amara", members: ["amara", "tobi", "sade"] }],
+    groups: [{ key: "alte-vinyl", name: "Vinyl diggers", description: "Crate-digging trips, record swaps and what's on the turntable.", visibility: "private", owner: "amara", members: ["amara", "tobi", "sade"] }],
     posts: [
       { by: "amara", body: "Listening session Thursday — bring one track you can't stop replaying. We'll go round the room, no skips.", ago: 2, pinned: true },
       { by: "sade", body: "Flyer scans from the 2019 Yaba nights are up. Name a venue you remember and I'll dig out the matching poster.", ago: 6 },
@@ -200,7 +200,7 @@ const COMMUNITIES: SeedCommunity[] = [
     owner: "chidi",
     members: ["chidi", "ife", "amara", "yusuf", "sade", "tobi"],
     age: 200,
-    groups: [{ key: "run-sub50", name: "Sub-50 10K pacers", description: "Structured pace work for anyone chasing a sub-50 10K.", visibility: "parent", owner: "chidi", members: ["chidi", "ife"] }],
+    groups: [{ key: "run-sub50", name: "Sub-50 10K pacers", description: "Structured pace work for anyone chasing a sub-50 10K.", visibility: "private", owner: "chidi", members: ["chidi", "ife"] }],
     posts: [{ by: "chidi", body: "Tuesday route: Admiralty Way out-and-back, 8K. Meet at the roundabout at 6:15pm. Reflective gear please — it gets dark fast.", ago: 2, pinned: true }],
   },
   {

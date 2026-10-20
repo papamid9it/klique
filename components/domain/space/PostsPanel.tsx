@@ -23,7 +23,7 @@ import { UserName } from "@/components/ui/UserName";
 export function PostsPanel({ slug, subSlug, canPost }: { slug: string; subSlug?: string; canPost: boolean }) {
   const { user } = useAuth();
   const toast = useToast();
-  const { items, loading, loadingMore, error, hasMore, loadMore, reload, setItems } = usePaged<PostDTO>((p) => SpaceService.posts(slug, subSlug, p), [slug, subSlug]);
+  const { items, loading, loadingMore, error, hasMore, loadMore, reload, setItems } = usePaged<PostDTO>((p) => SpaceService.posts(slug, subSlug, p), [slug, subSlug], { key: `posts:${slug}:${subSlug ?? ""}` });
   const [body, setBody] = useState("");
   const [image, setImage] = useState("");
   const [busy, setBusy] = useState(false);

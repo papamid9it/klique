@@ -33,9 +33,9 @@ export function ConversationInfo({
   onReport: () => void;
   onNavigate?: () => void;
 }) {
-  const profile = useApi(() => ProfileService.get(handle), [handle]);
+  const profile = useApi(() => ProfileService.get(handle), [handle], { key: `profile:${handle}` });
   const card = useProfileCard();
-  const mine = useApi(() => CommunityService.mine(), []);
+  const mine = useApi(() => CommunityService.mine(), [], { key: "my-communities" });
   const view = profile.data;
 
   if (profile.loading || !view) {

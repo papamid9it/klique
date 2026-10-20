@@ -18,7 +18,7 @@ import type {
   SystemStatusDTO,
   UserBrief,
 } from "@/lib/types";
-import { ablyKey, adminEmails, appUrl, cronSecret, eventHostMinMembers, googleConfig, isProd, livekitConfig, paystackConfig, promotionPricePerDay, promotionReview, r2Config, smtpConfig, webPushConfig } from "../env";
+import { ablyKey, adminEmails, appUrl, cronSecret, googleConfig, isProd, livekitConfig, paystackConfig, promotionPricePerDay, promotionReview, r2Config, smtpConfig, webPushConfig } from "../env";
 import { badRequest, forbidden, notFound } from "../http/errors";
 import { Channel, ChannelMessage, type IChannel, type IChannelMessage } from "../models/Channel";
 import { Community, type ICommunity } from "../models/Community";
@@ -278,13 +278,14 @@ const toAdminUser = (u: IUser): AdminUserDTO => ({
   email: u.email,
   emailVerified: !!u.emailVerifiedAt,
   isAdmin: isSiteAdmin(u),
-  canHostPublic: !!u.canHostPublic,
   suspended: !!u.suspendedAt,
   suspendedReason: u.suspendedReason ?? "",
   createdAt: u.createdAt.toISOString(),
 });
 
 const DAY = 24 * 60 * 60 * 1000;
+/** communities at least this big count as "large" on the overview */
+const LARGE_COMMUNITY = 100;
 
 /** Everyone, newest first, narrowed by a filter and a name / handle / email search. */
 export async function listUsers(q: { filter: AdminUserFilter; q: string; page: number }): Promise<Paginated<AdminUserDTO>> {
@@ -297,7 +298,6 @@ export async function listUsers(q: { filter: AdminUserFilter; q: string; page: n
   }
   if (q.filter === "new") and.push({ createdAt: { $gte: new Date(Date.now() - 7 * DAY) } });
   if (q.filter === "admins") and.push({ email: { $in: [...adminEmails()] } });
-  if (q.filter === "hosts") and.push({ canHostPublic: true });
   if (q.filter === "suspended") and.push({ suspendedAt: { $ne: null } });
   if (q.filter === "unverified") and.push({ emailVerifiedAt: null });
   const rows = await User.find(and.length ? { $and: and } : {})
@@ -336,13 +336,6 @@ async function findUser(userId: string): Promise<IUser> {
   const u = await User.findById(userId).lean<IUser>();
   if (!u) throw notFound("We couldn't find that person.");
   return u;
-}
-
-export async function setCanHostPublic(admin: IUser, userId: string, on: boolean): Promise<AdminUserDTO> {
-  await findUser(userId);
-  const u = await User.findByIdAndUpdate(userId, { canHostPublic: on }, { new: true }).lean<IUser>();
-  await logAction(admin, on ? "host.grant" : "host.revoke", "user", u!._id, `@${u!.handle}`, "", `/people/${u!.handle}`);
-  return toAdminUser(u!);
 }
 
 export async function setSuspended(admin: IUser, userId: string, on: boolean, reason = ""): Promise<AdminUserDTO> {
@@ -438,7 +431,6 @@ export async function listAdminCommunities(q: { q: string; sort: "members" | "ne
     .lean<ICommunity[]>();
   const list = rows.slice(0, size);
   const owners = await loadBriefs(list.map((c) => c.ownerId));
-  const min = eventHostMinMembers();
   return {
     items: list.map((c) => ({
       id: sid(c._id),
@@ -451,7 +443,6 @@ export async function listAdminCommunities(q: { q: string; sort: "members" | "ne
       country: c.country,
       city: c.city,
       owner: owners.get(sid(c.ownerId)) ?? null,
-      hostsPublic: c.memberCount >= min,
       createdAt: c.createdAt.toISOString(),
     })),
     page: q.page,
@@ -472,7 +463,7 @@ export async function adminDeleteCommunity(admin: IUser, id: string, note = "") 
 /** The tab counts in the admin menu. */
 export async function adminSummary(): Promise<AdminSummaryDTO> {
   const [reports, pendingDrafts] = await Promise.all([reportCounts(), EventDraft.countDocuments({ status: "pending" })]);
-  return { reports, pendingDrafts, hostMinMembers: eventHostMinMembers() };
+  return { reports, pendingDrafts };
 }
 
 export async function adminOverview(): Promise<AdminOverviewDTO> {
@@ -480,9 +471,9 @@ export async function adminOverview(): Promise<AdminOverviewDTO> {
   const d7 = new Date(now - 7 * DAY);
   const d14 = new Date(now - 14 * DAY);
   const start = new Date(new Date(now - 29 * DAY).toISOString().slice(0, 10));
-  const min = eventHostMinMembers();
+  const min = LARGE_COMMUNITY;
   const [
-    total, new7d, newPrev7d, suspended, verifiedHosts, unverified,
+    total, new7d, newPrev7d, suspended, unverified,
     upcoming, thisWeek, created7d, imported,
     communities, communitiesNew7d, large,
     openReports, pendingDrafts, perDay, recent,
@@ -491,7 +482,6 @@ export async function adminOverview(): Promise<AdminOverviewDTO> {
     User.countDocuments({ createdAt: { $gte: d7 } }),
     User.countDocuments({ createdAt: { $gte: d14, $lt: d7 } }),
     User.countDocuments({ suspendedAt: { $ne: null } }),
-    User.countDocuments({ canHostPublic: true }),
     User.countDocuments({ emailVerifiedAt: null }),
     Event.countDocuments({ cancelled: false, startsAt: { $gte: new Date(now) } }),
     Event.countDocuments({ cancelled: false, startsAt: { $gte: new Date(now), $lt: new Date(now + 7 * DAY) } }),
@@ -514,7 +504,7 @@ export async function adminOverview(): Promise<AdminOverviewDTO> {
     return { day, count: byDay.get(day) ?? 0 };
   });
   return {
-    people: { total, new7d, newPrev7d, suspended, verifiedHosts, unverified },
+    people: { total, new7d, newPrev7d, suspended, unverified },
     events: { upcoming, thisWeek, created7d, imported },
     communities: { total: communities, new7d: communitiesNew7d, large },
     queue: { openReports, pendingDrafts },
@@ -545,7 +535,6 @@ export function systemStatus(): SystemStatusDTO {
       { id: "cron", label: "Scheduled jobs", ok: !!cronSecret(), detail: cronSecret() ? "CRON_SECRET is set: reminders, cleanup and the nightly event finder can run." : "CRON_SECRET isn't set, so reminders, cleanup and the nightly event finder won't run." },
     ],
     admins: [...adminEmails()],
-    hostMinMembers: eventHostMinMembers(),
     appUrl: appUrl(),
     environment: isProd() ? "production" : "development",
   };

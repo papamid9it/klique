@@ -91,7 +91,7 @@ export function TopicFormModal({ slug, communityName, board, topic, onClose, onS
               ))}
             </ul>
           )}
-          <input ref={photoRef} type="file" hidden multiple accept=".jpg,.jpeg,.png,.webp,.gif,.avif" onChange={(e) => void upload("photo", e.target.files)} aria-label="Choose pictures" />
+          <input ref={photoRef} type="file" hidden multiple accept=".jpg,.jpeg,.png,.webp,.gif,.avif,.heic,.heif" onChange={(e) => void upload("photo", e.target.files)} aria-label="Choose pictures" />
           <input ref={videoRef} type="file" hidden accept=".mp4,.mov,.webm,.m4v" onChange={(e) => void upload("video", e.target.files)} aria-label="Choose a video" />
           <div className="flex flex-wrap items-center gap-2">
             {status?.photo ? (

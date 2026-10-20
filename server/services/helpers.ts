@@ -86,7 +86,7 @@ export async function purgeSpaceData(communityId: Types.ObjectId, subcommunityId
   const channels = await Channel.find(where).select("_id").lean<{ _id: Types.ObjectId }[]>();
   const channelIds = channels.map((c) => c._id);
 
-  // Every uploaded file in this space goes from Cloudinary too: chat photos/videos, topic media, update photos, event covers.
+  // Every uploaded file in this space goes from storage too: chat photos/videos, topic media, update photos, event covers.
   const [msgFiles, postFiles, topicFiles] = await Promise.all([
     channelIds.length ? ChannelMessage.find({ channelId: { $in: channelIds }, "images.0": { $exists: true } }).select("images").lean<{ images: string[] }[]>() : [],
     Post.find({ ...where, imageUrl: { $ne: null } }).select("imageUrl").lean<{ imageUrl: string | null }[]>(),

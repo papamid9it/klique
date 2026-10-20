@@ -20,6 +20,7 @@ export function PeopleBrowser() {
   const { items, loading, loadingMore, error, hasMore, loadMore, reload } = usePaged<UserBrief>(
     (page) => ProfileService.people({ where, interest: interest || undefined, q: dq || undefined, page }),
     [where, interest, dq],
+    { keepPrevious: true, key: `people:${where}:${interest}:${dq}` },
   );
   return (
     <div>
@@ -32,7 +33,7 @@ export function PeopleBrowser() {
           ))}
         </SelectField>
       </div>
-      {loading ? (
+      {loading && items.length === 0 ? (
         <RowSkeleton />
       ) : error ? (
         <ErrorState message={error} onRetry={reload} />
@@ -40,7 +41,7 @@ export function PeopleBrowser() {
         <EmptyState icon="user" title="No one found">People with private profiles don&apos;t appear here.</EmptyState>
       ) : (
         <>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className={`grid gap-3 transition-opacity duration-200 sm:grid-cols-2 ${loading ? "opacity-60" : ""}`} aria-busy={loading || undefined}>
             {items.map((u) => (
               <PersonRow key={u.id} user={u} />
             ))}

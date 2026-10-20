@@ -1,9 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { errorMessage, isApiError } from "@/app/ApiCore";
+import { AdminService } from "@/app/services/AdminService";
+import { CommunityService } from "@/app/services/CommunityService";
 import { EventService, type EventInput } from "@/app/services/EventService";
 import { SubcommunityService } from "@/app/services/SubcommunityService";
 import { PageTitle } from "@/components/layout/PageTitle";
@@ -17,7 +20,7 @@ import { SelectField, TextArea, TextField } from "@/components/ui/Field";
 import { Icon } from "@/components/ui/Icon";
 import { INTERESTS, LIMITS, isInterestId, type InterestId } from "@/lib/constants";
 import { CURRENCIES, formatPrice } from "@/lib/format";
-import { useApi } from "@/lib/hooks/useApi";
+import { useApi, useDebounced } from "@/lib/hooks/useApi";
 
 function toIso(date: string, time: string): string | null {
   if (!date || !time) return null;
@@ -60,20 +63,21 @@ function NewEventForm() {
     if (status === "anon") requireAuth();
   }, [status, requireAuth]);
 
-  // where this person may host: public events, and/or the communities (or groups) they run
+  // Events are posted from inside a community by its owner and admins (a group's by the group's), for that
+  // community only. Site admins can pick any community, or none for a public event.
   const hosting = useApi(status === "authed" ? () => EventService.hosting() : null, [status]);
   const communities = useMemo(() => hosting.data?.communities ?? [], [hosting.data]);
-  const canPublic = !!hosting.data?.public.allowed;
-  // Not allowed to post public events: start in the first community they can host in.
-  useEffect(() => {
-    if (hosting.data && !hosting.data.public.allowed && !communitySlug && hosting.data.communities[0]) setCommunitySlug(hosting.data.communities[0].slug);
-  }, [hosting.data, communitySlug]);
+  const siteAdmin = !!hosting.data?.siteAdmin;
+  // the admin's pick (name and privacy) when it isn't one of their own communities
+  const adminPick = useApi(siteAdmin && communitySlug && !communities.some((c) => c.slug === communitySlug) ? () => CommunityService.get(communitySlug) : null, [siteAdmin, communitySlug]);
   const groups = useApi(communitySlug ? () => SubcommunityService.list(communitySlug) : null, [communitySlug]);
-  const subs = useMemo(() => (communitySlug ? groups.data ?? [] : []), [communitySlug, groups.data]);
-  const pickedCommunity = communities.find((c) => c.slug === communitySlug);
-  const groupsOnly = !!pickedCommunity?.groupsOnly;
+  // only groups they run (owners/admins; the community's owner and site admins oversee every group)
+  const subs = useMemo(() => (communitySlug ? (groups.data ?? []).filter((g) => g.viewer.canManage) : []), [communitySlug, groups.data]);
+  const own = communities.find((c) => c.slug === communitySlug);
+  const pickedCommunity = own ?? (adminPick.data ? { slug: adminPick.data.slug, name: adminPick.data.name, privacy: adminPick.data.privacy, groupsOnly: false } : undefined);
+  const groupsOnly = !!pickedCommunity?.groupsOnly && !siteAdmin;
   const pickedSub = subs.find((s) => s.slug === subSlug);
-  const privateSpace = pickedCommunity?.privacy === "private" || pickedSub?.visibility === "private";
+  const privateSpace = pickedCommunity?.privacy === "private" || !!pickedSub;
 
   const priceNum = Math.max(0, Math.round(Number(price) || 0));
   const cur = currency ?? currencyOf(place.country);
@@ -121,6 +125,12 @@ function NewEventForm() {
     setErrors({});
     setFormError(null);
     try {
+      if (groupsOnly && !subSlug) {
+        setErrors({ subSlug: "Pick the group this event is for." });
+        setFormError("Pick the group this event is for.");
+        setBusy(false);
+        return;
+      }
       const res = await EventService.create(input);
       router.push(`/events/${res.data.id}`);
     } catch (err) {
@@ -132,20 +142,36 @@ function NewEventForm() {
 
   if (status === "loading" || (status === "authed" && hosting.loading)) return <p className="text-sm text-ink-muted">Loading…</p>;
 
-  if (hosting.data && !canPublic && communities.length === 0) {
+  // Everyone but site admins posts from a community they run, reached from its Events page.
+  if (hosting.data && !siteAdmin && !own) {
     return (
       <div className="max-w-xl space-y-4 rounded-card border border-line bg-surface p-6">
         <span className="inline-flex size-11 items-center justify-center rounded-full bg-raised text-accent-text">
           <Icon name="calendar" size={20} />
         </span>
-        <h2 className="text-xl font-semibold tracking-[-0.02em]">Hosting opens up as your community grows</h2>
+        <h2 className="text-xl font-semibold tracking-[-0.02em]">Events are posted from inside a community</h2>
         <p className="text-sm text-ink-muted">
-          Events on Klique are posted by community owners and admins, by verified hosts, and by owners of communities with {hosting.data.public.minMembers}+ members. Start a community, or ask the admins of one you&apos;re in to post your event.
+          A community&apos;s owner and admins post its events from the community&apos;s Events page, and a group&apos;s owner and admins can post in their group. {communities.length ? "Pick one you run:" : "Start a community, or ask the admins of one you're in to post your event."}
         </p>
-        <div className="flex flex-wrap gap-2">
-          <Button href="/communities/new" variant="primary">Start a community</Button>
-          <Button href="/events">Browse events</Button>
-        </div>
+        {communities.length > 0 ? (
+          <ul className="space-y-1.5">
+            {communities.map((c) => (
+              <li key={c.slug}>
+                <Link href={`/communities/${c.slug}?view=events`} className="flex items-center gap-2 rounded-control border border-line px-3 py-2.5 text-sm font-semibold transition hover:bg-raised">
+                  <Icon name="calendar" size={15} className="text-ink-muted" />
+                  <span className="min-w-0 flex-1 truncate">{c.name}</span>
+                  {c.groupsOnly && <span className="text-xs font-normal text-ink-muted">your groups</span>}
+                  <Icon name="chevron-right" size={14} className="text-ink-muted" />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            <Button href="/communities/new" variant="primary">Start a community</Button>
+            <Button href="/events">Browse events</Button>
+          </div>
+        )}
       </div>
     );
   }
@@ -191,46 +217,43 @@ function NewEventForm() {
       </div>
       <ImageField kind="photo" label="Cover image (optional)" value={cover} onChange={setCover} error={errors.coverImage} hint="A wide picture works best. We'll use artwork if you skip it." />
 
-      {communities.length > 0 && (
-        <fieldset className="space-y-4 rounded-card border border-line bg-surface p-4">
-          <legend className="px-1 text-[13px] font-medium">{canPublic ? "Host in a community (optional)" : "Where it's posted"}</legend>
-          <SelectField
-            label="Community"
+      <fieldset className="space-y-4 rounded-card border border-line bg-surface p-4">
+        <legend className="px-1 text-[13px] font-medium">Where it&apos;s posted</legend>
+        {siteAdmin ? (
+          <AdminCommunityPicker
             value={communitySlug}
-            onChange={(e) => {
-              setCommunitySlug(e.target.value);
+            name={pickedCommunity?.name ?? null}
+            onChange={(slug) => {
+              setCommunitySlug(slug);
               setSubSlug("");
             }}
             error={errors.communitySlug}
-          >
-            {canPublic && <option value="">No community — public event</option>}
-            {communities.map((c) => (
-              <option key={c.slug} value={c.slug}>
-                {c.name}
+          />
+        ) : (
+          <p className="flex items-center gap-2 text-sm">
+            <Icon name="users" size={15} className="text-ink-muted" />
+            <span className="font-semibold">{pickedCommunity?.name}</span>
+          </p>
+        )}
+        {communitySlug && subs.length > 0 && (
+          <SelectField label="Group" value={subSlug} onChange={(e) => setSubSlug(e.target.value)} error={errors.subSlug}>
+            {groupsOnly ? <option value="">Pick a group you run</option> : <option value="">Whole community</option>}
+            {subs.map((g) => (
+              <option key={g.id} value={g.slug}>
+                {g.name}
               </option>
             ))}
           </SelectField>
-          {communitySlug && subs.length > 0 && (
-            <SelectField label="Group" value={subSlug} onChange={(e) => setSubSlug(e.target.value)} error={errors.subSlug}>
-              {groupsOnly ? <option value="">Pick a group you run</option> : <option value="">Whole community</option>}
-              {subs.map((s) => (
-                <option key={s.id} value={s.slug}>
-                  {s.name}
-                </option>
-              ))}
-            </SelectField>
-          )}
-          {privateSpace && (
-            <p className="flex items-start gap-2 text-xs text-ink-muted">
-              <Icon name="lock" size={14} className="mt-0.5 shrink-0" />
-              This space is private, so the event will be members-only. Only people inside it can see it.
-            </p>
-          )}
-        </fieldset>
-      )}
-      {communities.length > 0 && (
-        <p className="text-xs text-ink-muted">Events in private communities and groups are members-only. Anything else is public.</p>
-      )}
+        )}
+        {privateSpace ? (
+          <p className="flex items-start gap-2 text-xs text-ink-muted">
+            <Icon name="lock" size={14} className="mt-0.5 shrink-0" />
+            {pickedSub ? "Groups are private, so the event is for the group's members only." : "This community is private, so the event will be members-only."}
+          </p>
+        ) : (
+          <p className="text-xs text-ink-muted">{communitySlug ? "This community is public, so anyone can see the event." : "Not tied to a community: a public event anyone can see."}</p>
+        )}
+      </fieldset>
 
       {formError && Object.keys(errors).length === 0 && (
         <p role="alert" className="text-sm font-medium text-danger">
@@ -257,12 +280,59 @@ function NewEventForm() {
 export default function NewEventPage() {
   return (
     <div>
-      <PageTitle title="Host a thing" eyebrow="New event">
+      <PageTitle title="New event" eyebrow="Post an event">
         Tell people where to be and when.
       </PageTitle>
       <Suspense fallback={null}>
         <NewEventForm />
       </Suspense>
+    </div>
+  );
+}
+
+/** Site admins: post in any community (search by name), or in none for a public event. */
+function AdminCommunityPicker({ value, name, onChange, error }: { value: string; name: string | null; onChange: (slug: string) => void; error?: string }) {
+  const [q, setQ] = useState("");
+  const dq = useDebounced(q.trim(), 250);
+  const results = useApi(dq ? () => AdminService.communities({ q: dq, sort: "members" }) : null, [dq]);
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <Icon name={value ? "users" : "globe"} size={15} className="text-ink-muted" />
+        <span className="font-semibold">{value ? (name ?? value) : "No community: public event"}</span>
+        {value && (
+          <button type="button" onClick={() => onChange("")} className="ml-auto text-xs font-semibold text-accent-text hover:underline">
+            Make it public instead
+          </button>
+        )}
+      </div>
+      <TextField label="Post in a community (optional)" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search communities by name" error={error} />
+      {dq && (
+        <ul className="max-h-56 space-y-1 overflow-y-auto">
+          {results.loading ? (
+            <li className="px-1 text-xs text-ink-muted">Searching…</li>
+          ) : (results.data?.items ?? []).length === 0 ? (
+            <li className="px-1 text-xs text-ink-muted">No communities match.</li>
+          ) : (
+            results.data!.items.map((c) => (
+              <li key={c.id}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChange(c.slug);
+                    setQ("");
+                  }}
+                  className="flex w-full items-center gap-2 rounded-control px-2.5 py-2 text-left text-sm transition hover:bg-raised"
+                >
+                  <span className="min-w-0 flex-1 truncate font-semibold">{c.name}</span>
+                  <span className="font-mono text-[11px] text-ink-muted">{c.memberCount} members</span>
+                  {c.privacy === "private" && <Icon name="lock" size={12} className="text-ink-muted" />}
+                </button>
+              </li>
+            ))
+          )}
+        </ul>
+      )}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
-import Link from "next/link";
+import { SoftLink } from "@/components/ui/SoftLink";
+import { isSamePage, softNavigate } from "@/lib/nav";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { ChannelService } from "@/app/services/ChannelService";
@@ -21,14 +22,8 @@ import { CategoryModal, ChannelSettings, CreateChannelModal } from "./ChannelFor
 export type WorkspaceView = "topics" | "events" | "groups" | "members";
 export type GroupView = "updates" | "events" | "members";
 
-/** Channels grouped by category, uncategorised ones first — the order they're shown in. */
-export function orderChannels(data: ChannelsDTO) {
-  const sections: { category: ChannelCategoryDTO | null; channels: ChannelDTO[] }[] = [];
-  const loose = data.channels.filter((c) => !c.categoryId || !data.categories.some((k) => k.id === c.categoryId));
-  if (loose.length) sections.push({ category: null, channels: loose });
-  for (const category of data.categories) sections.push({ category, channels: data.channels.filter((c) => c.categoryId === category.id) });
-  return sections;
-}
+import { orderChannels } from "./order";
+export { orderChannels };
 
 async function copy(text: string, toast: (m: string, t?: "success" | "error") => void, done = "Link copied") {
   try {
@@ -98,7 +93,8 @@ export function ChannelList({
     });
 
   function go(href: string) {
-    router.push(href, { scroll: false });
+    if (isSamePage(href)) softNavigate(href);
+    else router.push(href, { scroll: false });
     onNavigate?.();
   }
 
@@ -118,7 +114,8 @@ export function ChannelList({
 
   const nav: { id: WorkspaceView; label: string; icon: IconName; count?: number | null; show: boolean }[] = [
     { id: "events", label: "Events", icon: "calendar", count: c.upcomingEventCount, show: true },
-    { id: "groups", label: "Groups", icon: "folder", count: c.subcommunityCount, show: true },
+    // groups are private: the folder only appears once you're in one (the owner and site admins see them all)
+    { id: "groups", label: "Groups", icon: "folder", count: c.subcommunityCount, show: (c.subcommunityCount ?? 0) > 0 },
     { id: "members", label: "Members", icon: "users", count: c.memberCount, show: c.viewer.isMember },
   ];
 
@@ -271,7 +268,7 @@ export function ChannelList({
 
   const navLink = (href: string, on: boolean, label: string, icon: IconName, count?: number | null) => (
     <li key={label}>
-      <Link
+      <SoftLink
         href={href}
         scroll={false}
         onClick={onNavigate}
@@ -281,7 +278,7 @@ export function ChannelList({
         <Icon name={icon} size={16} />
         {label}
         {typeof count === "number" && count > 0 && <span className="ml-auto font-mono text-[11px] text-ink-muted">{compactCount(count)}</span>}
-      </Link>
+      </SoftLink>
     </li>
   );
 
@@ -306,7 +303,7 @@ export function ChannelList({
 
   /* ---- Inside a group: everything on the left belongs to the group ---- */
   if (activeGroup) {
-    const g: ChannelGroupDTO = data.groups.find((x) => x.slug === activeGroup) ?? { id: activeGroup, slug: activeGroup, name: "Group", visibility: "parent", role: null, channels: [] };
+    const g: ChannelGroupDTO = data.groups.find((x) => x.slug === activeGroup) ?? { id: activeGroup, slug: activeGroup, name: "Group", visibility: "private", role: null, channels: [] };
     const gBase = `${base}?g=${g.slug}`;
     const gManage = g.role === "owner" || g.role === "admin";
     const gMenu: MenuEntry[] = [
@@ -327,9 +324,9 @@ export function ChannelList({
     return (
       <nav aria-label={`${g.name} channels`} className="flex h-full flex-col">
         <div className="border-b border-line px-2 py-2.5 pr-14 lg:pr-2">
-          <Link href={base} onClick={onNavigate} className="eyebrow mb-0.5 inline-flex items-center gap-1 px-2.5 hover:text-ink">
+          <SoftLink href={base} onClick={onNavigate} className="eyebrow mb-0.5 inline-flex items-center gap-1 px-2.5 hover:text-ink">
             <Icon name="arrow-left" size={11} /> {c.name}
-          </Link>
+          </SoftLink>
           {headerButton(g.name, g.visibility === "private", gMenu, "Group menu")}
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-2 py-3">
@@ -365,9 +362,9 @@ export function ChannelList({
   return (
     <nav aria-label={`${c.name} channels`} className="flex h-full flex-col">
       <div className="border-b border-line px-2 py-2.5 pr-14 lg:pr-2">
-        <Link href="/communities" onClick={onNavigate} className="eyebrow mb-0.5 inline-flex items-center gap-1 px-2.5 hover:text-ink">
+        <SoftLink href="/communities" onClick={onNavigate} className="eyebrow mb-0.5 inline-flex items-center gap-1 px-2.5 hover:text-ink">
           <Icon name="arrow-left" size={11} /> Communities
-        </Link>
+        </SoftLink>
         {headerButton(c.name, c.privacy === "private", headerMenu, "Community menu")}
       </div>
 
@@ -393,7 +390,7 @@ export function ChannelList({
                 const on = view === "topics" && activeBoard === b.slug;
                 return (
                   <li key={b.id} className="group/board relative">
-                    <Link
+                    <SoftLink
                       href={`${base}?view=topics&b=${b.slug}`}
                       scroll={false}
                       onClick={onNavigate}
@@ -403,7 +400,7 @@ export function ChannelList({
                       <Icon name={b.postPolicy === "admins" ? "megaphone" : "topics"} size={16} />
                       <span className="truncate">{b.name}</span>
                       {b.topicCount > 0 && <span className={cx("ml-auto font-mono text-[11px] text-ink-muted", manage && "group-hover/board:hidden")}>{compactCount(b.topicCount)}</span>}
-                    </Link>
+                    </SoftLink>
                     {manage && (
                       <div className="absolute top-1.5 right-1 hidden group-focus-within/board:block group-hover/board:block">
                         <Dropdown
@@ -513,7 +510,7 @@ export function ChannelList({
 function ChannelRow({ ch, href, active, menu, onNavigate }: { ch: ChannelDTO; href: string; active: boolean; menu: MenuEntry[] | null; onNavigate?: () => void }) {
   return (
     <li className="group/ch relative">
-      <Link
+      <SoftLink
         href={href}
         scroll={false}
         onClick={onNavigate}
@@ -534,7 +531,7 @@ function ChannelRow({ ch, href, active, menu, onNavigate }: { ch: ChannelDTO; hr
         ) : (
           ch.unread && !active && <span className="ml-auto size-2 shrink-0 rounded-full bg-accent" aria-label="Unread messages" />
         )}
-      </Link>
+      </SoftLink>
       {menu && (
         <span className="absolute top-1/2 right-1.5 -translate-y-1/2 opacity-100 transition focus-within:opacity-100 has-[[aria-expanded=true]]:opacity-100 md:opacity-0 md:group-hover/ch:opacity-100">
           <Dropdown

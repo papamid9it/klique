@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { TopicService } from "@/app/services/TopicService";
 import { useAuth } from "@/components/providers/AuthProvider";
@@ -13,8 +12,9 @@ import { useDebounced, usePaged } from "@/lib/hooks/useApi";
 import type { BoardDTO, TopicDTO, TopicSort } from "@/lib/types";
 import { TopicFormModal } from "./TopicFormModal";
 import { TopicRow } from "./TopicRow";
-import { TopicThread } from "./TopicThread";
+import { emitTopic, seedTopic, useTopicEvents } from "./TopicThread";
 import { topicHref } from "./TopicMenu";
+import { softNavigate } from "@/lib/nav";
 
 const SORTS: { id: TopicSort; label: string }[] = [
   { id: "hot", label: "Hot" },
@@ -22,23 +22,30 @@ const SORTS: { id: TopicSort; label: string }[] = [
   { id: "top", label: "Top" },
 ];
 
-/** A community's Reddit-style board. With `topicId` it shows that topic's thread instead of the list. */
-export function TopicsPanel({ slug, communityName, isMember, topicId, board }: { slug: string; communityName: string; isMember: boolean; topicId: string | null; board: BoardDTO | null }) {
-  const router = useRouter();
-  const back = `/communities/${slug}?view=topics${board ? `&b=${board.slug}` : ""}`;
-  if (topicId) return <TopicThread backHref={back} onGone={() => router.replace(back, { scroll: false })} />;
+/**
+ * A community's Reddit-style board. Opening a topic (`openId`) shows it in the right-hand panel; the list stays
+ * here, scrolled where it was, so you can keep reading and open another.
+ */
+export function TopicsPanel({ slug, communityName, isMember, openId, board }: { slug: string; communityName: string; isMember: boolean; openId: string | null; board: BoardDTO | null }) {
   if (!board) return <EmptyState icon="topics" title="No boards yet">Admins can add boards from the sidebar, like Updates or Projects.</EmptyState>;
-  return <Board key={board.slug} slug={slug} communityName={communityName} isMember={isMember} board={board} />;
+  return <Board key={board.slug} slug={slug} communityName={communityName} isMember={isMember} board={board} openId={openId} />;
 }
 
-function Board({ slug, communityName, isMember, board }: { slug: string; communityName: string; isMember: boolean; board: BoardDTO }) {
+function Board({ slug, communityName, isMember, board, openId }: { slug: string; communityName: string; isMember: boolean; board: BoardDTO; openId: string | null }) {
   const { requireAuth } = useAuth();
-  const router = useRouter();
   const [sort, setSort] = useState<TopicSort>("hot");
   const [q, setQ] = useState("");
   const dq = useDebounced(q.trim(), 350);
   const [creating, setCreating] = useState(false);
-  const { items, loading, loadingMore, error, hasMore, loadMore, reload, setItems } = usePaged<TopicDTO>((page) => TopicService.list(slug, { board: board.slug, sort, q: dq || undefined, page }), [slug, board.slug, sort, dq]);
+  const { items, loading, loadingMore, error, hasMore, loadMore, reload, setItems } = usePaged<TopicDTO>((page) => TopicService.list(slug, { board: board.slug, sort, q: dq || undefined, page }), [slug, board.slug, sort, dq], {
+    keepPrevious: true,
+    key: `topics:${slug}:${board.slug}:${sort}:${dq}`,
+  });
+  // likes, comments and edits made in the open topic show here too
+  useTopicEvents((e) => {
+    if (e.type === "changed") setItems((prev) => (prev.some((x) => x.id === e.topic.id && x !== e.topic) ? prev.map((x) => (x.id === e.topic.id ? e.topic : x)) : prev));
+    else setItems((prev) => (prev.some((x) => x.id === e.id) ? prev.filter((x) => x.id !== e.id) : prev));
+  });
 
   return (
     <div className="space-y-4">
@@ -71,7 +78,7 @@ function Board({ slug, communityName, isMember, board }: { slug: string; communi
         )}
       </div>
 
-      {loading ? (
+      {loading && items.length === 0 ? (
         <RowSkeleton rows={4} />
       ) : error ? (
         <ErrorState message={error} onRetry={() => void reload()} />
@@ -80,10 +87,10 @@ function Board({ slug, communityName, isMember, board }: { slug: string; communi
           {dq ? "Try different words." : `Topics are for longer conversations in ${communityName} that people can comment on, like a forum.`}
         </EmptyState>
       ) : (
-        <ul className="space-y-3">
+        <ul className={cx("space-y-3 transition-opacity", loading && "opacity-60")} aria-busy={loading || undefined}>
           {items.map((t) => (
             <li key={t.id}>
-              <TopicRow topic={t} scroll={false} onChange={(n) => setItems((prev) => prev.map((x) => (x.id === n.id ? n : x)))} onRemoved={() => setItems((prev) => prev.filter((x) => x.id !== t.id))} />
+              <TopicRow topic={t} active={t.id === openId} onChange={(n) => emitTopic({ type: "changed", topic: n })} onRemoved={() => emitTopic({ type: "removed", id: t.id })} />
             </li>
           ))}
         </ul>
@@ -105,7 +112,14 @@ function Board({ slug, communityName, isMember, board }: { slug: string; communi
           onClose={() => setCreating(false)}
           onSaved={(t) => {
             setCreating(false);
-            router.push(topicHref(t), { scroll: false });
+            // straight to the top of the list, and open beside it
+            setItems((prev) => {
+              const rest = prev.filter((x) => x.id !== t.id);
+              const at = rest.findIndex((x) => !x.pinned);
+              return at < 0 ? [...rest, t] : [...rest.slice(0, at), t, ...rest.slice(at)];
+            });
+            seedTopic(t);
+            softNavigate(topicHref(t));
           }}
         />
       )}

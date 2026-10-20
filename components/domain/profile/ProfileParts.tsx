@@ -53,7 +53,7 @@ export const longDate = (iso: string) => new Date(iso).toLocaleDateString("en-GB
 
 /** Communities both of you are in: the person's visible communities ∩ yours. */
 export function useMutualCommunities(view: ProfileView | null): CommunityCardDTO[] {
-  const mine = useApi(() => CommunityService.mine(), []);
+  const mine = useApi(() => CommunityService.mine(), [], { key: "my-communities" });
   if (!view || view.isSelf) return view?.communities ?? [];
   const mineIds = new Set((mine.data ?? []).map((c) => c.id));
   return view.communities.filter((c) => mineIds.has(c.id));

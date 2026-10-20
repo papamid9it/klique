@@ -284,7 +284,7 @@ export async function updateTopic(viewer: IUser, space: Space, access: SpaceAcce
   if (Object.keys(set).length) {
     rateLimit(`topic-edit:${sid(viewer._id)}`, 40, 60_000);
     await Topic.updateOne({ _id: t._id }, { $set: set });
-    // files dropped by the edit (removed pictures/videos, or the old single image) leave Cloudinary
+    // files dropped by the edit (removed pictures/videos, or the old single image) leave storage
     if (set.media !== undefined) {
       const kept = new Set(topicFileUrls({ imageUrl: null, media: set.media as ITopic["media"] }));
       deleteUploads(topicFileUrls(t).filter((u) => u && !kept.has(u)));

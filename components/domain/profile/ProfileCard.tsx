@@ -13,7 +13,7 @@ import { UserName } from "@/components/ui/UserName";
 
 /** The small card (Discord's profile popover): banner, name, a line of bio, what you share, quick actions. */
 export function ProfileCard({ handle, onClose, onExpand }: { handle: string; onClose: () => void; onExpand: () => void }) {
-  const { data: view, loading, status, setData, reload } = useApi(() => ProfileService.get(handle), [handle]);
+  const { data: view, loading, status, setData, reload } = useApi(() => ProfileService.get(handle), [handle], { key: `profile:${handle}` });
   const mutual = useMutualCommunities(view);
 
   if (loading) {

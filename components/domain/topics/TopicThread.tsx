@@ -1,7 +1,6 @@
 "use client";
 
-import Link from "next/link";
-import { createContext, useContext, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { errorMessage } from "@/app/ApiCore";
 import { TopicService } from "@/app/services/TopicService";
 import { MessageEditor } from "@/components/domain/chat/MessageEditor";
@@ -19,7 +18,7 @@ import { cx } from "@/components/ui/cx";
 import { LIMITS } from "@/lib/constants";
 import { formatDateLong, formatTime, relativeStamp } from "@/lib/format";
 import { useApi, useNow } from "@/lib/hooks/useApi";
-import type { TopicCommentDTO, TopicDetailDTO, TopicDTO } from "@/lib/types";
+import type { TopicCommentDTO, TopicDetailDTO, TopicDTO, UserBrief } from "@/lib/types";
 import { Linkified, LikeButton } from "./parts";
 import { TopicMedia } from "./TopicMedia";
 import { TopicMenu } from "./TopicMenu";
@@ -28,7 +27,12 @@ import { UserName } from "@/components/ui/UserName";
 /** Replies revealed per "more replies" click, at each level. */
 const REPLY_PAGE = 3;
 /** Deepest level drawn in place; anything below opens as its own thread ("Continue this thread"). */
-const MAX_DEPTH = 3;
+const MAX_DEPTH = 4;
+/**
+ * Like Reddit, a thread arrives already open a few levels deep: this many replies show under a comment at each
+ * depth before "N more replies" (top-level comments show 3 replies, those show 2, then 1).
+ */
+const AUTO_SHOWN = [3, 2, 1];
 
 /**
  * Comments the Reddit way: a tree with a thread line down each level (click it to collapse),
@@ -73,117 +77,207 @@ function findNode(ts: Tree[], id: string): Tree | null {
   return null;
 }
 
+/* ------------------------------------------------------------------ */
+/* Keeping the list and the open topic in step                         */
+/* ------------------------------------------------------------------ */
+
+type TopicEvent = { type: "changed"; topic: TopicDTO } | { type: "removed"; id: string };
+const listeners = new Set<(e: TopicEvent) => void>();
+
+/** Tell every topic list and the open topic that a topic changed (a like, a new comment, an edit) or went away. */
+export function emitTopic(e: TopicEvent) {
+  for (const fn of listeners) fn(e);
+}
+
+/** Listen for emitTopic. */
+export function useTopicEvents(handler: (e: TopicEvent) => void) {
+  const ref = useRef(handler);
+  useEffect(() => {
+    ref.current = handler;
+  });
+  useEffect(() => {
+    const fn = (e: TopicEvent) => ref.current(e);
+    listeners.add(fn);
+    return () => void listeners.delete(fn);
+  }, []);
+}
+
+/** Topics clicked in a list, so the panel can show the post straight away while its comments load. */
+const seeds = new Map<string, TopicDTO>();
+export function seedTopic(t: TopicDTO) {
+  seeds.set(t.id, t);
+  if (seeds.size > 50) seeds.delete(seeds.keys().next().value!);
+}
+
 type DetailState = ReturnType<typeof useApi<TopicDetailDTO>>;
 interface Detail extends DetailState {
   slug: string;
   topicId: string;
+  /** the topic to draw: the loaded one, or the one clicked in the list while it loads */
+  preview: TopicDTO | null;
   setTopic: (t: TopicDTO) => void;
   setComment: (id: string, patch: Partial<TopicCommentDTO>) => void;
-  addComment: (c: TopicCommentDTO) => void;
+  /** add a comment; `replaces` swaps out the placeholder shown while it was sending */
+  addComment: (c: TopicCommentDTO, replaces?: string) => void;
+  dropComment: (id: string) => void;
   markDeleted: (id: string) => void;
 }
 const DetailCtx = createContext<Detail | null>(null);
 const useDetail = () => {
   const d = useContext(DetailCtx);
-  if (!d) throw new Error("TopicThread / TopicComments must sit inside <TopicDetailProvider>.");
+  if (!d) throw new Error("TopicPost / TopicComments must sit inside <TopicDetailProvider>.");
   return d;
 };
 
 /**
- * Loads one topic and shares it between the post (middle pane) and its comments (right panel), the way
- * Discord shows a thread beside the conversation. With `topicId` null it does nothing.
+ * Loads one topic and shares it between the post and its comments, shown together in the right-hand panel
+ * while the board stays put in the middle. With `topicId` null it does nothing.
  */
 export function TopicDetailProvider({ slug, topicId, children }: { slug: string; topicId: string | null; children: ReactNode }) {
-  const { user } = useAuth();
-  const api = useApi(topicId ? () => TopicService.get(slug, topicId) : null, [slug, topicId, user?.id]);
+  const api = useApi(topicId ? () => TopicService.get(slug, topicId) : null, [slug, topicId], { key: topicId ? `topic:${slug}:${topicId}` : undefined });
   const { setData, reload } = api;
-  // someone commented, edited or deleted: refetch this topic
+  // someone commented, edited or deleted: refetch this topic (what's on screen stays meanwhile)
   useRealtimeEvent(() => void reload(), { filter: (e) => e.type === "topic" && e.topicId === topicId, debounceMs: 500 });
+  // a like or edit made in the list reaches the open topic
+  useTopicEvents((e) => {
+    if (e.type === "changed" && e.topic.id === topicId) setData((d) => (d && d.topic !== e.topic ? { ...d, topic: e.topic } : d));
+  });
+  // and the other way round: what changes here (likes, comment count) shows in the list
+  const loaded = api.data?.topic;
+  useEffect(() => {
+    if (loaded) emitTopic({ type: "changed", topic: loaded });
+  }, [loaded]);
+
+  const seed = topicId ? (seeds.get(topicId) ?? null) : null;
   const value = useMemo<Detail>(
     () => ({
       ...api,
       slug,
       topicId: topicId ?? "",
+      preview: api.data?.topic ?? seed,
       setTopic: (next) => setData((d) => (d ? { ...d, topic: next } : d)),
       setComment: (id, patch) => setData((d) => (d ? { ...d, comments: d.comments.map((c) => (c.id === id ? { ...c, ...patch } : c)) } : d)),
-      addComment: (c) => setData((d) => (d ? { ...d, topic: { ...d.topic, commentCount: d.topic.commentCount + 1 }, comments: [...d.comments, c] } : d)),
+      addComment: (c, replaces) =>
+        setData((d) => {
+          if (!d) return d;
+          if (replaces && d.comments.some((x) => x.id === replaces)) return { ...d, comments: d.comments.map((x) => (x.id === replaces ? c : x)) };
+          if (d.comments.some((x) => x.id === c.id)) return d; // a realtime refresh got here first
+          return { ...d, topic: { ...d.topic, commentCount: d.topic.commentCount + 1 }, comments: [...d.comments, c] };
+        }),
+      dropComment: (id) => setData((d) => (d ? { ...d, topic: { ...d.topic, commentCount: Math.max(0, d.topic.commentCount - 1) }, comments: d.comments.filter((c) => c.id !== id) } : d)),
       markDeleted: (id) => setData((d) => (d ? { ...d, topic: { ...d.topic, commentCount: Math.max(0, d.topic.commentCount - 1) }, comments: d.comments.map((c) => (c.id === id ? { ...c, body: "", deleted: true, likeCount: 0, liked: false, canEdit: false, canDelete: false } : c)) } : d)),
     }),
-    [api, slug, topicId, setData],
+    [api, slug, topicId, setData, seed],
   );
   return <DetailCtx.Provider value={value}>{children}</DetailCtx.Provider>;
 }
 
-/** The topic itself. Its comments live in <TopicComments>, in the right panel. */
-export function TopicThread({ backHref, onGone }: { backHref: string; onGone: () => void }) {
-  const { data, loading, error, status, reload, setTopic, slug } = useDetail();
+/**
+ * The open topic in the right-hand panel: the post, then its comments, Reddit-style, in one scroll.
+ * `onClose` puts the community info back; `bare` leaves the close button to the drawer it sits in.
+ */
+export function TopicSide({ onClose, bare }: { onClose: () => void; bare?: boolean }) {
+  const { preview, error, status, reload } = useDetail();
+  const scroller = useRef<HTMLDivElement>(null);
+  const id = preview?.id;
+  // a different topic starts at the top
+  useEffect(() => {
+    scroller.current?.scrollTo({ top: 0 });
+  }, [id]);
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <header className={cx("flex min-h-14 shrink-0 items-center gap-2 border-b border-line pl-4", bare ? "pr-14" : "pr-2")}>
+        <Icon name="topics" size={17} className="shrink-0 text-ink-muted" />
+        <h2 className="min-w-0 flex-1 truncate text-[15px] font-semibold tracking-[-0.01em]">{preview?.board.name ?? "Topic"}</h2>
+        {!bare && (
+          <button type="button" onClick={onClose} aria-label="Close topic" title="Close" className="inline-flex size-9 shrink-0 items-center justify-center rounded-full text-ink-muted transition hover:bg-raised hover:text-ink">
+            <Icon name="x" size={18} />
+          </button>
+        )}
+      </header>
+      <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-3 pt-3 pb-6">
+        {!preview && error ? (
+          <SpaceError status={status} message={error} onRetry={reload} />
+        ) : (
+          <>
+            <TopicPost
+              onGone={(t) => {
+                emitTopic({ type: "removed", id: t.id });
+                onClose();
+              }}
+            />
+            <TopicComments inline />
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** The topic itself, at the top of the panel. */
+function TopicPost({ onGone }: { onGone: (t: TopicDTO) => void }) {
+  const { preview: t, setTopic, slug } = useDetail();
   const now = useNow();
 
-  if (loading) {
+  if (!t) {
     return (
-      <div className="space-y-4" aria-busy="true">
-        <Skeleton className="h-8 w-1/2" />
-        <Skeleton className="h-32" />
-        <Skeleton className="h-16" />
+      <div className="space-y-3 p-1" aria-busy="true">
+        <Skeleton className="h-6 w-2/3" />
+        <Skeleton className="h-24" />
       </div>
     );
   }
-  if (error || !data) return <SpaceError status={status} message={error} onRetry={reload} backHref={backHref} backLabel="Back to topics" />;
-
-  const { topic: t } = data;
+  const update = (next: TopicDTO) => {
+    setTopic(next);
+    emitTopic({ type: "changed", topic: next });
+  };
 
   return (
-    <div>
-      <Link href={backHref} scroll={false} className="eyebrow mb-4 inline-flex items-center gap-1 hover:text-ink">
-        <Icon name="arrow-left" size={11} /> {t.board.name}
-      </Link>
-
-      <article className="rounded-card border border-line bg-surface p-5 sm:p-6" aria-label={t.title}>
-        <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-ink-muted">
-          <ProfileTrigger handle={t.author.handle} className="inline-flex items-center gap-2 text-ink hover:underline">
-            <Avatar name={t.author.displayName} src={t.author.avatarUrl} frame={t.author.avatarFrame} size={26} />
-            <span className="text-[13px] font-semibold"><UserName name={t.author.displayName} effect={t.author.nameEffect} /></span>
-          </ProfileTrigger>
-          <span aria-hidden="true">·</span>
-          <time dateTime={t.createdAt} title={`${formatDateLong(t.createdAt)} ${formatTime(t.createdAt)}`}>
-            {now ? relativeStamp(t.createdAt, now) : ""}
-          </time>
-          {t.editedAt && <span>(edited)</span>}
-          {t.pinned && (
-            <span className="inline-flex items-center gap-1 font-semibold text-accent-text">
-              <Icon name="pushpin" size={12} /> Pinned
-            </span>
-          )}
-          {t.locked && (
-            <span className="inline-flex items-center gap-1 font-semibold">
-              <Icon name="lock" size={12} /> Locked
-            </span>
-          )}
-          <span className="ml-auto">
-            <TopicMenu topic={t} onChange={setTopic} onRemoved={onGone} />
+    <article className="rounded-card border border-line bg-surface p-4" aria-label={t.title}>
+      <div className="mb-2.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-ink-muted">
+        <ProfileTrigger handle={t.author.handle} className="inline-flex items-center gap-2 text-ink hover:underline">
+          <Avatar name={t.author.displayName} src={t.author.avatarUrl} frame={t.author.avatarFrame} size={24} />
+          <span className="text-[13px] font-semibold"><UserName name={t.author.displayName} effect={t.author.nameEffect} /></span>
+        </ProfileTrigger>
+        <span aria-hidden="true">·</span>
+        <time dateTime={t.createdAt} title={`${formatDateLong(t.createdAt)} ${formatTime(t.createdAt)}`}>
+          {now ? relativeStamp(t.createdAt, now) : ""}
+        </time>
+        {t.editedAt && <span>(edited)</span>}
+        {t.pinned && (
+          <span className="inline-flex items-center gap-1 font-semibold text-accent-text">
+            <Icon name="pushpin" size={12} /> Pinned
           </span>
-        </div>
-        <h1 className="text-[clamp(1.4rem,3vw,1.9rem)] leading-tight font-bold tracking-[-0.03em] break-words">{t.title}</h1>
-        {t.body && (
-          <p className="mt-3 text-[15px] leading-relaxed break-words whitespace-pre-wrap">
-            <Linkified text={t.body} />
-          </p>
         )}
-        <TopicMedia media={t.media} tall className="mt-4" />
-        <div className="mt-4 flex items-center gap-1 border-t border-line pt-3">
-          <LikeButton liked={t.liked} count={t.likeCount} canLike={t.canLike} onToggle={async () => (await TopicService.like(slug, t.id)).data} onChange={(n) => setTopic({ ...t, liked: n.liked, likeCount: n.likeCount })} />
-          <button
-            type="button"
-            onClick={() => scrollPaneTo(document.getElementById("topic-comments"))}
-            aria-label={`${t.commentCount} comments`}
-            className="inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[13px] font-semibold text-ink-muted transition hover:bg-raised hover:text-ink xl:pointer-events-none"
-          >
-            <Icon name="message" size={16} />
-            <span className="font-mono tabular-nums">{t.commentCount}</span>
-          </button>
-        </div>
-      </article>
-    </div>
+        {t.locked && (
+          <span className="inline-flex items-center gap-1 font-semibold">
+            <Icon name="lock" size={12} /> Locked
+          </span>
+        )}
+        <span className="ml-auto">
+          <TopicMenu topic={t} onChange={update} onRemoved={() => onGone(t)} />
+        </span>
+      </div>
+      <h1 className="text-xl leading-snug font-bold tracking-[-0.02em] break-words">{t.title}</h1>
+      {t.body && (
+        <p className="mt-2.5 text-[15px] leading-relaxed break-words whitespace-pre-wrap">
+          <Linkified text={t.body} />
+        </p>
+      )}
+      <TopicMedia media={t.media} tall className="mt-3" />
+      <div className="mt-3 flex items-center gap-1 border-t border-line pt-2.5">
+        <LikeButton liked={t.liked} count={t.likeCount} canLike={t.canLike} onToggle={async () => (await TopicService.like(slug, t.id)).data} onChange={(n) => update({ ...t, liked: n.liked, likeCount: n.likeCount })} />
+        <button
+          type="button"
+          onClick={() => scrollPaneTo(document.getElementById("topic-comments"))}
+          aria-label={`${t.commentCount} comments`}
+          className="inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[13px] font-semibold text-ink-muted transition hover:bg-raised hover:text-ink"
+        >
+          <Icon name="message" size={16} />
+          <span className="font-mono tabular-nums">{t.commentCount}</span>
+        </button>
+      </div>
+    </article>
   );
 }
 
@@ -201,8 +295,11 @@ interface TreeCtx {
   setReplyingTo: (id: string | null) => void;
   focus: (id: string) => void;
   onChange: (id: string, patch: Partial<TopicCommentDTO>) => void;
-  onPosted: (c: TopicCommentDTO) => void;
+  onPosted: (c: TopicCommentDTO, replaces?: string) => void;
+  onPending: (c: TopicCommentDTO) => void;
+  onFailed: (id: string) => void;
   onDeleted: (id: string) => void;
+  me: UserBrief | null;
 }
 
 /**
@@ -212,7 +309,7 @@ interface TreeCtx {
  */
 export function TopicComments({ inline }: { inline?: boolean } = {}) {
   const { user, requireAuth } = useAuth();
-  const { data, loading, slug, setComment, addComment, markDeleted } = useDetail();
+  const { data, loading, slug, setComment, addComment, dropComment, markDeleted } = useDetail();
   const now = useNow();
   const tree = useMemo(() => nest(data?.comments ?? []), [data?.comments]);
   const [shown, setShownMap] = useState<Record<string, number>>({});
@@ -249,20 +346,24 @@ export function TopicComments({ inline }: { inline?: boolean } = {}) {
           else listRef.current?.scrollTo({ top: 0 });
         },
         onChange: setComment,
-        onPosted: (c) => {
+        onPosted: (c, replaces) => addComment(c, replaces),
+        // shown at once while it sends; swapped for the real one when the server answers
+        onPending: (c) => {
           addComment(c);
           // open the comment they answered far enough to show the new reply
           if (c.parentId) setShownMap((s) => ({ ...s, [c.parentId!]: Number.MAX_SAFE_INTEGER }));
           setReplyingTo(null);
         },
+        onFailed: dropComment,
         onDeleted: markDeleted,
+        me: user,
       }
     : null;
 
   const composer = t && (
         <div className={inline ? "px-3 pt-3" : "shrink-0 border-t border-line p-3"}>
           {t.canComment ? (
-            <CommentBox slug={slug} topicId={t.id} placeholder="Add a comment" onPosted={(c) => ctx?.onPosted(c)} />
+            ctx && <CommentBox ctx={ctx} placeholder="Add a comment" />
           ) : (
             <p className="flex items-center gap-2 rounded-control border border-line bg-surface px-3 py-2.5 text-sm text-ink-muted">
               <Icon name="lock" size={15} className="shrink-0" />
@@ -284,7 +385,7 @@ export function TopicComments({ inline }: { inline?: boolean } = {}) {
       );
 
   return (
-    <section id={inline ? "topic-comments" : undefined} aria-label="Comments" className={inline ? "mt-6 scroll-mt-4 rounded-card border border-line bg-surface/40 pb-2" : "flex h-full min-h-0 flex-col"}>
+    <section id={inline ? "topic-comments" : undefined} aria-label="Comments" className={inline ? "mt-4 scroll-mt-4 rounded-card border border-line bg-surface/40 pb-2" : "flex h-full min-h-0 flex-col"}>
       <header className={cx("flex min-h-14 shrink-0 items-center gap-2 px-4", !inline && "border-b border-line")}>
         <Icon name="message" size={17} className="text-ink-muted" />
         <h2 className="text-[15px] font-semibold tracking-[-0.01em]">Comments</h2>
@@ -322,21 +423,38 @@ export function TopicComments({ inline }: { inline?: boolean } = {}) {
 }
 
 /** A rounded field with the send button inside. Used pinned at the bottom (new comment) and inline under a comment (reply). */
-function CommentBox({ slug, topicId, parentId, placeholder, onPosted, onCancel, autoFocus }: { slug: string; topicId: string; parentId?: string; placeholder: string; onPosted: (c: TopicCommentDTO) => void; onCancel?: () => void; autoFocus?: boolean }) {
+let pendingSeq = 0;
+const isPending = (c: TopicCommentDTO) => c.id.startsWith("pending-");
+
+function CommentBox({ ctx, parentId, placeholder, onCancel, autoFocus }: { ctx: TreeCtx; parentId?: string; placeholder: string; onCancel?: () => void; autoFocus?: boolean }) {
   const toast = useToast();
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const id = useId();
+  const { slug, topic } = ctx;
 
   async function post() {
     const body = text.trim();
     if (!body || busy) return;
-    setBusy(true);
-    try {
-      const res = await TopicService.comment(slug, topicId, body, parentId);
+    // the comment appears straight away; it only goes away again if the server says no
+    const tempId = `pending-${++pendingSeq}`;
+    if (ctx.me) {
+      const now = new Date().toISOString();
+      ctx.onPending({ id: tempId, topicId: topic.id, parentId: parentId ?? null, body, likeCount: 0, liked: false, deleted: false, createdAt: now, editedAt: null, author: ctx.me, canEdit: false, canDelete: false });
       setText("");
-      onPosted(res.data);
+    } else setBusy(true);
+    try {
+      const res = await TopicService.comment(slug, topic.id, body, parentId);
+      ctx.onPosted(res.data, ctx.me ? tempId : undefined);
+      if (!ctx.me) {
+        setText("");
+        ctx.setReplyingTo(null);
+      }
     } catch (e) {
+      if (ctx.me) {
+        ctx.onFailed(tempId);
+        setText((cur) => cur || body);
+      }
       toast(errorMessage(e), "error");
     } finally {
       setBusy(false);
@@ -402,7 +520,7 @@ function CommentNode({ node, depth, ctx }: { node: Tree; depth: number; ctx: Tre
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const isCollapsed = ctx.collapsed.has(c.id);
-  const open = Math.min(ctx.shown[c.id] ?? 0, kids.length);
+  const open = Math.min(ctx.shown[c.id] ?? AUTO_SHOWN[depth] ?? 0, kids.length);
   const left = kids.length - open;
   const tooDeep = depth >= MAX_DEPTH;
   const total = countAll(node);
@@ -413,7 +531,7 @@ function CommentNode({ node, depth, ctx }: { node: Tree; depth: number; ctx: Tre
   ];
 
   return (
-    <li className="relative">
+    <li className={cx("relative transition-opacity", isPending(c) && "opacity-60")} aria-busy={isPending(c) || undefined}>
       <div className="flex gap-2 pt-3">
         {/* avatar, then the thread line: click the line to fold this whole conversation */}
         <div className="flex w-7 shrink-0 flex-col items-center">
@@ -479,7 +597,7 @@ function CommentNode({ node, depth, ctx }: { node: Tree; depth: number; ctx: Tre
                 </p>
               )}
 
-              {!c.deleted && !editing && (
+              {!c.deleted && !editing && !isPending(c) && (
                 <div className="mt-0.5 -ml-2 flex flex-wrap items-center gap-0.5">
                   <LikeButton size="sm" liked={c.liked} count={c.likeCount} canLike={topic.canLike} onToggle={async () => (await TopicService.likeComment(slug, topic.id, c.id)).data} onChange={(n) => ctx.onChange(c.id, { liked: n.liked, likeCount: n.likeCount })} />
                   {topic.canComment && (
@@ -505,7 +623,7 @@ function CommentNode({ node, depth, ctx }: { node: Tree; depth: number; ctx: Tre
 
               {ctx.replyingTo === c.id && (
                 <div className="mt-2">
-                  <CommentBox slug={slug} topicId={topic.id} parentId={c.id} autoFocus placeholder={`Reply to ${c.author.displayName}`} onCancel={() => ctx.setReplyingTo(null)} onPosted={ctx.onPosted} />
+                  <CommentBox ctx={ctx} parentId={c.id} autoFocus placeholder={`Reply to ${c.author.displayName}`} onCancel={() => ctx.setReplyingTo(null)} />
                 </div>
               )}
 

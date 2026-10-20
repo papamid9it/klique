@@ -462,7 +462,7 @@ function Composer({
       <div className="flex items-end gap-2 rounded-card border border-line bg-surface p-2 focus-within:border-accent-text">
         {attach.enabled && (
           <>
-            <input ref={fileInput} type="file" hidden multiple accept=".jpg,.jpeg,.png,.webp,.gif,.avif" onChange={(e) => (void attach.add(e.target.files), (e.target.value = ""))} aria-label="Choose pictures" />
+            <input ref={fileInput} type="file" hidden multiple accept=".jpg,.jpeg,.png,.webp,.gif,.avif,.heic,.heif" onChange={(e) => (void attach.add(e.target.files), (e.target.value = ""))} aria-label="Choose pictures" />
             <button type="button" onClick={() => fileInput.current?.click()} disabled={attach.full || attach.uploading} aria-label="Add pictures" title="Add pictures" className="inline-flex size-10 shrink-0 items-center justify-center rounded-full text-ink-muted transition hover:bg-raised hover:text-ink disabled:opacity-40">
               <Icon name="image" size={20} />
             </button>

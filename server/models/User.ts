@@ -32,8 +32,6 @@ export interface IUser {
   /** bump to invalidate every issued login token */
   tokenVersion: number;
   isDemo?: boolean;
-  /** granted by a site admin: may post public events that aren't tied to a community */
-  canHostPublic?: boolean;
   /** set by a site admin: the account can't sign in or use the API */
   suspendedAt?: Date | null;
   suspendedReason?: string;
@@ -67,7 +65,6 @@ const UserSchema = new Schema<IUser>(
     dmPolicy: { type: String, enum: ["everyone", "shared", "nobody"], default: "shared" },
     tokenVersion: { type: Number, default: 0 },
     isDemo: { type: Boolean, default: false },
-    canHostPublic: { type: Boolean, default: false },
     suspendedAt: { type: Date, default: null },
     suspendedReason: { type: String, default: "", maxlength: 300 },
   },

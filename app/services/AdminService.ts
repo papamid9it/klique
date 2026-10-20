@@ -37,7 +37,7 @@ export const AdminService = {
 
   users: (params: { filter?: AdminUserFilter; q?: string; page?: number }) => api.get<Envelope<Paginated<AdminUserDTO>>>("/api/admin/users", params),
   user: (id: string) => api.get<Envelope<AdminUserDetailDTO>>(`/api/admin/users/${id}`),
-  updateUser: (id: string, patch: { canHostPublic?: boolean; suspended?: boolean; signOut?: true; reason?: string }) => api.patch<Envelope<AdminUserDTO>>(`/api/admin/users/${id}`, patch),
+  updateUser: (id: string, patch: { suspended?: boolean; signOut?: true; reason?: string }) => api.patch<Envelope<AdminUserDTO>>(`/api/admin/users/${id}`, patch),
 
   events: (params: { filter?: AdminEventFilter; q?: string; page?: number }) => api.get<Envelope<Paginated<AdminEventRow>>>("/api/admin/events", params),
   setEventCancelled: (id: string, cancelled: boolean, note = "") => api.patch<Envelope<{ cancelled: boolean }>>(`/api/admin/events/${id}`, { cancelled, note }),

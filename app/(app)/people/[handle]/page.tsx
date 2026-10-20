@@ -41,7 +41,7 @@ export default function ProfilePage() {
   const handle = params.handle;
   const router = useRouter();
   const toast = useToast();
-  const { data, loading, error, status, reload, setData } = useApi(() => ProfileService.get(handle), [handle]);
+  const { data, loading, error, status, reload, setData } = useApi(() => ProfileService.get(handle), [handle], { key: `profile:${handle}` });
   const [reportOpen, setReportOpen] = useState(false);
   const [blockOpen, setBlockOpen] = useState(false);
   const [busy, setBusy] = useState<"msg" | "block" | null>(null);
@@ -205,7 +205,6 @@ export default function ProfilePage() {
               <>
                 <Button variant="primary" href="/communities">Join communities</Button>
                 <Button href="/events">RSVP to an event</Button>
-                <Button href="/events/new">Host something</Button>
               </>
             ) : undefined
           }

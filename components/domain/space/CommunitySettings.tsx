@@ -42,15 +42,6 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
       toast(errorMessage(e), "error");
     }
   }
-  async function setEventPolicy(next: "admins" | "members") {
-    try {
-      await CommunityService.update(c.slug, { eventPolicy: next });
-      toast("Event settings saved", "success");
-      await onChanged();
-    } catch (e) {
-      toast(errorMessage(e), "error");
-    }
-  }
   async function setPrivacy(next: boolean) {
     setBusyPrivacy(true);
     try {
@@ -124,12 +115,7 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
       )}
 
       {active === "groups" && (
-        <SettingsBlock title="Who can post events" intro="Owners and admins can always post events here. A group's own admins can post events in their group.">
-          <SelectField label="Event posting" value={c.eventPolicy} onChange={(e) => void setEventPolicy(e.target.value as "admins" | "members")}>
-            <option value="admins">Only admins</option>
-            <option value="members">Any member</option>
-          </SelectField>
-        </SettingsBlock>
+        <SettingsBlock title="Who can post events" intro="Events are posted by this community's owner and admins, from its Events page. A group's own owner and admins can post events in their group.">{null}</SettingsBlock>
       )}
 
       {active === "members" && <MembersPanel slug={c.slug} />}

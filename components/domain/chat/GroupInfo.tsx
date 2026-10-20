@@ -11,17 +11,17 @@ import { Chip } from "@/components/ui/Chip";
 import { Icon } from "@/components/ui/Icon";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useApi } from "@/lib/hooks/useApi";
+import { LIMITS } from "@/lib/constants";
 import type { SubcommunityDTO } from "@/lib/types";
 import { UserName } from "@/components/ui/UserName";
 
 /** Right pane while you're inside a group: what it is, whose it is, who runs it. */
-export function GroupInfo({ group: g, onJoin, joining, onLeave, onNavigate }: { group: SubcommunityDTO; onJoin: () => void; joining: boolean; onLeave: () => void; onNavigate?: () => void }) {
+export function GroupInfo({ group: g, onLeave, onNavigate }: { group: SubcommunityDTO; onLeave: () => void; onNavigate?: () => void }) {
   const parentHref = `/communities/${g.parent.slug}`;
   const base = `${parentHref}?g=${g.slug}`;
   const canSeeStaff = g.viewer.canView && !g.moderationOnly;
-  const staff = useApi(canSeeStaff ? () => ChannelService.staff({ slug: g.parent.slug, sub: g.slug }) : null, [g.slug, g.viewer.role, canSeeStaff]);
+  const staff = useApi(canSeeStaff ? () => ChannelService.staff({ slug: g.parent.slug, sub: g.slug }) : null, [g.slug, g.viewer.role, canSeeStaff], { key: `staff:${g.parent.slug}:${g.slug}:${g.viewer.role}` });
   const v = g.viewer;
-  const isPrivate = g.visibility === "private";
 
   return (
     <div className="flex flex-col gap-6 px-5 py-5 pt-14 lg:pt-5">
@@ -31,21 +31,21 @@ export function GroupInfo({ group: g, onJoin, joining, onLeave, onNavigate }: { 
         </Link>
         <div className="mt-3 flex flex-wrap items-center gap-1.5">
           <Chip>
-            <Icon name={isPrivate ? "lock" : "users"} size={11} /> {isPrivate ? "Invite-only" : "Open to community members"}
+            <Icon name="lock" size={11} /> Private group
           </Chip>
           {v.role && <RoleBadge role={v.role} />}
         </div>
         <h2 className="mt-3 text-xl font-semibold tracking-[-0.03em] break-words">{g.name}</h2>
         <p className="mt-1.5 inline-flex items-center gap-1 text-[13px] text-ink-muted">
-          <Icon name="users" size={13} /> {g.memberCount === null ? "Members hidden" : `${g.memberCount} ${g.memberCount === 1 ? "member" : "members"}`}
+          <Icon name="users" size={13} /> {g.memberCount ?? 0}/{LIMITS.groupMembers} members
         </p>
         <p className={g.description ? "mt-3 text-sm leading-relaxed whitespace-pre-wrap text-ink" : "mt-3 text-sm text-ink-muted"}>{g.description || "No description yet."}</p>
         <div className="mt-4 flex flex-wrap items-center gap-2">
           {v.isMember ? (
             v.role === "owner" ? <Chip tone="accent">You own this</Chip> : <Button size="sm" onClick={onLeave}>Leave</Button>
-          ) : v.canView && !isPrivate ? (
-            <Button size="sm" variant="primary" onClick={onJoin} loading={joining}>
-              <Icon name="plus" size={13} /> Join group
+          ) : v.canManage ? (
+            <Button size="sm" variant="primary" href={`${base}&view=members`} onClick={onNavigate}>
+              <Icon name="userplus" size={13} /> Add yourself
             </Button>
           ) : null}
           <ShareButton path={base} text={`${g.name} — ${g.parent.name} on klique`} label="Share" />

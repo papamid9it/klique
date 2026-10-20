@@ -28,8 +28,8 @@ import { UserName } from "@/components/ui/UserName";
  */
 export function CommunityInfo({ community: c, onJoined, onNavigate, onLeave }: { community: CommunityDTO; onJoined: (c: CommunityDTO) => void; onNavigate?: () => void; onLeave: () => void }) {
   const base = `/communities/${c.slug}`;
-  const staff = useApi(() => ChannelService.staff({ slug: c.slug }), [c.slug, c.viewer.role]);
-  const events = useApi(() => EventService.list({ community: c.slug, page: 1 }), [c.slug]);
+  const staff = useApi(() => ChannelService.staff({ slug: c.slug }), [c.slug, c.viewer.role], { key: `staff:${c.slug}:${c.viewer.role}` });
+  const events = useApi(() => EventService.list({ community: c.slug, page: 1 }), [c.slug], { key: `info-events:${c.slug}` });
   const upcoming = (events.data?.items ?? []).slice(0, 3);
   const v = c.viewer;
 

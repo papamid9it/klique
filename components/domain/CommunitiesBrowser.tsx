@@ -28,7 +28,7 @@ export function CommunitiesBrowser({ initialInterest, scope = "discover" }: { in
   const { items, loading, loadingMore, error, hasMore, loadMore, reload } = usePaged<CommunityCardDTO>(
     (page) => CommunityService.list({ where: scope === "joined" ? undefined : where, interest: interest || undefined, q: dq || undefined, scope, page }),
     [where, interest, dq, scope],
-    { keepPrevious: true },
+    { keepPrevious: true, key: `communities:${scope}:${where}:${interest}:${dq}` },
   );
   const filtered = !!(interest || q);
 

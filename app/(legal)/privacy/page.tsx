@@ -48,7 +48,7 @@ export default function PrivacyPage() {
         <p>We use trusted service providers who process data for us under contract:</p>
         <ul>
           <li>MongoDB Atlas (database) and Vercel (hosting);</li>
-          <li>Cloudinary (pictures you upload);</li>
+          <li>Cloudflare R2 (pictures and videos you upload, which are shrunk on your device before they&apos;re sent);</li>
           <li>Ably and LiveKit (live chat and voice channels);</li>
           <li>Expo and browser push services (notifications);</li>
           <li>our email provider (account emails) and Google (if you use Google sign-in).</li>

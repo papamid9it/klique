@@ -207,12 +207,12 @@ export async function createEvent(viewer: IUser, input: z.infer<typeof eventCrea
   let space: Space | null = null;
   if (input.communitySlug) {
     const resolved = await resolveSpaceFor(viewer, input.communitySlug, input.subSlug);
-    assertCanHostInSpace(resolved.space.community, resolved.access); // owners/admins, or members where the community allows it
+    assertCanHostInSpace(viewer, resolved.access); // the space's owner and admins (and site admins)
     space = resolved.space;
   } else if (input.subSlug) {
     throw new ApiError(422, "Choose the community this group belongs to.", { errors: { communitySlug: "Required with a group" } });
   } else {
-    await assertCanHostPublic(viewer);
+    assertCanHostPublic(viewer); // site admins only
   }
 
   const interest = input.interest ?? space?.community.interest;

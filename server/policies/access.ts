@@ -8,6 +8,7 @@ import { Membership, type IMembership } from "../models/Membership";
 import { MembershipRequest } from "../models/MembershipRequest";
 import type { ISubcommunity } from "../models/Subcommunity";
 import type { IUser } from "../models/User";
+import { isSiteAdmin } from "./hosting";
 
 /**
  * AUTHORIZATION POLICIES — the single source of truth for "who may do what".
@@ -67,28 +68,33 @@ export function communityAccessFrom(
   };
 }
 
-/** Pure subcommunity access from already-loaded rows (lets list pages batch the lookups). */
+/**
+ * Pure group access from already-loaded rows (lets list pages batch the lookups).
+ * Every group is private. Its own members can see and use it; the community's owner and site admins can also
+ * see, enter and manage every group (to add themselves or others, and to moderate). Nobody joins a group:
+ * its owner and admins add people from the community.
+ */
 export function subAccessFrom(
-  sub: Pick<ISubcommunity, "visibility">,
+  _sub: unknown,
   parentMembership: IMembership | null,
   subMembership: IMembership | null,
+  viewerIsSiteAdmin = false,
 ): SpaceAccess {
   const parentRole = activeRole(parentMembership);
   const role = activeRole(subMembership);
   const banned = subMembership?.status === "banned";
-  // "parent" visibility: anyone in the parent community can see & join. "private": members only.
-  const canView = sub.visibility === "parent" ? parentRole !== null || role !== null : role !== null;
+  const overseer = parentRole === "owner" || viewerIsSiteAdmin;
   return {
     role,
     isMember: role !== null,
-    pendingRequest: false, // groups are invite-only or open to the parent; there is no request flow
-    canManage: isManager(role),
-    canView,
+    pendingRequest: false,
+    canManage: isManager(role) || overseer,
+    canView: role !== null || overseer,
     canPost: role !== null,
     banned,
     parentRole,
-    canJoinDirectly: sub.visibility === "parent" && parentRole !== null && !banned && role === null,
-    canModerate: isManager(parentRole),
+    canJoinDirectly: false,
+    canModerate: overseer,
   };
 }
 
@@ -131,7 +137,7 @@ export async function spaceAccess(space: Space, viewer: IUser | null): Promise<S
     findMembership(viewer._id, community._id, null),
     findMembership(viewer._id, community._id, sub._id),
   ]);
-  return subAccessFrom(sub, parentM, subM);
+  return subAccessFrom(sub, parentM, subM, isSiteAdmin(viewer));
 }
 
 /* ---------------------------- assertions ---------------------------- */
@@ -148,15 +154,9 @@ export function assertCanManage(access: SpaceAccess) {
   if (!access.canManage) throw forbidden("Only owners and admins can do that.");
 }
 
-/**
- * A PRIVATE subcommunity must look like it doesn't exist to anyone who can't see
- * it (parent moderators excepted, so they can still moderate it). A "parent"-visibility
- * group is merely locked — visitors get a "join the community" gate instead.
- */
+/** A group must look like it doesn't exist to anyone who can't see it. */
 export function assertSubVisibleOrHidden(space: Space, access: SpaceAccess) {
-  if (space.sub?.visibility === "private" && !access.canView && !access.canModerate) {
-    throw notFound("We couldn't find that group.");
-  }
+  if (space.sub && !access.canView) throw notFound("We couldn't find that group.");
 }
 
 /* ------------------------------ events ------------------------------ */
@@ -176,8 +176,9 @@ export async function eventVisibilityFilter(viewer: IUser | null): Promise<Recor
   return {
     $or: [
       publicOnly,
-      { audience: "community", communityId: { $in: communityIds } },
-      { audience: "subcommunity", subcommunityId: { $in: subIds } },
+      // community events, but never a group's: those belong to the group whatever their stored audience
+      { audience: "community", communityId: { $in: communityIds }, subcommunityId: null },
+      { subcommunityId: { $in: subIds }, audience: { $ne: "public" } },
       { hostId: viewer._id },
     ],
   };
@@ -188,7 +189,7 @@ export async function canViewEvent(event: IEvent, viewer: IUser | null): Promise
   if (!viewer) return false;
   if (String(event.hostId) === String(viewer._id)) return true;
 
-  if (event.audience === "subcommunity" && event.subcommunityId) {
+  if (event.subcommunityId) {
     const m = await findMembership(viewer._id, event.communityId!, event.subcommunityId);
     return activeRole(m) !== null;
   }
@@ -202,7 +203,7 @@ export async function canViewEvent(event: IEvent, viewer: IUser | null): Promise
 /** Audience an event inherits from the space it is created in. */
 export function audienceFor(space: Space | null): IEvent["audience"] {
   if (!space) return "public";
-  if (space.sub) return space.sub.visibility === "private" ? "subcommunity" : "community";
+  if (space.sub) return "subcommunity";
   return space.community.privacy === "public" ? "public" : "community";
 }
 

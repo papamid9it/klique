@@ -121,7 +121,6 @@ export async function updateCommunity(viewer: IUser, slug: string, patch: z.infe
   if (patch.coverImage !== undefined) set.coverImage = patch.coverImage || null;
   if (patch.privacy !== undefined) set.privacy = patch.privacy;
   if (patch.groupPolicy !== undefined) set.groupPolicy = patch.groupPolicy;
-  if (patch.eventPolicy !== undefined) set.eventPolicy = patch.eventPolicy;
 
   await Community.updateOne({ _id: space.community._id }, set);
   if (set.coverImage !== undefined && space.community.coverImage && space.community.coverImage !== set.coverImage) deleteUploads([space.community.coverImage]);

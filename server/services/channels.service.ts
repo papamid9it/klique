@@ -1,3 +1,4 @@
+import { isSiteAdmin } from "../policies/hosting";
 import { SignJWT } from "jose";
 import { deleteUploads } from "./media.service";
 import { livekitConfig } from "../env";
@@ -215,7 +216,7 @@ export async function listChannels(viewer: IUser | null, space: Space, access: S
       const subChannels = await Channel.find({ communityId, subcommunityId: { $in: subs.map((s) => s._id) } }).sort({ position: 1, createdAt: 1 }).lean<IChannel[]>();
       for (const sub of subs) {
         const m = subMs.find((x) => sid(x.subcommunityId!) === sid(sub._id)) ?? null;
-        const gAccess = subAccessFrom(sub, parentM, m);
+        const gAccess = subAccessFrom(sub, parentM, m, isSiteAdmin(viewer));
         const rows = subChannels.filter((c) => sid(c.subcommunityId!) === sid(sub._id) && canSeeChannel(c, gAccess, invited.has(sid(c._id))));
         const gMentions = await countMentions(viewer._id, rows, readBy);
         const gCounts = gAccess.canManage ? await guestCounts(rows) : undefined;

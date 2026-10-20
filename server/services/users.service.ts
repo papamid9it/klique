@@ -42,7 +42,7 @@ export async function updateMe(viewer: IUser, patch: z.infer<typeof profileUpdat
 
   const updated = await User.findByIdAndUpdate(viewer._id, set, { new: true, runValidators: true }).lean<IUser>();
   if (!updated) throw notFound("We couldn't find your account.");
-  // a replaced or removed picture/banner is gone for good: clear the old file out of Cloudinary
+  // a replaced or removed picture/banner is gone for good: clear the old file out of storage
   deleteUploads([
     viewer.avatarUrl && viewer.avatarUrl !== updated.avatarUrl ? viewer.avatarUrl : null,
     viewer.bannerUrl && viewer.bannerUrl !== updated.bannerUrl ? viewer.bannerUrl : null,

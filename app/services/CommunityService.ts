@@ -24,7 +24,6 @@ export interface CommunityInput {
   neighborhood?: string;
   privacy?: CommunityPrivacy;
   groupPolicy?: GroupPolicy;
-  eventPolicy?: "admins" | "members";
   coverImage?: string | null;
 }
 

@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { softNavigate } from "@/lib/nav";
 import { useEffect } from "react";
 import { CommunityService } from "@/app/services/CommunityService";
 import { useAuth } from "@/components/providers/AuthProvider";
@@ -10,6 +12,7 @@ import { cx } from "@/components/ui/cx";
 import { useRealtime, useRealtimeEvent } from "@/components/providers/RealtimeProvider";
 import { useApi } from "@/lib/hooks/useApi";
 import type { MyCommunityDTO } from "@/lib/types";
+import { prefetchCommunities, prefetchCommunity } from "./prefetchCommunity";
 
 /**
  * Your communities, one tile each, so you can hop between them without going back to a list.
@@ -19,7 +22,11 @@ import type { MyCommunityDTO } from "@/lib/types";
 export function CommunityRail({ activeSlug, horizontal, onNavigate }: { activeSlug: string | null; horizontal?: boolean; onNavigate?: () => void }) {
   const { status, user } = useAuth();
   const authed = status === "authed";
-  const { data, loading, reload } = useApi(authed ? () => CommunityService.mine() : null, [authed, user?.id]);
+  const { data, loading, reload } = useApi(authed ? () => CommunityService.mine() : null, [authed, user?.id], { key: "my-communities" });
+
+  const pathname = usePathname();
+  // already in a community: switching to another one stays in the browser (everything it needs is preloaded)
+  const inWorkspace = /^\/communities\/(?!new$)[^/]+$/.test(pathname);
 
   const { connected } = useRealtime();
   useEffect(() => {
@@ -29,6 +36,18 @@ export function CommunityRail({ activeSlug, horizontal, onNavigate }: { activeSl
   }, [authed, reload, connected]);
   // activity in any of your communities: refresh the unread dots
   useRealtimeEvent(() => void reload(), { filter: (e) => e.type === "channel", debounceMs: 1500 });
+
+  // Have every community ready before it's opened (quietly, a couple at a time, when the browser is idle);
+  // ones with something new go first. Runs again as the list refreshes; recently loaded ones are skipped.
+  useEffect(() => {
+    if (!data?.length || horizontal) return;
+    const signal = { cancelled: false };
+    const order = [...data].sort((a, b) => Number(b.mentions > 0 || b.unread) - Number(a.mentions > 0 || a.unread));
+    prefetchCommunities(order.map((c) => c.slug).filter((x) => x !== activeSlug), signal);
+    return () => {
+      signal.cancelled = true;
+    };
+  }, [data, horizontal, activeSlug]);
 
   if (status === "loading" || (authed && loading && !data)) {
     // Same tile + label shape as the real thing, so nothing jumps when it loads.
@@ -57,7 +76,16 @@ export function CommunityRail({ activeSlug, horizontal, onNavigate }: { activeSl
       <li key={c.id} className={cx("relative", horizontal ? "shrink-0" : "w-full")}>
         <Link
           href={`/communities/${c.slug}`}
-          onClick={onNavigate}
+          onClick={(e) => {
+            onNavigate?.();
+            if (!inWorkspace || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+            e.preventDefault();
+            if (!active || window.location.search) softNavigate(`/communities/${c.slug}`);
+          }}
+          // pointing at it is a strong hint: load it now if the background pass hasn't yet
+          onPointerEnter={() => void prefetchCommunity(c.slug)}
+          onFocus={() => void prefetchCommunity(c.slug)}
+          onTouchStart={() => void prefetchCommunity(c.slug)}
           title={c.name}
           aria-label={`${c.name}${c.mentions ? `, ${c.mentions} mentions` : c.unread ? ", unread messages" : ""}`}
           aria-current={active ? "page" : undefined}

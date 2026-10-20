@@ -20,7 +20,7 @@ export function ChatImages({ images, className }: { images: string[]; className?
         {shown.map((u, i) => (
           <button key={u} type="button" onClick={() => setOpen(i)} aria-label={`Open picture ${i + 1} of ${shown.length}`} className={cx("group/img relative block overflow-hidden bg-raised", single ? "max-h-80" : "aspect-square")}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={cdn(u, { w: single ? 720 : 360, h: single ? undefined : 360, fit: single ? undefined : "fill" })} alt="" loading="lazy" onError={() => setBroken((b) => new Set(b).add(u))} className={cx("transition group-hover/img:brightness-110", single ? "max-h-80 w-auto max-w-full object-contain" : "size-full object-cover")} />
+            <img src={cdn(u, { w: single ? 720 : 360, h: single ? undefined : 360, fit: single ? undefined : "fill" })} alt="" loading="lazy" decoding="async" onError={() => setBroken((b) => new Set(b).add(u))} className={cx("transition group-hover/img:brightness-110", single ? "max-h-80 w-auto max-w-full object-contain" : "size-full object-cover")} />
           </button>
         ))}
       </div>

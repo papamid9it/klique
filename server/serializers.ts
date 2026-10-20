@@ -32,6 +32,7 @@ export function viewerAccess(a: SpaceAccess): ViewerAccess {
     canManage: a.canManage,
     canView: a.canView,
     canPost: a.canPost,
+    ...(a.canModerate ? { canModerate: true } : {}),
   };
 }
 
@@ -154,8 +155,7 @@ export async function toCommunityDetail(
     createdAt: c.createdAt.toISOString(),
     groupPolicy: c.groupPolicy ?? "admins",
     canCreateGroup: canCreateGroup(c, access),
-    eventPolicy: c.eventPolicy ?? "admins",
-    canHostEvents: canHostInSpace(c, access),
+    canHostEvents: canHostInSpace(access),
     owner,
     subcommunityCount: card.locked ? null : extra.subcommunityCount,
     upcomingEventCount: card.locked ? null : extra.upcomingEventCount,

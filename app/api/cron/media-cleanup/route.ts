@@ -6,7 +6,7 @@ import { sweepOrphanedUploads } from "@/server/services/media-sweep";
 
 /**
  * Deletes uploads nothing uses any more (pictures picked in a form that was never saved, and the like),
- * so Cloudinary storage only holds what the app shows. Call it once a night from any scheduler with the
+ * so R2 storage only holds what the app shows. Call it once a night from any scheduler with the
  * CRON_SECRET: `Authorization: Bearer <secret>` or `?secret=<secret>`.
  * Add `?dry=1` to see what it would delete without deleting anything.
  */

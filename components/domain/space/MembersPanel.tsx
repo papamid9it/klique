@@ -14,17 +14,29 @@ import { EmptyState, ErrorState } from "@/components/ui/States";
 import { useDebounced, usePaged } from "@/lib/hooks/useApi";
 import type { MemberDTO, Role } from "@/lib/types";
 import { ConfirmModal, RoleBadge } from "./parts";
+import { AddMembersModal } from "./AddMembersModal";
+import { LIMITS } from "@/lib/constants";
 
-export function MembersPanel({ slug, subSlug }: { slug: string; subSlug?: string }) {
+/** For a group: what the "Add members" button needs (shown to the group's owners and admins). */
+export interface GroupAdding {
+  name: string;
+  communityName: string;
+  memberCount: number;
+  canAdd: boolean;
+  onChanged?: () => void;
+}
+
+export function MembersPanel({ slug, subSlug, group }: { slug: string; subSlug?: string; group?: GroupAdding }) {
   const { user } = useAuth();
   const toast = useToast();
   const [q, setQ] = useState("");
   const dq = useDebounced(q.trim());
-  const { items, loading, loadingMore, error, hasMore, loadMore, reload, setItems } = usePaged<MemberDTO>((p) => SpaceService.members(slug, subSlug, p, dq || undefined), [slug, subSlug, dq]);
+  const { items, loading, loadingMore, error, hasMore, loadMore, reload, setItems } = usePaged<MemberDTO>((p) => SpaceService.members(slug, subSlug, p, dq || undefined), [slug, subSlug, dq], { keepPrevious: true, key: `members:${slug}:${subSlug ?? ""}:${dq}` });
   const [removing, setRemoving] = useState<{ m: MemberDTO; ban: boolean } | null>(null);
   const [reporting, setReporting] = useState<MemberDTO | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [handingOver, setHandingOver] = useState<MemberDTO | null>(null);
+  const [adding, setAdding] = useState(false);
   const iOwn = !!user && items.some((x) => x.user.id === user.id && x.role === "owner");
 
   async function changeRole(m: MemberDTO, role: Exclude<Role, "owner">) {
@@ -40,6 +52,35 @@ export function MembersPanel({ slug, subSlug }: { slug: string; subSlug?: string
     }
   }
 
+  const addBar =
+    group && subSlug && group.canAdd ? (
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface px-4 py-3">
+        <p className="text-sm text-ink-muted">
+          <span className="font-semibold text-ink">
+            {group.memberCount}/{LIMITS.groupMembers}
+          </span>{" "}
+          people. Only people you add can see this group.
+        </p>
+        <Button size="sm" variant="primary" onClick={() => setAdding(true)} disabled={group.memberCount >= LIMITS.groupMembers}>
+          <Icon name="userplus" size={14} /> {group.memberCount >= LIMITS.groupMembers ? "Group is full" : "Add members"}
+        </Button>
+        {adding && (
+          <AddMembersModal
+            slug={slug}
+            subSlug={subSlug}
+            groupName={group.name}
+            communityName={group.communityName}
+            memberCount={group.memberCount}
+            onClose={() => setAdding(false)}
+            onAdded={() => {
+              void reload();
+              group.onChanged?.();
+            }}
+          />
+        )}
+      </div>
+    ) : null;
+
   const search = (
     <label className="relative mb-4 block">
       <span className="sr-only">Search members by name</span>
@@ -48,12 +89,13 @@ export function MembersPanel({ slug, subSlug }: { slug: string; subSlug?: string
     </label>
   );
 
-  if (loading) return <div>{search}<RowSkeleton /></div>;
-  if (error) return <div>{search}<ErrorState message={error} onRetry={reload} /></div>;
-  if (!items.length) return <div>{search}<EmptyState icon="users" title={dq ? `No members match “${dq}”` : "No members to show"} compact /></div>;
+  if (loading && items.length === 0) return <div>{addBar}{search}<RowSkeleton /></div>;
+  if (error) return <div>{addBar}{search}<ErrorState message={error} onRetry={reload} /></div>;
+  if (!items.length) return <div>{addBar}{search}<EmptyState icon="users" title={dq ? `No members match “${dq}”` : "No members to show"} compact /></div>;
 
   return (
     <div className="space-y-2">
+      {addBar}
       {search}
       {items.map((m) => (
         <PersonRow

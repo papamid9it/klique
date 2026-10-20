@@ -86,6 +86,8 @@ export async function joinSpace(
   access: SpaceAccess,
 ): Promise<JoinResult> {
   if (access.isMember) return { status: "already_member", message: `You're already in ${spaceLabel(space)}.` };
+  // groups are private and nobody joins them: a group's owner or admins add people from the community
+  if (space.sub) throw forbidden("Groups are private. Ask one of the group's admins to add you.");
   if (access.banned) throw forbidden("You can't join this one.");
 
   // 1) Invite link — the one way into a private space without approval.
@@ -117,8 +119,6 @@ export async function joinSpace(
   }
 
   // 4) Everything else is closed.
-  if (space.sub?.visibility === "private") throw forbidden("This group is invite-only. Ask a member for an invite link.");
-  if (space.sub) throw forbidden(`Join ${space.community.name} first to join this group.`);
   throw forbidden("You can't join this one.");
 }
 
@@ -308,7 +308,7 @@ export async function decideRequest(
 /* Invite links                                                        */
 /* ------------------------------------------------------------------ */
 
-const isInviteOnly = (space: Space) => (space.sub ? space.sub.visibility === "private" : space.community.privacy === "private");
+const isInviteOnly = (space: Space) => !space.sub && space.community.privacy === "private";
 
 function inviteActive(i: IInvitation, now = new Date()): { active: boolean; reason?: "expired" | "revoked" | "used_up" } {
   if (i.revokedAt) return { active: false, reason: "revoked" };
@@ -340,6 +340,7 @@ export async function createInvite(
   access: SpaceAccess,
   input: { expiresInDays?: number; maxUses?: number },
 ): Promise<InviteDTO> {
+  if (space.sub) throw badRequest("Groups don't use invite links. Add people from the group's Members page.");
   assertCanManage(access);
   if (!isInviteOnly(space)) {
     throw badRequest("Invite links are for private spaces. Open ones can just share their normal link.");
@@ -384,8 +385,9 @@ async function loadInvite(code: string) {
   if (!invite) return null;
   const community = await Community.findById(invite.communityId).lean<ICommunity>();
   if (!community) return null;
-  const sub = invite.subcommunityId ? await Subcommunity.findById(invite.subcommunityId).lean<ISubcommunity>() : null;
-  if (invite.subcommunityId && !sub) return null;
+  // group invite links stopped working when groups became add-only
+  if (invite.subcommunityId) return null;
+  const sub: ISubcommunity | null = null;
   return { invite, space: { community, sub } as Space };
 }
 
@@ -449,7 +451,7 @@ function canDeletePost(viewer: IUser | null, access: SpaceAccess, post: IPost, s
   if (!viewer) return false;
   if (sid(post.authorId) === sid(viewer._id)) return true;
   if (access.canManage) return true;
-  return !!space.sub && space.sub.visibility === "parent" && access.canModerate;
+  return !!space.sub && access.canModerate;
 }
 
 export async function createPost(viewer: IUser, space: Space, access: SpaceAccess, input: { body: string; imageUrl?: string | null }) {

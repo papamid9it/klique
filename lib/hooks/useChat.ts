@@ -5,6 +5,7 @@ import { errorMessage, isApiError } from "@/app/ApiCore";
 import { ChannelService, type SpaceRef } from "@/app/services/ChannelService";
 import { useRealtime } from "@/components/providers/RealtimeProvider";
 import { applyReaction, type ReactionKind } from "@/lib/reactions";
+import { recallApi, rememberApi } from "./useApi";
 import type { ChannelMessageDTO, ReactionDTO, ReplyRefDTO, UserBrief } from "@/lib/types";
 
 const POLL_MS = 4000;
@@ -23,13 +24,16 @@ export function useChat(space: SpaceRef, channelSlug: string, channelId?: string
   const slug = space.slug;
   const sub = space.sub ?? null;
   const ref = useMemo<SpaceRef>(() => ({ slug, sub }), [slug, sub]);
-  const [items, setItems] = useState<ChannelMessageDTO[]>([]);
-  const [hasOlder, setHasOlder] = useState(false);
-  const [loading, setLoading] = useState(true);
+  // the last messages seen in this channel paint at once when you come back; the newest page refreshes behind them
+  const cacheKey = `chat:${slug}:${sub ?? ""}:${channelSlug}`;
+  const [initial] = useState(() => recallApi<{ items: ChannelMessageDTO[]; hasOlder: boolean }>(cacheKey));
+  const [items, setItems] = useState<ChannelMessageDTO[]>(initial?.items ?? []);
+  const [hasOlder, setHasOlder] = useState(initial?.hasOlder ?? false);
+  const [loading, setLoading] = useState(!initial);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<number | null>(null);
-  const itemsRef = useRef<ChannelMessageDTO[]>([]);
+  const itemsRef = useRef<ChannelMessageDTO[]>(initial?.items ?? []);
   const busyOlder = useRef(false);
   /** when each message was last reacted to locally: a poll that started earlier must not overwrite it */
   const touched = useRef(new Map<string, number>());
@@ -40,15 +44,21 @@ export function useChat(space: SpaceRef, channelSlug: string, channelId?: string
     itemsRef.current = value;
     setItems(value);
   }, []);
+  // keep only the newest stretch: enough to fill the screen on return
+  useEffect(() => {
+    const real = items.filter(isReal);
+    if (!loading && !error) rememberApi(cacheKey, { items: real.slice(-60), hasOlder: hasOlder || real.length > 60 });
+  }, [items, hasOlder, loading, error, cacheKey]);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (quiet = false) => {
     const mine = ++ticket.current;
-    setLoading(true);
+    if (!quiet) setLoading(true);
     setError(null);
     try {
       const res = await ChannelService.messages(ref, channelSlug);
       if (mine !== ticket.current) return;
-      commit(res.data.items);
+      // keep messages still sending; everything else comes from the server's newest page
+      commit((prev) => [...res.data.items, ...prev.filter((m) => m.pending)]);
       setHasOlder(res.data.hasMore);
     } catch (e) {
       if (mine !== ticket.current) return;
@@ -60,12 +70,21 @@ export function useChat(space: SpaceRef, channelSlug: string, channelId?: string
   }, [ref, channelSlug, commit]);
 
   useEffect(() => {
-    commit([]);
-    setHasOlder(false);
-    void load();
+    const cached = recallApi<{ items: ChannelMessageDTO[]; hasOlder: boolean }>(cacheKey);
+    if (cached) {
+      commit(cached.items);
+      setHasOlder(cached.hasOlder);
+      setLoading(false);
+      void load(true);
+    } else {
+      commit([]);
+      setHasOlder(false);
+      void load();
+    }
     return () => {
       ticket.current++;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [load, commit]);
 
   const loadOlder = useCallback(async () => {
@@ -251,5 +270,6 @@ export function useChat(space: SpaceRef, channelSlug: string, channelId?: string
     [ref, channelSlug, commit],
   );
 
-  return { react, edit, pin, items, hasOlder, loading, loadingOlder, error, status, reload: load, loadOlder, send, remove };
+  const reload = useCallback(() => load(), [load]);
+  return { react, edit, pin, items, hasOlder, loading, loadingOlder, error, status, reload, loadOlder, send, remove };
 }

@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { LinkService } from "@/app/services/LinkService";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { Icon } from "@/components/ui/Icon";
+import { useNearScreen } from "@/lib/hooks/useNearScreen";
 import type { LinkPreviewDTO } from "@/lib/types";
 
 /* --------------------------- classification --------------------------- */
@@ -125,7 +126,7 @@ function PlayableVideo({ provider, thumb, src, href, title }: { provider: string
   );
 }
 
-function LinkCard({ url, enabled }: { url: string; enabled: boolean }) {
+function LinkCard({ url, enabled, near }: { url: string; enabled: boolean; near: boolean }) {
   const data = usePreview(url, enabled);
   if (!data) return null;
   return (
@@ -138,22 +139,33 @@ function LinkCard({ url, enabled }: { url: string; enabled: boolean }) {
       )}
       {data.description && <p className="mt-1 line-clamp-3 text-[13px] leading-relaxed text-ink-muted">{data.description}</p>}
       {data.videoUrl ? (
-        <video controls preload="metadata" poster={data.image ?? undefined} className="mt-2 max-h-72 w-full rounded-control bg-black">
+        <video controls preload={near ? "metadata" : "none"} poster={data.image ?? undefined} className="mt-2 max-h-72 w-full rounded-control bg-black">
           <source src={data.videoUrl} />
         </video>
       ) : (
         data.image && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={data.image} alt="" loading="lazy" referrerPolicy="no-referrer" className="mt-2 max-h-64 w-full rounded-control object-cover" />
+          <img src={data.image} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" className="mt-2 max-h-64 w-full rounded-control object-cover" />
         )
       )}
     </div>
   );
 }
 
+/** Wraps each embed so nothing is fetched (previews, video data) until the message scrolls near the screen. */
 function Embed({ url, signedIn }: { url: string; signedIn: boolean }) {
+  const box = useRef<HTMLDivElement>(null);
+  const near = useNearScreen(box);
+  return (
+    <div ref={box}>
+      <EmbedBody url={url} signedIn={signedIn} near={near} />
+    </div>
+  );
+}
+
+function EmbedBody({ url, signedIn, near }: { url: string; signedIn: boolean; near: boolean }) {
   const kind = useMemo(() => classifyUrl(url), [url]);
-  const vimeo = usePreview(url, kind.type === "vimeo" && signedIn);
+  const vimeo = usePreview(url, kind.type === "vimeo" && signedIn && near);
   switch (kind.type) {
     case "youtube":
       return <PlayableVideo provider="YouTube" thumb={`https://i.ytimg.com/vi/${kind.id}/hqdefault.jpg`} src={`https://www.youtube-nocookie.com/embed/${kind.id}?autoplay=1&rel=0`} href={url} />;
@@ -161,7 +173,7 @@ function Embed({ url, signedIn }: { url: string; signedIn: boolean }) {
       return <PlayableVideo provider="Vimeo" thumb={vimeo?.image ?? null} src={`https://player.vimeo.com/video/${kind.id}?autoplay=1`} href={url} title={vimeo?.title} />;
     case "video":
       return (
-        <video controls preload="metadata" className="max-h-80 max-w-full rounded-card bg-black">
+        <video controls preload={near ? "metadata" : "none"} className="max-h-80 max-w-full rounded-card bg-black">
           <source src={kind.src} />
         </video>
       );
@@ -169,11 +181,11 @@ function Embed({ url, signedIn }: { url: string; signedIn: boolean }) {
       return (
         <a href={url} target="_blank" rel="noopener noreferrer nofollow ugc" className="inline-block">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={kind.src} alt="Linked image" loading="lazy" referrerPolicy="no-referrer" className="max-h-80 max-w-full rounded-card border border-line object-contain" />
+          <img src={kind.src} alt="Linked image" loading="lazy" decoding="async" referrerPolicy="no-referrer" className="max-h-80 max-w-full rounded-card border border-line object-contain" />
         </a>
       );
     default:
-      return <LinkCard url={url} enabled={signedIn} />;
+      return <LinkCard url={url} enabled={signedIn && near} near={near} />;
   }
 }
 

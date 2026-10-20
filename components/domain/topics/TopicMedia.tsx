@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { useNearScreen } from "@/lib/hooks/useNearScreen";
 import { cdn, videoPoster, videoSrc } from "@/lib/cdn";
 import { Icon } from "@/components/ui/Icon";
 import { cx } from "@/components/ui/cx";
@@ -19,15 +20,18 @@ export const looksLikeVideo = (url: string) => /\.(mp4|webm|mov|m4v)(\?|#|$)/i.t
 export function TopicMedia({ media, tall, className }: { media: TopicMediaDTO[]; tall?: boolean; className?: string }) {
   const [i, setI] = useState(0);
   const [broken, setBroken] = useState<Set<number>>(new Set());
+  // a long board of videos only asks for each one's data as it comes near the screen
+  const box = useRef<HTMLDivElement>(null);
+  const near = useNearScreen(box);
   if (!media.length) return null;
   const cur = media[Math.min(i, media.length - 1)];
   const max = tall ? "max-h-[34rem]" : "max-h-[26rem]";
   const many = media.length > 1;
 
   return (
-    <div className={cx("relative overflow-hidden rounded-control border border-line bg-black/60", className)}>
+    <div ref={box} className={cx("relative overflow-hidden rounded-control border border-line bg-black/60", className)}>
       {cur.kind === "video" ? (
-        <video key={cur.url} src={videoSrc(cur.url)} poster={cur.poster ?? videoPoster(cur.url) ?? undefined} controls playsInline preload="metadata" className={cx("mx-auto block w-full bg-black object-contain", max)} aria-label="Video">
+        <video key={cur.url} src={videoSrc(cur.url)} poster={cur.poster ?? videoPoster(cur.url) ?? undefined} controls playsInline preload={near ? "metadata" : "none"} className={cx("mx-auto block w-full bg-black object-contain", max)} aria-label="Video">
           Your browser can&apos;t play this video.
         </video>
       ) : broken.has(i) ? (
@@ -38,9 +42,9 @@ export function TopicMedia({ media, tall, className }: { media: TopicMediaDTO[];
         <>
           {/* blurred copy fills the sides of tall or narrow pictures */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={cdn(cur.url, { w: 200 })} alt="" aria-hidden="true" className="absolute inset-0 size-full scale-110 object-cover opacity-40 blur-2xl" />
+          <img src={cdn(cur.url, { w: 200 })} alt="" aria-hidden="true" loading="lazy" decoding="async" className="absolute inset-0 size-full scale-110 object-cover opacity-40 blur-2xl" />
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={cdn(cur.url, { w: 1280 })} alt={`Picture ${i + 1} of ${media.length}`} loading="lazy" onError={() => setBroken((b) => new Set(b).add(i))} className={cx("relative mx-auto block w-full object-contain", max)} />
+          <img src={cdn(cur.url, { w: 1280 })} alt={`Picture ${i + 1} of ${media.length}`} loading="lazy" decoding="async" onError={() => setBroken((b) => new Set(b).add(i))} className={cx("relative mx-auto block w-full object-contain", max)} />
         </>
       )}
 

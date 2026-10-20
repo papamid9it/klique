@@ -9,7 +9,7 @@ import { TextField } from "@/components/ui/Field";
 import { Icon } from "@/components/ui/Icon";
 import { Modal } from "@/components/ui/Modal";
 import { EmptyState, ErrorState } from "@/components/ui/States";
-import type { Role, SubVisibility } from "@/lib/types";
+import type { Role } from "@/lib/types";
 
 export function RoleBadge({ role }: { role: Role }) {
   if (role === "member") return null;
@@ -142,28 +142,3 @@ export function ConfirmModal({
     </Modal>
   );
 }
-
-export function VisibilityPicker({ value, onChange }: { value: SubVisibility; onChange: (v: SubVisibility) => void }) {
-  return (
-    <fieldset>
-      <legend className="mb-2 text-[13px] font-medium">Who can join?</legend>
-      <div className="space-y-2">
-        {(
-          [
-            ["parent", "Open to community members", "Anyone in the community can see this group and join."],
-            ["private", "Invite-only", "Hidden from non-members. People join with an invite link."],
-          ] as const
-        ).map(([id, title, hint]) => (
-          <label key={id} className="flex cursor-pointer gap-3 rounded-control border border-line bg-raised p-3 has-[:checked]:border-accent-text has-[:checked]:bg-surface">
-            <input type="radio" name="visibility" checked={value === id} onChange={() => onChange(id)} className="mt-1 accent-[var(--accent-text)]" />
-            <span>
-              <span className="block text-sm font-semibold">{title}</span>
-              <span className="block text-xs text-ink-muted">{hint}</span>
-            </span>
-          </label>
-        ))}
-      </div>
-    </fieldset>
-  );
-}
-

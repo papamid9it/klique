@@ -7,7 +7,6 @@ import { BrowseScenes, EventSection, WeekStrip, YourPlans } from "@/components/d
 import { ScopeButton } from "@/components/domain/places/ScopeButton";
 import { usePlace } from "@/components/providers/PlaceProvider";
 import { Button } from "@/components/ui/Button";
-import { Icon } from "@/components/ui/Icon";
 import { CardGridSkeleton, Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { parseScope, scopeLabel, WORLD } from "@/lib/places";
@@ -18,7 +17,7 @@ import type { DiscoverDTO, EventDTO } from "@/lib/types";
 export default function DiscoverPage() {
   const { where, label } = usePlace();
   const now = useNow(600_000);
-  const { data, loading, error, reload, setData } = useApi(() => DiscoverService.discover(where), [where]);
+  const { data, loading, error, reload, setData } = useApi(() => DiscoverService.discover(where), [where], { key: `discover:${where}` });
 
   const patchEvent = (next: EventDTO) => {
     const swap = (list: EventDTO[]) => list.map((e) => (e.id === next.id ? next : e));
@@ -48,9 +47,6 @@ export default function DiscoverPage() {
           <h1 className="display text-[clamp(2.25rem,5vw,3.25rem)]">Find your people.</h1>
           <div className="mt-3 max-w-xs"><ScopeButton /></div>
         </div>
-        <Button href="/events/new" variant="ink" size="lg">
-          <Icon name="plus" size={15} /> Host a thing
-        </Button>
       </header>
 
       <div role="region" aria-label="For you">
@@ -74,7 +70,7 @@ function ForYou({ data, onEvent }: { data: DiscoverDTO; onEvent: (e: EventDTO) =
   const [feedAd] = useAds("home-feed");
   if (!data.featured && !data.eventsNearYou.length) {
     return (
-      <EmptyState icon="calendar" title={`Nothing on in ${place} yet`} action={<><Button href="/events/new" variant="primary">Host an event</Button><Button href="/communities/new">Start a community</Button></>}>
+      <EmptyState icon="calendar" title={`Nothing on in ${place} yet`} action={<Button href="/communities/new" variant="primary">Start a community</Button>}>
         Be the first to put something on the map here.
       </EmptyState>
     );

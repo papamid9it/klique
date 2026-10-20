@@ -74,7 +74,7 @@ function Empty({ children }: { children: React.ReactNode }) {
 
 /** The big profile: identity + actions on the left, Activity / Mutual friends / Mutual communities on the right. */
 function ProfileBody({ handle, onClose, onOpenPerson }: { handle: string; onClose: () => void; onOpenPerson: (handle: string) => void }) {
-  const { data: view, loading, status, setData, reload } = useApi(() => ProfileService.get(handle), [handle]);
+  const { data: view, loading, status, setData, reload } = useApi(() => ProfileService.get(handle), [handle], { key: `profile:${handle}` });
   const mutual = useMutualCommunities(view);
   const [tab, setTab] = useState<Tab>("activity");
 

@@ -4,6 +4,56 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { errorMessage, isApiError } from "@/app/ApiCore";
 import type { Envelope } from "@/lib/types";
 
+/* ------------------------------------------------------------------ */
+/* Keep-what's-on-screen cache                                         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Last good result per `key`, so coming back to a view (another channel, back from an event, a second visit)
+ * paints at once from memory and refreshes quietly, instead of blanking to a skeleton. Entries belong to the
+ * signed-in person: AuthProvider calls setApiCacheScope with their id, and a change of person drops them all.
+ */
+const cache = new Map<string, unknown>();
+const CACHE_MAX = 400;
+let cacheScope: string | null = null;
+
+export function setApiCacheScope(scope: string | null) {
+  if (scope === cacheScope) return;
+  cacheScope = scope;
+  cache.clear();
+}
+
+function cacheGet<T>(key: string | undefined): T | undefined {
+  if (!key || !cache.has(key)) return undefined;
+  const v = cache.get(key) as T;
+  cache.delete(key); // move to the back: least recently used goes first
+  cache.set(key, v);
+  return v;
+}
+
+function cachePut(key: string | undefined, value: unknown) {
+  if (!key) return;
+  if (value === null || value === undefined) {
+    cache.delete(key);
+    return;
+  }
+  cache.delete(key);
+  cache.set(key, value);
+  if (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value!);
+}
+
+/** Read and write the same cache from hooks that don't go through useApi/usePaged (e.g. chat). */
+export const recallApi = cacheGet;
+export const rememberApi = cachePut;
+
+export interface CacheOptions {
+  /**
+   * Identity of this request (include every input that changes the result). With a key, the last result is
+   * shown at once on the next mount or when the deps come back to it, and refetched in the background.
+   */
+  key?: string;
+}
+
 export interface ApiState<T> {
   data: T | null;
   /** true only for the first load (no data yet) */
@@ -22,15 +72,27 @@ export interface ApiState<T> {
  *   const { data, loading, error, reload } = useApi(() => EventService.get(id), [id]);
  * Pass `null` as the fetcher to skip (e.g. while waiting for a dependency).
  */
-export function useApi<T>(fetcher: (() => Promise<Envelope<T>>) | null, deps: unknown[]): ApiState<T> {
-  const [data, setData] = useState<T | null>(null);
-  const [loading, setLoading] = useState(fetcher !== null);
+export function useApi<T>(fetcher: (() => Promise<Envelope<T>>) | null, deps: unknown[], { key }: CacheOptions = {}): ApiState<T> {
+  const cacheKey = fetcher ? key : undefined;
+  const [data, setDataRaw] = useState<T | null>(() => cacheGet<T>(cacheKey) ?? null);
+  const [loading, setLoading] = useState(fetcher !== null && data === null);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<number | null>(null);
   const ticket = useRef(0);
   const fetcherRef = useRef(fetcher);
   fetcherRef.current = fetcher;
+  const keyRef = useRef(cacheKey);
+  keyRef.current = cacheKey;
+
+  // local edits (optimistic updates) go into the cache too, so they survive leaving and coming back
+  const setData = useCallback((next: T | null | ((prev: T | null) => T | null)) => {
+    setDataRaw((prev) => {
+      const v = typeof next === "function" ? (next as (p: T | null) => T | null)(prev) : next;
+      cachePut(keyRef.current, v);
+      return v;
+    });
+  }, []);
 
   const run = useCallback(async (initial: boolean) => {
     const fn = fetcherRef.current;
@@ -57,12 +119,14 @@ export function useApi<T>(fetcher: (() => Promise<Envelope<T>>) | null, deps: un
         setRefreshing(false);
       }
     }
-  }, []);
+  }, [setData]);
 
   useEffect(() => {
-    setData(null);
+    const cached = cacheGet<T>(keyRef.current);
+    setDataRaw(cached ?? null);
+    if (cached !== undefined) setLoading(false);
     setError(null);
-    void run(true);
+    void run(cached === undefined);
     return () => {
       ticket.current++;
     };
@@ -75,55 +139,103 @@ export function useApi<T>(fetcher: (() => Promise<Envelope<T>>) | null, deps: un
 
 export interface PagedState<T> {
   items: T[];
+  /** true only while there is nothing to show yet */
   loading: boolean;
+  /** true while refetching with items already on screen */
+  refreshing: boolean;
   loadingMore: boolean;
   error: string | null;
   hasMore: boolean;
   loadMore: () => Promise<void>;
+  /** refetch page 1 in place; what's on screen stays until the new page arrives */
   reload: () => Promise<void>;
   setItems: (next: T[] | ((prev: T[]) => T[])) => void;
 }
 
+type PagedSnapshot<T> = { items: T[]; page: number; hasMore: boolean };
+
 /**
  * Paginated variant: `fetchPage(page)` returns the standard Paginated envelope.
  * `keepPrevious` leaves the old items on screen while new deps load, instead of blanking to a skeleton.
+ * `key` remembers the list (see useApi), so coming back to it is instant.
  */
 export function usePaged<T>(
   fetchPage: (page: number) => Promise<Envelope<{ items: T[]; page: number; hasMore: boolean }>>,
   deps: unknown[],
-  { keepPrevious = false }: { keepPrevious?: boolean } = {},
+  { keepPrevious = false, key }: { keepPrevious?: boolean } & CacheOptions = {},
 ): PagedState<T> {
-  const [items, setItems] = useState<T[]>([]);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [initial] = useState(() => cacheGet<PagedSnapshot<T>>(key));
+  const [items, setItemsRaw] = useState<T[]>(initial?.items ?? []);
+  const [page, setPage] = useState(initial?.page ?? 1);
+  const [hasMore, setHasMore] = useState(initial?.hasMore ?? false);
+  const [loading, setLoading] = useState(!initial);
+  const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const ticket = useRef(0);
   const fetchRef = useRef(fetchPage);
   fetchRef.current = fetchPage;
-
-  const first = useCallback(async () => {
-    const mine = ++ticket.current;
-    setLoading(true);
-    try {
-      const res = await fetchRef.current(1);
-      if (mine !== ticket.current) return;
-      setItems(res.data.items);
-      setPage(1);
-      setHasMore(res.data.hasMore);
-      setError(null);
-    } catch (e) {
-      if (mine !== ticket.current) return;
-      setError(errorMessage(e));
-    } finally {
-      if (mine === ticket.current) setLoading(false);
-    }
+  const keyRef = useRef(key);
+  keyRef.current = key;
+  const snap = useRef<PagedSnapshot<T>>({ items: initial?.items ?? [], page: initial?.page ?? 1, hasMore: initial?.hasMore ?? false });
+  const remember = useCallback((patch: Partial<PagedSnapshot<T>>) => {
+    snap.current = { ...snap.current, ...patch };
+    cachePut(keyRef.current, snap.current);
   }, []);
 
+  const setItems = useCallback(
+    (next: T[] | ((prev: T[]) => T[])) => {
+      setItemsRaw((prev) => {
+        const v = typeof next === "function" ? next(prev) : next;
+        remember({ items: v });
+        return v;
+      });
+    },
+    [remember],
+  );
+
+  /** `blank`: nothing worth showing meanwhile, so show the skeleton */
+  const first = useCallback(
+    async (blank: boolean) => {
+      const mine = ++ticket.current;
+      if (blank) setLoading(true);
+      else setRefreshing(true);
+      try {
+        const res = await fetchRef.current(1);
+        if (mine !== ticket.current) return;
+        setItemsRaw(res.data.items);
+        setPage(1);
+        setHasMore(res.data.hasMore);
+        remember({ items: res.data.items, page: 1, hasMore: res.data.hasMore });
+        setError(null);
+      } catch (e) {
+        if (mine !== ticket.current) return;
+        setError(errorMessage(e));
+      } finally {
+        if (mine === ticket.current) {
+          setLoading(false);
+          setRefreshing(false);
+        }
+      }
+    },
+    [remember],
+  );
+
   useEffect(() => {
-    if (!keepPrevious) setItems([]);
-    void first();
+    const cached = cacheGet<PagedSnapshot<T>>(keyRef.current);
+    if (cached) {
+      snap.current = cached;
+      setItemsRaw(cached.items);
+      setPage(cached.page);
+      setHasMore(cached.hasMore);
+      setLoading(false);
+      setError(null);
+      void first(false);
+    } else {
+      snap.current = { items: [], page: 1, hasMore: false };
+      if (!keepPrevious) setItemsRaw([]);
+      void first(true);
+    }
     return () => {
       ticket.current++;
     };
@@ -136,7 +248,11 @@ export function usePaged<T>(
     try {
       const res = await fetchRef.current(page + 1);
       if (mine !== ticket.current) return;
-      setItems((prev) => [...prev, ...res.data.items]);
+      setItemsRaw((prev) => {
+        const v = [...prev, ...res.data.items];
+        remember({ items: v, page: page + 1, hasMore: res.data.hasMore });
+        return v;
+      });
       setPage(page + 1);
       setHasMore(res.data.hasMore);
     } catch (e) {
@@ -144,9 +260,10 @@ export function usePaged<T>(
     } finally {
       setLoadingMore(false);
     }
-  }, [page]);
+  }, [page, remember]);
 
-  return { items, loading, loadingMore, error, hasMore, loadMore, reload: first, setItems };
+  const reload = useCallback(() => first(false), [first]);
+  return { items, loading, refreshing, loadingMore, error, hasMore, loadMore, reload, setItems };
 }
 
 /** Debounced copy of a value (for search-as-you-type). */

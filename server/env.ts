@@ -40,7 +40,7 @@ export const allowedOrigins = (): string[] =>
 
 export const isProd = () => process.env.NODE_ENV === "production";
 
-/* ----------------------------- Cloudinary ---------------------------- */
+/* ------------------------------ Uploads ------------------------------ */
 
 export type { UploadKind } from "@/lib/uploads";
 
@@ -48,13 +48,15 @@ export type { UploadKind } from "@/lib/uploads";
  * Cloudflare R2, where every uploaded picture and video is stored (resized and compressed on the device first).
  * Null until all five values are set; uploads stay off and people can paste picture links instead.
  */
-export function r2Config(): { accountId: string; accessKeyId: string; secretAccessKey: string; bucket: string; publicUrl: string } | null {
+export function r2Config(): { accountId: string; accessKeyId: string; secretAccessKey: string; bucket: string; publicUrl: string; endpoint: string } | null {
   const accountId = process.env.R2_ACCOUNT_ID?.trim();
   const accessKeyId = process.env.R2_ACCESS_KEY_ID?.trim();
   const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY?.trim();
   const bucket = process.env.R2_BUCKET?.trim();
   const publicUrl = process.env.R2_PUBLIC_URL?.trim().replace(/\/$/, "");
-  return accountId && accessKeyId && secretAccessKey && bucket && publicUrl ? { accountId, accessKeyId, secretAccessKey, bucket, publicUrl } : null;
+  // R2_ENDPOINT is optional: another S3-compatible store (or a local MinIO for testing) instead of R2
+  const endpoint = (process.env.R2_ENDPOINT?.trim() || `https://${accountId}.r2.cloudflarestorage.com`).replace(/\/$/, "");
+  return accountId && accessKeyId && secretAccessKey && bucket && publicUrl ? { accountId, accessKeyId, secretAccessKey, bucket, publicUrl, endpoint } : null;
 }
 
 /** Realtime pings (Ably). Null until ABLY_API_KEY is set; the app then falls back to polling. */
@@ -117,12 +119,6 @@ export const cronSecret = (): string | null => process.env.CRON_SECRET?.trim() |
 /** Site admins: these emails can open /admin, review reports and post public events. */
 export const adminEmails = (): Set<string> =>
   new Set((process.env.ADMIN_EMAILS ?? "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean));
-
-/** Owners of a community at least this big may post public events (not tied to a community). */
-export const eventHostMinMembers = (): number => {
-  const n = Number(process.env.EVENT_HOST_MIN_MEMBERS);
-  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 100;
-};
 
 /**
  * Browser notifications (desktop and phone browsers, and klique installed as an app). Generate a key pair once

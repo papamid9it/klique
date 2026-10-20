@@ -96,7 +96,6 @@ export const communityUpdateSchema = z.object({
   neighborhood: optText(60),
   privacy: z.enum(["public", "private"]).optional(),
   groupPolicy: z.enum(["admins", "members", "off"]).optional(),
-  eventPolicy: z.enum(["admins", "members"]).optional(),
   coverImage: clearableUrl,
 });
 
@@ -110,14 +109,15 @@ export const communityListQuery = pageQuery.extend({
 export const subCreateSchema = z.object({
   name: text(LIMITS.communityName, 3),
   description: text(LIMITS.communityDescription).default(""),
-  visibility: z.enum(["parent", "private"]).default("parent"),
 });
 
 export const subUpdateSchema = z.object({
   name: text(LIMITS.communityName, 3).optional(),
   description: optText(LIMITS.communityDescription),
-  visibility: z.enum(["parent", "private"]).optional(),
 });
+
+export const groupAddSchema = z.object({ userIds: z.array(objectId).min(1, "Pick at least one person").max(50) });
+export const groupAddableQuery = z.object({ q: z.string().trim().max(60).default("") });
 
 export const joinSchema = z.object({
   message: optText(LIMITS.requestMessage),
@@ -362,7 +362,7 @@ export const adminReportActionSchema = z.object({
 
 export const adminUsersQuery = pageQuery.extend({
   q: z.string().trim().max(100).default(""),
-  filter: z.enum(["all", "new", "admins", "hosts", "suspended", "unverified"]).default("all"),
+  filter: z.enum(["all", "new", "admins", "suspended", "unverified"]).default("all"),
 });
 
 export const adminEventsQuery = pageQuery.extend({
@@ -386,13 +386,12 @@ export const adminEventUpdateSchema = z.object({ cancelled: z.boolean(), note: z
 
 export const adminUserUpdateSchema = z
   .object({
-    canHostPublic: z.boolean().optional(),
     suspended: z.boolean().optional(),
     /** sign them out on every device */
     signOut: z.literal(true).optional(),
     reason: z.string().trim().max(300).default(""),
   })
-  .refine((v) => v.canHostPublic !== undefined || v.suspended !== undefined || v.signOut, "Nothing to change");
+  .refine((v) => v.suspended !== undefined || v.signOut, "Nothing to change");
 
 export const adminDraftsQuery = z.object({ status: z.enum(["pending", "approved", "rejected"]).default("pending") });
 

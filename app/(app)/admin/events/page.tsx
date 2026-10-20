@@ -57,7 +57,16 @@ function AdminEventsPageContent() {
 
   return (
     <>
-      <AdminHeader title="Events">Every event on Klique, public and inside communities. Cancel one to keep it visible as cancelled, or delete it outright.</AdminHeader>
+      <AdminHeader
+        title="Events"
+        actions={
+          <Button href="/events/new" variant="primary">
+            <Icon name="plus" size={15} /> Create event
+          </Button>
+        }
+      >
+        Every event on Klique, public and inside communities. Create one in any community, or a public one in none. Cancel one to keep it visible as cancelled, or delete it outright.
+      </AdminHeader>
       <Toolbar>
         <SearchBox value={q} onChange={setQ} placeholder="Search event titles" />
         <Segmented label="Filter events" value={filter} onChange={setFilter} options={FILTERS} />

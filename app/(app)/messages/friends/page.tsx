@@ -35,9 +35,9 @@ export default function FriendsPage() {
   const toast = useToast();
   const tab: Tab = sp.get("tab") === "pending" ? "pending" : sp.get("tab") === "add" ? "add" : "all";
 
-  const friends = useApi(authed ? () => FriendService.list() : null, [authed]);
-  const requests = useApi(authed ? () => FriendService.requests() : null, [authed]);
-  const suggestions = useApi(authed ? () => FriendService.suggestions() : null, [authed]);
+  const friends = useApi(authed ? () => FriendService.list() : null, [authed], { key: "friends" });
+  const requests = useApi(authed ? () => FriendService.requests() : null, [authed], { key: "friend-requests" });
+  const suggestions = useApi(authed ? () => FriendService.suggestions() : null, [authed], { key: "friend-suggestions" });
   const [q, setQ] = useState("");
   const [handle, setHandle] = useState("");
   const [adding, setAdding] = useState(false);

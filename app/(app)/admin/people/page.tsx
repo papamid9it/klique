@@ -18,7 +18,6 @@ import type { AdminUserDTO, AdminUserFilter } from "@/lib/types";
 const FILTERS: { id: AdminUserFilter; label: string }[] = [
   { id: "all", label: "Everyone" },
   { id: "new", label: "New this week" },
-  { id: "hosts", label: "Verified hosts" },
   { id: "suspended", label: "Suspended" },
   { id: "unverified", label: "Unverified" },
   { id: "admins", label: "Admins" },

@@ -36,6 +36,8 @@ export function isInterestId(id: unknown): id is InterestId {
 /* ------------------------------------------------------------------ */
 
 export const LIMITS = {
+  /** groups are small and private: at most this many people, owner included */
+  groupMembers: 50,
   handleMin: 3,
   handleMax: 20,
   displayName: 50,

@@ -16,7 +16,7 @@ export function RightRail() {
   const router = useRouter();
   const { where } = usePlace();
   const [q, setQ] = useState("");
-  const { data, loading, error } = useApi(() => DiscoverService.discover(where), [where]);
+  const { data, loading, error } = useApi(() => DiscoverService.discover(where), [where], { key: `discover:${where}` });
 
   const [railAd] = useAds("home-rail");
   const picks = data?.suggestedCommunities.filter((c) => !c.viewer.isMember).slice(0, 4) ?? [];

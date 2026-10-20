@@ -21,7 +21,7 @@ const TABS: { id: Scope; label: string; empty: string; hint: string }[] = [
 
 function List({ scope }: { scope: Scope }) {
   const tab = TABS.find((t) => t.id === scope)!;
-  const { items, loading, loadingMore, error, hasMore, loadMore, reload, setItems } = usePaged<EventDTO>((page) => EventService.list({ scope, page }), [scope]);
+  const { items, loading, loadingMore, error, hasMore, loadMore, reload, setItems } = usePaged<EventDTO>((page) => EventService.list({ scope, page }), [scope], { key: `my-events:${scope}` });
   if (loading) return <CardGridSkeleton count={4} />;
   if (error) return <ErrorState message={error} onRetry={reload} />;
   if (items.length === 0) {
@@ -31,8 +31,8 @@ function List({ scope }: { scope: Scope }) {
         title={tab.empty}
         action={
           scope === "hosted" ? (
-            <Button href="/events/new" variant="primary">
-              Host a thing
+            <Button href="/communities" variant="primary">
+              Your communities
             </Button>
           ) : (
             <Button href="/events" variant="primary">
@@ -89,9 +89,6 @@ export default function SavedPage() {
           <div className="flex flex-wrap gap-2">
             <Button href="/events" variant="secondary">
               Browse events
-            </Button>
-            <Button href="/events/new" variant="ink">
-              <Icon name="plus" size={15} /> Host a thing
             </Button>
           </div>
         }

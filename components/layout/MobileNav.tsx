@@ -12,7 +12,7 @@ export function MobileNav() {
 
   const items = [
     { href: "/", label: "Discover", icon: "home" as const, active: pathname === "/" || pathname.startsWith("/search") },
-    { href: "/events", label: "Events", icon: "calendar" as const, active: pathname.startsWith("/events") && pathname !== "/events/new" },
+    { href: "/events", label: "Events", icon: "calendar" as const, active: pathname.startsWith("/events") },
     { href: "/communities", label: "Communities", icon: "users" as const, active: pathname.startsWith("/communities") },
     {
       href: status === "authed" && user ? `/people/${user.handle}` : "/login",
@@ -34,9 +34,6 @@ export function MobileNav() {
       <div className="mx-auto flex max-w-md items-center justify-around px-2 py-1.5">
         {link(items[0])}
         {link(items[1])}
-        <Link href="/events/new" aria-label="Host an event" className="-mt-5 inline-flex size-13 items-center justify-center rounded-full bg-accent text-accent-ink shadow-lg ring-4 ring-canvas transition active:scale-95">
-          <Icon name="plus" size={24} />
-        </Link>
         {link(items[2])}
         {link(items[3])}
       </div>
