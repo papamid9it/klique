@@ -94,3 +94,10 @@ export type ReportReason = (typeof REPORT_REASONS)[number]["id"];
 
 /** A topic has to be this lively (comments) before the home page calls it trending. */
 export const TRENDING_MIN_COMMENTS = 30;
+
+/**
+ * Voice channels ("hangout") are switched off for now and shown as "coming soon": they're hidden from channel
+ * lists, can't be created or joined, and existing ones stay in the database untouched. Flip to true to bring
+ * them back (LiveKit keys must be set; see .env.example).
+ */
+export const VOICE_ENABLED = false;

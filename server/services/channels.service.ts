@@ -1,3 +1,4 @@
+import { VOICE_ENABLED } from "@/lib/constants";
 import { isSiteAdmin } from "../policies/hosting";
 import { SignJWT } from "jose";
 import { deleteUploads } from "./media.service";
@@ -200,7 +201,7 @@ export async function listChannels(viewer: IUser | null, space: Space, access: S
     invitedSet(viewer, communityId),
   ]);
   const readBy = new Map(reads.map((r) => [sid(r.channelId), r]));
-  const visible = channels.filter((c) => canSeeChannel(c, access, invited.has(sid(c._id))));
+  const visible = channels.filter((c) => canSeeChannel(c, access, invited.has(sid(c._id))) && (VOICE_ENABLED || c.type !== "voice"));
   const mentionCounts = viewer && access.isMember ? await countMentions(viewer._id, visible, readBy) : new Map<string, number>();
   const memberCounts = access.canManage ? await guestCounts(visible) : undefined;
   const ctx: DtoCtx = { access, readBy, invited, mentionCounts, memberCounts };
@@ -217,7 +218,7 @@ export async function listChannels(viewer: IUser | null, space: Space, access: S
       for (const sub of subs) {
         const m = subMs.find((x) => sid(x.subcommunityId!) === sid(sub._id)) ?? null;
         const gAccess = subAccessFrom(sub, parentM, m, isSiteAdmin(viewer));
-        const rows = subChannels.filter((c) => sid(c.subcommunityId!) === sid(sub._id) && canSeeChannel(c, gAccess, invited.has(sid(c._id))));
+        const rows = subChannels.filter((c) => sid(c.subcommunityId!) === sid(sub._id) && canSeeChannel(c, gAccess, invited.has(sid(c._id))) && (VOICE_ENABLED || c.type !== "voice"));
         const gMentions = await countMentions(viewer._id, rows, readBy);
         const gCounts = gAccess.canManage ? await guestCounts(rows) : undefined;
         groups.push({
@@ -281,6 +282,7 @@ async function assertSpaceMembers(space: Space, userIds: string[]): Promise<Type
 
 export async function createChannel(viewer: IUser, space: Space, access: SpaceAccess, input: z.infer<typeof channelCreateSchema>): Promise<ChannelDTO> {
   assertCanManage(access);
+  if (input.type === "voice" && !VOICE_ENABLED) throw badRequest("Voice channels are coming soon.");
   await ensureChannelIndexes();
   rateLimit(`channel-create:${sid(viewer._id)}`, 20, 60 * 60 * 1000);
   const scope = scopeOf(space);
@@ -315,6 +317,7 @@ export async function updateChannel(viewer: IUser, space: Space, access: SpaceAc
     set.slug = await uniqueChannelSlug(space, patch.name, channel._id);
   }
   if (patch.topic !== undefined) set.topic = patch.topic;
+  if (patch.type === "voice" && !VOICE_ENABLED) throw badRequest("Voice channels are coming soon.");
   if (patch.type !== undefined) set.type = patch.type;
   if (patch.visibility !== undefined) set.visibility = patch.visibility;
   if (patch.categoryId !== undefined) set.categoryId = await assertCategory(space, patch.categoryId);
@@ -615,6 +618,7 @@ export async function pinMessage(viewer: IUser, space: Space, access: SpaceAcces
 export async function joinVoice(viewer: IUser, space: Space, access: SpaceAccess, channelSlug: string): Promise<VoiceJoinDTO> {
   const { channel, invited } = await loadChannel(viewer, space, access, channelSlug);
   if (channel.type !== "voice") throw forbidden("This isn't a voice channel.");
+  if (!VOICE_ENABLED) throw forbidden("Voice channels are coming soon.");
   if (access.banned) throw forbidden("You can't join this channel.");
   if (!access.isMember) throw forbidden("Join the community to talk.");
   if (!canSeeChannel(channel, access, invited)) throw forbidden("You can't join this channel.");

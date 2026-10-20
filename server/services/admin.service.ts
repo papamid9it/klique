@@ -1,4 +1,5 @@
 import "server-only";
+import { VOICE_ENABLED } from "@/lib/constants";
 import type { Types } from "mongoose";
 import type {
   AdminCommunityRow,
@@ -527,7 +528,7 @@ export function systemStatus(): SystemStatusDTO {
       { id: "google", label: "Sign in with Google", ok: !!googleConfig(), detail: googleConfig() ? "Google sign-in is on." : "GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET aren't set.", optional: true },
       { id: "uploads", label: "Picture & video uploads", ok: !!r2, detail: r2 ? `Stored in Cloudflare R2 (bucket “${r2.bucket}”), resized and compressed on the device first.` : "R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET and R2_PUBLIC_URL aren't all set, so uploads are off (people can still paste picture links)." },
       { id: "realtime", label: "Live chat updates", ok: !!ablyKey(), detail: ablyKey() ? "Ably is connected." : "ABLY_API_KEY isn't set: chats refresh by polling.", optional: true },
-      { id: "voice", label: "Voice channels", ok: !!livekitConfig(), detail: livekitConfig() ? "LiveKit is connected." : "LiveKit isn't set up, so voice channels are off.", optional: true },
+      { id: "voice", label: "Voice channels", ok: VOICE_ENABLED && !!livekitConfig(), detail: !VOICE_ENABLED ? "Coming soon: switched off in lib/constants.ts (VOICE_ENABLED)." : livekitConfig() ? "LiveKit is connected." : "LiveKit isn't set up, so voice channels are off.", optional: true },
       { id: "cache", label: "Shared cache & rate limits", ok: redis, detail: redis ? "Upstash Redis is connected." : "No Redis: rate limits are per server instance.", optional: true },
       { id: "webpush", label: "Browser notifications", ok: !!webPushConfig(), detail: webPushConfig() ? "Desktop and web-app notifications are on." : "VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY aren't set, so desktop and browser notifications are off." },
       { id: "support", label: "Support email", ok: !!process.env.NEXT_PUBLIC_SUPPORT_EMAIL?.trim(), detail: process.env.NEXT_PUBLIC_SUPPORT_EMAIL?.trim() ? `Shown on Terms and Privacy: ${process.env.NEXT_PUBLIC_SUPPORT_EMAIL.trim()}` : "NEXT_PUBLIC_SUPPORT_EMAIL isn't set, so Terms and Privacy have no contact address." },

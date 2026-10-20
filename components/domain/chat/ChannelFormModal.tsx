@@ -9,15 +9,17 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { SelectField, Switch, TextArea, TextField } from "@/components/ui/Field";
 import { Icon } from "@/components/ui/Icon";
+import { cx } from "@/components/ui/cx";
 import { Modal } from "@/components/ui/Modal";
 import { SaveBar, SettingsBlock, SettingsShell, type SettingsGroup } from "@/components/ui/SettingsShell";
+import { VOICE_ENABLED } from "@/lib/constants";
 import { useDebounced } from "@/lib/hooks/useApi";
 import type { ChannelCategoryDTO, ChannelDTO, ChannelType, ChannelVisibility, UserBrief } from "@/lib/types";
 
-const TYPE_CARDS: { id: ChannelType; icon: "hash" | "megaphone" | "mic"; title: string; hint: string }[] = [
+const TYPE_CARDS: { id: ChannelType; icon: "hash" | "megaphone" | "mic"; title: string; hint: string; soon?: boolean }[] = [
   { id: "text", icon: "hash", title: "Text", hint: "Everyone who can see it can post: chat, photos, links." },
   { id: "announcement", icon: "megaphone", title: "Announcement", hint: "Everyone can read. Only owners and admins post." },
-  { id: "voice", icon: "mic", title: "Voice", hint: "Talk out loud together. Members join and speak." },
+  { id: "voice", icon: "mic", title: "Voice", hint: "Talk out loud together. Members join and speak.", soon: !VOICE_ENABLED },
 ];
 
 /** Discord's "Create Channel" dialog: type cards, name, private switch. The server re-checks that you're an owner/admin. */
@@ -73,13 +75,17 @@ export function CreateChannelModal({
           <legend className="eyebrow mb-2">Channel type</legend>
           <div className="space-y-2">
             {TYPE_CARDS.map((t) => (
-              <label key={t.id} className="flex cursor-pointer items-center gap-3 rounded-control border border-line bg-raised p-3 transition has-[:checked]:border-accent-text has-[:checked]:bg-surface">
+              <label key={t.id} className={cx("flex items-center gap-3 rounded-control border border-line bg-raised p-3 transition has-[:checked]:border-accent-text has-[:checked]:bg-surface", t.soon ? "cursor-not-allowed opacity-60" : "cursor-pointer")} aria-disabled={t.soon || undefined}>
                 <Icon name={t.icon} size={22} className="shrink-0 text-ink-muted" />
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm font-semibold">{t.title}</span>
                   <span className="block text-xs text-ink-muted">{t.hint}</span>
                 </span>
-                <input type="radio" name="channel-type" checked={type === t.id} onChange={() => setType(t.id)} className="size-4 accent-[var(--accent-text)]" />
+                {t.soon ? (
+                  <span className="shrink-0 rounded-full border border-line px-2 py-0.5 text-[11px] font-semibold text-ink-muted">Coming soon</span>
+                ) : (
+                  <input type="radio" name="channel-type" checked={type === t.id} onChange={() => setType(t.id)} className="size-4 accent-[var(--accent-text)]" />
+                )}
               </label>
             ))}
           </div>
@@ -287,13 +293,17 @@ export function ChannelSettings({
           <SettingsBlock title="Who can post" intro="Everyone who can see the channel can read it.">
             <div className="space-y-2">
               {TYPE_CARDS.map((t) => (
-                <label key={t.id} className="flex cursor-pointer items-center gap-3 rounded-control border border-line bg-raised p-3 transition has-[:checked]:border-accent-text has-[:checked]:bg-surface">
+                <label key={t.id} className={cx("flex items-center gap-3 rounded-control border border-line bg-raised p-3 transition has-[:checked]:border-accent-text has-[:checked]:bg-surface", t.soon ? "cursor-not-allowed opacity-60" : "cursor-pointer")} aria-disabled={t.soon || undefined}>
                   <Icon name={t.icon} size={20} className="shrink-0 text-ink-muted" />
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm font-semibold">{t.title}</span>
                     <span className="block text-xs text-ink-muted">{t.hint}</span>
                   </span>
+                  {t.soon ? (
+                  <span className="shrink-0 rounded-full border border-line px-2 py-0.5 text-[11px] font-semibold text-ink-muted">Coming soon</span>
+                ) : (
                   <input type="radio" name="post-type" checked={type === t.id} onChange={() => setType(t.id)} className="size-4 accent-[var(--accent-text)]" />
+                )}
                 </label>
               ))}
             </div>
