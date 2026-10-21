@@ -1,5 +1,6 @@
 "use client";
 
+import { useCategories } from "@/lib/hooks/useCategories";
 import { useSearchParams } from "next/navigation";
 import { Fragment, useState } from "react";
 import { EventService } from "@/app/services/EventService";
@@ -11,7 +12,7 @@ import { Modal } from "@/components/ui/Modal";
 import { cx } from "@/components/ui/cx";
 import { RowSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/States";
-import { INTERESTS, isInterestId, type InterestId } from "@/lib/constants";
+import { isInterestId, type InterestId } from "@/lib/constants";
 import { isDateFilter, type DateFilter } from "@/lib/dates";
 import { formatDateLong } from "@/lib/format";
 import { useApi, useDebounced, useNow, usePaged } from "@/lib/hooks/useApi";
@@ -51,6 +52,7 @@ function Pill({ on, onClick, children, className }: { on: boolean; onClick: () =
  * The side panel is the calendar and a "browse by place" list that drills down one level at a time.
  */
 export function EventsExplorer() {
+  const categories = useCategories();
   const place = usePlace();
   const now = useNow(60_000);
   // Links can open the page pre-filtered: ?interest=skate&date=weekend&day=2026-10-24&free=1&format=online
@@ -190,7 +192,7 @@ export function EventsExplorer() {
               <legend className="eyebrow mb-2">Kind</legend>
               <div className="flex flex-wrap gap-2">
                 <Pill on={!interest} onClick={() => setInterest("")}>All kinds</Pill>
-                {INTERESTS.map((i) => (
+                {categories.map((i) => (
                   <Pill key={i.id} on={interest === i.id} onClick={() => setInterest(interest === i.id ? "" : i.id)}>
                     <span aria-hidden="true">{i.glyph}</span> {i.short}
                   </Pill>
@@ -236,7 +238,7 @@ export function EventsExplorer() {
           </div>
           <div className="no-bar -mx-3.5 flex gap-2 overflow-x-auto px-3.5 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0" role="group" aria-label="Interest">
             <Pill on={!interest} onClick={() => setInterest("")}>All kinds</Pill>
-            {INTERESTS.map((i) => (
+            {categories.map((i) => (
               <Pill key={i.id} on={interest === i.id} onClick={() => setInterest(interest === i.id ? "" : i.id)}>
                 <span aria-hidden="true">{i.glyph}</span> {i.short}
               </Pill>

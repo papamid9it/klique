@@ -1,5 +1,6 @@
 "use client";
 
+import { useCategories } from "@/lib/hooks/useCategories";
 import { useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
 import { AdService } from "@/app/services/AdService";
@@ -13,19 +14,22 @@ import { Icon } from "@/components/ui/Icon";
 import { ImageField } from "@/components/ui/ImageField";
 import { SlideOver } from "@/components/ui/SlideOver";
 import { cx } from "@/components/ui/cx";
-import { INTERESTS, type InterestId } from "@/lib/constants";
+import { type InterestId } from "@/lib/constants";
 import { formatDateShort } from "@/lib/format";
 import { useApi, useDebounced } from "@/lib/hooks/useApi";
 import { parseScope, scopeLabel, type Place } from "@/lib/places";
+import { DISCOVER_BANNER_ADS } from "@/lib/constants";
 import type { AdDTO, AdInput, AdminAdDTO, AdminEventRow, AdSlot } from "@/lib/types";
 
-export const SLOTS: { id: AdSlot; label: string; hint: string }[] = [
+const ALL_SLOTS: { id: AdSlot; label: string; hint: string }[] = [
+  { id: "home-hero", label: "Discover banner", hint: "The big banner at the top of the home page (replaces the featured event)" },
   { id: "home-feed", label: "Home feed", hint: "A card in “Happening around you” (phones and desktop)" },
   { id: "home-rail", label: "Home side box", hint: "Right column of the home page, desktop only" },
   { id: "events-list", label: "Events list", hint: "Top of the list, and once further down" },
   { id: "event-page", label: "Event page", hint: "Partner box under “I'm going”. No picture." },
   { id: "search", label: "Search", hint: "First result, when the search words match" },
 ];
+export const SLOTS = ALL_SLOTS.filter((s) => DISCOVER_BANNER_ADS || s.id !== "home-hero");
 
 const toLocal = (iso: string | null | undefined) => {
   if (!iso) return "";
@@ -54,7 +58,7 @@ function EventPicker({ value, onPick }: { value: AdminAdDTO["event"]; onPick: (e
           <span className="text-ink-muted">Promoting:</span> <span className="font-semibold">{value.title}</span> · {formatDateShort(value.startsAt)}
         </p>
       )}
-      <TextField label={value ? "Pick a different event" : "Event to promote"} type="search" placeholder="Search upcoming public events" value={q} onChange={(e) => setQ(e.target.value)} hint="Only public events can be promoted." />
+      <TextField label={value ? "Pick a different event" : "Event to promote"} type="search" placeholder="Search upcoming public events" value={q} onChange={(e) => setQ(e.target.value)} hint="Only Klique's own events can be promoted: a community's events are for its members." />
       <ul className="divide-y divide-line rounded-control border border-line">
         {loading && !list.length ? (
           <li className="px-3 py-2 text-sm text-ink-muted">Loading…</li>
@@ -77,6 +81,7 @@ function EventPicker({ value, onPick }: { value: AdminAdDTO["event"]; onPick: (e
 
 /** Create or edit an ad, with a live preview of how it looks in the app. */
 export function AdEditor({ ad, onClose, onSaved }: { ad: AdminAdDTO | "new"; onClose: () => void; onSaved: (a: AdminAdDTO) => void }) {
+  const categories = useCategories();
   const toast = useToast();
   const start = ad === "new" ? null : ad;
   const [f, setF] = useState({
@@ -229,7 +234,7 @@ export function AdEditor({ ad, onClose, onSaved }: { ad: AdminAdDTO | "new"; onC
             <p className="text-sm font-medium">Scenes</p>
             <p className="text-xs text-ink-muted">{f.interests.length ? "Shown to people into these scenes, or browsing them." : "Every scene."}</p>
             <div className="mt-2 flex flex-wrap gap-1.5">
-              {INTERESTS.map((i) => (
+              {categories.map((i) => (
                 <button key={i.id} type="button" aria-pressed={f.interests.includes(i.id)} onClick={() => set("interests", toggle(f.interests, i.id))} className={cx("inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[13px] font-medium", f.interests.includes(i.id) ? "border-transparent bg-accent text-accent-ink" : "border-line text-ink-muted hover:text-ink")}>
                   <span aria-hidden="true">{i.glyph}</span> {i.short}
                 </button>

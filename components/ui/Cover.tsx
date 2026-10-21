@@ -126,7 +126,9 @@ export function Cover({
   const [failed, setFailed] = useState(false);
   const showArt = !src || failed;
   return (
-    <div className={cx("relative overflow-hidden bg-raised", className)}>
+    // "relative" only when the caller doesn't place it themselves: both at once and "relative" wins, which
+    // collapses a full-bleed background (the Discover banner) to zero height
+    <div className={cx(!/\b(absolute|fixed|sticky)\b/.test(className ?? "") && "relative", "overflow-hidden bg-raised", className)}>
       {showArt ? (
         <ArtCover seed={seed} interest={interest} className="absolute inset-0" />
       ) : (

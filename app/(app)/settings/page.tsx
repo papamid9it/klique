@@ -1,5 +1,6 @@
 "use client";
 
+import { useCategories } from "@/lib/hooks/useCategories";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -31,7 +32,7 @@ import { UserName } from "@/components/ui/UserName";
 import { ProfileBanner, monthYear } from "@/components/domain/profile/ProfileParts";
 import { Avatar } from "@/components/ui/Avatar";
 import { placeLabel, type Place } from "@/lib/places";
-import { DM_POLICIES, INTERESTS, LIMITS, PROFILE_VISIBILITY, type DmPolicy, type InterestId, type ProfileVisibility } from "@/lib/constants";
+import { DM_POLICIES, LIMITS, PROFILE_VISIBILITY, type DmPolicy, type InterestId, type ProfileVisibility } from "@/lib/constants";
 import { useApi } from "@/lib/hooks/useApi";
 import { MOODS, type MoodId } from "@/lib/moods";
 import type { UserMe } from "@/lib/types";
@@ -85,6 +86,7 @@ function RadioCards<T extends string>({ name, value, options, onChange, disabled
 type ProfileDraft = { displayName: string; bio: string; avatarUrl: string; place: Place; neighborhood: string };
 
 function ProfileForm({ me, onDraft }: { me: UserMe; onDraft?: (d: ProfileDraft) => void }) {
+  const categories = useCategories();
   const { setUser } = useAuth();
   const toast = useToast();
   const [displayName, setDisplayName] = useState(me.displayName);
@@ -143,7 +145,7 @@ function ProfileForm({ me, onDraft }: { me: UserMe; onDraft?: (d: ProfileDraft) 
           Interests <span className="text-ink-muted">({interests.length}/{LIMITS.maxInterests})</span>
         </legend>
         <div className="mt-2 flex flex-wrap gap-2">
-          {INTERESTS.map((i) => {
+          {categories.map((i) => {
             const on = interests.includes(i.id);
             const locked = !on && interests.length >= LIMITS.maxInterests;
             return (

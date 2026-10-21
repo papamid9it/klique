@@ -1,5 +1,19 @@
 export const APP_NAME = "klique";
 
+/**
+ * Selling the big Discover banner as an ad spot ("Discover banner" placement). Built but switched off: while
+ * false it isn't offered in Create ad or the admin ad editor, isn't priced, and is never served, so the banner
+ * always shows the featured event. Flip to true to start selling it.
+ */
+export const DISCOVER_BANNER_ADS = false;
+
+/**
+ * The one default community, "Klique": everyone is in it from signup and can't leave. Only site admins post its
+ * events, and those are the only events everyone sees; every other event is for its own community's (or group's)
+ * members. Announcements are made there.
+ */
+export const KLIQUE_SLUG = "klique";
+
 /** Where people can reach you about their data or the rules (shown on /terms and /privacy). Set NEXT_PUBLIC_SUPPORT_EMAIL. */
 export const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL?.trim() || "";
 
@@ -10,7 +24,25 @@ export type CityId = string;
 /* Interests                                                           */
 /* ------------------------------------------------------------------ */
 
-export const INTERESTS = [
+/**
+ * Categories ("interests" in the code: what a community, event or person is into). A site admin edits the list in
+ * Admin → Categories; these are the defaults until they do. A hidden category stays on everything that already
+ * uses it but isn't offered any more. The list lives in one registry here, filled from the server (`/api/categories`)
+ * in the browser and from the database on the server (see server/services/categories.service.ts), so the helpers
+ * below stay synchronous.
+ */
+export interface Category {
+  /** the slug stored on communities, events and people; never changes once created */
+  id: string;
+  name: string;
+  /** a short label for chips and tight spaces */
+  short: string;
+  /** an emoji or symbol shown next to the name */
+  glyph: string;
+  hidden?: boolean;
+}
+
+export const DEFAULT_CATEGORIES: Category[] = [
   { id: "skate", name: "Skateboarding", short: "Skate", glyph: "✳" },
   { id: "music", name: "Alté & indie music", short: "Music", glyph: "♫" },
   { id: "streetwear", name: "Streetwear", short: "Streetwear", glyph: "✦" },
@@ -19,16 +51,42 @@ export const INTERESTS = [
   { id: "art", name: "Art", short: "Art", glyph: "◐" },
   { id: "film", name: "Film", short: "Film", glyph: "▶" },
   { id: "dance", name: "Dance", short: "Dance", glyph: "❋" },
-] as const;
+];
 
-export type InterestId = (typeof INTERESTS)[number]["id"];
-export const INTEREST_IDS = INTERESTS.map((i) => i.id) as InterestId[];
+export type InterestId = string;
+export const CATEGORY_SLUG = /^[a-z0-9][a-z0-9-]{1,29}$/;
 
-export function getInterest(id: string | null | undefined) {
-  return INTERESTS.find((i) => i.id === id) ?? INTERESTS[0];
+let registry: Category[] = DEFAULT_CATEGORIES;
+let visible: Category[] = DEFAULT_CATEGORIES;
+const listeners = new Set<() => void>();
+
+/** Replace the list (from the server). Everyone using `useCategories` re-renders. */
+export function setCategories(list: Category[]) {
+  if (!list.length) return;
+  registry = list;
+  visible = list.filter((c) => !c.hidden);
+  listeners.forEach((fn) => fn());
 }
+export function onCategoriesChange(fn: () => void) {
+  listeners.add(fn);
+  return () => void listeners.delete(fn);
+}
+/** Every category, hidden ones included, in the admin's order. */
+export const allCategories = (): Category[] => registry;
+/** The ones on offer (pickers, filters, onboarding). */
+export const visibleCategories = (): Category[] => visible;
+
+const prettify = (id: string) => id.replace(/-/g, " ").replace(/^./, (c) => c.toUpperCase());
+
+export function getInterest(id: string | null | undefined): Category {
+  const found = registry.find((i) => i.id === id);
+  if (found) return found;
+  const name = id ? prettify(id) : "Other";
+  return { id: id ?? "", name, short: name, glyph: "•" };
+}
+/** A category that exists (hidden ones too: things already using them keep working). */
 export function isInterestId(id: unknown): id is InterestId {
-  return typeof id === "string" && (INTEREST_IDS as string[]).includes(id);
+  return typeof id === "string" && registry.some((c) => c.id === id);
 }
 
 /* ------------------------------------------------------------------ */

@@ -1,6 +1,6 @@
 import type { InterestId } from "@/lib/constants";
 import { parseScope, scopeFilter, scopeFromPlace, scopeToString } from "@/lib/places";
-import { INTEREST_IDS } from "@/lib/constants";
+import { visibleCategories } from "@/lib/constants";
 import { dateRangeFor, startOfLagosDay } from "@/lib/dates";
 import type { CommunityCardDTO, DiscoverDTO, EventDTO, SearchResultsDTO } from "@/lib/types";
 import { Community, type ICommunity } from "../models/Community";
@@ -15,6 +15,7 @@ import { toBrief } from "../serializers";
 import { hiddenUserIds } from "./blocks";
 import { listCommunities } from "./communities.service";
 import { listEvents } from "./events.service";
+import { kliqueId } from "./klique-id";
 import { escapeRegex } from "./helpers";
 
 const LINGER_MS = 3 * 60 * 60 * 1000;
@@ -45,7 +46,8 @@ export async function discover(viewer: IUser | null, whereParam?: string): Promi
       .lean<IEvent[]>(),
     goingIds.length ? Event.find({ $and: [visibility, { _id: { $in: goingIds }, ...live }] }).sort({ startsAt: 1 }).limit(3).lean<IEvent[]>() : Promise.resolve<IEvent[]>([]),
     joinedIds.length
-      ? Event.find({ $and: [visibility, { communityId: { $in: joinedIds }, ...live, startsAt: { $gte: now } }] }).sort({ startsAt: 1 }).limit(12).lean<IEvent[]>()
+      ? // "From your communities": the ones you chose (Klique's events are already all over the page)
+        Event.find({ $and: [visibility, { communityId: { $in: joinedIds, $ne: await kliqueId() }, ...live, startsAt: { $gte: now } }] }).sort({ startsAt: 1 }).limit(12).lean<IEvent[]>()
       : Promise.resolve<IEvent[]>([]),
     Event.aggregate<{ _id: string; n: number }>([
       { $match: { $and: [visibility, { ...place, cancelled: false, startsAt: { $gte: today, $lt: new Date(+today + 7 * DAY_MS) } }] } },
@@ -55,7 +57,17 @@ export async function discover(viewer: IUser | null, whereParam?: string): Promi
 
   // Interest matches first, then soonest.
   const ranked = [...upcoming].sort((a, b) => Number(mine.has(b.interest)) - Number(mine.has(a.interest)) || +a.startsAt - +b.startsAt);
-  const featuredRow = ranked.find((e) => e.coverImage) ?? ranked[0] ?? null;
+  // The big banner is public-facing: only events open to everyone (never a members-only community or group
+  // event), the one with the most people going first; your interests, then the sooner one, break ties.
+  const candidates = upcoming.filter((e) => e.audience === "public" && !e.subcommunityId);
+  const candidateCommunities = [...new Set(candidates.map((e) => e.communityId).filter(Boolean).map(String))];
+  const privateCommunities = new Set(
+    candidateCommunities.length ? (await Community.find({ _id: { $in: candidateCommunities }, privacy: { $ne: "public" } }).select("_id").lean<{ _id: ICommunity["_id"] }[]>()).map((c) => String(c._id)) : [],
+  );
+  const featuredRow =
+    candidates
+      .filter((e) => !e.communityId || !privateCommunities.has(String(e.communityId)))
+      .sort((a, b) => (b.goingCount ?? 0) - (a.goingCount ?? 0) || Number(mine.has(b.interest)) - Number(mine.has(a.interest)) || +a.startsAt - +b.startsAt)[0] ?? null;
   const nearRows = ranked.filter((e) => e !== featuredRow).slice(0, 6);
 
   // The themed rows below never repeat an event already shown above them.
@@ -98,7 +110,7 @@ export async function discover(viewer: IUser | null, whereParam?: string): Promi
   for (const e of upcoming) counts.set(e.interest, (counts.get(e.interest) ?? 0) + 1);
   const interests: InterestId[] = viewer?.interests?.length
     ? viewer.interests
-    : [...INTEREST_IDS].sort((a, b) => (counts.get(b) ?? 0) - (counts.get(a) ?? 0)).slice(0, 4);
+    : visibleCategories().map((c) => c.id).sort((a, b) => (counts.get(b) ?? 0) - (counts.get(a) ?? 0)).slice(0, 4);
   const yourScenes = interests.map((interest) => ({ interest, count: counts.get(interest) ?? 0 }));
 
   return {

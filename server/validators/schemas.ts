@@ -424,7 +424,7 @@ export const adminSourceSchema = z.object({
 
 /* --------------------------------- ads ------------------------------ */
 
-const adSlot = z.enum(["home-feed", "home-rail", "events-list", "event-page", "search"]);
+const adSlot = z.enum(["home-hero", "home-feed", "home-rail", "events-list", "event-page", "search"]);
 
 export const adServeQuery = z.object({
   slot: adSlot,
@@ -530,7 +530,7 @@ export const adCampaignSchema = z.object({
 
 const naira = z.number().int().min(0).max(100_000_000);
 export const adPricingSchema = z.object({
-  perDay: z.partialRecord(z.enum(["home-feed", "home-rail", "events-list", "event-page", "search"]), naira).optional(),
+  perDay: z.partialRecord(z.enum(["home-hero", "home-feed", "home-rail", "events-list", "event-page", "search"]), naira).optional(),
   reach: z.partialRecord(z.enum(["city", "country", "world"]), z.number().min(0.1).max(100)).optional(),
   minDays: z.number().int().min(1).max(365).optional(),
   maxDays: z.number().int().min(1).max(365).optional(),
@@ -573,3 +573,22 @@ export const ranksConfigSchema = z.object({
   dailyCap: z.number().int().min(1).max(1_000_000).optional(),
 });
 export const attendanceSchema = z.object({ userIds: z.array(z.string().regex(/^[a-f0-9]{24}$/)).min(1).max(500), attended: z.boolean() });
+
+/** Admin → Categories: the whole list, in order. */
+export const categoriesListSchema = z.object({
+  categories: z
+    .array(
+      z.object({
+        id: z.string().trim().min(2).max(30),
+        name: z.string().trim().min(1).max(40),
+        short: z.string().trim().max(16).optional().default(""),
+        glyph: z.string().trim().max(4).optional().default(""),
+        hidden: z.boolean().optional(),
+      }),
+    )
+    .min(3)
+    .max(60),
+});
+
+/** Onboarding step 1: what you're into (at least 3). */
+export const onboardingInterestsSchema = z.object({ interests: z.array(interestId).min(3, "Pick at least 3.").max(20) });

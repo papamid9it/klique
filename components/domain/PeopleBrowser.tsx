@@ -1,5 +1,6 @@
 "use client";
 
+import { useCategories } from "@/lib/hooks/useCategories";
 import { useState } from "react";
 import { ProfileService } from "@/app/services/ProfileService";
 import { PersonRow } from "@/components/domain/PersonRow";
@@ -7,12 +8,13 @@ import { Button } from "@/components/ui/Button";
 import { SelectField, TextField } from "@/components/ui/Field";
 import { RowSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/States";
-import { INTERESTS, isInterestId, type InterestId } from "@/lib/constants";
+import { isInterestId, type InterestId } from "@/lib/constants";
 import { usePlace } from "@/components/providers/PlaceProvider";
 import { useDebounced, usePaged } from "@/lib/hooks/useApi";
 import type { UserBrief } from "@/lib/types";
 
 export function PeopleBrowser() {
+  const categories = useCategories();
   const { where } = usePlace();
   const [interest, setInterest] = useState<InterestId | "">("");
   const [q, setQ] = useState("");
@@ -28,7 +30,7 @@ export function PeopleBrowser() {
         <TextField label="Search" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name or @handle" />
         <SelectField label="Interest" value={interest} onChange={(e) => setInterest(isInterestId(e.target.value) ? e.target.value : "")}>
           <option value="">All interests</option>
-          {INTERESTS.map((i) => (
+          {categories.map((i) => (
             <option key={i.id} value={i.id}>{i.name}</option>
           ))}
         </SelectField>

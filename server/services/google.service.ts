@@ -1,3 +1,4 @@
+import { joinKlique } from "./klique.service";
 import { randomBytes } from "node:crypto";
 import { SignJWT, createRemoteJWKSet, jwtVerify } from "jose";
 import { LIMITS } from "@/lib/constants";
@@ -172,5 +173,6 @@ export async function signInWithGoogle(p: GoogleProfile): Promise<{ user: IUser;
     displayName: p.name,
     avatarUrl: p.picture,
   });
+  await joinKlique(created._id); // everyone's in Klique, from the start
   return { user: created.toObject() as IUser, isNew: true };
 }

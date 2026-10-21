@@ -1,3 +1,4 @@
+import { kliqueId } from "./klique-id";
 import "server-only";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { PromoteOptionsDTO, PromotionDTO } from "@/lib/types";
@@ -52,11 +53,11 @@ async function hostEvent(viewer: IUser, id: string): Promise<IEvent> {
   return e;
 }
 
-function whyNot(e: IEvent): string | null {
+function whyNot(e: IEvent, kliqueIdNow: string): string | null {
   if (!paystackConfig()) return "Promotions aren't available yet.";
   if (e.cancelled) return "This event was cancelled.";
   if (e.startsAt <= new Date()) return "This event has already started.";
-  if (e.audience !== "public") return "Only public events can be promoted. Events inside a community are already shown to its members.";
+  if (e.subcommunityId || !e.communityId || String(e.communityId) !== kliqueIdNow) return "Only Klique's own events can be promoted. A community's events are for its members.";
   return null;
 }
 
@@ -97,9 +98,10 @@ export async function promoteOptions(viewer: IUser, eventId: string): Promise<Pr
   const prices: PromoteOptionsDTO["prices"] = {};
   for (const r of reaches) prices[r] = Object.fromEntries(PROMO_DAYS.map((d) => [String(d), promotionPrice(r, d)]));
   const rows = await Promotion.find({ eventId: e._id, status: { $ne: "failed" } }).sort({ createdAt: -1 }).limit(20).lean<IPromotion[]>();
+  const reason = whyNot(e, String(await kliqueId()));
   return {
-    available: !whyNot(e),
-    reason: whyNot(e),
+    available: !reason,
+    reason,
     event: { id: sid(e._id), title: e.title, startsAt: e.startsAt.toISOString() },
     currency: "NGN",
     days: PROMO_DAYS,
@@ -130,7 +132,7 @@ export async function paystack<T>(path: string, init?: { method?: string; body?:
 /** Create the order and a Paystack checkout; the client sends the host to `authorizationUrl`. */
 export async function startPromotion(viewer: IUser, eventId: string, input: { days: number; reach: string }) {
   const e = await hostEvent(viewer, eventId);
-  const reason = whyNot(e);
+  const reason = whyNot(e, String(await kliqueId()));
   if (reason) throw badRequest(reason);
   if (!PROMO_DAYS.includes(input.days)) throw badRequest("Pick how many days to promote it for.");
   if (!reachesFor(e).includes(input.reach)) throw badRequest("Pick how far to promote it.");

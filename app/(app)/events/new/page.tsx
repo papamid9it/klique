@@ -1,5 +1,7 @@
 "use client";
 
+import { useCategories } from "@/lib/hooks/useCategories";
+import { KLIQUE_SLUG } from "@/lib/constants";
 import Link from "next/link";
 import { Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -13,12 +15,12 @@ import { PageTitle } from "@/components/layout/PageTitle";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { PlaceFields } from "@/components/domain/places/PlaceFields";
 import { usePlace } from "@/components/providers/PlaceProvider";
-import { cityName, currencyOf, type Place } from "@/lib/places";
+import { currencyOf, type Place } from "@/lib/places";
 import { ImageField } from "@/components/ui/ImageField";
 import { Button } from "@/components/ui/Button";
 import { SelectField, TextArea, TextField } from "@/components/ui/Field";
 import { Icon } from "@/components/ui/Icon";
-import { INTERESTS, LIMITS, isInterestId, type InterestId } from "@/lib/constants";
+import { LIMITS, isInterestId, type InterestId } from "@/lib/constants";
 import { CURRENCIES, formatPrice } from "@/lib/format";
 import { useApi, useDebounced } from "@/lib/hooks/useApi";
 
@@ -29,6 +31,7 @@ function toIso(date: string, time: string): string | null {
 }
 
 function NewEventForm() {
+  const categories = useCategories();
   const router = useRouter();
   const params = useSearchParams();
   const { status, requireAuth, user } = useAuth();
@@ -64,7 +67,8 @@ function NewEventForm() {
   }, [status, requireAuth]);
 
   // Events are posted from inside a community by its owner and admins (a group's by the group's), for that
-  // community only. Site admins can pick any community; left empty, it goes into the city's official one ("Klique Lagos").
+  // community's members only. Site admins can pick any community; left empty, it goes into Klique, the default
+  // community everyone's in, and everyone sees it.
   const hosting = useApi(status === "authed" ? () => EventService.hosting() : null, [status]);
   const communities = useMemo(() => hosting.data?.communities ?? [], [hosting.data]);
   const siteAdmin = !!hosting.data?.siteAdmin;
@@ -182,7 +186,7 @@ function NewEventForm() {
       <TextArea label="Description" value={description} onChange={(e) => setDescription(e.target.value)} maxLength={LIMITS.eventDescription} counter={LIMITS.eventDescription} error={errors.description} hint="What should people expect? What should they bring?" />
       <div className="grid gap-4 sm:grid-cols-2">
         <SelectField label="Interest" value={interest} onChange={(e) => isInterestId(e.target.value) && setInterest(e.target.value)} error={errors.interest}>
-          {INTERESTS.map((i) => (
+          {categories.map((i) => (
             <option key={i.id} value={i.id}>
               {i.name}
             </option>
@@ -221,7 +225,7 @@ function NewEventForm() {
         <legend className="px-1 text-[13px] font-medium">Where it&apos;s posted</legend>
         {siteAdmin ? (
           <AdminCommunityPicker
-            officialName={`Klique ${place.city ? cityName(place.country, place.city) : "(pick a city)"}`}
+            officialName="Klique"
             value={communitySlug}
             name={pickedCommunity?.name ?? null}
             onChange={(slug) => {
@@ -252,7 +256,11 @@ function NewEventForm() {
             {pickedSub ? "Groups are private, so the event is for the group's members only." : "This community is private, so the event will be members-only."}
           </p>
         ) : (
-          <p className="text-xs text-ink-muted">{communitySlug ? "This community is public, so anyone can see the event." : "Goes into the official Klique community for this city (created the first time it's needed). Public: anyone can see it."}</p>
+          <p className="text-xs text-ink-muted">
+            {!communitySlug || communitySlug === KLIQUE_SLUG
+              ? "Goes into Klique, the community everyone's in: everyone sees it on the homepage and the Events page."
+              : "For this community's members: they see it in their feeds. Visitors to the community's page can see it too, and join to go."}
+          </p>
         )}
       </fieldset>
 
@@ -291,7 +299,7 @@ export default function NewEventPage() {
   );
 }
 
-/** Site admins: post in any community (search by name), or leave it to the city's official Klique community. */
+/** Site admins: post in any community (search by name), or leave it to Klique (everyone sees it). */
 function AdminCommunityPicker({ value, name, officialName, onChange, error }: { value: string; name: string | null; officialName: string; onChange: (slug: string) => void; error?: string }) {
   const [q, setQ] = useState("");
   const dq = useDebounced(q.trim(), 250);
@@ -303,7 +311,7 @@ function AdminCommunityPicker({ value, name, officialName, onChange, error }: { 
         <span className="font-semibold">{value ? (name ?? value) : `${officialName} (official)`}</span>
         {value && (
           <button type="button" onClick={() => onChange("")} className="ml-auto text-xs font-semibold text-accent-text hover:underline">
-            Use {officialName} instead
+            Post in {officialName} instead
           </button>
         )}
       </div>

@@ -1,7 +1,8 @@
 "use client";
 
-import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, type ReactNode } from "react";
+import { useAuth } from "@/components/providers/AuthProvider";
 import { MobileNav } from "./MobileNav";
 import { MobileTopBar } from "./MobileTopBar";
 import { RightRail } from "./RightRail";
@@ -21,6 +22,17 @@ const SKIP =
  * content, not a fixed rail, so it can show whatever that page needs.
  */
 export function AppShell({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const { user, status } = useAuth();
+  // Not finished joining (new, or an older account that never did it): /welcome first, once.
+  const mustOnboard = status === "authed" && !!user && !user.onboarded && pathname !== "/welcome";
+  useEffect(() => {
+    if (mustOnboard) router.replace("/welcome");
+  }, [mustOnboard, router]);
+  if (mustOnboard) return null;
+  // /welcome is a full-screen flow of its own
+  if (pathname === "/welcome") return <>{children}</>;
   return (
     <>
       <CommunityPreloader />

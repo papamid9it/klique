@@ -2,7 +2,7 @@ import "server-only";
 import http from "node:http";
 import https from "node:https";
 import type { Types } from "mongoose";
-import { INTEREST_IDS, type InterestId } from "@/lib/constants";
+import { isInterestId, type InterestId } from "@/lib/constants";
 import type { DraftDTO, DraftPatch, ImportResult, SourceDTO } from "@/lib/types";
 import { COUNTRIES, currencyOf, getCountry, isCountryCode, regionsOf, slugify } from "@/lib/places";
 import { ApiError, badRequest, notFound } from "../http/errors";
@@ -291,7 +291,7 @@ function cleanPatch(p: DraftPatch): Partial<IEventDraft> {
   const set: Partial<IEventDraft> = {};
   if (p.title !== undefined) set.title = p.title.trim().slice(0, 200);
   if (p.description !== undefined) set.description = p.description.slice(0, 4000);
-  if (p.interest !== undefined && INTEREST_IDS.includes(p.interest)) set.interest = p.interest;
+  if (p.interest !== undefined && isInterestId(p.interest)) set.interest = p.interest;
   if (p.organizerName !== undefined) set.organizerName = p.organizerName.trim().slice(0, 120);
   if (p.country !== undefined && getCountry(p.country)) set.country = p.country.toUpperCase();
   if (p.region !== undefined) set.region = p.region;

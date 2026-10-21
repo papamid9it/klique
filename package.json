@@ -16,7 +16,7 @@
     "seed": "tsx --conditions=react-server scripts/seed.ts",
     "seed:reset": "tsx --conditions=react-server scripts/seed.ts --reset",
     "migrate:groups": "tsx scripts/migrate-private-groups.ts",
-    "migrate:official": "tsx --conditions=react-server scripts/migrate-official-communities.ts",
+    "migrate:klique": "tsx --conditions=react-server scripts/migrate-klique.ts",
     "check:unfurl": "tsx scripts/check-unfurl.ts"
   },
   "dependencies": {

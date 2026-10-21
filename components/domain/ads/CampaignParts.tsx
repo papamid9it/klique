@@ -2,7 +2,7 @@
 
 import { Cover } from "@/components/ui/Cover";
 import { cx } from "@/components/ui/cx";
-import { AD_PLACEMENTS } from "@/lib/ads";
+import { ALL_AD_PLACEMENTS } from "@/lib/ads";
 import { formatPrice } from "@/lib/format";
 import type { AdCampaignDTO, AdCampaignPhase } from "@/lib/types";
 
@@ -55,7 +55,7 @@ export function phaseLine(c: AdCampaignDTO, now: Date | null): string {
   }
 }
 
-export const placementLabel = (id: string) => AD_PLACEMENTS.find((p) => p.id === id)?.label ?? id;
+export const placementLabel = (id: string) => ALL_AD_PLACEMENTS.find((p) => p.id === id)?.label ?? id;
 
 /** What the ad will look like on Klique: picture, "Sponsored · who", headline, text, button. */
 export function CampaignPreview({ c, className }: { c: Pick<AdCampaignDTO, "kind" | "advertiser" | "title" | "body" | "imageUrl" | "ctaLabel"> & { id?: string; event?: AdCampaignDTO["event"]; community?: AdCampaignDTO["community"] }; className?: string }) {

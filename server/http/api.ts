@@ -8,6 +8,7 @@ import { User, type IUser } from "../models/User";
 import { ApiError, unauthorized } from "./errors";
 import { rateLimitShared } from "./rate-limit";
 import { maybeRunReminders } from "../services/reminders.service";
+import { getCategories } from "../services/categories.service";
 import type { Envelope } from "@/lib/types";
 
 /* ------------------------------------------------------------------ */
@@ -139,6 +140,7 @@ export function withApi<P = Record<string, never>, A extends AuthMode = "optiona
       if (opts.limit) await rateLimitShared(`${opts.limit.name}:${ip}`, opts.limit.max, opts.limit.windowMs);
 
       await connectDb();
+      await getCategories(); // the admin's category list, for validators and helpers (cached)
 
       let viewer: IUser | null = null;
       if (opts.auth !== "none" && tok) {

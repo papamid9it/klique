@@ -1,5 +1,6 @@
 "use client";
 
+import { useCategories } from "@/lib/hooks/useCategories";
 import Link from "next/link";
 import { useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
@@ -14,7 +15,7 @@ import { Icon } from "@/components/ui/Icon";
 import { Modal } from "@/components/ui/Modal";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/States";
-import { INTERESTS, type InterestId } from "@/lib/constants";
+import { type InterestId } from "@/lib/constants";
 import { CURRENCIES, formatDateLong, formatPrice, formatTime, relativeStamp } from "@/lib/format";
 import { useApi } from "@/lib/hooks/useApi";
 import { placeLabel, type Place } from "@/lib/places";
@@ -173,6 +174,7 @@ function Sources({ onImported }: { onImported: () => void }) {
 /* ------------------------------ editor ------------------------------ */
 
 function DraftEditor({ draft, onClose, onDone }: { draft: DraftDTO; onClose: () => void; onDone: (d: DraftDTO | null) => void }) {
+  const categories = useCategories();
   const toast = useToast();
   const [f, setF] = useState(() => ({
     title: draft.title,
@@ -245,7 +247,7 @@ function DraftEditor({ draft, onClose, onDone }: { draft: DraftDTO; onClose: () 
         <TextArea label="Description" value={f.description} onChange={(e) => set("description", e.target.value)} maxLength={4000} rows={5} />
         <div className="grid gap-4 sm:grid-cols-2">
           <SelectField label="Scene" value={f.interest} onChange={(e) => set("interest", e.target.value as InterestId)}>
-            {INTERESTS.map((i) => (
+            {categories.map((i) => (
               <option key={i.id} value={i.id}>
                 {i.name}
               </option>

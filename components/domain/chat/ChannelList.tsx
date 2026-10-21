@@ -1,5 +1,6 @@
 "use client";
 
+import { KLIQUE_SLUG } from "@/lib/constants";
 import { SoftLink } from "@/components/ui/SoftLink";
 import { isSamePage, softNavigate } from "@/lib/nav";
 import { useRouter } from "next/navigation";
@@ -120,7 +121,8 @@ export function ChannelList({
     ...(manage ? ([{ label: "Create channel", icon: "plus", onSelect: () => setCreating({ categoryId: null }) }, { label: "Create category", icon: "folder", onSelect: () => setCategoryModal({}) }] as MenuEntry[]) : []),
     ...(c.canCreateGroup ? ([{ label: "Create group", icon: "users", onSelect: () => setNewGroup(true) }] as MenuEntry[]) : []),
     { type: "sep" },
-    ...(c.viewer.isMember && c.viewer.role !== "owner" ? ([{ label: "Leave community", icon: "logout", danger: true, onSelect: onLeave }] as MenuEntry[]) : []),
+    // nobody leaves Klique (the default community: announcements and Klique's own events live there)
+    ...(c.viewer.isMember && c.viewer.role !== "owner" && !(c.official && c.slug === KLIQUE_SLUG) ? ([{ label: "Leave community", icon: "logout", danger: true, onSelect: onLeave }] as MenuEntry[]) : []),
     { label: "Report community", icon: "flag", danger: true, onSelect: onReport },
   ];
 

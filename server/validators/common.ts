@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { HANDLE_REGEX, INTEREST_IDS, LIMITS, type InterestId } from "@/lib/constants";
+import { HANDLE_REGEX, isInterestId, LIMITS } from "@/lib/constants";
 import { COUNTRY_CODES, parseScope } from "@/lib/places";
 
 export const OBJECT_ID_REGEX = /^[a-f\d]{24}$/i;
@@ -20,7 +20,9 @@ export const placeOptional = { country: countryCode.optional(), region: z.string
 /** ... and defaulted at signup. */
 export const placeDefault = { country: countryCode.default("NG"), region: regionSlug, city: citySlug.default("lagos") };
 
-export const interestId = z.enum(INTEREST_IDS as [InterestId, ...InterestId[]]);
+/** A category from the admin's list (hidden ones too, so things already using them still save). The list is
+ * loaded for each request in withApi (server/services/categories.service.ts). */
+export const interestId = z.string().trim().toLowerCase().refine(isInterestId, "Pick a category from the list.");
 
 /** http(s) URL or empty. Stops javascript:/data: URLs ever being stored and rendered. */
 export const httpUrl = z

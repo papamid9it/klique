@@ -57,9 +57,26 @@ export interface UserProfile extends UserBrief {
 }
 
 /** The signed-in user's own account. */
+/** Where someone is in /welcome: categories picked, communities joined, what to suggest. */
+export interface OnboardingDTO {
+  interests: string[];
+  minInterests: number;
+  /** communities joined (not counting Klique) */
+  joined: number;
+  /** how many they must join to finish (2, or fewer when there aren't enough to join) */
+  needed: number;
+  /** nothing (much) matched their categories, so these are from any category */
+  widened: boolean;
+  /** the ones they've joined first, then suggestions: their city, their country, then anywhere */
+  suggestions: CommunityCardDTO[];
+  done: boolean;
+}
+
 export interface UserMe extends UserProfile {
   email: string;
   emailVerified: boolean;
+  /** has been through /welcome (picked categories, joined communities) */
+  onboarded: boolean;
   /** false for Google-only accounts: they can add a password without entering a current one */
   hasPassword: boolean;
   googleLinked: boolean;
@@ -161,7 +178,7 @@ export interface CommunityCardDTO {
   id: Id;
   slug: string;
   name: string;
-  /** an official Klique city community ("Klique Lagos") */
+  /** made by Klique; the default "Klique" community everyone is in */
   official: boolean;
   /** short preview. For a locked private community this is empty. */
   description: string;
@@ -298,7 +315,8 @@ export interface EventDTO {
   host: UserBrief;
   /** an event found elsewhere and approved by Klique: who really runs it, and where its tickets are */
   organizer: { name: string; url: string | null } | null;
-  community: { slug: string; name: string; privacy: CommunityPrivacy } | null;
+  /** `official`: it's in Klique, the default community everyone's in (so everyone sees it) */
+  community: { slug: string; name: string; privacy: CommunityPrivacy; official?: boolean } | null;
   subcommunity: { slug: string; name: string } | null;
   audience: EventAudience;
   goingCount: number;
@@ -307,7 +325,8 @@ export interface EventDTO {
   crewCount: number;
   isPast: boolean;
   isFull: boolean;
-  viewer: { rsvp: RsvpStatus | null; saved: boolean; isHost: boolean; canEdit: boolean };
+  /** `mustJoin`: a community's event the viewer isn't a member of: going or saving it means joining first */
+  viewer: { rsvp: RsvpStatus | null; saved: boolean; isHost: boolean; canEdit: boolean; mustJoin?: boolean };
 }
 
 /* ------------------------------ crews ------------------------------- */
@@ -961,7 +980,7 @@ export interface SystemStatusDTO {
 
 /* -------------------------------- ads ------------------------------- */
 
-export type AdSlot = "home-feed" | "home-rail" | "events-list" | "event-page" | "search";
+export type AdSlot = "home-hero" | "home-feed" | "home-rail" | "events-list" | "event-page" | "search";
 
 /** An ad as the app shows it. Always rendered with a "Sponsored" label. */
 export interface AdDTO {

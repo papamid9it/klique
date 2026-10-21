@@ -6,7 +6,9 @@ import { AdService } from "@/app/services/AdService";
 import { ReportDialog } from "@/components/domain/ReportDialog";
 import { usePlace } from "@/components/providers/PlaceProvider";
 import { cx } from "@/components/ui/cx";
+import { Cover } from "@/components/ui/Cover";
 import { Icon } from "@/components/ui/Icon";
+import { eventPhoto } from "@/lib/fake";
 import { formatDateShort } from "@/lib/format";
 import { useApi } from "@/lib/hooks/useApi";
 import { placeShort } from "@/lib/places";
@@ -19,9 +21,14 @@ import type { AdDTO, AdSlot } from "@/lib/types";
 
 /** Fetch the ad(s) for one spot; empty while loading or when nothing fits, so the page never waits on ads. */
 export function useAds(slot: AdSlot, ctx: { interest?: string; q?: string; exclude?: string; count?: number } = {}, enabled = true) {
+  return useAdSlot(slot, ctx, enabled).ads;
+}
+
+/** Same, plus whether the answer is in: for a spot that would otherwise swap from one thing to another. */
+export function useAdSlot(slot: AdSlot, ctx: { interest?: string; q?: string; exclude?: string; count?: number } = {}, enabled = true) {
   const { where } = usePlace();
-  const { data } = useApi(enabled ? () => AdService.forSlot(slot, { where, ...ctx }) : null, [slot, where, ctx.interest, ctx.q, ctx.exclude, ctx.count, enabled]);
-  return data ?? [];
+  const { data, loading } = useApi(enabled ? () => AdService.forSlot(slot, { where, ...ctx }) : null, [slot, where, ctx.interest, ctx.q, ctx.exclude, ctx.count, enabled]);
+  return { ads: data ?? [], ready: !enabled || !loading };
 }
 
 const subline = (ad: AdDTO) => (ad.event ? `${formatDateShort(ad.event.startsAt)} · ${ad.event.online ? "Online" : ad.event.venue || placeShort(ad.event)}` : ad.body);
@@ -177,6 +184,56 @@ export function SponsoredBox({ ad, image = true }: { ad: AdDTO; image?: boolean 
       <AdLink ad={ad} className="mt-3 inline-flex h-8 items-center rounded-full bg-ink px-3.5 text-[13px] font-semibold text-canvas hover:opacity-90">
         {ad.ctaLabel}
       </AdLink>
+      {report.dialog}
+    </section>
+  );
+}
+
+/**
+ * The Discover banner, bought: same size and feel as the featured event it replaces, labelled "Promoted" (an
+ * event) or "Sponsored" (anything else) with who paid, and reportable.
+ */
+export function SponsoredHero({ ad }: { ad: AdDTO }) {
+  const report = useReport(ad);
+  const seen = useSeen<HTMLElement>(ad.id);
+  const art = ad.event ? eventPhoto(ad.event.id, ad.imageUrl) : ad.imageUrl;
+  const line = ad.event ? (ad.body || ad.event.description.split(/(?<=[.!?])\s/)[0] || subline(ad)) : ad.body;
+  return (
+    <section ref={seen} aria-label={ad.event ? "Promoted event" : "Sponsored"} className="relative isolate overflow-hidden rounded-[1.25rem] border border-line">
+      <Cover src={art} seed={ad.id} interest={ad.event?.interest ?? "music"} className="absolute inset-0 -z-10" />
+      {/* two shades where the words sit (in from the left, up from the bottom) so white text reads on bright
+          pictures, fading out so the right side of the photo stays clear */}
+      <div aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-r from-black/80 via-black/45 to-transparent" />
+      <div aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-t from-black/75 via-black/25 to-transparent" />
+      <div className="flex min-h-[19rem] flex-col justify-end gap-3 p-6 text-white sm:min-h-[22rem] sm:p-9">
+        <div className="flex items-center justify-between gap-3">
+          <span className="inline-flex min-w-0 items-center gap-2 rounded-full bg-black/55 px-3 py-1.5 font-mono text-[11px] font-medium tracking-wider uppercase backdrop-blur-sm">
+            <span className="truncate">
+              {ad.event ? "Promoted" : "Sponsored"}
+              {ad.advertiser ? ` · ${ad.advertiser}` : ""}
+            </span>
+          </span>
+          <button type="button" onClick={report.open} className="shrink-0 rounded-full bg-black/40 px-2.5 py-1 font-mono text-[10px] text-white/80 hover:bg-black/60 hover:text-white" aria-label={`Report this ad from ${ad.advertiser || "this advertiser"}`}>
+            Ad · Report
+          </button>
+        </div>
+        <h2 className="display max-w-xl text-[clamp(2rem,5vw,3.25rem)] text-balance [text-shadow:0_2px_16px_rgb(0_0_0/0.45)]">
+          <AdLink ad={ad} className="hover:underline">
+            {ad.title}
+          </AdLink>
+        </h2>
+        {line && <p className="max-w-md text-[15px] text-white/90 [text-shadow:0_1px_8px_rgb(0_0_0/0.5)]">{line}</p>}
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+          <AdLink ad={ad} className="inline-flex h-10 items-center gap-1.5 rounded-full bg-white px-4 text-sm font-semibold text-neutral-900 hover:opacity-90">
+            {ad.ctaLabel} <Icon name="arrow-up-right" size={14} />
+          </AdLink>
+          {ad.event && (
+            <span className="inline-flex items-center gap-2 rounded-full bg-black/55 px-3.5 py-2 font-mono text-[11px] text-white backdrop-blur-sm">
+              <Icon name="users" size={13} /> {ad.event.goingCount} going · {ad.event.venue || subline(ad)}
+            </span>
+          )}
+        </div>
+      </div>
       {report.dialog}
     </section>
   );

@@ -1,5 +1,6 @@
 "use client";
 
+import { useCategories } from "@/lib/hooks/useCategories";
 import { WhoCame } from "@/components/domain/events/WhoCame";
 import { ProfileTrigger } from "@/components/providers/ProfileCardProvider";
 import Link from "next/link";
@@ -26,7 +27,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { PlaceFields } from "@/components/domain/places/PlaceFields";
-import { INTERESTS, LIMITS, isInterestId, type InterestId } from "@/lib/constants";
+import { LIMITS, isInterestId, type InterestId } from "@/lib/constants";
 import { currencyOf, placeLabel, type Place } from "@/lib/places";
 import { CURRENCIES, formatDateLong, formatDateShort, formatPrice, formatTime } from "@/lib/format";
 import { useApi, useNow } from "@/lib/hooks/useApi";
@@ -43,6 +44,7 @@ function lagosInputs(iso: string) {
 const toIso = (date: string, time: string) => new Date(`${date}T${time}:00+01:00`).toISOString();
 
 function EditModal({ event, open, onClose, onSaved }: { event: EventDTO; open: boolean; onClose: () => void; onSaved: (e: EventDTO) => void }) {
+  const categories = useCategories();
   const toast = useToast();
   const s = lagosInputs(event.startsAt);
   const en = event.endsAt ? lagosInputs(event.endsAt) : null;
@@ -117,7 +119,7 @@ function EditModal({ event, open, onClose, onSaved }: { event: EventDTO; open: b
         <TextArea label="Description" value={description} onChange={(e) => setDescription(e.target.value)} maxLength={LIMITS.eventDescription} error={errors.description} />
         <div className="grid gap-4 sm:grid-cols-2">
           <SelectField label="Interest" value={interest} onChange={(e) => isInterestId(e.target.value) && setInterest(e.target.value)} error={errors.interest}>
-            {INTERESTS.map((i) => (
+            {categories.map((i) => (
               <option key={i.id} value={i.id}>
                 {i.name}
               </option>
@@ -371,7 +373,8 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
                     <Icon name="users" size={15} /> Who came?
                   </Button>
                 )}
-                {event.audience === "public" && !event.isPast && !cancelled && (
+                {/* only Klique's events reach everyone, so only they can be promoted */}
+                {event.community?.official && !event.isPast && !cancelled && (
                   <Button href={`/ads/new?event=${event.id}`} variant="secondary" className="w-full">
                     <Icon name="megaphone" size={15} /> Promote this event
                   </Button>
@@ -381,6 +384,14 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
               <p className="text-sm font-medium text-danger">This event was cancelled.</p>
             ) : event.isPast ? (
               <p className="text-sm text-ink-muted">This event has ended.</p>
+            ) : event.viewer.mustJoin && !event.viewer.rsvp && event.community ? (
+              // community events are for members: join first, then go
+              <>
+                <p className="text-sm text-ink-muted">This event is for members of {event.community.name}. Join to go and to see their other events.</p>
+                <Button variant="primary" size="lg" className="w-full" href={`/communities/${event.community.slug}`}>
+                  <Icon name="users" size={16} /> Join {event.community.name}
+                </Button>
+              </>
             ) : (
               <>
                 {event.isFull && !going && <p className="text-sm font-medium text-ink-muted">This event is full.</p>}
@@ -415,9 +426,11 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
                 <Icon name="users" size={15} /> Who came?
               </Button>
             )}
-            <Button className="w-full" onClick={toggleSave} loading={busy === "save"} aria-pressed={event.viewer.saved}>
-              <Icon name="bookmark" /> {event.viewer.saved ? "Saved" : "Save for later"}
-            </Button>
+            {(!event.viewer.mustJoin || event.viewer.saved) && (
+              <Button className="w-full" onClick={toggleSave} loading={busy === "save"} aria-pressed={event.viewer.saved}>
+                <Icon name="bookmark" /> {event.viewer.saved ? "Saved" : "Save for later"}
+              </Button>
+            )}
           </div>
           {!event.online && !event.isPast && !cancelled && (
             <div className="space-y-2 rounded-card border border-line bg-surface p-4">

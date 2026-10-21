@@ -18,6 +18,7 @@ import { ImageField } from "@/components/ui/ImageField";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cx } from "@/components/ui/cx";
 import { AD_PLACEMENTS, AD_REACHES, adPrice, type AdPlacement, type AdReach } from "@/lib/ads";
+import { KLIQUE_SLUG } from "@/lib/constants";
 import { formatPrice } from "@/lib/format";
 import { useApi } from "@/lib/hooks/useApi";
 import { cityName, countryName } from "@/lib/places";
@@ -25,7 +26,7 @@ import type { AdCampaignInput } from "@/lib/types";
 
 type Kind = "event" | "community" | "brand";
 const KINDS: { id: Kind; title: string; hint: string; icon: "calendar" | "users" | "megaphone" }[] = [
-  { id: "event", title: "An event", hint: "One you host. Shown as a promoted event people can RSVP to.", icon: "calendar" },
+  { id: "event", title: "A Klique event", hint: "One of Klique's own events (the ones everyone sees). Other events are for their community's members.", icon: "calendar" },
   { id: "community", title: "A community", hint: "One you own or run, so more people join.", icon: "users" },
   { id: "brand", title: "Your own ad", hint: "A picture, a headline and a link: a business, a product, a shop.", icon: "megaphone" },
 ];
@@ -51,7 +52,7 @@ function NewAdForm() {
   const mine = useApi(authed ? () => CommunityService.mine() : null, [authed], { key: "my-communities" });
   const original = useApi(authed && copyId ? () => CampaignService.get(copyId) : null, [authed, copyId]);
 
-  const [kind, setKind] = useState<Kind>(sp.get("community") ? "community" : sp.get("event") ? "event" : "event");
+  const [kind, setKind] = useState<Kind>(sp.get("community") ? "community" : sp.get("event") ? "event" : "community");
   const [eventId, setEventId] = useState(sp.get("event") ?? "");
   const [communitySlug, setCommunitySlug] = useState(sp.get("community") ?? "");
   const [advertiser, setAdvertiser] = useState("");
@@ -91,10 +92,11 @@ function NewAdForm() {
   }, [o, editId]);
 
   // what can be promoted
-  const events = (hosted.data?.items ?? []).filter((e) => e.audience === "public" && !e.subcommunity && !e.isPast);
+  // only Klique's events reach everyone; a community's events are for its members, so they can't be advertised
+  const events = (hosted.data?.items ?? []).filter((e) => e.community?.official && !e.subcommunity && !e.isPast);
   const extraEvent = useApi(eventId && !events.some((e) => e.id === eventId) ? () => EventService.get(eventId) : null, [eventId, events.length]);
   const eventChoices = extraEvent.data && !events.some((e) => e.id === extraEvent.data!.id) ? [extraEvent.data, ...events] : events;
-  const communities = (mine.data ?? []).filter((c) => (c.role === "owner" || c.role === "admin") && c.privacy === "public");
+  const communities = (mine.data ?? []).filter((c) => (c.role === "owner" || c.role === "admin") && c.privacy === "public" && c.slug !== KLIQUE_SLUG); // everyone is already in Klique
   const pickedEvent = eventChoices.find((e) => e.id === eventId) ?? null;
   const pickedCommunity = useApi(kind === "community" && communitySlug ? () => CommunityService.get(communitySlug) : null, [kind, communitySlug]);
 
@@ -170,7 +172,7 @@ function NewAdForm() {
         </fieldset>
 
         {kind === "event" && (
-          <SelectField label="Event" value={eventId} onChange={(e) => setEventId(e.target.value)} hint={eventChoices.length ? "Public, upcoming events you host." : "You don't host any public upcoming events yet."}>
+          <SelectField label="Event" value={eventId} onChange={(e) => setEventId(e.target.value)} hint={eventChoices.length ? "Upcoming Klique events you host." : "Only Klique's own events can be advertised: a community's events are for its members. Promote your community instead, and people who join will see its events."}>
             <option value="">Pick an event</option>
             {eventChoices.map((e) => (
               <option key={e.id} value={e.id}>

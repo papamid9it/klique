@@ -1,5 +1,5 @@
 import { Schema, model, models, type Model, type Types } from "mongoose";
-import { INTEREST_IDS, type InterestId } from "@/lib/constants";
+import { type InterestId } from "@/lib/constants";
 
 /**
  * An event found on another site (pasted by an admin or picked up from a source page), waiting in the
@@ -38,7 +38,7 @@ const EventDraftSchema = new Schema<IEventDraft>(
     sourceName: { type: String, default: "", maxlength: 120 },
     title: { type: String, default: "", maxlength: 200 },
     description: { type: String, default: "", maxlength: 4000 },
-    interest: { type: String, enum: INTEREST_IDS, default: "music" },
+    interest: { type: String, default: "music" },
     organizerName: { type: String, default: "", maxlength: 120 },
     country: { type: String, default: "NG" },
     region: { type: String, default: "" },

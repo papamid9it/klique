@@ -1,5 +1,6 @@
 "use client";
 
+import { useCategories } from "@/lib/hooks/useCategories";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/components/providers/AuthProvider";
@@ -8,7 +9,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { cx } from "@/components/ui/cx";
-import { INTERESTS, getInterest } from "@/lib/constants";
+import { getInterest } from "@/lib/constants";
 import { CommunityRail } from "./CommunityRail";
 import { UserMenu } from "./UserMenu";
 import { Logo } from "./Logo";
@@ -16,12 +17,13 @@ import { NAV, SCENE_DOT } from "./nav";
 import { UserName } from "@/components/ui/UserName";
 
 export function Sidebar({ compact = false }: { compact?: boolean }) {
+  const categories = useCategories();
   const pathname = usePathname();
   const { user, status } = useAuth();
 
   if (compact) return <SlimNav pathname={pathname} />;
 
-  const scenes = user?.interests?.length ? user.interests : INTERESTS.slice(0, 4).map((i) => i.id);
+  const scenes = user?.interests?.length ? user.interests : categories.slice(0, 4).map((i) => i.id);
 
   return (
     <aside className="sticky top-0 hidden h-dvh flex-col gap-6 overflow-y-auto no-bar [&>*]:shrink-0 border-r border-line px-6 py-7 lg:flex" aria-label="Primary">

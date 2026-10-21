@@ -80,6 +80,8 @@ export function EventCard({ event, onChange }: { event: EventDTO; onChange: (e: 
             <Icon name="users" size={13} /> {event.goingCount} going
           </span>
           <div className="flex items-center gap-1.5">
+            {/* a community's event you're not in yet (seen on its page): joining comes first, so no save / RSVP here */}
+            {!event.viewer.mustJoin && (
             <button
               type="button"
               onClick={toggleSave}
@@ -92,13 +94,14 @@ export function EventCard({ event, onChange }: { event: EventDTO; onChange: (e: 
                 <path d="M6.5 3.5h11v17l-5.5-4-5.5 4z" />
               </svg>
             </button>
+            )}
             {event.viewer.isHost ? (
               <Button size="sm" href={`/events/${event.id}`}>
                 Hosting
               </Button>
-            ) : event.isPast || (event.isFull && !going) ? (
+            ) : event.isPast || (event.isFull && !going) || (event.viewer.mustJoin && !going) ? (
               <Button size="sm" href={`/events/${event.id}`}>
-                {event.isPast ? "View" : "Full"}
+                {event.isPast || event.viewer.mustJoin ? "View" : "Full"}
               </Button>
             ) : (
               <Button size="sm" variant={going ? "primary" : "secondary"} onClick={() => rsvp("going")} loading={busy === "rsvp"} aria-pressed={going}>

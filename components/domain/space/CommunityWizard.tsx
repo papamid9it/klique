@@ -1,5 +1,6 @@
 "use client";
 
+import { useCategories } from "@/lib/hooks/useCategories";
 import { useState } from "react";
 import { isApiError } from "@/app/ApiCore";
 import type { CommunityInput } from "@/app/services/CommunityService";
@@ -9,7 +10,7 @@ import { SelectField, TextArea, TextField } from "@/components/ui/Field";
 import { ImageField } from "@/components/ui/ImageField";
 import { Icon } from "@/components/ui/Icon";
 import { cx } from "@/components/ui/cx";
-import { INTERESTS, LIMITS, isInterestId, type InterestId } from "@/lib/constants";
+import { LIMITS, isInterestId, type InterestId } from "@/lib/constants";
 import type { CommunityPrivacy } from "@/lib/types";
 
 const STEPS = ["Who can join", "About it", "Where it is"] as const;
@@ -19,11 +20,12 @@ const STEPS = ["Who can join", "About it", "Where it is"] as const;
  * `onSubmit` should throw on failure; field errors from the API send you back to the step that has them.
  */
 export function CommunityWizard({ onSubmit }: { onSubmit: (input: CommunityInput) => Promise<void> }) {
+  const categories = useCategories();
   const [step, setStep] = useState(0);
   const [privacy, setPrivacy] = useState<CommunityPrivacy>("public");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [interest, setInterest] = useState<InterestId>(INTERESTS[0].id);
+  const [interest, setInterest] = useState<InterestId>(categories[0].id);
   const [coverImage, setCoverImage] = useState("");
   const [place, setPlace] = useState({ country: "NG", region: "lagos", city: "lagos" });
   const [neighborhood, setNeighborhood] = useState("");
@@ -102,7 +104,7 @@ export function CommunityWizard({ onSubmit }: { onSubmit: (input: CommunityInput
             <ImageField kind="photo" label="Cover image (optional)" value={coverImage} onChange={setCoverImage} error={errors.coverImage} fallback={<span className="text-lg font-bold text-ink-muted">{initial}</span>} />
             <TextField label="Community name" value={name} onChange={(e) => setName(e.target.value)} maxLength={LIMITS.communityName} required autoFocus error={errors.name} placeholder="Lekki Skate Crew" />
             <SelectField label="What's it about?" value={interest} onChange={(e) => isInterestId(e.target.value) && setInterest(e.target.value)} error={errors.interest}>
-              {INTERESTS.map((i) => (
+              {categories.map((i) => (
                 <option key={i.id} value={i.id}>
                   {i.name}
                 </option>

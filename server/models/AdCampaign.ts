@@ -1,5 +1,5 @@
 import { Schema, model, models, type Model, type Types } from "mongoose";
-import { AD_PLACEMENTS, AD_REACHES, type AdPlacement, type AdReach } from "@/lib/ads";
+import { ALL_AD_PLACEMENTS as AD_PLACEMENTS, AD_REACHES, type AdPlacement, type AdReach } from "@/lib/ads";
 
 /**
  * An ad someone asked to run. The steps: they submit it ("pending") → a site admin approves it, asks for

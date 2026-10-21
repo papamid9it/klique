@@ -1,5 +1,5 @@
 import { Schema, model, models, type Model, type Types } from "mongoose";
-import { INTEREST_IDS, type InterestId } from "@/lib/constants";
+import { type InterestId } from "@/lib/constants";
 
 export interface ICommunity {
   _id: Types.ObjectId;
@@ -20,7 +20,7 @@ export interface ICommunity {
   channelsReady?: boolean;
   /** who may create groups inside this community */
   groupPolicy: "admins" | "members" | "off";
-  /** an official Klique community for a city ("Klique Lagos"): home of admin-posted and imported events */
+  /** made by Klique, can't be deleted. The default "Klique" community (slug "klique") is the official one */
   official?: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -31,7 +31,7 @@ const CommunitySchema = new Schema<ICommunity>(
     slug: { type: String, required: true, unique: true, lowercase: true, trim: true },
     name: { type: String, required: true, trim: true, maxlength: 60 },
     description: { type: String, default: "", maxlength: 1200 },
-    interest: { type: String, enum: INTEREST_IDS, required: true },
+    interest: { type: String, required: true },
     country: { type: String, default: "NG", index: true },
     region: { type: String, default: "" },
     city: { type: String, required: true },
@@ -49,8 +49,6 @@ const CommunitySchema = new Schema<ICommunity>(
 
 CommunitySchema.index({ privacy: 1, country: 1, city: 1, interest: 1, memberCount: -1 });
 CommunitySchema.index({ name: "text", description: "text" });
-// one official community per city
-CommunitySchema.index({ country: 1, city: 1 }, { unique: true, partialFilterExpression: { official: true } });
 
 export const Community: Model<ICommunity> =
   (models.Community as Model<ICommunity>) || model<ICommunity>("Community", CommunitySchema);

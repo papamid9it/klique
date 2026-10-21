@@ -5,12 +5,14 @@ import { Membership, type IMembership } from "../models/Membership";
 import type { HostingOptionsDTO } from "@/lib/types";
 import type { IUser } from "../models/User";
 import type { SpaceAccess } from "./access";
+import { isKlique } from "../services/klique-id";
 
 /**
  * Who may put an event on Klique.
  *  - Events are posted from inside a community, by that community's owner and admins, for that community only.
  *  - A group's owner and admins may post events in their own group (the community's owner can too, as overseer).
- *  - Site admins may post anywhere, including public events that aren't tied to any community (Admin → Events).
+ *  - Site admins may post anywhere. Only they post in the default "Klique" community, whose events everyone sees
+ *    (Admin → Events, or the new-event form with no community picked).
  */
 
 export const isSiteAdmin = (u: Pick<IUser, "email"> | null | undefined): boolean => !!u && adminEmails().has(u.email.toLowerCase());
@@ -40,8 +42,10 @@ export async function hostingOptions(u: IUser): Promise<HostingOptionsDTO> {
   const runsTop = new Set(memberships.filter((m) => !m.subcommunityId).map((m) => String(m.communityId)));
   const runsGroupIn = new Set(memberships.filter((m) => m.subcommunityId).map((m) => String(m.communityId)));
   const ids = [...new Set([...runsTop, ...runsGroupIn])];
-  const communities = ids.length ? await Community.find({ _id: { $in: ids } }).select("slug name privacy").lean<Pick<ICommunity, "_id" | "slug" | "name" | "privacy">[]>() : [];
-  const list = communities.map((c) => ({ slug: c.slug, name: c.name, privacy: c.privacy, groupsOnly: !runsTop.has(String(c._id)) }));
+  const siteAdmin = isSiteAdmin(u);
+  const communities = ids.length ? await Community.find({ _id: { $in: ids } }).select("slug name privacy official").lean<Pick<ICommunity, "_id" | "slug" | "name" | "privacy" | "official">[]>() : [];
+  // Klique's events go to everyone: only site admins post there, whatever their role in it
+  const list = communities.filter((c) => siteAdmin || !isKlique(c)).map((c) => ({ slug: c.slug, name: c.name, privacy: c.privacy, groupsOnly: !runsTop.has(String(c._id)) }));
   list.sort((a, b) => a.name.localeCompare(b.name));
-  return { siteAdmin: isSiteAdmin(u), communities: list };
+  return { siteAdmin, communities: list };
 }

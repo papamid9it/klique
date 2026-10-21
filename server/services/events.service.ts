@@ -1,5 +1,5 @@
 import type { QueryFilter, Types } from "mongoose";
-import { assertCanHostInSpace, assertCanHostPublic } from "../policies/hosting";
+import { assertCanHostInSpace, assertCanHostPublic, isSiteAdmin } from "../policies/hosting";
 import { deleteUploads } from "./media.service";
 import { assertVerified } from "./account.service";
 import type { z } from "zod";
@@ -15,6 +15,7 @@ import { Subcommunity, type ISubcommunity } from "../models/Subcommunity";
 import { User, type IUser } from "../models/User";
 import {
   audienceFor,
+  canSeeEventInFeeds,
   canViewEvent,
   eventVisibilityFilter,
   spaceAccess,
@@ -27,7 +28,7 @@ import { assertPlace, escapeRegex, PAGE_SIZE, recountRsvps, sid } from "./helper
 import { notify } from "./push.service";
 import { resolveSpaceFor } from "./spaces.service";
 import { purgeCrews, syncCrewExpiry } from "./crews.service";
-import { officialCommunityFor } from "./official.service";
+import { ensureKlique, isKlique } from "./klique.service";
 import { Membership } from "../models/Membership";
 
 /** Events stay "upcoming" until 3 hours after they start (when no end time is set). */
@@ -41,7 +42,7 @@ type ListQuery = z.infer<typeof eventListQuery>;
 
 export async function listEvents(viewer: IUser | null, q: ListQuery): Promise<Paginated<EventDTO>> {
   const now = new Date();
-  const and: QueryFilter<IEvent>[] = [await eventVisibilityFilter(viewer), { cancelled: false }];
+  const and: QueryFilter<IEvent>[] = [{ cancelled: false }];
 
   // time window
   const recent = new Date(now.getTime() - LINGER_MS);
@@ -71,11 +72,14 @@ export async function listEvents(viewer: IUser | null, q: ListQuery): Promise<Pa
     and.push({ $or: [{ title: rx }, { venue: rx }, { neighborhood: rx }, { description: rx }] });
   }
 
-  // Events inside one community / group — the viewer must be allowed to see that space.
+  // Events inside one community / group: whoever may see that space sees its events. That's how a public
+  // community shows visitors what's on before they join; everywhere else, events are for members only.
   if (q.community) {
     const { space, access } = await resolveSpaceFor(viewer, q.community, q.sub);
     if (!access.canView) throw forbidden("Join to see events here.");
     and.push({ communityId: space.community._id, subcommunityId: space.sub?._id ?? null });
+  } else {
+    and.push(await eventVisibilityFilter(viewer));
   }
 
   if (q.scope !== "all") {
@@ -209,15 +213,22 @@ export async function createEvent(viewer: IUser, input: z.infer<typeof eventCrea
   let space: Space | null = null;
   if (input.communitySlug) {
     const resolved = await resolveSpaceFor(viewer, input.communitySlug, input.subSlug);
-    assertCanHostInSpace(viewer, resolved.access); // the space's owner and admins (and site admins)
+    // Klique's events go to everyone, so only site admins post there; elsewhere the space's owner and admins
+    if (isKlique(resolved.space.community)) {
+      if (!isSiteAdmin(viewer)) throw forbidden("Only the Klique team posts events in Klique. Post it in your own community.");
+      if (!input.interest) throw new ApiError(422, "Pick an interest for this event.", { errors: { interest: "Pick an interest" } });
+    }
+    else assertCanHostInSpace(viewer, resolved.access);
     space = resolved.space;
   } else if (input.subSlug) {
     throw new ApiError(422, "Choose the community this group belongs to.", { errors: { communitySlug: "Required with a group" } });
   } else {
     assertCanHostPublic(viewer); // site admins only
-    // every event lives in a community: Klique's own go into that city's official one ("Klique Lagos")
+    // every event lives in a community: Klique's own (for everyone) go into the default Klique community
     if (!input.interest) throw new ApiError(422, "Pick an interest for this event.", { errors: { interest: "Pick an interest" } });
-    space = { community: await officialCommunityFor(viewer, { country: input.country, region: input.region, city: input.city, interest: input.interest }), sub: null };
+    const klique = await ensureKlique(viewer._id);
+    if (!klique) throw new ApiError(500, "Klique's community isn't set up yet.");
+    space = { community: klique, sub: null };
   }
 
   const interest = input.interest ?? space?.community.interest;
@@ -249,8 +260,9 @@ export async function createEvent(viewer: IUser, input: z.infer<typeof eventCrea
   await Rsvp.create({ eventId: doc._id, userId: viewer._id, status: "going" });
   await recountRsvps(doc._id);
 
-  // Tell the people in the community (or group) it was posted in.
-  if (space) {
+  // Tell the people in the community (or group) it was posted in. Not for Klique: that's everyone, and its
+  // events are on everyone's homepage already.
+  if (space && !isKlique(space.community)) {
     const members = await Membership.find({ communityId: space.community._id, subcommunityId: space.sub?._id ?? null, status: "active", userId: { $ne: viewer._id } })
       .select("userId")
       .limit(1000)
@@ -358,8 +370,16 @@ export async function purgeEvent(event: Pick<IEvent, "_id" | "coverImage">) {
 /* RSVP & save                                                         */
 /* ------------------------------------------------------------------ */
 
+/** Going to (or saving) a community's event means joining it first: members are who see its events. */
+async function assertCanJoinIn(viewer: IUser, event: IEvent, what: string) {
+  if (await canSeeEventInFeeds(event, viewer)) return;
+  const c = event.communityId ? await Community.findById(event.communityId).select("name").lean<Pick<ICommunity, "name">>() : null;
+  throw forbidden(`Join ${c?.name ?? "the community"} to ${what}.`);
+}
+
 export async function setRsvp(viewer: IUser, id: string, status: "going" | "interested"): Promise<EventDTO> {
   const event = await loadVisibleEvent(viewer, id);
+  await assertCanJoinIn(viewer, event, "RSVP");
   const end = (event.endsAt ?? new Date(event.startsAt.getTime() + LINGER_MS)).getTime();
   if (event.cancelled) throw conflict("This event was cancelled.");
   if (end < Date.now()) throw conflict("This event has already happened.");
@@ -384,6 +404,7 @@ export async function removeRsvp(viewer: IUser, id: string): Promise<EventDTO> {
 
 export async function setSaved(viewer: IUser, id: string, saved: boolean): Promise<EventDTO> {
   const event = await loadVisibleEvent(viewer, id);
+  if (saved) await assertCanJoinIn(viewer, event, "save its events");
   if (saved) await SavedEvent.updateOne({ eventId: event._id, userId: viewer._id }, {}, { upsert: true });
   else await SavedEvent.deleteOne({ eventId: event._id, userId: viewer._id });
   return getEvent(viewer, id);

@@ -11,13 +11,16 @@ export function EventHero({ event, eyebrow = "Your scene, IRL" }: { event: Event
   return (
     <section aria-label="Featured event" className="relative isolate overflow-hidden rounded-[1.25rem] border border-line">
       <Cover src={eventPhoto(event.id, event.coverImage)} seed={event.id} interest={event.interest} className="absolute inset-0 -z-10" />
-      <div aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-t from-black/80 via-black/45 to-black/10" />
+      {/* two shades where the words sit (in from the left, up from the bottom) so white text reads on bright
+          pictures, fading out so the right side of the photo stays clear */}
+      <div aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-r from-black/80 via-black/45 to-transparent" />
+      <div aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-t from-black/75 via-black/25 to-transparent" />
       <div className="flex min-h-[19rem] flex-col justify-end gap-3 p-6 text-white sm:min-h-[22rem] sm:p-9">
         <span className="inline-flex w-fit items-center gap-2 rounded-full bg-accent px-3 py-1.5 font-mono text-[11px] font-medium tracking-wider text-accent-ink uppercase">
           <span className="size-1.5 rounded-full bg-accent-ink" aria-hidden="true" /> {eyebrow}
         </span>
-        <h2 className="display max-w-xl text-[clamp(2rem,5vw,3.25rem)] text-balance">{event.title}</h2>
-        <p className="max-w-md text-[15px] text-white/85">{event.description.split(/(?<=[.!?])\s/)[0] || `${event.venue} · ${formatDateShort(event.startsAt)}`}</p>
+        <h2 className="display max-w-xl text-[clamp(2rem,5vw,3.25rem)] text-balance [text-shadow:0_2px_16px_rgb(0_0_0/0.45)]">{event.title}</h2>
+        <p className="max-w-md text-[15px] text-white/90 [text-shadow:0_1px_8px_rgb(0_0_0/0.5)]">{event.description.split(/(?<=[.!?])\s/)[0] || `${event.venue} · ${formatDateShort(event.startsAt)}`}</p>
         <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
           <Link href={`/events/${event.id}`} className={buttonClass("ink", "md", "bg-white !text-neutral-900")}>
             See who&apos;s going <Icon name="arrow-up-right" size={14} />

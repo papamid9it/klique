@@ -1,7 +1,7 @@
 import { Schema, model, models, type Model, type Types } from "mongoose";
-import { INTEREST_IDS, type InterestId } from "@/lib/constants";
+import { type InterestId } from "@/lib/constants";
 
-export const AD_SLOTS = ["home-feed", "home-rail", "events-list", "event-page", "search"] as const;
+export const AD_SLOTS = ["home-hero", "home-feed", "home-rail", "events-list", "event-page", "search"] as const;
 export type AdSlot = (typeof AD_SLOTS)[number];
 
 /**
@@ -60,7 +60,7 @@ const AdSchema = new Schema<IAd>(
     url: { type: String, default: "", maxlength: 1000 },
     slots: { type: [String], enum: AD_SLOTS, default: [] },
     places: { type: [String], default: [] },
-    interests: { type: [String], enum: INTEREST_IDS, default: [] },
+    interests: { type: [String], default: [] },
     keywords: { type: [String], default: [] },
     startsAt: { type: Date, default: null },
     endsAt: { type: Date, default: null },

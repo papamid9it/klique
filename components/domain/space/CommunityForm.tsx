@@ -1,5 +1,6 @@
 "use client";
 
+import { useCategories } from "@/lib/hooks/useCategories";
 import { useEffect, useState } from "react";
 import { isApiError } from "@/app/ApiCore";
 import type { CommunityInput } from "@/app/services/CommunityService";
@@ -7,7 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { SelectField, TextArea, TextField } from "@/components/ui/Field";
 import { ImageField } from "@/components/ui/ImageField";
 import { PlaceFields } from "@/components/domain/places/PlaceFields";
-import { INTERESTS, LIMITS, isInterestId, type InterestId } from "@/lib/constants";
+import { LIMITS, isInterestId, type InterestId } from "@/lib/constants";
 import type { CommunityPrivacy } from "@/lib/types";
 
 export interface CommunityFormValues {
@@ -37,10 +38,11 @@ export function CommunityForm({
   /** inside settings: no submit button; the page's "unsaved changes" bar submits the form with this id */
   embedded?: { formId: string; onDirty: (dirty: boolean) => void; onBusy?: (busy: boolean) => void };
 }) {
+  const categories = useCategories();
   const [v, setV] = useState<CommunityFormValues>({
     name: initial?.name ?? "",
     description: initial?.description ?? "",
-    interest: initial?.interest ?? INTERESTS[0].id,
+    interest: initial?.interest ?? categories[0].id,
     country: initial?.country ?? "NG",
     region: initial?.region ?? "lagos",
     city: initial?.city ?? "lagos",
@@ -89,7 +91,7 @@ export function CommunityForm({
       <TextArea label="Description" value={v.description} onChange={(e) => set("description", e.target.value)} maxLength={LIMITS.communityDescription} counter={LIMITS.communityDescription} error={errors.description} placeholder="Who is this for and what do you do together?" />
       <div className="grid gap-4 sm:grid-cols-2">
         <SelectField label="Interest" value={v.interest} onChange={(e) => isInterestId(e.target.value) && set("interest", e.target.value)} error={errors.interest}>
-          {INTERESTS.map((i) => (
+          {categories.map((i) => (
             <option key={i.id} value={i.id}>
               {i.name}
             </option>

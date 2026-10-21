@@ -9,6 +9,7 @@ import { MembershipRequest } from "../models/MembershipRequest";
 import type { ISubcommunity } from "../models/Subcommunity";
 import type { IUser } from "../models/User";
 import { isSiteAdmin } from "./hosting";
+import { kliqueId } from "../services/klique-id";
 
 /**
  * AUTHORIZATION POLICIES — the single source of truth for "who may do what".
@@ -162,30 +163,29 @@ export function assertSubVisibleOrHidden(space: Space, access: SpaceAccess) {
 /* ------------------------------ events ------------------------------ */
 
 /**
- * Mongo filter of events this viewer is allowed to see. Use it in EVERY event list/search query.
- * The rule: everyone sees events from public communities (and public events outside any community). Events in a
- * private community are for its members only, and a group's events (groups are always private) for the group's
- * members only. The host always sees their own.
+ * Mongo filter of the events this viewer sees in feeds: home, Events, search, profiles, ads. Use it in EVERY event
+ * list/search query. The rule: Klique's own events (the default community, posted by site admins) are for
+ * everyone; every other event is for the members of its community, and a group's events for the group's members
+ * only, public community or not. The host always sees their own. Membership decides, not the stored audience.
+ * (A public community's own page still lists its events to visitors: see listEvents.)
  */
 export async function eventVisibilityFilter(viewer: IUser | null): Promise<Record<string, unknown>> {
-  // A group's event is never public, and neither is one in a community that's private now, whatever the
-  // event's stored audience says (it's kept in sync, but the community's current privacy is what counts).
-  const [privateIds, memberships] = await Promise.all([
-    Community.find({ privacy: "private" }).select("_id").lean<{ _id: Types.ObjectId }[]>(),
+  const [klique, memberships] = await Promise.all([
+    kliqueId(),
     viewer
       ? Membership.find({ userId: viewer._id, status: "active" }).select("communityId subcommunityId").lean<Pick<IMembership, "communityId" | "subcommunityId">[]>()
       : Promise.resolve([] as Pick<IMembership, "communityId" | "subcommunityId">[]),
   ]);
-  const publicOnly = { audience: "public", subcommunityId: null, communityId: { $nin: privateIds.map((c) => c._id) } };
-  if (!viewer) return publicOnly;
+  // Klique's events, and any old event that never had a community
+  const forEveryone = { communityId: { $in: klique ? [klique, null] : [null] }, subcommunityId: null };
+  if (!viewer) return forEveryone;
 
   const communityIds = memberships.filter((m) => !m.subcommunityId).map((m) => m.communityId);
   const subIds = memberships.filter((m) => m.subcommunityId).map((m) => m.subcommunityId!);
-
   return {
     $or: [
-      publicOnly,
-      // community events, but never a group's: those belong to the group whatever their stored audience
+      forEveryone,
+      // community events, but never a group's: those belong to the group
       { communityId: { $in: communityIds }, subcommunityId: null },
       { subcommunityId: { $in: subIds } },
       { hostId: viewer._id },
@@ -193,25 +193,25 @@ export async function eventVisibilityFilter(viewer: IUser | null): Promise<Recor
   };
 }
 
-export async function canViewEvent(event: IEvent, viewer: IUser | null): Promise<boolean> {
+/** The same rule for one event: would it show up in this viewer's feeds (and ads)? */
+export async function canSeeEventInFeeds(event: IEvent, viewer: IUser | null): Promise<boolean> {
   if (viewer && String(event.hostId) === String(viewer._id)) return true;
-  if (event.audience === "public" && !event.subcommunityId) {
-    // trust the community's current privacy over the stored audience
-    if (!event.communityId) return true;
-    const c = await Community.findById(event.communityId).select("privacy").lean<Pick<ICommunity, "privacy">>();
-    if (!c || c.privacy === "public") return true;
-  }
+  if (!event.subcommunityId && (!event.communityId || String(event.communityId) === String(await kliqueId()))) return true;
   if (!viewer) return false;
+  const m = await findMembership(viewer._id, event.communityId!, event.subcommunityId ?? null);
+  return activeRole(m) !== null;
+}
 
-  if (event.subcommunityId) {
-    const m = await findMembership(viewer._id, event.communityId!, event.subcommunityId);
-    return activeRole(m) !== null;
-  }
-  if (event.communityId) {
-    const m = await findMembership(viewer._id, event.communityId, null);
-    return activeRole(m) !== null;
-  }
-  return false;
+/**
+ * Can this viewer open the event's page? Everything they'd see in feeds, plus the events of a public community
+ * (its page lists them to visitors so they can decide to join; going needs joining). A private community's and a
+ * group's events stay with their members.
+ */
+export async function canViewEvent(event: IEvent, viewer: IUser | null): Promise<boolean> {
+  if (await canSeeEventInFeeds(event, viewer)) return true;
+  if (event.subcommunityId || !event.communityId) return false;
+  const c = await Community.findById(event.communityId).select("privacy").lean<Pick<ICommunity, "privacy">>();
+  return c?.privacy === "public";
 }
 
 /** Audience an event inherits from the space it is created in. */

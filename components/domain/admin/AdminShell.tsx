@@ -33,6 +33,7 @@ const MENU: { title: string | null; items: Item[] }[] = [
       { href: "/admin/people", label: "People", icon: "users" },
       { href: "/admin/events", label: "Events", icon: "calendar" },
       { href: "/admin/communities", label: "Communities", icon: "hash" },
+      { href: "/admin/categories", label: "Categories", icon: "folder" },
     ],
   },
   {

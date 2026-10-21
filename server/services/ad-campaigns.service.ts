@@ -19,6 +19,7 @@ import { GHOST, loadBriefs } from "../serializers";
 import type { adCampaignSchema, adPricingSchema } from "../validators/schemas";
 import { assertVerified } from "./account.service";
 import { sid } from "./helpers";
+import { isKlique, kliqueId } from "./klique-id";
 import { paystack } from "./promotions.service";
 import { notify, notifyNow } from "./push.service";
 
@@ -150,7 +151,9 @@ async function cleanInput(viewer: IUser, input: z.infer<typeof adCampaignSchema>
     let mine = sid(e.hostId) === sid(viewer._id);
     if (!mine && e.communityId) mine = !!(await Membership.exists({ userId: viewer._id, communityId: e.communityId, subcommunityId: null, status: "active", role: { $in: ["owner", "admin"] } }));
     if (!mine) throw forbidden("You can promote events you host, or events in a community you run.");
-    if (e.audience !== "public" || e.subcommunityId) throw badRequest("Only public events can be advertised. Events in a private community or group stay with their members.");
+    // A community's events are for its members only, so advertising one to everyone would break that: only
+    // Klique's own events (which everyone sees anyway) can be. Communities can advertise themselves instead.
+    if (e.subcommunityId || !e.communityId || String(e.communityId) !== String(await kliqueId())) throw badRequest("Only Klique's own events can be advertised: a community's events are for its members. Promote the community instead, and people who join will see its events.");
     if (e.cancelled) throw badRequest("This event was cancelled.");
     const daysLeft = Math.ceil((+e.startsAt - Math.max(Date.now(), +(startOn ?? 0))) / DAY_MS);
     if (daysLeft < 1) throw badRequest("This event starts too soon to advertise it.");
@@ -163,6 +166,7 @@ async function cleanInput(viewer: IUser, input: z.infer<typeof adCampaignSchema>
     const runs = await Membership.exists({ userId: viewer._id, communityId: c._id, subcommunityId: null, status: "active", role: { $in: ["owner", "admin"] } });
     if (!runs) throw forbidden("You can promote communities you own or run.");
     if (c.privacy !== "public") throw badRequest("Only public communities can be advertised.");
+    if (isKlique(c)) throw badRequest("Everyone's already in Klique.");
     return {
       ...base,
       communityId: c._id,

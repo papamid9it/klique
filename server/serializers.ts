@@ -1,5 +1,6 @@
 import type { Types } from "mongoose";
 import { canHostInSpace, isSiteAdmin } from "./policies/hosting";
+import { isKlique } from "./services/klique-id";
 import type {
   CommunityCardDTO,
   CommunityDTO,
@@ -66,6 +67,7 @@ export const toMe = (u: IUser, unreadMessages = 0, unreadNotifications = 0): Use
   ...toProfile(u),
   email: u.email,
   emailVerified: !!u.emailVerifiedAt,
+  onboarded: !!u.onboardedAt,
   hasPassword: u.hasPassword !== false,
   googleLinked: !!u.googleId,
   mood: u.mood,
@@ -161,7 +163,8 @@ export async function toCommunityDetail(
     createdAt: c.createdAt.toISOString(),
     groupPolicy: c.groupPolicy ?? "admins",
     canCreateGroup: canCreateGroup(c, access),
-    canHostEvents: canHostInSpace(access),
+    // Klique: only site admins post its events (its owner here; the others from Admin → Events)
+    canHostEvents: isKlique(c) ? access.role === "owner" : canHostInSpace(access),
     owner,
     subcommunityCount: card.locked ? null : extra.subcommunityCount,
     upcomingEventCount: card.locked ? null : extra.upcomingEventCount,
@@ -226,12 +229,12 @@ export async function toEvents(events: IEvent[], viewer: IUser | null): Promise<
   const subIds = events.map((e) => e.subcommunityId).filter(Boolean) as Types.ObjectId[];
   const eventIds = events.map((e) => e._id);
 
-  const [hosts, communities, subs, rsvps, saved, crewCounts] = await Promise.all([
+  const [hosts, communities, subs, rsvps, saved, crewCounts, memberOf] = await Promise.all([
     loadBriefs(hostIds),
     communityIds.length
       ? Community.find({ _id: { $in: communityIds } })
-          .select("slug name privacy")
-          .lean<Pick<ICommunity, "_id" | "slug" | "name" | "privacy">[]>()
+          .select("slug name privacy official")
+          .lean<Pick<ICommunity, "_id" | "slug" | "name" | "privacy" | "official">[]>()
       : [],
     subIds.length
       ? Subcommunity.find({ _id: { $in: subIds } })
@@ -243,7 +246,11 @@ export async function toEvents(events: IEvent[], viewer: IUser | null): Promise<
       : [],
     viewer ? SavedEvent.find({ userId: viewer._id, eventId: { $in: eventIds } }).select("eventId").lean<{ eventId: Types.ObjectId }[]>() : [],
     Crew.aggregate<{ _id: Types.ObjectId; n: number }>([{ $match: { eventId: { $in: eventIds } } }, { $group: { _id: "$eventId", n: { $sum: 1 } } }]),
+    viewer && communityIds.length
+      ? Membership.find({ userId: viewer._id, communityId: { $in: communityIds }, subcommunityId: null, status: "active" }).select("communityId").lean<{ communityId: Types.ObjectId }[]>()
+      : [],
   ]);
+  const memberSet = new Set(memberOf.map((m) => sid(m.communityId)));
   const crewMap = new Map(crewCounts.map((c) => [sid(c._id), c.n]));
 
   const communityMap = new Map(communities.map((c) => [sid(c._id), c]));
@@ -276,7 +283,7 @@ export async function toEvents(events: IEvent[], viewer: IUser | null): Promise<
       coverImage: e.coverImage,
       host: hosts.get(sid(e.hostId)) ?? GHOST,
       organizer: e.organizerName ? { name: e.organizerName, url: e.sourceUrl ?? null } : null,
-      community: c ? { slug: c.slug, name: c.name, privacy: c.privacy } : null,
+      community: c ? { slug: c.slug, name: c.name, privacy: c.privacy, official: isKlique(c) } : null,
       subcommunity: s ? { slug: s.slug, name: s.name } : null,
       audience: e.audience,
       goingCount: e.goingCount,
@@ -289,6 +296,8 @@ export async function toEvents(events: IEvent[], viewer: IUser | null): Promise<
         saved: savedSet.has(sid(e._id)),
         isHost,
         canEdit: isHost,
+        // a community's event (not Klique's): going or saving it means joining the community first
+        mustJoin: !isHost && !!c && !isKlique(c) && !memberSet.has(sid(c._id)),
       },
     };
   });

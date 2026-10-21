@@ -1,14 +1,15 @@
 import "server-only";
 import { Types } from "mongoose";
 import type { AdDTO, AdInput, AdminAdDTO, AdSlot } from "@/lib/types";
-import { isInterestId } from "@/lib/constants";
+import { DISCOVER_BANNER_ADS, isInterestId } from "@/lib/constants";
 import { parseScope, scopesOverlap, WORLD } from "@/lib/places";
 import { badRequest, notFound } from "../http/errors";
 import { Ad, AD_SLOTS, type IAd } from "../models/Ad";
 import { Event, type IEvent } from "../models/Event";
 import { Report } from "../models/Safety";
 import type { IUser } from "../models/User";
-import { canViewEvent } from "../policies/access";
+import { canSeeEventInFeeds } from "../policies/access";
+import { kliqueId } from "./klique-id";
 import { Promotion, type IPromotion } from "../models/Promotion";
 import { loadBriefs, toEvents } from "../serializers";
 import { startReviewedRun } from "./promotions.service";
@@ -53,15 +54,17 @@ export async function serveAds(
   viewer: IUser | null,
   q: { slot: AdSlot; where?: string; interest?: string; search?: string; exclude?: string; count: number },
 ): Promise<AdDTO[]> {
+  if (q.slot === "home-hero" && !DISCOVER_BANNER_ADS) return []; // the banner isn't for sale (lib/constants.ts)
   const now = new Date();
   const rows = await Ad.find({ status: "active", slots: q.slot }).lean<IAd[]>();
   let eligible = rows.filter((a) => isLive(a, now) && matches(a, { where: q.where, interest: q.interest, q: q.slot === "search" ? (q.search ?? "") : undefined, viewer }));
 
-  // Promoted events must still be on, public to this viewer, and not the page you're already on.
+  // Promoted events must still be on, in this viewer's feeds (Klique's, or a community they're in), and not the
+  // page they're already on.
   const eventIds = eligible.filter((a) => a.kind === "event" && a.eventId).map((a) => a.eventId!);
   const events = eventIds.length ? await Event.find({ _id: { $in: eventIds }, cancelled: false, startsAt: { $gt: now } }).lean<IEvent[]>() : [];
   const visible = new Map<string, IEvent>();
-  for (const e of events) if (await canViewEvent(e, viewer)) visible.set(sid(e._id), e);
+  for (const e of events) if (await canSeeEventInFeeds(e, viewer)) visible.set(sid(e._id), e);
   eligible = eligible.filter((a) => a.kind === "brand" || (a.eventId && visible.has(sid(a.eventId)) && sid(a.eventId) !== q.exclude));
 
   const chosen = pickWeighted(eligible, q.count);
@@ -109,7 +112,7 @@ const httpsUrl = (u: string) => {
 };
 
 async function clean(input: AdInput): Promise<Partial<IAd>> {
-  const slots = [...new Set(input.slots)].filter((s): s is AdSlot => (AD_SLOTS as readonly string[]).includes(s));
+  const slots = [...new Set(input.slots)].filter((s): s is AdSlot => (AD_SLOTS as readonly string[]).includes(s) && (DISCOVER_BANNER_ADS || s !== "home-hero"));
   if (!slots.length) throw badRequest("Pick at least one spot on the site for this ad.");
   const places = [...new Set(input.places)].filter((p) => parseScope(p));
   const interests = [...new Set(input.interests)].filter(isInterestId);
@@ -139,7 +142,7 @@ async function clean(input: AdInput): Promise<Partial<IAd>> {
   if (input.kind === "event") {
     const e = input.eventId ? await Event.findById(input.eventId).lean<IEvent>() : null;
     if (!e) throw badRequest("Pick the event to promote.");
-    if (e.audience !== "public") throw badRequest("Only public events can be promoted. This one is only visible inside its community.");
+    if (e.subcommunityId || !e.communityId || String(e.communityId) !== String(await kliqueId())) throw badRequest("Only Klique's own events can be promoted: a community's events are for its members.");
     return { ...base, eventId: e._id, url: "" };
   }
   const url = httpsUrl((input.url ?? "").trim());

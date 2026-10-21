@@ -1,5 +1,5 @@
 import { Schema, model, models, type Model, type Types } from "mongoose";
-import { INTEREST_IDS, type DmPolicy, type InterestId, type ProfileVisibility } from "@/lib/constants";
+import { type DmPolicy, type InterestId, type ProfileVisibility } from "@/lib/constants";
 import { FRAME_IDS, NAME_EFFECT_IDS } from "@/lib/cosmetics";
 import { DEFAULT_MOOD, MOOD_IDS, type MoodId } from "@/lib/moods";
 
@@ -41,6 +41,8 @@ export interface IUser {
   rank?: number;
   /** set by a site admin: the account can't sign in or use the API */
   suspendedAt?: Date | null;
+  /** finished joining: picked 3+ categories and joined 2+ communities (null: they're sent to /welcome) */
+  onboardedAt?: Date | null;
   suspendedReason?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -65,7 +67,7 @@ const UserSchema = new Schema<IUser>(
     city: { type: String, default: "lagos" },
     neighborhood: { type: String, default: "", maxlength: 60 },
     bio: { type: String, default: "", maxlength: 280 },
-    interests: { type: [{ type: String, enum: INTEREST_IDS }], default: [] },
+    interests: { type: [{ type: String }], default: [] },
     mood: { type: String, enum: MOOD_IDS, default: DEFAULT_MOOD },
     profileVisibility: { type: String, enum: ["public", "members", "private"], default: "public" },
     attendancePublic: { type: Boolean, default: true },
@@ -77,6 +79,7 @@ const UserSchema = new Schema<IUser>(
     hype: { type: Number, default: 0, min: 0 },
     rank: { type: Number, default: 1, min: 1 },
     suspendedAt: { type: Date, default: null },
+    onboardedAt: { type: Date, default: null },
     suspendedReason: { type: String, default: "", maxlength: 300 },
   },
   { timestamps: true },

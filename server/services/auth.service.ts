@@ -1,3 +1,4 @@
+import { joinKlique } from "./klique.service";
 import type { z } from "zod";
 import { ApiError } from "../http/errors";
 import { dummyHash, hashPassword, verifyPassword } from "../auth/password";
@@ -38,6 +39,7 @@ export async function signup(input: z.infer<typeof signupSchema>): Promise<AuthR
     city: input.city,
   });
   const lean = user.toObject() as IUser;
+  await joinKlique(user._id); // everyone's in Klique, from the start
   await sendVerification(lean);
   return { _id: String(user._id), user: toMe(lean, 0), token: await signSession(String(user._id), user.tokenVersion) };
 }

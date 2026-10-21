@@ -1,5 +1,5 @@
 import { Schema, model, models, type Model, type Types } from "mongoose";
-import { INTEREST_IDS, type InterestId } from "@/lib/constants";
+import { type InterestId } from "@/lib/constants";
 
 /**
  * `audience` is denormalised from the owning space so list queries can filter
@@ -51,7 +51,7 @@ const EventSchema = new Schema<IEvent>(
     audience: { type: String, enum: ["public", "community", "subcommunity"], default: "public" },
     title: { type: String, required: true, trim: true, maxlength: 100 },
     description: { type: String, default: "", maxlength: 4000 },
-    interest: { type: String, enum: INTEREST_IDS, required: true },
+    interest: { type: String, required: true },
     country: { type: String, default: "NG", index: true },
     region: { type: String, default: "" },
     city: { type: String, required: true },

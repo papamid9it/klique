@@ -1,3 +1,4 @@
+import { isKlique } from "./klique-id";
 import type { Types } from "mongoose";
 import { deleteUploads } from "./media.service";
 import type {
@@ -155,6 +156,7 @@ export async function leaveSpace(viewer: IUser, space: Space, access: SpaceAcces
   if (access.role === "owner") {
     throw conflict("Owners can't leave. Delete it instead, or ask a member to take over.");
   }
+  if (!space.sub && isKlique(space.community)) throw conflict("Everyone's in Klique: it's where announcements and Klique's own events are, so it can't be left.");
 
   await Membership.deleteOne({ userId: viewer._id, ...spaceFilter(space) });
   await ChannelMember.deleteMany({ userId: viewer._id, ...spaceFilter(space) });
