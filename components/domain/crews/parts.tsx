@@ -6,7 +6,7 @@ import { Icon } from "@/components/ui/Icon";
 import { cx } from "@/components/ui/cx";
 import { formatTime } from "@/lib/format";
 import { buttonClass } from "@/components/ui/Button";
-import type { CrewCardDTO, CrewStanding, EventDTO, UserBrief } from "@/lib/types";
+import type { CrewCardDTO, CrewStanding, EventDTO, MyCrewDTO, UserBrief } from "@/lib/types";
 
 /**
  * Where an event's crews live: the "Crews" view of its community (or group), opened on that event.
@@ -100,4 +100,16 @@ export function CrewRow({ crew, joinable = true }: { crew: CrewCardDTO; joinable
       </SoftLink>
     </article>
   );
+}
+
+/**
+ * What leaving a community (group = null) or one of its groups does to your crews there, in a sentence for the
+ * "Leave?" dialog. Empty when you have none.
+ */
+export function crewLeaveWarning(crews: MyCrewDTO[], group: string | null): string {
+  const mine = crews.filter((x) => (group ? x.sub === group : true));
+  if (!mine.length) return "";
+  const hosting = mine.filter((x) => x.standing === "host").length;
+  const names = mine.map((x) => `from ${x.area} (${x.eventTitle})`).join(", ");
+  return ` You'll also leave ${mine.length === 1 ? "your crew" : `your ${mine.length} crews`} ${names}.${hosting ? ` ${hosting === 1 ? "The crew you host" : "Crews you host"} will be called off, and everyone in ${hosting === 1 ? "it" : "them"} is told.` : ""}`;
 }

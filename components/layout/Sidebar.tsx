@@ -160,7 +160,8 @@ function SlimNav({ pathname }: { pathname: string }) {
       <div className="no-bar flex min-h-0 w-full flex-1 flex-col items-center gap-3 overflow-y-auto pb-4 [&>*]:shrink-0">
       <nav aria-label="Main">
         <ul className="space-y-1.5">
-          {NAV.map((n) => {
+          {/* no Discover icon here: the klique logo above already goes home */}
+          {NAV.filter((n) => n.href !== "/").map((n) => {
             const active = n.match(pathname);
             return (
               <li key={n.href}>

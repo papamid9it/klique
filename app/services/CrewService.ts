@@ -29,5 +29,5 @@ export const CrewService = {
   messages: (id: string, after?: string) => api.get<Envelope<CrewMessageDTO[]>>(`/api/crews/${id}/messages`, after ? { after } : undefined),
   /** crews you're in for this community's events (its left panel) */
   mineIn: (slug: string) => api.get<Envelope<MyCrewDTO[]>>(`/api/communities/${slug}/crews/mine`),
-  send: (id: string, body: string) => api.post<Envelope<CrewMessageDTO>>(`/api/crews/${id}/messages`, { body }),
+  send: (id: string, body: string, replyToId?: string | null) => api.post<Envelope<CrewMessageDTO>>(`/api/crews/${id}/messages`, { body, replyToId: replyToId ?? null }),
 };

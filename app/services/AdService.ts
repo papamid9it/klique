@@ -7,6 +7,10 @@ export const AdService = {
   /** The ad(s) for one spot. Never cached: each view is a fresh pick. */
   forSlot: (slot: AdSlot, ctx: { where?: string; interest?: string; q?: string; exclude?: string; count?: number } = {}) =>
     api.get<Envelope<AdDTO[]>>("/api/ads", { slot, ...ctx }),
+  /** Count a view: called once the ad is actually on screen. */
+  view: (id: string) => {
+    void fetch(`/api/ads/${id}/view`, { method: "POST", keepalive: true, headers: { "Content-Type": "application/json" }, body: "{}" }).catch(() => {});
+  },
   /** Count a click; the link itself navigates on its own. */
   click: (id: string) => {
     void fetch(`/api/ads/${id}/click`, { method: "POST", keepalive: true, headers: { "Content-Type": "application/json" }, body: "{}" }).catch(() => {});

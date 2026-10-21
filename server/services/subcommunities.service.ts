@@ -132,7 +132,7 @@ export async function addableMembers(viewer: IUser, slug: string, subSlug: strin
   const text = q.trim().replace(/^@/, "");
   const rx = text ? new RegExp(escapeRegex(text), "i") : null;
   const users = await User.find({ _id: { $in: parentIds }, ...(rx ? { $or: [{ handle: rx }, { displayName: rx }] } : {}) })
-    .select("handle displayName avatarUrl avatarFrame nameEffect country city")
+    .select("handle displayName avatarUrl avatarFrame nameEffect rank country city")
     .sort({ displayName: 1 })
     .limit(20)
     .lean<IUser[]>();

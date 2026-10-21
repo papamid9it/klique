@@ -53,6 +53,7 @@ const PATHS = {
   phoneoff: <path d="M4 15.5c4.5-4.5 11.5-4.5 16 0l-2 2.5-3-1.5v-2.5a10 10 0 0 0-6 0v2.5L6 18l-2-2.5z" />,
   pushpin: <><path d="M9 4h6l-1 5.5 3 3.5v1H7v-1l3-3.5L9 4z" /><path d="M12 14v6" /></>,
   asterisk: <path d="M12 3.5v17M4.6 7.8l14.8 8.4M4.6 16.2 19.4 7.8" />,
+  coin: <><ellipse cx="12" cy="7" rx="7" ry="3" /><path d="M5 7v5c0 1.7 3.1 3 7 3s7-1.3 7-3V7M5 12v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5" /></>,
 } as const;
 
 export type IconName = keyof typeof PATHS;

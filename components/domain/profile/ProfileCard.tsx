@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { useApi } from "@/lib/hooks/useApi";
 import { monthYear, ProfileActions, ProfileBanner, useMutualCommunities } from "./ProfileParts";
 import { UserName } from "@/components/ui/UserName";
+import { RankBadge } from "@/components/ui/RankBadge";
 
 /** The small card (Discord's profile popover): banner, name, a line of bio, what you share, quick actions. */
 export function ProfileCard({ handle, onClose, onExpand }: { handle: string; onClose: () => void; onExpand: () => void }) {
@@ -47,7 +48,9 @@ export function ProfileCard({ handle, onClose, onExpand }: { handle: string; onC
         <button type="button" onClick={onExpand} className="mt-2 block max-w-full text-left">
           <span className="block truncate text-lg font-semibold tracking-[-0.02em] hover:underline"><UserName name={p.displayName} effect={p.nameEffect} /></span>
         </button>
-        <p className="font-mono text-xs text-ink-muted">@{p.handle}</p>
+        <p className="flex items-center gap-2 font-mono text-xs text-ink-muted">
+          @{p.handle} <RankBadge rank={p.rank} always />
+        </p>
 
         {view.visible ? (
           <div className="mt-3 space-y-3 rounded-card border border-line bg-raised/50 p-3">
@@ -80,7 +83,7 @@ export function ProfileCard({ handle, onClose, onExpand }: { handle: string; onC
         )}
 
         <div className="mt-3">
-          <ProfileActions view={view} onFriendship={(friendship) => setData((d) => (d ? { ...d, friendship } : d))} onReload={() => void reload()} onNavigate={onClose} />
+          <ProfileActions view={view} menu={false} onFriendship={(friendship) => setData((d) => (d ? { ...d, friendship } : d))} onReload={() => void reload()} onNavigate={onClose} />
         </div>
         <button type="button" onClick={onExpand} className="mt-3 inline-flex items-center gap-1 text-[13px] font-semibold text-accent-text hover:underline">
           View full profile <Icon name="arrow-up-right" size={13} />

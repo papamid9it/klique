@@ -74,6 +74,14 @@ export interface CacheOptions {
   key?: string;
 }
 
+export interface ApiOptions extends CacheOptions {
+  /**
+   * When the deps change to something not loaded yet, leave what's on screen (marked `refreshing`) until the new
+   * result arrives, instead of blanking to a skeleton. For filters and tabs over the same list.
+   */
+  keepPrevious?: boolean;
+}
+
 export interface ApiState<T> {
   data: T | null;
   /** true only for the first load (no data yet) */
@@ -92,7 +100,7 @@ export interface ApiState<T> {
  *   const { data, loading, error, reload } = useApi(() => EventService.get(id), [id]);
  * Pass `null` as the fetcher to skip (e.g. while waiting for a dependency).
  */
-export function useApi<T>(fetcher: (() => Promise<Envelope<T>>) | null, deps: unknown[], { key }: CacheOptions = {}): ApiState<T> {
+export function useApi<T>(fetcher: (() => Promise<Envelope<T>>) | null, deps: unknown[], { key, keepPrevious = false }: ApiOptions = {}): ApiState<T> {
   const cacheKey = fetcher ? key : undefined;
   const [data, setDataRaw] = useState<T | null>(() => cacheGet<T>(cacheKey) ?? null);
   const [loading, setLoading] = useState(fetcher !== null && data === null);
@@ -104,6 +112,8 @@ export function useApi<T>(fetcher: (() => Promise<Envelope<T>>) | null, deps: un
   fetcherRef.current = fetcher;
   const keyRef = useRef(cacheKey);
   keyRef.current = cacheKey;
+  const shown = useRef<T | null>(data);
+  shown.current = data;
 
   // local edits (optimistic updates) go into the cache too, so they survive leaving and coming back,
   // and reach any other component showing the same key
@@ -156,10 +166,12 @@ export function useApi<T>(fetcher: (() => Promise<Envelope<T>>) | null, deps: un
 
   useEffect(() => {
     const cached = cacheGet<T>(keyRef.current);
-    setDataRaw(cached ?? null);
+    // nothing cached for the new deps: keep the old result up while fetching, if asked to
+    const hold = cached === undefined && keepPrevious && shown.current !== null && fetcherRef.current !== null;
+    if (!hold) setDataRaw(cached ?? null);
     if (cached !== undefined) setLoading(false);
     setError(null);
-    void run(cached === undefined);
+    void run(cached === undefined && !hold);
     return () => {
       ticket.current++;
     };

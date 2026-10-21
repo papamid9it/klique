@@ -1,6 +1,7 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, Suspense, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
 import { ProfileCard } from "@/components/domain/profile/ProfileCard";
 import { ProfileModal } from "@/components/domain/profile/ProfileModal";
 import { cx } from "@/components/ui/cx";
@@ -55,6 +56,10 @@ export function ProfileCardProvider({ children }: { children: ReactNode }) {
     setFull(handle);
   }, []);
   const closeFull = useCallback(() => setFull(null), []);
+  const closeAll = useCallback(() => {
+    setPop(null);
+    setFull(null);
+  }, []);
 
   // The back button dismisses both (links and actions inside them close themselves).
   useEffect(() => {
@@ -133,8 +138,24 @@ export function ProfileCardProvider({ children }: { children: ReactNode }) {
         </>
       )}
       <ProfileModal handle={full} onClose={closeFull} onOpenPerson={openFull} />
+      {/* the address is only known at request time, so this listens inside its own Suspense boundary */}
+      <Suspense fallback={null}>
+        <CloseOnNavigate onNavigate={closeAll} />
+      </Suspense>
     </ProfileCtx.Provider>
   );
+}
+
+/** Going to another page (or another view of it, like a community's Members) closes the card and the modal. */
+function CloseOnNavigate({ onNavigate }: { onNavigate: () => void }) {
+  const where = `${usePathname()}?${useSearchParams().toString()}`;
+  const seen = useRef(where);
+  useEffect(() => {
+    if (seen.current === where) return;
+    seen.current = where;
+    onNavigate();
+  }, [where, onNavigate]);
+  return null;
 }
 
 /** Wrap any name / avatar / @mention: click opens the small profile card. Renders a plain button. */

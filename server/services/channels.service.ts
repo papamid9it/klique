@@ -132,6 +132,8 @@ interface DtoCtx {
   readBy: Map<string, IChannelRead>;
   invited: Set<string>;
   mentionCounts: Map<string, number>;
+  /** unread messages per channel (not counting your own), capped at 99 */
+  unreadCounts?: Map<string, number>;
   memberCounts?: Map<string, number>;
 }
 
@@ -151,14 +153,18 @@ function toChannel(c: IChannel, ctx: DtoCtx): ChannelDTO {
     position: c.position,
     lastMessageAt: c.lastMessageAt ? c.lastMessageAt.toISOString() : null,
     unread: ctx.access.isMember && !!last && (!read || last > read),
+    unreadCount: ctx.access.isMember && !!last && (!read || last > read) ? (ctx.unreadCounts?.get(sid(c._id)) ?? 1) : 0,
     canPost: canPostInChannel(c, ctx.access, invited),
     mentions: ctx.mentionCounts.get(sid(c._id)) ?? 0,
     ...(ctx.memberCounts?.has(sid(c._id)) ? { memberCount: ctx.memberCounts.get(sid(c._id)) } : {}),
   };
 }
 
-/** Unread @mentions per channel for this viewer (capped, and only for channels that have unread). */
-async function countMentions(viewerId: Types.ObjectId, channels: IChannel[], readBy: Map<string, IChannelRead>): Promise<Map<string, number>> {
+/**
+ * Unread @mentions per channel for this viewer (capped, and only for channels that have unread). With
+ * `unreadOut`, also how many messages are unread in each (other people's, capped at 99).
+ */
+async function countMentions(viewerId: Types.ObjectId, channels: IChannel[], readBy: Map<string, IChannelRead>, unreadOut?: Map<string, number>): Promise<Map<string, number>> {
   const out = new Map<string, number>();
   const unread = channels
     .filter((c) => {
@@ -170,8 +176,12 @@ async function countMentions(viewerId: Types.ObjectId, channels: IChannel[], rea
   await Promise.all(
     unread.map(async (c) => {
       const after = readBy.get(sid(c._id))?.lastReadMessageId ?? ZERO_ID;
-      const n = await ChannelMessage.countDocuments({ channelId: c._id, mentions: viewerId, deletedAt: null, _id: { $gt: after } }, { limit: 99 });
+      const [n, u] = await Promise.all([
+        ChannelMessage.countDocuments({ channelId: c._id, mentions: viewerId, deletedAt: null, _id: { $gt: after } }, { limit: 99 }),
+        unreadOut ? ChannelMessage.countDocuments({ channelId: c._id, authorId: { $ne: viewerId }, deletedAt: null, _id: { $gt: after } }, { limit: 99 }) : 0,
+      ]);
       if (n) out.set(sid(c._id), n);
+      if (unreadOut) unreadOut.set(sid(c._id), u);
     }),
   );
   return out;
@@ -202,9 +212,10 @@ export async function listChannels(viewer: IUser | null, space: Space, access: S
   ]);
   const readBy = new Map(reads.map((r) => [sid(r.channelId), r]));
   const visible = channels.filter((c) => canSeeChannel(c, access, invited.has(sid(c._id))) && (VOICE_ENABLED || c.type !== "voice"));
-  const mentionCounts = viewer && access.isMember ? await countMentions(viewer._id, visible, readBy) : new Map<string, number>();
+  const unreadCounts = new Map<string, number>();
+  const mentionCounts = viewer && access.isMember ? await countMentions(viewer._id, visible, readBy, unreadCounts) : new Map<string, number>();
   const memberCounts = access.canManage ? await guestCounts(visible) : undefined;
-  const ctx: DtoCtx = { access, readBy, invited, mentionCounts, memberCounts };
+  const ctx: DtoCtx = { access, readBy, invited, mentionCounts, unreadCounts, memberCounts };
 
   // The groups you're in (community list only), each with the channels you can see.
   const groups: ChannelGroupDTO[] = [];
@@ -219,7 +230,8 @@ export async function listChannels(viewer: IUser | null, space: Space, access: S
         const m = subMs.find((x) => sid(x.subcommunityId!) === sid(sub._id)) ?? null;
         const gAccess = subAccessFrom(sub, parentM, m, isSiteAdmin(viewer));
         const rows = subChannels.filter((c) => sid(c.subcommunityId!) === sid(sub._id) && canSeeChannel(c, gAccess, invited.has(sid(c._id))) && (VOICE_ENABLED || c.type !== "voice"));
-        const gMentions = await countMentions(viewer._id, rows, readBy);
+        const gUnread = new Map<string, number>();
+        const gMentions = await countMentions(viewer._id, rows, readBy, gUnread);
         const gCounts = gAccess.canManage ? await guestCounts(rows) : undefined;
         groups.push({
           id: sid(sub._id),
@@ -227,7 +239,7 @@ export async function listChannels(viewer: IUser | null, space: Space, access: S
           name: sub.name,
           visibility: sub.visibility,
           role: gAccess.role,
-          channels: rows.map((c) => toChannel(c, { access: gAccess, readBy, invited, mentionCounts: gMentions, memberCounts: gCounts })),
+          channels: rows.map((c) => toChannel(c, { access: gAccess, readBy, invited, mentionCounts: gMentions, unreadCounts: gUnread, memberCounts: gCounts })),
         });
       }
     }
@@ -416,7 +428,7 @@ export async function searchSpaceMembers(viewer: IUser, space: Space, access: Sp
     ...(rx ? { $or: [{ handle: rx }, { displayName: rx }] } : {}),
     _id: { $nin: [...hidden, viewer._id] },
   })
-    .select("handle displayName avatarUrl avatarFrame nameEffect country city")
+    .select("handle displayName avatarUrl avatarFrame nameEffect rank country city")
     .limit(400)
     .lean<IUser[]>();
   const memberRows = await Membership.find({ ...scopeOf(space), status: "active", userId: { $in: users.map((u) => u._id) } }).select("userId").lean<Pick<IMembership, "userId">[]>();

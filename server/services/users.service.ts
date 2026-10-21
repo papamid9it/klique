@@ -16,6 +16,7 @@ import { hostedEventsOf, upcomingRsvpEventsOf } from "./events.service";
 import { friendStatus, mutualFriends } from "./friends.service";
 import { messagingEligibility, unreadTotal } from "./messaging.service";
 import { unreadNotificationCount } from "./notifications.service";
+import { assertCanWear } from "./points.service";
 
 export async function getMe(viewer: IUser): Promise<UserMe> {
   const [dms, bell] = await Promise.all([unreadTotal(viewer._id), unreadNotificationCount(viewer._id)]);
@@ -35,6 +36,8 @@ export async function updateMe(viewer: IUser, patch: z.infer<typeof profileUpdat
   if (patch.avatarUrl !== undefined) set.avatarUrl = patch.avatarUrl || null;
   if (patch.bannerUrl !== undefined) set.bannerUrl = patch.bannerUrl || null;
   if (patch.bannerColor !== undefined) set.bannerColor = patch.bannerColor || null;
+  // frames and name styles cost points: putting on one you haven't unlocked is refused
+  if (patch.avatarFrame || patch.nameEffect) await assertCanWear(viewer, patch);
   if (patch.avatarFrame !== undefined) set.avatarFrame = patch.avatarFrame || null;
   if (patch.nameEffect !== undefined) set.nameEffect = patch.nameEffect || null;
   if (patch.mood !== undefined) set.mood = patch.mood as IUser["mood"];
@@ -159,7 +162,7 @@ export async function listPeople(viewer: IUser | null, q: z.infer<typeof peopleQ
     .sort({ createdAt: -1 })
     .skip((q.page - 1) * size)
     .limit(size + 1)
-    .select("handle displayName avatarUrl avatarFrame nameEffect country city")
+    .select("handle displayName avatarUrl avatarFrame nameEffect rank country city")
     .lean<IUser[]>();
   return { items: rows.slice(0, size).map(toBrief), page: q.page, hasMore: rows.length > size };
 }

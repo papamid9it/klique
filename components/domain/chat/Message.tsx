@@ -15,6 +15,7 @@ import { ReplyQuote } from "./ReplyQuote";
 import { EditedTag, MessageEditor } from "./MessageEditor";
 import { ReactButton, ReactionBar, StickerView } from "./Reactions";
 import { UserName } from "@/components/ui/UserName";
+import { RankBadge } from "@/components/ui/RankBadge";
 
 const TOKEN_RX = /(https?:\/\/[^\s<]+)|(?<![\w@])@([a-zA-Z0-9_]{3,20})(?![\w])/g;
 
@@ -110,6 +111,7 @@ export const Message = memo(function Message({
             <ProfileTrigger handle={m.author.handle} className="truncate text-[15px] font-semibold text-ink hover:underline">
               <UserName name={m.author.displayName} effect={m.author.nameEffect} />
             </ProfileTrigger>
+            <RankBadge rank={m.author.rank} className="self-center" />
             <time dateTime={m.createdAt} className="font-mono text-[11px] text-ink-muted">
               {formatTime(m.createdAt)}
             </time>

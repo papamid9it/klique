@@ -6,6 +6,7 @@ import { when } from "./events.service";
 import { notifyNow } from "./push.service";
 import { runCrewReminders } from "./crews.service";
 import { runAdLifecycle } from "./ad-campaigns.service";
+import { runStyleLifecycle } from "./points.service";
 
 /**
  * "Starting soon" reminders to everyone going, on their phones (mobile app) and browsers (desktop and web app).
@@ -36,6 +37,8 @@ export async function runReminders(): Promise<{ events: number; notified: number
   notified += await runCrewReminders(now);
   // ads: "ends tomorrow" and "ended" (with results)
   notified += await runAdLifecycle(now);
+  // points: styles from before points existed, "ends in 3 days", auto-renew or take off
+  notified += await runStyleLifecycle(now);
   return { events: due.length, notified };
 }
 

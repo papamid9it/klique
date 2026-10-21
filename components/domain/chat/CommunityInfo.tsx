@@ -22,11 +22,10 @@ import type { CommunityDTO } from "@/lib/types";
 import { UserName } from "@/components/ui/UserName";
 
 /**
- * Right pane of the community workspace (the Reddit sidebar / Discord member panel):
- * what this community is, who runs it, and what's coming up. It replaces the generic
- * suggestions rail that other pages show.
+ * The community's About (opened from its name menu): what it is, who runs it, what's coming up, and share.
+ * Leaving lives in the name menu itself, so it isn't repeated here.
  */
-export function CommunityInfo({ community: c, onJoined, onNavigate, onLeave }: { community: CommunityDTO; onJoined: (c: CommunityDTO) => void; onNavigate?: () => void; onLeave: () => void }) {
+export function CommunityInfo({ community: c, onJoined, onNavigate }: { community: CommunityDTO; onJoined: (c: CommunityDTO) => void; onNavigate?: () => void }) {
   const base = `/communities/${c.slug}`;
   const staff = useApi(() => ChannelService.staff({ slug: c.slug }), [c.slug, c.viewer.role], { key: `staff:${c.slug}:${c.viewer.role}` });
   const events = useApi(() => EventService.list({ community: c.slug, page: 1 }), [c.slug], { key: `info-events:${c.slug}` });
@@ -34,7 +33,7 @@ export function CommunityInfo({ community: c, onJoined, onNavigate, onLeave }: {
   const v = c.viewer;
 
   return (
-    <div className="flex flex-col gap-6 px-5 py-5 pt-14 lg:pt-5">
+    <div className="flex flex-col gap-6">
       <section aria-labelledby="about-h">
         <Cover src={c.coverImage} seed={c.id} interest={c.interest} className="aspect-[16/8] rounded-card" />
         <div className="mt-4 flex flex-wrap items-center gap-1.5">
@@ -71,19 +70,13 @@ export function CommunityInfo({ community: c, onJoined, onNavigate, onLeave }: {
 
         <div className="mt-4 flex flex-wrap items-center gap-2">
           {v.isMember ? (
-            v.role === "owner" ? (
-              <Chip tone="accent">You own this</Chip>
-            ) : (
-              <Button size="sm" onClick={onLeave}>
-                Leave
-              </Button>
-            )
+            v.role === "owner" && <Chip tone="accent">You own this</Chip>
           ) : (
             <JoinButton size="md" community={c} onChange={(next) => onJoined(next as CommunityDTO)} />
           )}
           <ShareButton path={base} text={`${c.name} on klique`} label="Share" />
           {v.canManage && c.privacy === "private" && (
-            <Button size="sm" href={`${base}?settings=invites`}>
+            <Button size="sm" href={`${base}?settings=invites`} onClick={onNavigate}>
               <Icon name="link" size={13} /> Invite
             </Button>
           )}
@@ -136,7 +129,7 @@ export function CommunityInfo({ community: c, onJoined, onNavigate, onLeave }: {
           <ul className="space-y-2">
             {upcoming.map((e) => (
               <li key={e.id}>
-                <Link href={`/events/${e.id}`} className="block rounded-card border border-line bg-surface p-3 hover:bg-raised">
+                <Link href={`/events/${e.id}`} onClick={onNavigate} className="block rounded-card border border-line bg-surface p-3 hover:bg-raised">
                   <p className="truncate text-sm font-semibold">{e.title}</p>
                   <p className="mt-0.5 font-mono text-[11px] text-ink-muted">{formatDateShort(e.startsAt)}</p>
                 </Link>

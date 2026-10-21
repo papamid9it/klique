@@ -35,7 +35,13 @@ const MENU: { title: string | null; items: Item[] }[] = [
       { href: "/admin/communities", label: "Communities", icon: "hash" },
     ],
   },
-  { title: "Revenue", items: [{ href: "/admin/ads", label: "Ads", icon: "megaphone", count: (s) => s.pendingAds }] },
+  {
+    title: "Revenue",
+    items: [
+      { href: "/admin/ads", label: "Ads", icon: "megaphone", count: (s) => s.pendingAds },
+      { href: "/admin/points", label: "Points", icon: "coin" },
+    ],
+  },
   {
     title: "Records",
     items: [

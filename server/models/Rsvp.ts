@@ -5,6 +5,8 @@ export interface IRsvp {
   eventId: Types.ObjectId;
   userId: Types.ObjectId;
   status: "going" | "interested";
+  /** the host confirmed they came (earns Hype) */
+  attendedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -14,6 +16,7 @@ const RsvpSchema = new Schema<IRsvp>(
     eventId: { type: Schema.Types.ObjectId, ref: "Event", required: true },
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     status: { type: String, enum: ["going", "interested"], required: true },
+    attendedAt: { type: Date, default: null },
   },
   { timestamps: true },
 );

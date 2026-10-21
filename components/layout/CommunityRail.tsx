@@ -6,6 +6,8 @@ import { softNavigate } from "@/lib/nav";
 import { useEffect } from "react";
 import { CommunityService } from "@/app/services/CommunityService";
 import { useAuth } from "@/components/providers/AuthProvider";
+import { CountBadge } from "@/components/ui/CountBadge";
+import { useAppEvent } from "@/lib/appEvents";
 import { Cover } from "@/components/ui/Cover";
 import { Icon } from "@/components/ui/Icon";
 import { cx } from "@/components/ui/cx";
@@ -35,7 +37,9 @@ export function CommunityRail({ activeSlug, horizontal, onNavigate }: { activeSl
     return () => clearInterval(t);
   }, [authed, reload, connected]);
   // activity in any of your communities: refresh the unread dots
-  useRealtimeEvent(() => void reload(), { filter: (e) => e.type === "channel", debounceMs: 1500 });
+  useRealtimeEvent(() => void reload(), { filter: (e) => e.type === "channel" || (e.type === "crew" && !!e.chat), debounceMs: 1500 });
+  // you joined or left one in this tab: its icon appears or goes at once
+  useAppEvent("membership", () => void reload());
   // you were let into a community (or added to a group): its icon appears
   useRealtimeEvent(() => void reload(), { filter: (e) => e.type === "notify" && e.category === "community", debounceMs: 500 });
 
@@ -78,17 +82,18 @@ export function CommunityRail({ activeSlug, horizontal, onNavigate }: { activeSl
           onFocus={() => void prefetchCommunity(c.slug)}
           onTouchStart={() => void prefetchCommunity(c.slug)}
           title={c.name}
-          aria-label={`${c.name}${c.mentions ? `, ${c.mentions} mentions` : c.unread ? ", unread messages" : ""}`}
+          aria-label={`${c.name}${c.unreadCount ? `, ${c.unreadCount} unread` : c.unread ? ", unread messages" : ""}${c.mentions ? `, ${c.mentions} mention you` : ""}`}
           aria-current={active ? "page" : undefined}
           className={cx("group flex flex-col items-center gap-1", horizontal ? "w-14" : "w-full")}
         >
           <span className={cx("relative block overflow-hidden transition-[border-radius,box-shadow]", horizontal ? "size-11" : "size-14", active ? "rounded-[14px] ring-2 ring-ink" : "rounded-full group-hover:rounded-[14px]")}>
             <Cover src={c.coverImage} seed={c.id} interest={c.interest} className="size-full" />
           </span>
-          {(c.mentions > 0 || (c.unread && horizontal)) && (
-            <span className={cx("absolute top-0 flex min-w-[18px] items-center justify-center rounded-full bg-accent text-[11px] leading-none font-bold text-accent-ink ring-2 ring-canvas", c.mentions > 0 ? "h-[18px] px-1" : "size-3", horizontal ? "right-1" : "right-1")}>
-              {c.mentions > 0 ? (c.mentions > 99 ? "99+" : c.mentions) : ""}
-            </span>
+          {/* how many unseen messages (channels and your crews' chats); red when some mention you */}
+          {(c.unreadCount ?? 0) > 0 || c.mentions > 0 ? (
+            <CountBadge n={Math.max(c.unreadCount ?? 0, c.mentions)} mention={c.mentions > 0} className="absolute top-0 right-1 ring-2 ring-canvas" label="" />
+          ) : (
+            c.unread && <span className="absolute top-0 right-1 size-3 rounded-full bg-accent ring-2 ring-canvas" aria-hidden="true" />
           )}
           {horizontal && <span className={cx("w-full truncate px-1 text-center text-[10px] leading-tight", active ? "font-semibold text-ink" : "text-ink-muted group-hover:text-ink")}>{c.name}</span>}
         </Link>

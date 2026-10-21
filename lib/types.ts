@@ -33,6 +33,8 @@ export interface UserBrief {
   avatarFrame?: string | null;
   /** animated name style (lib/cosmetics NameEffectId), if chosen */
   nameEffect?: string | null;
+  /** rank number (1 = first rank, lib/ranks); names come from GET /api/ranks */
+  rank?: number;
   /** ISO country code, e.g. "NG" */
   country: string;
   city: CityId;
@@ -69,6 +71,8 @@ export interface UserMe extends UserProfile {
   unreadNotifications: number;
   /** points balance (spent on picture frames and name styles) */
   points: number;
+  /** Hype earned so far (ranks) */
+  hype: number;
   /** a site admin (opens /admin) */
   isAdmin: boolean;
 }
@@ -344,6 +348,8 @@ export interface MyCrewDTO {
   standing: Exclude<CrewStanding, null>;
   /** the group the event lives in, if any */
   sub: string | null;
+  /** unread chat messages (members only; capped at 99) */
+  unreadCount: number;
 }
 
 export interface CrewDTO extends CrewCardDTO {
@@ -355,7 +361,15 @@ export interface CrewDTO extends CrewCardDTO {
   requests: { user: UserBrief; message: string; createdAt: ISODate }[];
   /** when it all disappears */
   expiresAt: ISODate;
-  viewer: { standing: CrewStanding; canEdit: boolean; canChat: boolean; canJoin: boolean; joinBlockedReason: string | null };
+  viewer: {
+    standing: CrewStanding;
+    canEdit: boolean;
+    canChat: boolean;
+    canJoin: boolean;
+    joinBlockedReason: string | null;
+    /** join this community (sub = null) or group first; `ask`: it takes a request; `requested`: one is waiting */
+    joinSpace: { slug: string; sub: string | null; name: string; ask: boolean; requested: boolean } | null;
+  };
 }
 
 export interface EventCrewsDTO {
@@ -375,6 +389,8 @@ export interface CrewMessageDTO {
   createdAt: ISODate;
   author: UserBrief;
   mine: boolean;
+  /** the message it answers (gone = deleted with the crew's history) */
+  replyTo: { id: Id; author: string; body: string } | null;
 }
 
 /** Where the signed-in person may host events. */
@@ -513,6 +529,8 @@ export interface ChannelDTO {
   lastMessageAt: ISODate | null;
   /** new messages since you last read (members only) */
   unread: boolean;
+  /** how many (other people's messages, capped at 99; 0 when read) */
+  unreadCount: number;
   /** the signed-in viewer may post here (server-computed; never trust the UI alone) */
   canPost: boolean;
   /** unread messages that tag the viewer (capped at 99) */
@@ -561,6 +579,8 @@ export interface MyCommunityDTO {
   privacy: CommunityPrivacy;
   role: Role;
   unread: boolean;
+  /** unread messages across its channels you can see, and your crews' chats there (capped at 99) */
+  unreadCount: number;
   mentions: number;
   lastActivityAt: ISODate | null;
 }
@@ -1127,6 +1147,8 @@ export interface PointTxnDTO {
 /** Your points: balance, what you've unlocked, prices, packs to buy and your history. */
 export interface PointsWalletDTO {
   balance: number;
+  /** site admins: every design is free, nothing to unlock */
+  allFree: boolean;
   config: import("./points").PointsConfig;
   unlocks: StyleUnlockDTO[];
   history: PointTxnDTO[];
@@ -1158,6 +1180,31 @@ export interface AdminPointsOverviewDTO {
 export interface AdminPointsUserDTO {
   user: UserBrief;
   balance: number;
+  hype: number;
   unlocks: StyleUnlockDTO[];
   history: PointTxnDTO[];
+}
+
+/* ------------------------------ ranks ------------------------------ */
+
+/** Your rank and how far to the next. */
+export interface RankProgressDTO {
+  rank: number;
+  name: string;
+  hype: number;
+  /** Hype your rank needed */
+  current: number;
+  next: { name: string; hype: number; points: number } | null;
+  /** Hype you can still earn today */
+  todayLeft: number;
+  recent: { action: import("./ranks").HypeAction; amount: number; createdAt: ISODate }[];
+}
+
+/** The host's "Who came?" list. */
+export interface AttendanceDTO {
+  /** ticking is allowed now (from the start until a week after the end) */
+  open: boolean;
+  opensAt: ISODate;
+  closesAt: ISODate;
+  people: { user: UserBrief; attended: boolean }[];
 }

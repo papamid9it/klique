@@ -224,6 +224,8 @@ export async function handlePaystackWebhook(rawBody: string, signature: string |
     const data = await paystack<{ status: string; amount: number; currency: string; channel?: string; paid_at?: string }>(`/transaction/verify/${encodeURIComponent(evt.data.reference)}`);
     // ad requests (kad_…) start their run; event promotions (klq_…) as before
     if (evt.data.reference.startsWith("kad_")) await (await import("./ad-campaigns.service")).fulfilCampaign(evt.data.reference, data);
+    // points packs (kpt_…)
+    else if (evt.data.reference.startsWith("kpt_")) await (await import("./points.service")).fulfilPointPurchase(evt.data.reference, data);
     else await fulfil(evt.data.reference, data);
   }
   return true;

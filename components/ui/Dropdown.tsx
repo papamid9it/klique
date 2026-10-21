@@ -12,7 +12,8 @@ export type MenuEntry =
 
 /**
  * Discord-style dropdown menu. The panel is rendered in a portal with fixed positioning,
- * so scrolling sidebars never clip it, and it flips to stay on screen.
+ * so scrolling sidebars never clip it (or grow a scrollbar), and it flips to stay on screen. Inside a modal
+ * <dialog> it portals into that dialog, since anything outside the dialog sits underneath it.
  * Keyboard: ↑ ↓ Home End move, Enter selects, Esc closes and returns focus to the trigger.
  */
 export function Dropdown({
@@ -33,6 +34,7 @@ export function Dropdown({
 }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [host, setHost] = useState<Element | null>(null);
   const anchor = useRef<HTMLSpanElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const id = useId();
@@ -115,11 +117,15 @@ export function Dropdown({
             e.preventDefault();
             e.stopPropagation();
             if (open) close();
-            else setOpen(true);
+            else {
+              setHost(anchor.current?.closest("dialog") ?? document.body);
+              setOpen(true);
+            }
           },
         },
       })}
       {open &&
+        host &&
         createPortal(
           <div
             ref={panel}
@@ -158,7 +164,7 @@ export function Dropdown({
               ),
             )}
           </div>,
-          document.body,
+          host,
         )}
     </span>
   );

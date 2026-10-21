@@ -18,8 +18,8 @@ import { isSamePage, softNavigate } from "@/lib/nav";
 import { NOTIFY_CATEGORIES } from "@/lib/notifications";
 import type { NotificationDTO } from "@/lib/types";
 
-const ICON: Record<string, IconName> = { mentions: "message", replies: "topics", crews: "pin", admin: "shield", community: "users", events: "calendar", ads: "megaphone", friends: "userplus", messages: "message" };
-const SHORT: Record<string, string> = { mentions: "Mentions & replies", replies: "Topic comments", crews: "Crews", admin: "Communities you run", community: "Your communities", events: "Events", ads: "Your ads", friends: "Friends" };
+const ICON: Record<string, IconName> = { mentions: "message", replies: "topics", crews: "pin", admin: "shield", community: "users", events: "calendar", ads: "megaphone", points: "coin", friends: "userplus", messages: "message" };
+const SHORT: Record<string, string> = { mentions: "Mentions & replies", replies: "Topic comments", crews: "Crews", admin: "Communities you run", community: "Your communities", events: "Events", ads: "Your ads", points: "Rank & points", friends: "Friends" };
 const FILTERS = [{ id: "all", label: "All", icon: "bell" as IconName }, { id: "unread", label: "Unread", icon: "asterisk" as IconName }, ...NOTIFY_CATEGORIES.filter((c) => !("pushOnly" in c)).map((c) => ({ id: c.id as string, label: SHORT[c.id] ?? c.label, icon: ICON[c.id] ?? "bell" }))];
 
 /** Today / Yesterday / This week / Earlier, in Lagos time. */
@@ -43,7 +43,8 @@ function NotificationsContent() {
   const now = useNow();
   const filter = sp.get("f") ?? "all";
   const q = filter === "all" ? {} : filter === "unread" ? { unread: true } : { category: filter };
-  const { data, loading, error, reload, setData } = useApi(authed ? () => InboxService.list(q) : null, [authed, filter], { key: `inbox:${filter}` });
+  // switching filters keeps the current list up (slightly faded) until the new one arrives: no blank flash
+  const { data, loading, refreshing, error, reload, setData } = useApi(authed ? () => InboxService.list(q) : null, [authed, filter], { key: `inbox:${filter}`, keepPrevious: true });
   const [more, setMore] = useState<NotificationDTO[]>([]);
   const [loadingMore, setLoadingMore] = useState(false);
 
@@ -119,7 +120,7 @@ function NotificationsContent() {
           })}
         </ul>
       </nav>
-      <p className="mt-auto px-1 text-xs text-ink-muted">Only things addressed to you or waiting on you. Similar ones bundle into one line. Ordinary chat shows as unread dots instead.</p>
+      <p className="mt-auto px-1 text-xs text-ink-muted">Only things addressed to you or waiting on you. Similar ones bundle into one line. Channel chat shows as unread counts instead.</p>
     </div>
   );
 
@@ -169,7 +170,7 @@ function NotificationsContent() {
             {filter === "all" ? "Requests to join your crews and communities, replies, mentions, event news and your ads show up here." : filter === "unread" ? "No unread notifications." : `No ${title.toLowerCase()} notifications yet.`}
           </EmptyState>
         ) : (
-          <div className="space-y-6">
+          <div className={cx("space-y-6 transition-opacity", refreshing && "opacity-60")} aria-busy={refreshing || undefined}>
             {groups.map((g) => (
               <section key={g.label} aria-label={g.label}>
                 <h2 className="eyebrow mb-2">{g.label}</h2>

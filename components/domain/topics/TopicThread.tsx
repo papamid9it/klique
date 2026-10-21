@@ -23,6 +23,7 @@ import { Linkified, LikeButton } from "./parts";
 import { TopicMedia } from "./TopicMedia";
 import { TopicMenu } from "./TopicMenu";
 import { UserName } from "@/components/ui/UserName";
+import { RankBadge } from "@/components/ui/RankBadge";
 
 /** Replies revealed per "more replies" click, at each level. */
 const REPLY_PAGE = 3;
@@ -239,6 +240,7 @@ function TopicPost({ onGone }: { onGone: (t: TopicDTO) => void }) {
           <Avatar name={t.author.displayName} src={t.author.avatarUrl} frame={t.author.avatarFrame} size={24} />
           <span className="text-[13px] font-semibold"><UserName name={t.author.displayName} effect={t.author.nameEffect} /></span>
         </ProfileTrigger>
+        <RankBadge rank={t.author.rank} />
         <span aria-hidden="true">·</span>
         <time dateTime={t.createdAt} title={`${formatDateLong(t.createdAt)} ${formatTime(t.createdAt)}`}>
           {now ? relativeStamp(t.createdAt, now) : ""}
@@ -558,6 +560,7 @@ function CommentNode({ node, depth, ctx }: { node: Tree; depth: number; ctx: Tre
                 <UserName name={c.author.displayName} effect={c.author.nameEffect} />
               </ProfileTrigger>
             )}
+            {!c.deleted && <RankBadge rank={c.author.rank} />}
             {topic.author.id === c.author.id && !c.deleted && <span className="rounded bg-accent/15 px-1.5 text-[10px] font-bold tracking-wide text-accent-text uppercase">OP</span>}
             <time dateTime={c.createdAt} title={`${formatDateLong(c.createdAt)} ${formatTime(c.createdAt)}`}>
               {now ? relativeStamp(c.createdAt, now) : ""}

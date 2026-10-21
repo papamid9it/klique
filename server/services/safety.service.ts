@@ -40,7 +40,7 @@ export async function unblockUser(viewer: IUser, handle: string) {
 export async function listBlocked(viewer: IUser): Promise<BlockedUserDTO[]> {
   const rows = await Block.find({ blockerId: viewer._id }).sort({ createdAt: -1 }).limit(200).lean<{ blockedId: Types.ObjectId; createdAt: Date }[]>();
   const users = await User.find({ _id: { $in: rows.map((r) => r.blockedId) } })
-    .select("handle displayName avatarUrl avatarFrame nameEffect country city")
+    .select("handle displayName avatarUrl avatarFrame nameEffect rank country city")
     .lean<IUser[]>();
   const map = new Map(users.map((u) => [sid(u._id), u]));
   return rows.flatMap((r) => {

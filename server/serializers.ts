@@ -39,13 +39,14 @@ export function viewerAccess(a: SpaceAccess): ViewerAccess {
 
 /* ------------------------------- users ------------------------------ */
 
-export const toBrief = (u: Pick<IUser, "_id" | "handle" | "displayName" | "avatarUrl" | "country" | "city"> & Partial<Pick<IUser, "avatarFrame" | "nameEffect">>): UserBrief => ({
+export const toBrief = (u: Pick<IUser, "_id" | "handle" | "displayName" | "avatarUrl" | "country" | "city"> & Partial<Pick<IUser, "avatarFrame" | "nameEffect" | "rank">>): UserBrief => ({
   id: sid(u._id),
   handle: u.handle,
   displayName: u.displayName,
   avatarUrl: u.avatarUrl ?? null,
   avatarFrame: u.avatarFrame ?? null,
   nameEffect: u.nameEffect ?? null,
+  rank: u.rank ?? 1,
   country: u.country ?? "NG",
   city: u.city,
 });
@@ -73,10 +74,11 @@ export const toMe = (u: IUser, unreadMessages = 0, unreadNotifications = 0): Use
   unreadMessages,
   unreadNotifications,
   points: u.points ?? 0,
+  hype: u.hype ?? 0,
   isAdmin: isSiteAdmin(u),
 });
 
-const BRIEF_FIELDS = "handle displayName avatarUrl avatarFrame nameEffect country city";
+const BRIEF_FIELDS = "handle displayName avatarUrl avatarFrame nameEffect rank country city";
 
 export async function loadBriefs(ids: (Types.ObjectId | string)[]): Promise<Map<string, UserBrief>> {
   const unique = [...new Set(ids.map(sid))];

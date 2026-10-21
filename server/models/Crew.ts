@@ -101,6 +101,8 @@ export interface ICrewMessage {
   crewId: Types.ObjectId;
   userId: Types.ObjectId;
   body: string;
+  /** the message this one answers */
+  replyToId: Types.ObjectId | null;
   expiresAt: Date;
   createdAt: Date;
 }
@@ -110,6 +112,7 @@ const CrewMessageSchema = new Schema<ICrewMessage>(
     crewId: { type: Schema.Types.ObjectId, ref: "Crew", required: true },
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     body: { type: String, required: true, trim: true, maxlength: 1000 },
+    replyToId: { type: Schema.Types.ObjectId, ref: "CrewMessage", default: null },
     expiresAt: { type: Date, required: true },
   },
   { timestamps: { createdAt: true, updatedAt: false } },
@@ -119,3 +122,26 @@ CrewMessageSchema.index({ crewId: 1, _id: -1 });
 CrewMessageSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 export const CrewMessage: Model<ICrewMessage> = (models.CrewMessage as Model<ICrewMessage>) || model<ICrewMessage>("CrewMessage", CrewMessageSchema);
+
+/** How far someone has read a crew's chat, for unread counts. Goes with the crew (same `expiresAt`). */
+export interface ICrewRead {
+  _id: Types.ObjectId;
+  crewId: Types.ObjectId;
+  userId: Types.ObjectId;
+  lastReadMessageId: Types.ObjectId | null;
+  /** last time they had the chat open (people reading right now aren't notified) */
+  readAt: Date | null;
+  expiresAt: Date;
+}
+
+const CrewReadSchema = new Schema<ICrewRead>({
+  crewId: { type: Schema.Types.ObjectId, ref: "Crew", required: true },
+  userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+  lastReadMessageId: { type: Schema.Types.ObjectId, default: null },
+  readAt: { type: Date, default: null },
+  expiresAt: { type: Date, required: true },
+});
+CrewReadSchema.index({ userId: 1, crewId: 1 }, { unique: true });
+CrewReadSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+
+export const CrewRead: Model<ICrewRead> = (models.CrewRead as Model<ICrewRead>) || model<ICrewRead>("CrewRead", CrewReadSchema);

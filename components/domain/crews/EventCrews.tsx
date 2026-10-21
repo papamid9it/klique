@@ -9,6 +9,8 @@ import { Icon } from "@/components/ui/Icon";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { ErrorState } from "@/components/ui/States";
 import { useApi } from "@/lib/hooks/useApi";
+import { useAppEvent } from "@/lib/appEvents";
+import { useRealtimeEvent } from "@/components/providers/RealtimeProvider";
 import type { EventDTO } from "@/lib/types";
 import { CrewRow } from "./parts";
 import { StartCrewModal } from "./StartCrewModal";
@@ -21,6 +23,9 @@ export function EventCrews({ event }: { event: EventDTO }) {
   const router = useRouter();
   const { requireAuth } = useAuth();
   const { data, loading, error, reload } = useApi(() => CrewService.forEvent(event.id), [event.id], { key: `crews:${event.id}` });
+  // joined or left the community (Join buttons appear), or a crew of yours changed: the list follows
+  useAppEvent("membership", () => void reload());
+  useRealtimeEvent(() => void reload(), { filter: (e) => e.type === "crew" && !e.chat, debounceMs: 400 });
   const [starting, setStarting] = useState(false);
   if (event.online) return null;
 

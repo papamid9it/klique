@@ -1,5 +1,6 @@
 "use client";
 
+import { WhoCame } from "@/components/domain/events/WhoCame";
 import { ProfileTrigger } from "@/components/providers/ProfileCardProvider";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -28,7 +29,7 @@ import { PlaceFields } from "@/components/domain/places/PlaceFields";
 import { INTERESTS, LIMITS, isInterestId, type InterestId } from "@/lib/constants";
 import { currencyOf, placeLabel, type Place } from "@/lib/places";
 import { CURRENCIES, formatDateLong, formatDateShort, formatPrice, formatTime } from "@/lib/format";
-import { useApi } from "@/lib/hooks/useApi";
+import { useApi, useNow } from "@/lib/hooks/useApi";
 import { useEventActions } from "@/lib/hooks/useEventActions";
 import type { EventDTO } from "@/lib/types";
 import { EventCrews } from "@/components/domain/crews/EventCrews";
@@ -210,6 +211,11 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
   const [cancelling, setCancelling] = useState(false);
   const [reporting, setReporting] = useState(false);
   const [working, setWorking] = useState(false);
+  const [checkingIn, setCheckingIn] = useState(false);
+  const now = useNow();
+  // "Who came?" from the start until a week after the end (the server has the final say)
+  const end = event.endsAt ? +new Date(event.endsAt) : +new Date(event.startsAt) + 3 * 3600_000;
+  const canCheckIn = !!now && (event.viewer.isHost || event.viewer.canEdit) && +now >= +new Date(event.startsAt) && +now <= end + 7 * 86_400_000;
 
   const going = event.viewer.rsvp === "going";
   const [partnerAd] = useAds("event-page", { interest: event.interest, exclude: event.id });
@@ -360,6 +366,11 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
                 <p className="flex items-center gap-2 text-sm font-semibold">
                   <Icon name="check" className="text-accent-text" /> You&apos;re hosting
                 </p>
+                {canCheckIn && !cancelled && (
+                  <Button variant="primary" className="w-full" onClick={() => setCheckingIn(true)}>
+                    <Icon name="users" size={15} /> Who came?
+                  </Button>
+                )}
                 {event.audience === "public" && !event.isPast && !cancelled && (
                   <Button href={`/ads/new?event=${event.id}`} variant="secondary" className="w-full">
                     <Icon name="megaphone" size={15} /> Promote this event
@@ -398,6 +409,12 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
                 )}
               </>
             )}
+            {/* community admins can tick people off too */}
+            {canCheckIn && !isHost && !cancelled && (
+              <Button className="w-full" onClick={() => setCheckingIn(true)}>
+                <Icon name="users" size={15} /> Who came?
+              </Button>
+            )}
             <Button className="w-full" onClick={toggleSave} loading={busy === "save"} aria-pressed={event.viewer.saved}>
               <Icon name="bookmark" /> {event.viewer.saved ? "Saved" : "Save for later"}
             </Button>
@@ -428,6 +445,7 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
         </aside>
       </div>
 
+      {checkingIn && <WhoCame eventId={event.id} onClose={() => setCheckingIn(false)} />}
       {editing && <EditModal event={event} open={editing} onClose={() => setEditing(false)} onSaved={onChange} />}
       <Modal open={cancelling} onClose={() => setCancelling(false)} title="Cancel this event?" description="Attendees will see it as cancelled. You can't undo this." size="sm">
         <div className="flex justify-end gap-2">

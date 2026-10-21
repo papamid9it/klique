@@ -7,4 +7,8 @@ type P = { id: string };
 /** The crew's chat (members only). `?after=<id>` returns only newer messages. */
 export const GET = withApi<P, "required">({ auth: "required" }, async ({ req, params, viewer }) => listCrewMessages(viewer, params.id, readQuery(req, crewMessagesQuery).after));
 
-export const POST = withApi<P, "required">({ auth: "required" }, async ({ req, params, viewer }) => created(await postCrewMessage(viewer, params.id, (await readJson(req, crewMessageSchema)).body)));
+/** Post to the chat; `replyToId` answers an earlier message (its author is told). */
+export const POST = withApi<P, "required">({ auth: "required" }, async ({ req, params, viewer }) => {
+  const { body, replyToId } = await readJson(req, crewMessageSchema);
+  return created(await postCrewMessage(viewer, params.id, body, replyToId ?? null));
+});

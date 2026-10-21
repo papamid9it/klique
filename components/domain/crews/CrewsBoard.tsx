@@ -11,6 +11,8 @@ import { EmptyState, ErrorState } from "@/components/ui/States";
 import { cx } from "@/components/ui/cx";
 import { formatDateShort } from "@/lib/format";
 import { useApi } from "@/lib/hooks/useApi";
+import { useAppEvent } from "@/lib/appEvents";
+import { useRealtimeEvent } from "@/components/providers/RealtimeProvider";
 import { softNavigate } from "@/lib/nav";
 import type { EventDTO } from "@/lib/types";
 import { CrewRow, crewHref } from "./parts";
@@ -73,6 +75,9 @@ export function CrewsBoard({ slug, sub, eventId, onChanged }: { slug: string; su
 function EventCrewList({ event, onChanged }: { event: EventDTO; onChanged: () => void }) {
   const { requireAuth } = useAuth();
   const { data, loading, error, reload } = useApi(() => CrewService.forEvent(event.id), [event.id], { key: `crews:${event.id}` });
+  // joined or left the community (Join buttons appear), or a crew of yours changed: the list follows
+  useAppEvent("membership", () => void reload());
+  useRealtimeEvent(() => void reload(), { filter: (e) => e.type === "crew" && !e.chat, debounceMs: 400 });
   const [starting, setStarting] = useState(false);
   const crews = data?.crews ?? [];
   const start = () => requireAuth() && setStarting(true);

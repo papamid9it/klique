@@ -25,6 +25,8 @@ import { DeviceSettings } from "@/components/domain/account/DeviceSettings";
 import { NotificationSettings } from "@/components/domain/account/NotificationSettings";
 import { ResendButton } from "@/components/domain/account/EmailStatus";
 import { StylePicker, type StyleDraft } from "@/components/domain/account/StylePicker";
+import { PointsTab, UnlockDialog, styleAccess, usePointsWallet } from "@/components/domain/account/Points";
+import type { StyleKey } from "@/lib/points";
 import { UserName } from "@/components/ui/UserName";
 import { ProfileBanner, monthYear } from "@/components/domain/profile/ProfileParts";
 import { Avatar } from "@/components/ui/Avatar";
@@ -34,14 +36,24 @@ import { useApi } from "@/lib/hooks/useApi";
 import { MOODS, type MoodId } from "@/lib/moods";
 import type { UserMe } from "@/lib/types";
 
-type Tab = "account" | "profile" | "style" | "privacy" | "notifications" | "appearance";
-const GROUPS: { title: string; items: { id: Tab; label: string; icon: "user" | "edit" | "asterisk" | "shield" | "sliders" | "bell" }[] }[] = [
-  { title: "User settings", items: [{ id: "account", label: "My Account", icon: "user" }, { id: "profile", label: "Profile", icon: "edit" }, { id: "style", label: "Profile style", icon: "asterisk" }, { id: "privacy", label: "Privacy & Safety", icon: "shield" }] },
+type Tab = "account" | "profile" | "style" | "points" | "privacy" | "blocked" | "notifications" | "appearance";
+const GROUPS: { title: string; items: { id: Tab; label: string; icon: "user" | "edit" | "asterisk" | "coin" | "shield" | "ban" | "sliders" | "bell" }[] }[] = [
+  {
+    title: "User settings",
+    items: [
+      { id: "account", label: "My Account", icon: "user" },
+      { id: "profile", label: "Profile", icon: "edit" },
+      { id: "style", label: "Profile style", icon: "asterisk" },
+      { id: "points", label: "Rank & points", icon: "coin" },
+      { id: "privacy", label: "Privacy & Safety", icon: "shield" },
+      { id: "blocked", label: "Blocked people", icon: "ban" },
+    ],
+  },
   { title: "App settings", items: [{ id: "notifications", label: "Notifications", icon: "bell" }, { id: "appearance", label: "Appearance", icon: "sliders" }] },
 ];
-const TITLES: Record<Tab, string> = { account: "My Account", profile: "Profile", style: "Profile style", privacy: "Privacy & Safety", notifications: "Notifications", appearance: "Appearance" };
+const TITLES: Record<Tab, string> = { account: "My Account", profile: "Profile", style: "Profile style", points: "Rank & points", privacy: "Privacy & Safety", blocked: "Blocked people", notifications: "Notifications", appearance: "Appearance" };
 /** old anchors (#messages, #safety, #mood…) still land somewhere sensible */
-const HASH: Record<string, Tab> = { account: "account", profile: "profile", style: "style", design: "style", privacy: "privacy", messages: "privacy", safety: "privacy", appearance: "appearance", mood: "appearance", notifications: "notifications" };
+const HASH: Record<string, Tab> = { account: "account", profile: "profile", style: "style", design: "style", points: "points", wallet: "points", rank: "points", privacy: "privacy", messages: "privacy", safety: "privacy", blocked: "blocked", blocks: "blocked", appearance: "appearance", mood: "appearance", notifications: "notifications" };
 
 /** A titled block inside a tab: small caps heading, optional intro, then the content. */
 function Block({ title, intro, children }: { title: string; intro?: string; children: React.ReactNode }) {
@@ -408,8 +420,10 @@ function ProfileTab({ me }: { me: UserMe }) {
 }
 
 /** Banner, picture frame and name style, saved on their own. */
-function StyleTab({ me }: { me: UserMe }) {
+function StyleTab({ me, go }: { me: UserMe; go: (t: Tab) => void }) {
   const { setUser } = useAuth();
+  const { data: wallet, setData: setWallet } = usePointsWallet();
+  const [unlocking, setUnlocking] = useState<StyleKey | null>(null);
   const toast = useToast();
   const [style, setStyle] = useState<StyleDraft>(() => styleOf(me));
   const [busy, setBusy] = useState(false);
@@ -440,8 +454,38 @@ function StyleTab({ me }: { me: UserMe }) {
   return (
     <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_17rem]">
       <form onSubmit={save} className="space-y-5">
-        <p className="text-sm text-ink-muted">How you show up around klique: your banner, a frame around your picture and a style for your name. All free.</p>
-        <StylePicker value={style} onChange={setStyle} name={me.displayName} avatarUrl={me.avatarUrl ?? null} />
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="max-w-md text-sm text-ink-muted">How you show up around klique. Your banner is free. {wallet?.allFree ? "As a site admin, every frame and name style is free for you." : <>Frames and name styles cost points{wallet ? ` and last ${wallet.config.unlockDays} days` : ""}.</>}</p>
+          <button type="button" onClick={() => go("points")} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-line bg-surface px-3.5 text-[13px] font-semibold hover:bg-raised">
+            <Icon name="coin" size={15} /> <span className="font-mono">{(wallet?.balance ?? me.points ?? 0).toLocaleString("en-NG")}</span> points
+          </button>
+        </div>
+        <StylePicker
+          value={style}
+          onChange={setStyle}
+          name={me.displayName}
+          avatarUrl={me.avatarUrl ?? null}
+          access={wallet ? (k) => styleAccess(wallet, k) : undefined}
+          onLocked={setUnlocking}
+          worn={{ avatarFrame: saved.avatarFrame, nameEffect: saved.nameEffect }}
+        />
+        {unlocking && (
+          <UnlockDialog
+            key={unlocking}
+            k={unlocking}
+            wallet={wallet}
+            me={me}
+            onClose={() => setUnlocking(null)}
+            onGetPoints={() => go("points")}
+            onDone={(w) => {
+              setWallet(w);
+              // put it on straight away; they still press Save
+              const [kind, id] = unlocking.split(":");
+              setStyle((st) => ({ ...st, ...(kind === "frame" ? { avatarFrame: id } : { nameEffect: id }) }));
+              setUnlocking(null);
+            }}
+          />
+        )}
         {error && (
           <p role="alert" className="text-sm font-medium text-danger">
             {error}
@@ -485,11 +529,22 @@ export default function SettingsPage() {
 
   // Deep links (/settings#profile, #privacy, the old #safety…) open that category.
   useEffect(() => {
-    const t = HASH[window.location.hash.slice(1)];
+    // ?tab=points (where Paystack and notifications send people) or #points
+    const t = HASH[window.location.hash.slice(1)] ?? HASH[new URLSearchParams(window.location.search).get("tab") ?? ""];
     if (t) {
       setTab(t);
       setMenu(false);
     }
+    // a link to another category while already here (/settings#points from the account menu)
+    const onHash = () => {
+      const h = HASH[window.location.hash.slice(1)];
+      if (h) {
+        setTab(h);
+        setMenu(false);
+      }
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
   const close = useCallback(() => {
@@ -596,14 +651,17 @@ export default function SettingsPage() {
             </div>
             {tab === "account" && <AccountTab me={user} go={select} onSignOut={out} onEverywhere={everywhere} busy={busy} />}
             {tab === "profile" && <ProfileTab me={user} />}
-            {tab === "style" && <StyleTab me={user} />}
+            {tab === "style" && <StyleTab me={user} go={select} />}
+            {tab === "points" && <PointsTab me={user} onStyle={() => select("style")} />}
             {tab === "privacy" && (
               <div className="space-y-6">
                 <PrefsSections me={user} />
-                <Block title="Blocked people" intro="People you've blocked can't message you.">
-                  <BlockedList />
-                </Block>
               </div>
+            )}
+            {tab === "blocked" && (
+              <Block title="People you've blocked" intro="People you've blocked can't message you. Unblock someone to let them back in.">
+                <BlockedList />
+              </Block>
             )}
             {tab === "notifications" && (
               <div className="space-y-6">

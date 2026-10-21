@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AdService } from "@/app/services/AdService";
 import { ReportDialog } from "@/components/domain/ReportDialog";
 import { usePlace } from "@/components/providers/PlaceProvider";
@@ -56,6 +56,31 @@ function Label({ ad, onReport }: { ad: AdDTO; onReport: () => void }) {
   );
 }
 
+/**
+ * Count one view when at least half the ad has been on screen (so a hidden side column, or an ad fetched and then
+ * replaced, never counts). Previews in the editors have no real id and are never counted.
+ */
+function useSeen<T extends HTMLElement>(id: string) {
+  const ref = useRef<T>(null);
+  const counted = useRef<string | null>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || counted.current === id || !/^[a-f0-9]{24}$/.test(id) || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((e) => e.isIntersecting) || counted.current === id) return;
+        counted.current = id;
+        AdService.view(id);
+        io.disconnect();
+      },
+      { threshold: 0.5 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [id]);
+  return ref;
+}
+
 function useReport(ad: AdDTO) {
   const [open, setOpen] = useState(false);
   return {
@@ -78,8 +103,9 @@ function Art({ ad, className }: { ad: AdDTO; className?: string }) {
 /** Same footprint as an event card, for the home feed and search results. */
 export function SponsoredCard({ ad }: { ad: AdDTO }) {
   const report = useReport(ad);
+  const seen = useSeen<HTMLElement>(ad.id);
   return (
-    <article className="flex flex-col overflow-hidden rounded-card border border-line bg-surface">
+    <article ref={seen} className="flex flex-col overflow-hidden rounded-card border border-line bg-surface">
       <AdLink ad={ad} className="block" label={ad.title}>
         <Art ad={ad} className="aspect-[16/9] w-full" />
       </AdLink>
@@ -107,8 +133,9 @@ export function SponsoredCard({ ad }: { ad: AdDTO }) {
 /** Same footprint as an event row, for the events list. */
 export function SponsoredRow({ ad }: { ad: AdDTO }) {
   const report = useReport(ad);
+  const seen = useSeen<HTMLElement>(ad.id);
   return (
-    <article className="flex items-center gap-3.5 rounded-card border border-line bg-surface p-3 sm:gap-4 sm:p-3.5">
+    <article ref={seen} className="flex items-center gap-3.5 rounded-card border border-line bg-surface p-3 sm:gap-4 sm:p-3.5">
       <AdLink ad={ad} className="shrink-0" label={ad.title}>
         <Art ad={ad} className="size-14 rounded-xl sm:size-[4.5rem]" />
       </AdLink>
@@ -132,8 +159,9 @@ export function SponsoredRow({ ad }: { ad: AdDTO }) {
 /** A compact box for side columns (home rail, event page). */
 export function SponsoredBox({ ad, image = true }: { ad: AdDTO; image?: boolean }) {
   const report = useReport(ad);
+  const seen = useSeen<HTMLElement>(ad.id);
   return (
-    <section aria-label="Sponsored" className="rounded-card border border-line bg-surface p-4">
+    <section ref={seen} aria-label="Sponsored" className="rounded-card border border-line bg-surface p-4">
       {image && ad.imageUrl && (
         <AdLink ad={ad} className="mb-3 block" label={ad.title}>
           <Art ad={ad} className="aspect-[2/1] w-full rounded-xl" />

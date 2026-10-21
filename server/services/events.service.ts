@@ -309,6 +309,11 @@ export async function updateEvent(viewer: IUser, id: string, patch: z.infer<type
   // People who said they're going hear about a cancellation or a new time.
   const cancelledNow = patch.cancelled === true && !event.cancelled;
   const movedNow = !cancelledNow && patch.startsAt !== undefined && +patch.startsAt !== +event.startsAt;
+  const placeNow = !cancelledNow && !movedNow && patch.venue !== undefined && patch.venue.trim() !== (event.venue ?? "").trim() && !!patch.venue.trim();
+  if (placeNow) {
+    const going = await Rsvp.find({ eventId: event._id, status: "going", userId: { $ne: viewer._id } }).select("userId").lean<{ userId: Types.ObjectId }[]>();
+    notify(going.map((g) => g.userId), { title: "New place", body: `${set.title ?? event.title} is now at ${patch.venue}.`, data: { type: "event", id } }, { category: "events", ref: `event:${id}` });
+  }
   if (cancelledNow || movedNow) {
     const going = await Rsvp.find({ eventId: event._id, status: "going", userId: { $ne: viewer._id } }).select("userId").lean<{ userId: Types.ObjectId }[]>();
     notify(
@@ -336,7 +341,10 @@ export async function deleteEvent(viewer: IUser, id: string) {
   }
   if (!allowed) throw forbidden("Only the host or a community admin can delete this event.");
 
+  // people going hear that it's gone (unless it was already cancelled, and they were told then)
+  const going = event.cancelled || +event.startsAt < Date.now() ? [] : await Rsvp.find({ eventId: event._id, status: "going", userId: { $ne: viewer._id } }).select("userId").lean<{ userId: Types.ObjectId }[]>();
   await purgeEvent(event);
+  if (going.length) notify(going.map((g) => g.userId), { title: "Event removed", body: `${event.title} was taken down, so it's off.`, data: { href: "/events" } }, { category: "events", ref: `event:${sid(event._id)}` });
   return { deleted: true };
 }
 
@@ -398,7 +406,7 @@ export async function getAttendees(viewer: IUser | null, id: string): Promise<At
     _id: { $in: rsvps.map((r) => r.userId) },
     $or: [{ attendancePublic: true }, { _id: viewer._id }],
   })
-    .select("handle displayName avatarUrl avatarFrame nameEffect country city")
+    .select("handle displayName avatarUrl avatarFrame nameEffect rank country city")
     .limit(24)
     .lean<IUser[]>();
 
@@ -409,6 +417,7 @@ export async function getAttendees(viewer: IUser | null, id: string): Promise<At
     avatarUrl: u.avatarUrl,
     avatarFrame: u.avatarFrame ?? null,
     nameEffect: u.nameEffect ?? null,
+    rank: u.rank ?? 1,
     country: u.country ?? "NG",
     city: u.city,
   }));

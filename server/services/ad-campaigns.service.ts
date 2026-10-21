@@ -125,6 +125,7 @@ const httpUrl = (u: string) => {
   }
 };
 
+const count = (n: number, word: string) => `${n.toLocaleString("en-NG")} ${word}${n === 1 ? "" : "s"}`;
 const dateLabel = (d: Date) => d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "Africa/Lagos" });
 
 /** Check what's being promoted and that this person may promote it; returns the fields to store. */
@@ -226,7 +227,8 @@ export async function updateCampaign(viewer: IUser, id: string, input: z.infer<t
   const pricing = await getAdPricing();
   const fields = await cleanInput(viewer, input, pricing);
   const amount = adPrice(pricing, fields.placements!, fields.reach!, fields.days!);
-  await AdCampaign.updateOne({ _id: c._id }, { $set: { ...fields, amount, status: "pending", reviewNote: "", reviewedBy: null, reviewedAt: null } });
+  // a changed ad can cost something else, so the next payment starts a fresh checkout
+  await AdCampaign.updateOne({ _id: c._id }, { $set: { ...fields, amount, status: "pending", reviewNote: "", reviewedBy: null, reviewedAt: null, paymentRef: null, paymentUrl: null } });
   tellAdmins(viewer, { title: fields.title ?? c.title, amount });
   return getMyCampaign(viewer, id);
 }
@@ -245,8 +247,18 @@ export async function payCampaign(viewer: IUser, id: string): Promise<{ authoriz
   const c = await myCampaign(viewer, id);
   if (c.status !== "approved") throw conflict(c.status === "paid" ? "This ad is already paid for." : "You can pay once an admin has approved your ad.");
   if (!paystackConfig()) throw badRequest("Card payments aren't set up yet. An admin will tell you how to pay by transfer.");
-  const reference = c.paymentRef ?? `kad_${randomBytes(9).toString("hex")}`;
-  if (!c.paymentRef) await AdCampaign.updateOne({ _id: c._id }, { $set: { paymentRef: reference } });
+  // Paying again (they closed the checkout, or came back later): Paystack won't open a second checkout with the
+  // same reference, so check the first one went through, and if not send them back to that same checkout.
+  if (c.paymentRef && c.paymentUrl) {
+    const prev = await paystack<{ status: string; amount: number; currency: string; paid_at?: string }>(`/transaction/verify/${encodeURIComponent(c.paymentRef)}`).catch(() => null);
+    if (prev?.status === "success") {
+      await fulfilCampaign(c.paymentRef, prev);
+      throw conflict("This ad is already paid for. It's starting now.");
+    }
+    return { authorizationUrl: c.paymentUrl, reference: c.paymentRef };
+  }
+  const reference = `kad_${randomBytes(9).toString("hex")}`;
+  await AdCampaign.updateOne({ _id: c._id }, { $set: { paymentRef: reference } });
   const data = await paystack<{ authorization_url: string }>("/transaction/initialize", {
     method: "POST",
     body: {
@@ -258,6 +270,7 @@ export async function payCampaign(viewer: IUser, id: string): Promise<{ authoriz
       metadata: { purpose: "ad_campaign", campaignId: sid(c._id), cancel_action: `${appUrl()}/ads` },
     },
   });
+  await AdCampaign.updateOne({ _id: c._id }, { $set: { paymentUrl: data.authorization_url } });
   return { authorizationUrl: data.authorization_url, reference };
 }
 
@@ -377,7 +390,7 @@ export async function runAdLifecycle(now = new Date()): Promise<number> {
     const a = c.adId ? await Ad.findById(c.adId).select("impressions clicks").lean<Pick<IAd, "impressions" | "clicks">>() : null;
     await notifyNow(
       [c.userId],
-      { title: `Your ad has ended: ${c.title}`, body: `Seen ${(a?.impressions ?? 0).toLocaleString("en-NG")} times, ${(a?.clicks ?? 0).toLocaleString("en-NG")} taps.`, data: { href: "/ads" } },
+      { title: `Your ad has ended: ${c.title}`, body: `${count(a?.impressions ?? 0, "view")}, ${count(a?.clicks ?? 0, "tap")}.`, data: { href: "/ads" } },
       { category: "ads", ref: `ad:${sid(c._id)}` },
     );
     sent++;

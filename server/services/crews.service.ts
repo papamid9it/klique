@@ -4,10 +4,12 @@ import type { z } from "zod";
 import type { CrewCardDTO, CrewDTO, CrewMessageDTO, CrewStanding, EventCrewsDTO, MyCrewDTO } from "@/lib/types";
 import { badRequest, conflict, forbidden, notFound } from "../http/errors";
 import { rateLimit } from "../http/rate-limit";
-import { Crew, CrewMember, CrewMessage, type ICrew, type ICrewMember, type ICrewMessage } from "../models/Crew";
+import { Crew, CrewMember, CrewMessage, CrewRead, type ICrew, type ICrewMember, type ICrewMessage, type ICrewRead } from "../models/Crew";
 import { Community, type ICommunity } from "../models/Community";
 import { Event, type IEvent } from "../models/Event";
 import { Membership } from "../models/Membership";
+import { Notification } from "../models/Notification";
+import { MembershipRequest } from "../models/MembershipRequest";
 import { Subcommunity, type ISubcommunity } from "../models/Subcommunity";
 import type { IUser } from "../models/User";
 import { canViewEvent } from "../policies/access";
@@ -94,6 +96,27 @@ async function spaceBlock(viewer: IUser, event: Pick<IEvent, "communityId" | "su
   }
   const c = await Community.findById(event.communityId).select("name").lean<Pick<ICommunity, "name">>();
   return `Join ${c?.name ?? "the community"} to start or join a crew.`;
+}
+
+/**
+ * The space to join first, when that's what stands between this viewer and the event's crews: the community
+ * (also when the event is in one of its groups and they aren't in the community yet), else the group.
+ * The crew page turns it into a "Join …" / "Ask to join …" button.
+ */
+async function spaceNeed(viewer: IUser, event: Pick<IEvent, "communityId" | "subcommunityId">): Promise<CrewDTO["viewer"]["joinSpace"]> {
+  if (!event.communityId) return null;
+  const [community, inCommunity] = await Promise.all([
+    Community.findById(event.communityId).select("slug name privacy").lean<Pick<ICommunity, "slug" | "name" | "privacy">>(),
+    Membership.exists({ userId: viewer._id, communityId: event.communityId, subcommunityId: null, status: "active" }),
+  ]);
+  if (!community) return null;
+  const requested = async (subcommunityId: Types.ObjectId | null) => !!(await MembershipRequest.exists({ userId: viewer._id, communityId: event.communityId, subcommunityId, status: "pending" }));
+  if (!inCommunity) return { slug: community.slug, sub: null, name: community.name, ask: community.privacy === "private", requested: await requested(null) };
+  if (!event.subcommunityId) return null;
+  if (await Membership.exists({ userId: viewer._id, communityId: event.communityId, subcommunityId: event.subcommunityId, status: "active" })) return null;
+  const g = await Subcommunity.findById(event.subcommunityId).select("slug name visibility").lean<Pick<ISubcommunity, "slug" | "name" | "visibility">>();
+  if (!g) return null;
+  return { slug: community.slug, sub: g.slug, name: g.name, ask: g.visibility === "private", requested: await requested(event.subcommunityId) };
 }
 
 /** Tell everyone in a crew (and anyone in `also`) that it changed, so their open pages refresh by themselves. */
@@ -207,6 +230,7 @@ export async function getCrew(viewer: IUser | null, crewId: string): Promise<Cre
   else if (card.isFull) joinBlockedReason = "This crew is full.";
   else if (await CrewMember.exists({ eventId: event._id, userId: viewer._id })) joinBlockedReason = "You're already in another crew for this event.";
   else joinBlockedReason = await spaceBlock(viewer, event);
+  const joinSpace = viewer && !standing && joinBlockedReason && !card.closed && !card.isFull ? await spaceNeed(viewer, event) : null;
 
   return {
     ...card,
@@ -221,8 +245,45 @@ export async function getCrew(viewer: IUser | null, crewId: string): Promise<Cre
       canChat: inCrew,
       canJoin: !standing && joinBlockedReason === null,
       joinBlockedReason: standing ? null : joinBlockedReason,
+      joinSpace,
     },
   };
+}
+
+/** Unread messages (other people's, capped at 99) in each of these crews' chats, for this person. */
+export async function crewUnreadCounts(userId: Types.ObjectId, crewIds: Types.ObjectId[]): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (!crewIds.length) return out;
+  const reads = await CrewRead.find({ userId, crewId: { $in: crewIds } }).lean<ICrewRead[]>();
+  const readBy = new Map(reads.map((r) => [sid(r.crewId), r.lastReadMessageId]));
+  await Promise.all(
+    crewIds.slice(0, 50).map(async (id) => {
+      const after = readBy.get(sid(id));
+      const n = await CrewMessage.countDocuments({ crewId: id, userId: { $ne: userId }, ...(after ? { _id: { $gt: after } } : {}) }, { limit: 99 });
+      if (n) out.set(sid(id), n);
+    }),
+  );
+  return out;
+}
+
+/**
+ * You've seen the chat up to `messageId` (never moves backwards). `looking`: they have it open right now
+ * (fetching it), as opposed to having just posted.
+ */
+async function markCrewRead(userId: Types.ObjectId, crew: Pick<ICrew, "_id" | "expiresAt">, messageId: Types.ObjectId, looking = true) {
+  await CrewRead.updateOne(
+    { userId, crewId: crew._id, $or: [{ lastReadMessageId: null }, { lastReadMessageId: { $lt: messageId } }] },
+    { $set: { lastReadMessageId: messageId, ...(looking ? { readAt: new Date() } : {}), expiresAt: crew.expiresAt } },
+    { upsert: true },
+  ).catch(async (e) => {
+    if (!isDup(e)) throw e;
+    // already further along: still note that they're looking
+    if (looking) await CrewRead.updateOne({ userId, crewId: crew._id }, { $set: { readAt: new Date() } });
+  });
+  // the chat's bundled notifications are read now too
+  const cleared = await Notification.updateMany({ userId, groupKey: { $in: [`crew-chat:${sid(crew._id)}`, `crew-reply:${sid(crew._id)}`] }, read: false }, { $set: { read: true } });
+  // the bell (and the notifications page) catch up in every open tab
+  if (cleared.modifiedCount) publish([rtChannel.user(sid(userId))], { type: "notify", category: "crews", ref: `crew:${sid(crew._id)}`, inbox: true });
 }
 
 /**
@@ -242,12 +303,14 @@ export async function myCommunityCrews(viewer: IUser, slug: string): Promise<MyC
   ]);
   const eventById = new Map(events.map((e) => [sid(e._id), e]));
   const subById = new Map(subs.map((s) => [sid(s._id), s.slug]));
+  const activeIn = crews.filter((c) => rows.some((r) => sid(r.crewId) === sid(c._id) && r.status === "active")).map((c) => c._id);
+  const unread = await crewUnreadCounts(viewer._id, activeIn);
   const out: MyCrewDTO[] = [];
   for (const c of crews) {
     const e = eventById.get(sid(c.eventId));
     if (!e || !(await canViewEvent(e, viewer))) continue;
     const r = rows.find((x) => sid(x.crewId) === sid(c._id))!;
-    out.push({ id: sid(c._id), area: c.area, eventId: sid(e._id), eventTitle: e.title, meetupAt: c.meetupAt.toISOString(), memberCount: c.memberCount, standing: standingOf(r)!, sub: c.subcommunityId ? (subById.get(sid(c.subcommunityId)) ?? null) : null });
+    out.push({ id: sid(c._id), area: c.area, eventId: sid(e._id), eventTitle: e.title, meetupAt: c.meetupAt.toISOString(), memberCount: c.memberCount, standing: standingOf(r)!, sub: c.subcommunityId ? (subById.get(sid(c.subcommunityId)) ?? null) : null, unreadCount: unread.get(sid(c._id)) ?? 0 });
   }
   return out;
 }
@@ -313,15 +376,18 @@ export async function updateCrew(viewer: IUser, crewId: string, patch: z.infer<t
   await Crew.updateOne({ _id: crew._id }, { $set: patch });
   void pingCrew(crew._id);
 
-  // a new place or time is worth a ping to everyone in
+  // anything people in the crew would want to know about gets a ping: place, time, where from, the note
   const moved = (patch.meetupPoint && patch.meetupPoint !== crew.meetupPoint) || (patch.meetupAt && +patch.meetupAt !== +crew.meetupAt);
-  if (moved) {
+  const changes: string[] = [];
+  if (moved) changes.push(`now meeting at ${patch.meetupPoint ?? crew.meetupPoint}, ${at(patch.meetupAt ?? crew.meetupAt)}`);
+  if (patch.area && patch.area !== crew.area) changes.push(`coming from ${patch.area}`);
+  if (patch.note !== undefined && patch.note.trim() !== crew.note.trim()) changes.push(patch.note.trim() ? `new note: "${snippet(patch.note.trim(), 80)}"` : "the note was removed");
+  if (changes.length) {
     const members = await CrewMember.find({ crewId: crew._id, status: "active", userId: { $ne: viewer._id } }).select("userId").lean<{ userId: Types.ObjectId }[]>();
-    const point = patch.meetupPoint ?? crew.meetupPoint;
-    const time = patch.meetupAt ?? crew.meetupAt;
-    notify(members.map((m) => m.userId), { title: `Crew update · ${event.title}`, body: `Now meeting at ${point}, ${at(time)}.`, data: { type: "crew", id: sid(crew._id) } }, { category: "crews", ref: `crew:${sid(crew._id)}` });
-    if (patch.meetupAt) await Crew.updateOne({ _id: crew._id }, { $set: { reminderSentAt: null } });
+    const body = changes.join("; ");
+    notify(members.map((m) => m.userId), { title: `Crew update · ${event.title}`, body: body[0].toUpperCase() + body.slice(1) + ".", data: { type: "crew", id: sid(crew._id) } }, { category: "crews", groupKey: `crew-update:${sid(crew._id)}`, many: (n) => `Your crew changed ${n} times · ${event.title}`, ref: `crew:${sid(crew._id)}` });
   }
+  if (patch.meetupAt && +patch.meetupAt !== +crew.meetupAt) await Crew.updateOne({ _id: crew._id }, { $set: { reminderSentAt: null } });
   return getCrew(viewer, crewId);
 }
 
@@ -371,7 +437,7 @@ export async function joinCrew(viewer: IUser, crewId: string, message: string): 
     notify([crew.hostId], { title: `${viewer.displayName} joined your crew`, body: `Going to ${event.title} from ${crew.area}.`, data: { type: "crew", id: sid(crew._id) } }, { category: "crews", groupKey: `crew-join:${sid(crew._id)}`, many: (n) => `${n} people joined your crew from ${crew.area}`, ref: `crew:${sid(crew._id)}` });
   } else {
     void pingCrew(crew._id);
-    notify([crew.hostId], { title: `${viewer.displayName} wants to join your crew`, body: message ? `"${message}"` : `For ${event.title}. Tap to accept or decline.`, data: { type: "crew", id: sid(crew._id) } }, { category: "crews", groupKey: `crew-req:${sid(crew._id)}`, many: (n) => `${n} people want to join your crew from ${crew.area}`, ref: `crew:${sid(crew._id)}` });
+    notify([crew.hostId], { title: `${viewer.displayName} wants to join your crew`, body: message ? `"${message}"` : `For ${event.title}. Tap to accept or decline.`, data: { href: `/crews/${sid(crew._id)}?tab=requests` } }, { category: "crews", groupKey: `crew-req:${sid(crew._id)}`, many: (n) => `${n} people want to join your crew from ${crew.area}`, ref: `crew:${sid(crew._id)}` });
   }
   return getCrew(viewer, crewId);
 }
@@ -383,7 +449,10 @@ export async function leaveCrew(viewer: IUser, crewId: string): Promise<CrewDTO>
   if (!me) return getCrew(viewer, crewId);
   if (me.role === "host") throw badRequest("You're the host. Call the crew off instead, or hand it over by asking someone else to start one.");
   await CrewMember.deleteOne({ _id: me._id });
-  if (me.status === "active") await Crew.updateOne({ _id: crew._id, memberCount: { $gt: 1 } }, { $inc: { memberCount: -1 } });
+  if (me.status === "active") {
+    await Crew.updateOne({ _id: crew._id, memberCount: { $gt: 1 } }, { $inc: { memberCount: -1 } });
+    notify([crew.hostId], { title: `${viewer.displayName} left your crew`, body: `From ${crew.area}. A spot is open again.`, data: { type: "crew", id: sid(crew._id) } }, { category: "crews", groupKey: `crew-left:${sid(crew._id)}`, many: (n) => `${n} people left your crew from ${crew.area}`, ref: `crew:${sid(crew._id)}` });
+  }
   void pingCrew(crew._id);
   return getCrew(viewer, crewId);
 }
@@ -395,6 +464,7 @@ export async function decideRequest(viewer: IUser, crewId: string, userId: strin
   if (!accept) {
     await CrewMember.deleteOne({ _id: row._id });
     void pingCrew(crew._id, { also: [row.userId] });
+    notify([row.userId], declined(crew, event), { category: "crews", ref: `crew:${sid(crew._id)}` });
     return getCrew(viewer, crewId);
   }
   if (+event.startsAt <= Date.now()) throw badRequest("The event has started, so the crew is closed.");
@@ -416,6 +486,7 @@ export async function decideAll(viewer: IUser, crewId: string, accept: boolean):
   if (!accept) {
     await CrewMember.deleteMany({ _id: { $in: pending.map((p) => p._id) } });
     void pingCrew(crew._id, { also: pending.map((p) => p.userId) });
+    notify(pending.map((p) => p.userId), declined(crew, event), { category: "crews", ref: `crew:${sid(crew._id)}` });
     return getCrew(viewer, crewId);
   }
   if (+event.startsAt <= Date.now()) throw badRequest("The event has started, so the crew is closed.");
@@ -439,8 +510,17 @@ export async function removeMember(viewer: IUser, crewId: string, userId: string
   await CrewMember.deleteOne({ _id: row._id });
   if (row.status === "active") await Crew.updateOne({ _id: crew._id, memberCount: { $gt: 1 } }, { $inc: { memberCount: -1 } });
   void pingCrew(crew._id, { also: [row.userId] });
+  const event = await Event.findById(crew.eventId).select("_id title").lean<Pick<IEvent, "_id" | "title">>();
+  notify([row.userId], row.status === "active" ? { title: "You were removed from a crew", body: `The host took you off the crew from ${crew.area}${event ? ` to ${event.title}` : ""}. You can join another one.`, data: { type: "event", id: sid(crew.eventId) } } : declined(crew, event), { category: "crews", ref: `crew:${sid(crew._id)}` });
   return getCrew(viewer, crewId);
 }
+
+/** "Not this time": a request that wasn't accepted, kindly, with a way to find another crew. */
+const declined = (crew: Pick<ICrew, "area" | "eventId">, event: Pick<IEvent, "title"> | null) => ({
+  title: "Your crew request wasn't accepted",
+  body: `The crew from ${crew.area} couldn't take you this time. ${event ? `Other crews are going to ${event.title}.` : "Try another crew."}`,
+  data: { type: "event", id: sid(crew.eventId) },
+});
 
 /* ------------------------------------------------------------------ */
 /* Chat                                                                */
@@ -453,9 +533,24 @@ async function assertInCrew(viewer: IUser, crewId: string) {
   return { crew, event };
 }
 
+const snippet = (s: string, n = 120) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+
 async function toMessages(rows: ICrewMessage[], viewer: IUser): Promise<CrewMessageDTO[]> {
-  const briefs = await loadBriefs(rows.map((r) => r.userId));
-  return rows.map((r) => ({ id: sid(r._id), body: r.body, createdAt: r.createdAt.toISOString(), author: briefs.get(sid(r.userId)) ?? GHOST, mine: sid(r.userId) === sid(viewer._id) }));
+  const parentIds = rows.map((r) => r.replyToId).filter((x): x is Types.ObjectId => !!x);
+  const parents = parentIds.length ? await CrewMessage.find({ _id: { $in: parentIds } }).select("userId body").lean<Pick<ICrewMessage, "_id" | "userId" | "body">[]>() : [];
+  const briefs = await loadBriefs([...rows.map((r) => r.userId), ...parents.map((p) => p.userId)]);
+  const parentBy = new Map(parents.map((p) => [sid(p._id), p]));
+  return rows.map((r) => {
+    const p = r.replyToId ? parentBy.get(sid(r.replyToId)) : undefined;
+    return {
+      id: sid(r._id),
+      body: r.body,
+      createdAt: r.createdAt.toISOString(),
+      author: briefs.get(sid(r.userId)) ?? GHOST,
+      mine: sid(r.userId) === sid(viewer._id),
+      replyTo: p ? { id: sid(p._id), author: (briefs.get(sid(p.userId)) ?? GHOST).displayName, body: snippet(p.body) } : null,
+    };
+  });
 }
 
 /** The latest 100 messages, oldest first; with `after`, only newer ones (for polling). */
@@ -465,14 +560,41 @@ export async function listCrewMessages(viewer: IUser, crewId: string, after?: st
     .sort({ _id: -1 })
     .limit(100)
     .lean<ICrewMessage[]>();
+  // looking at the chat reads it (an empty poll still says you're looking)
+  if (rows[0]) await markCrewRead(viewer._id, crew, rows[0]._id);
+  else await CrewRead.updateOne({ userId: viewer._id, crewId: crew._id }, { $set: { readAt: new Date() }, $setOnInsert: { lastReadMessageId: null, expiresAt: crew.expiresAt } }, { upsert: true }).catch(() => {});
   return toMessages(rows.reverse(), viewer);
 }
 
-export async function postCrewMessage(viewer: IUser, crewId: string, body: string): Promise<CrewMessageDTO> {
-  const { crew } = await assertInCrew(viewer, crewId);
+/** People whose open chat checked in within the last 3 minutes are reading along: no notification for them. */
+const READING_MS = 3 * 60_000;
+
+export async function postCrewMessage(viewer: IUser, crewId: string, body: string, replyToId: string | null = null): Promise<CrewMessageDTO> {
+  const { crew, event } = await assertInCrew(viewer, crewId);
   rateLimit(`crew-msg:${sid(viewer._id)}`, 30, 60_000);
-  const row = (await CrewMessage.create({ crewId: crew._id, userId: viewer._id, body, expiresAt: crew.expiresAt })).toObject();
+  const parent = replyToId ? await CrewMessage.findOne({ _id: oid(replyToId, "message"), crewId: crew._id }).select("userId").lean<Pick<ICrewMessage, "_id" | "userId">>() : null;
+  if (replyToId && !parent) throw notFound("That message is gone.");
+  const row = (await CrewMessage.create({ crewId: crew._id, userId: viewer._id, body, replyToId: parent?._id ?? null, expiresAt: crew.expiresAt })).toObject();
+  await markCrewRead(viewer._id, crew, row._id, false);
   void pingCrew(crew._id, { chat: true });
+
+  // tell the rest of the crew, except anyone reading along right now
+  const [members, reading] = await Promise.all([
+    CrewMember.find({ crewId: crew._id, status: "active", userId: { $ne: viewer._id } }).select("userId").lean<{ userId: Types.ObjectId }[]>(),
+    CrewRead.find({ crewId: crew._id, readAt: { $gte: new Date(Date.now() - READING_MS) } }).select("userId").lean<{ userId: Types.ObjectId }[]>(),
+  ]);
+  const busy = new Set(reading.map((r) => sid(r.userId)));
+  const away = members.map((m) => m.userId).filter((u) => !busy.has(sid(u)));
+  const repliedTo = parent && sid(parent.userId) !== sid(viewer._id) && away.some((u) => sid(u) === sid(parent.userId)) ? parent.userId : null;
+  const where = `crew from ${crew.area}`;
+  const data = { type: "crew", id: sid(crew._id) };
+  if (repliedTo) {
+    notify([repliedTo], { title: `${viewer.displayName} replied to you`, body: `${snippet(body, 100)} · ${where}`, data }, { category: "mentions", groupKey: `crew-reply:${sid(crew._id)}`, many: (n) => `${n} replies to you in your ${where}`, ref: `crew:${sid(crew._id)}`, pushOnce: true });
+  }
+  const rest = away.filter((u) => !repliedTo || sid(u) !== sid(repliedTo));
+  if (rest.length) {
+    notify(rest, { title: `${viewer.displayName} in your ${where}`, body: `${snippet(body, 100)} · ${event.title}`, data }, { category: "crews", groupKey: `crew-chat:${sid(crew._id)}`, many: (n) => `${n} new messages in your ${where}`, ref: `crew:${sid(crew._id)}`, pushOnce: true });
+  }
   return (await toMessages([row], viewer))[0];
 }
 
@@ -484,7 +606,7 @@ export async function postCrewMessage(viewer: IUser, crewId: string, body: strin
 export async function purgeCrews(where: Record<string, unknown>) {
   const ids = await Crew.find(where).distinct("_id");
   if (!ids.length) return;
-  await Promise.all([Crew.deleteMany({ _id: { $in: ids } }), CrewMember.deleteMany({ crewId: { $in: ids } }), CrewMessage.deleteMany({ crewId: { $in: ids } })]);
+  await Promise.all([Crew.deleteMany({ _id: { $in: ids } }), CrewMember.deleteMany({ crewId: { $in: ids } }), CrewMessage.deleteMany({ crewId: { $in: ids } }), CrewRead.deleteMany({ crewId: { $in: ids } })]);
 }
 
 /** An event's times changed: its crews now disappear a day after the new end. */
@@ -496,7 +618,35 @@ export async function syncCrewExpiry(event: Pick<IEvent, "_id" | "startsAt" | "e
     Crew.updateMany({ _id: { $in: ids } }, { $set: { expiresAt } }),
     CrewMember.updateMany({ crewId: { $in: ids } }, { $set: { expiresAt } }),
     CrewMessage.updateMany({ crewId: { $in: ids } }, { $set: { expiresAt } }),
+    CrewRead.updateMany({ crewId: { $in: ids } }, { $set: { expiresAt } }),
   ]);
+}
+
+/**
+ * Someone left (or was removed from) a community or one of its groups: they can't be in its crews any more.
+ * Leaving a community covers its groups' crews too. Crews they host are called off (everyone in them is told);
+ * in the rest they leave, and requests they sent are dropped. Returns how many crews they were taken out of.
+ */
+export async function leaveSpaceCrews(userId: Types.ObjectId, communityId: Types.ObjectId, subcommunityId: Types.ObjectId | null): Promise<number> {
+  const where = subcommunityId ? { subcommunityId } : { communityId };
+  const crews = await Crew.find(where).select("_id hostId area eventId").lean<Pick<ICrew, "_id" | "hostId" | "area" | "eventId">[]>();
+  if (!crews.length) return 0;
+  const rows = await CrewMember.find({ userId, crewId: { $in: crews.map((c) => c._id) } }).lean<ICrewMember[]>();
+  for (const r of rows) {
+    const crew = crews.find((c) => sid(c._id) === sid(r.crewId))!;
+    if (r.role === "host") {
+      const others = await CrewMember.find({ crewId: crew._id, userId: { $ne: userId } }).select("userId").lean<{ userId: Types.ObjectId }[]>();
+      await pingCrew(crew._id);
+      await purgeCrews({ _id: crew._id });
+      const event = await Event.findById(crew.eventId).select("title").lean<Pick<IEvent, "title">>();
+      notify(others.map((m) => m.userId), { title: "Crew called off", body: `The host left, so the crew from ${crew.area}${event ? ` to ${event.title}` : ""} is off. You can join or start another one.`, data: { type: "event", id: sid(crew.eventId) } }, { category: "crews", ref: `crew:${sid(crew._id)}` });
+    } else {
+      await CrewMember.deleteOne({ _id: r._id });
+      if (r.status === "active") await Crew.updateOne({ _id: crew._id, memberCount: { $gt: 1 } }, { $inc: { memberCount: -1 } });
+      void pingCrew(crew._id, { also: [userId] });
+    }
+  }
+  return rows.length;
 }
 
 /** Someone deleted their account: their crews are called off, and they leave the others. */
@@ -508,6 +658,7 @@ export async function removeUserFromCrews(userId: Types.ObjectId) {
     if (r.status === "active") await Crew.updateOne({ _id: r.crewId, memberCount: { $gt: 1 } }, { $inc: { memberCount: -1 } });
   }
   await CrewMessage.deleteMany({ userId });
+  await CrewRead.deleteMany({ userId });
 }
 
 /** "Crew meets soon" to everyone in a crew, about an hour before its meetup. Each crew once. */

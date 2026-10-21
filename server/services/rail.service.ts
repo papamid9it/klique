@@ -5,6 +5,8 @@ import { Community, type ICommunity } from "../models/Community";
 import { Membership, type IMembership } from "../models/Membership";
 import type { IUser } from "../models/User";
 import { channelVisibleToRole } from "../policies/access";
+import { Crew, CrewMember } from "../models/Crew";
+import { crewUnreadCounts } from "./crews.service";
 import { sid } from "./helpers";
 
 const ZERO = "000000000000000000000000";
@@ -34,7 +36,7 @@ export async function myCommunities(viewer: IUser): Promise<MyCommunityDTO[]> {
   const readBy = new Map(reads.map((r) => [sid(r.channelId), r.lastReadMessageId ? sid(r.lastReadMessageId) : null]));
   const guestOf = new Set(guest.map((g) => sid(g.channelId)));
 
-  const byCommunity = new Map<string, { unread: IChannel[]; last: Date | null }>();
+  const byCommunity = new Map<string, { unread: IChannel[]; last: Date | null; crewUnread?: boolean }>();
   for (const c of communities) byCommunity.set(sid(c._id), { unread: [], last: null });
   for (const ch of channels) {
     const role = ch.subcommunityId ? (groupRole.get(sid(ch.subcommunityId)) ?? null) : (parentRole.get(sid(ch.communityId)) ?? null);
@@ -47,16 +49,34 @@ export async function myCommunities(viewer: IUser): Promise<MyCommunityDTO[]> {
     if (last && (!read || last > read)) slot.unread.push(ch);
   }
 
-  // Unread @mentions (capped), only for channels that actually have unread messages.
+  // Unread @mentions and unread message counts (both capped), only for channels that actually have unread.
   const mentionTotals = new Map<string, number>();
+  const unreadTotals = new Map<string, number>();
+  const add = (m: Map<string, number>, k: string, n: number) => n && m.set(k, (m.get(k) ?? 0) + n);
   const toCount = [...byCommunity.values()].flatMap((v) => v.unread).slice(0, 60);
   await Promise.all(
     toCount.map(async (ch) => {
       const after = readBy.get(sid(ch._id)) ?? ZERO;
-      const n = await ChannelMessage.countDocuments({ channelId: ch._id, mentions: viewer._id, deletedAt: null, _id: { $gt: after } }, { limit: 99 });
-      if (n) mentionTotals.set(sid(ch.communityId), (mentionTotals.get(sid(ch.communityId)) ?? 0) + n);
+      const [n, u] = await Promise.all([
+        ChannelMessage.countDocuments({ channelId: ch._id, mentions: viewer._id, deletedAt: null, _id: { $gt: after } }, { limit: 99 }),
+        ChannelMessage.countDocuments({ channelId: ch._id, authorId: { $ne: viewer._id }, deletedAt: null, _id: { $gt: after } }, { limit: 99 }),
+      ]);
+      add(mentionTotals, sid(ch.communityId), n);
+      add(unreadTotals, sid(ch.communityId), u);
     }),
   );
+  // ...and your crews' chats there
+  const inCrews = await CrewMember.find({ userId: viewer._id, status: "active" }).select("crewId").lean<{ crewId: Types.ObjectId }[]>();
+  if (inCrews.length) {
+    const crews = await Crew.find({ _id: { $in: inCrews.map((r) => r.crewId) }, communityId: { $in: ids } }).select("communityId").lean<{ _id: Types.ObjectId; communityId: Types.ObjectId }[]>();
+    const counts = await crewUnreadCounts(viewer._id, crews.map((c) => c._id));
+    for (const c of crews) {
+      const n = counts.get(sid(c._id)) ?? 0;
+      add(unreadTotals, sid(c.communityId), n);
+      const slot = byCommunity.get(sid(c.communityId));
+      if (n && slot) slot.crewUnread = true;
+    }
+  }
 
   return communities
     .map((c): MyCommunityDTO => {
@@ -69,7 +89,8 @@ export async function myCommunities(viewer: IUser): Promise<MyCommunityDTO[]> {
         coverImage: c.coverImage,
         privacy: c.privacy,
         role: parentRole.get(sid(c._id))!,
-        unread: slot.unread.length > 0,
+        unread: slot.unread.length > 0 || !!slot.crewUnread,
+        unreadCount: Math.min(99, unreadTotals.get(sid(c._id)) ?? 0),
         mentions: Math.min(99, mentionTotals.get(sid(c._id)) ?? 0),
         lastActivityAt: (slot.last ?? null)?.toISOString() ?? null,
       };

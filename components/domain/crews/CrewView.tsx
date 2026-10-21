@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRealtime, useRealtimeEvent } from "@/components/providers/RealtimeProvider";
 import { softNavigate } from "@/lib/nav";
+import { useAppEvent } from "@/lib/appEvents";
+import { SpaceService } from "@/app/services/SpaceService";
 import { errorMessage, isApiError } from "@/app/ApiCore";
 import { CrewService } from "@/app/services/CrewService";
 import { ConfirmModal, SpaceError } from "@/components/domain/space/parts";
@@ -13,6 +15,7 @@ import { useAuth } from "@/components/providers/AuthProvider";
 import { ProfileTrigger } from "@/components/providers/ProfileCardProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import { Avatar } from "@/components/ui/Avatar";
+import { RankBadge } from "@/components/ui/RankBadge";
 import { Button } from "@/components/ui/Button";
 import { TextArea, TextField } from "@/components/ui/Field";
 import { Icon } from "@/components/ui/Icon";
@@ -30,7 +33,7 @@ import { Faces, StandingTag, crewHref, fromLagos, lagosInputs } from "./parts";
  * panel refresh when you join, leave or call a crew off. On its own page, a crew that belongs to a community
  * moves into that community.
  */
-export function CrewView({ id, embedded, onChanged }: { id: string; embedded?: boolean; onChanged?: () => void }) {
+export function CrewView({ id, embedded, onChanged, onRead, tab }: { id: string; embedded?: boolean; onChanged?: () => void; onRead?: () => void; tab?: string | null }) {
   const router = useRouter();
   const { data: crew, loading, error, status, reload, setData } = useApi(() => CrewService.get(id), [id], { key: `crew:${id}` });
   // someone asked, joined, left or was let in (you included): the page updates by itself
@@ -39,8 +42,11 @@ export function CrewView({ id, embedded, onChanged }: { id: string; embedded?: b
       void reload();
       onChanged?.();
     },
-    { filter: (e) => (e.type === "crew" && e.crewId === id && !e.chat) || (e.type === "notify" && e.ref === `crew:${id}`), debounceMs: 250 },
+    // (a community request approved also changes what you can do here)
+    { filter: (e) => (e.type === "crew" && e.crewId === id && !e.chat) || (e.type === "notify" && (e.ref === `crew:${id}` || e.category === "community")), debounceMs: 250 },
   );
+  // you joined, asked to join or left a community somewhere in this tab: the Join button follows at once
+  useAppEvent("membership", () => void reload());
   // without a live connection, look again every so often
   const { connected } = useRealtime();
   useEffect(() => {
@@ -48,7 +54,7 @@ export function CrewView({ id, embedded, onChanged }: { id: string; embedded?: b
     const t = setInterval(() => document.visibilityState === "visible" && void reload(), 15_000);
     return () => clearInterval(t);
   }, [connected, reload]);
-  const target = crew && !embedded && crew.space ? crewHref(crew) : null;
+  const target = crew && !embedded && crew.space ? crewTabHref(crew, tab ?? null) : null;
   useEffect(() => {
     if (target) router.replace(target);
   }, [target, router]);
@@ -66,6 +72,8 @@ export function CrewView({ id, embedded, onChanged }: { id: string; embedded?: b
   return (
     <Crew
       crew={crew}
+      tab={tab ?? null}
+      onRead={onRead}
       embedded={!!embedded}
       onChange={(c) => {
         setData(c);
@@ -77,7 +85,13 @@ export function CrewView({ id, embedded, onChanged }: { id: string; embedded?: b
   );
 }
 
-function Crew({ crew, embedded, onChange, onGone, reload }: { crew: CrewDTO; embedded: boolean; onChange: (c: CrewDTO) => void; onGone?: () => void; reload: () => Promise<void> }) {
+/** The crew's own address, plus "&tab=…" / "?tab=…" for a sub-page such as its join requests. */
+const crewTabHref = (crew: CrewDTO, tab: string | null) => {
+  const base = crewHref(crew);
+  return tab ? `${base}${base.includes("?") ? "&" : "?"}tab=${tab}` : base;
+};
+
+function Crew({ crew, tab, embedded, onChange, onGone, onRead, reload }: { crew: CrewDTO; tab: string | null; embedded: boolean; onChange: (c: CrewDTO) => void; onGone?: () => void; onRead?: () => void; reload: () => Promise<void> }) {
   const router = useRouter();
   const toast = useToast();
   const { requireAuth } = useAuth();
@@ -85,7 +99,6 @@ function Crew({ crew, embedded, onChange, onGone, reload }: { crew: CrewDTO; emb
   const [asking, setAsking] = useState(false);
   const [editing, setEditing] = useState(false);
   const [callingOff, setCallingOff] = useState(false);
-  const [reviewing, setReviewing] = useState(false);
   const v = crew.viewer;
   const isHost = v.standing === "host";
   const inCrew = v.standing === "host" || v.standing === "member";
@@ -105,11 +118,32 @@ function Crew({ crew, embedded, onChange, onGone, reload }: { crew: CrewDTO; emb
     }
   }
 
+  /** move between the crew and its sub-pages without reloading the community around it */
+  const go = (t: string | null, replace = false) => {
+    const href = crewTabHref(crew, t);
+    if (embedded) softNavigate(href, { replace });
+    else if (replace) router.replace(href, { scroll: false });
+    else router.push(href, { scroll: false });
+  };
+
   const join = () => {
     if (!requireAuth()) return;
     if (crew.joinMode === "approval") setAsking(true);
     else void act("join", () => CrewService.join(crew.id), "You're in the crew");
   };
+
+  if (tab === "requests" && isHost) {
+    return (
+      <RequestsPage
+        crew={crew}
+        busy={busy}
+        embedded={embedded}
+        onBack={() => go(null)}
+        onDecide={(userId, name, accept) => void act(`${accept ? "ok" : "no"}:${userId}`, () => CrewService.decide(crew.id, userId, accept), accept ? `${name} is in` : undefined)}
+        onAll={(accept) => void act(accept ? "all-ok" : "all-no", () => CrewService.decideAll(crew.id, accept), accept ? "Accepted" : "Declined")}
+      />
+    );
+  }
 
   return (
     <div className={embedded ? undefined : "mx-auto max-w-3xl"}>
@@ -195,6 +229,8 @@ function Crew({ crew, embedded, onChange, onGone, reload }: { crew: CrewDTO; emb
               <Button size="sm" variant="primary" onClick={join} loading={busy === "join"}>
                 {crew.joinMode === "open" ? "Join crew" : "Ask to join"}
               </Button>
+            ) : v.joinSpace ? (
+              <JoinSpaceButton space={v.joinSpace} crewOpen={crew.joinMode === "open"} />
             ) : (
               v.joinBlockedReason && <p className="text-xs text-ink-muted">{v.joinBlockedReason}</p>
             )}
@@ -202,9 +238,16 @@ function Crew({ crew, embedded, onChange, onGone, reload }: { crew: CrewDTO; emb
           </div>
         </div>
         {v.standing === "pending" && <p className="mt-3 text-sm text-ink-muted">You asked to join. The host will let you in, and you&apos;ll get a notification.</p>}
+        {v.joinSpace && (
+          <p className="mt-3 text-sm text-ink-muted">
+            {v.joinSpace.requested
+              ? `You asked to join ${v.joinSpace.name}. Once you're let in, you can join this crew right here.`
+              : `Crews are for members of ${v.joinSpace.name}. ${v.joinSpace.ask ? "Ask to join it" : "Join it"} and you can join this crew straight away.`}
+          </p>
+        )}
       </section>
 
-      {/* a compact bar however many ask; the list itself opens in a panel */}
+      {/* one compact line however many ask; the list itself is its own page */}
       {isHost && crew.requests.length > 0 && (
         <section className="mt-5 flex flex-wrap items-center gap-3 rounded-card border border-accent-text/60 bg-surface p-3.5" aria-label="Requests to join">
           <Faces people={crew.requests.slice(0, 4).map((r) => r.user)} total={crew.requests.length} size={30} />
@@ -216,19 +259,11 @@ function Crew({ crew, embedded, onChange, onGone, reload }: { crew: CrewDTO; emb
               Newest: {crew.requests[crew.requests.length - 1].user.displayName} · {Math.max(0, crew.maxMembers - crew.memberCount)} spots left
             </p>
           </div>
-          <Button size="sm" variant="primary" onClick={() => setReviewing(true)}>
-            Review
+          <Button size="sm" variant="primary" onClick={() => go("requests")}>
+            Requests · {crew.requests.length}
+            <Icon name="chevron-right" size={14} />
           </Button>
         </section>
-      )}
-      {reviewing && isHost && (
-        <RequestsModal
-          crew={crew}
-          busy={busy}
-          onClose={() => setReviewing(false)}
-          onDecide={(userId, name, accept) => void act(`${accept ? "ok" : "no"}:${userId}`, () => CrewService.decide(crew.id, userId, accept), accept ? `${name} is in` : undefined)}
-          onAll={(accept) => void act(accept ? "all-ok" : "all-no", () => CrewService.decideAll(crew.id, accept), accept ? "Accepted" : "Declined")}
-        />
       )}
 
       <div className={cx("mt-5 grid gap-5", inCrew && "lg:grid-cols-[16rem_1fr]")}>
@@ -240,6 +275,7 @@ function Crew({ crew, embedded, onChange, onGone, reload }: { crew: CrewDTO; emb
                 <ProfileTrigger handle={m.handle} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
                   <Avatar name={m.displayName} src={m.avatarUrl} size={30} />
                   <span className="truncate text-sm font-medium">{m.displayName}</span>
+                  <RankBadge rank={m.rank} />
                   {i === 0 && <span className="rounded bg-accent/15 px-1.5 text-[10px] font-bold tracking-wide text-accent-text uppercase">Host</span>}
                 </ProfileTrigger>
                 {isHost && i > 0 && (
@@ -257,7 +293,7 @@ function Crew({ crew, embedded, onChange, onGone, reload }: { crew: CrewDTO; emb
             ))}
           </ul>
         </section>
-        {inCrew && <CrewChat crewId={crew.id} />}
+        {inCrew && <CrewChat crewId={crew.id} onRead={onRead} />}
       </div>
 
       <p className="mt-6 flex items-center gap-2 text-xs text-ink-muted">
@@ -285,28 +321,58 @@ function Crew({ crew, embedded, onChange, onGone, reload }: { crew: CrewDTO; emb
 }
 
 /**
- * The host's queue of join requests, however long: searchable, scrolls inside the panel, oldest first, with
- * Accept / Decline per person and both for everyone at once. Closes itself when the queue is empty.
+ * The host's queue of join requests, on its own page so the crew page never grows with it: searchable,
+ * oldest first, Accept / Decline per person and both for everyone at once. Back to the crew when it's empty.
  */
-function RequestsModal({ crew, busy, onClose, onDecide, onAll }: { crew: CrewDTO; busy: string | null; onClose: () => void; onDecide: (userId: string, name: string, accept: boolean) => void; onAll: (accept: boolean) => void }) {
+function RequestsPage({ crew, busy, embedded, onBack, onDecide, onAll }: { crew: CrewDTO; busy: string | null; embedded: boolean; onBack: () => void; onDecide: (userId: string, name: string, accept: boolean) => void; onAll: (accept: boolean) => void }) {
   const [q, setQ] = useState("");
   const now = useNow();
   const needle = q.trim().toLowerCase().replace(/^@/, "");
   const list = needle ? crew.requests.filter((r) => r.user.displayName.toLowerCase().includes(needle) || r.user.handle.includes(needle)) : crew.requests;
   const room = Math.max(0, crew.maxMembers - crew.memberCount);
-  useEffect(() => {
-    if (!crew.requests.length) onClose();
-  }, [crew.requests.length, onClose]);
 
   return (
-    <Modal open onClose={onClose} title={`Asking to join · ${crew.requests.length}`} description={room ? `${room} ${room === 1 ? "spot" : "spots"} left. Tap a name to see their profile, mutual friends and communities first.` : "Your crew is full. To let more people in, raise the crew size (Edit) or remove someone."}>
-      <div className="space-y-3">
-        {crew.requests.length > 6 && <TextField label="Find someone" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name or @handle" />}
-        <ul className="max-h-[50vh] space-y-1.5 overflow-y-auto pr-1">
+    <div className={embedded ? undefined : "mx-auto max-w-3xl"}>
+      <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1.5 text-sm text-ink-muted hover:text-ink">
+        <Icon name="arrow-left" size={15} /> Crew from {crew.area}
+      </button>
+      <header className="mb-4 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="eyebrow mb-1">Asking to join</p>
+          <h1 className="text-[clamp(1.4rem,3vw,1.8rem)] font-bold tracking-[-0.03em]">
+            {crew.requests.length} {crew.requests.length === 1 ? "request" : "requests"}
+          </h1>
+          <p className="mt-1 text-sm text-ink-muted">{room ? `${room} ${room === 1 ? "spot" : "spots"} left. Tap a name to see their profile, mutual friends and communities first.` : "Your crew is full. To let more people in, raise the crew size (Edit) or remove someone."}</p>
+        </div>
+        {crew.requests.length > 0 && (
+          <div className="flex gap-2">
+            <Button size="sm" variant="ghost" loading={busy === "all-no"} onClick={() => onAll(false)}>
+              Decline all
+            </Button>
+            <Button size="sm" variant="primary" disabled={!room} loading={busy === "all-ok"} onClick={() => onAll(true)}>
+              {!room ? "Crew is full" : crew.requests.length <= room ? `Accept all ${crew.requests.length}` : `Accept the first ${room}`}
+            </Button>
+          </div>
+        )}
+      </header>
+      {crew.requests.length > 6 && (
+        <div className="mb-3 max-w-sm">
+          <TextField label="Find someone" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name or @handle" />
+        </div>
+      )}
+      {crew.requests.length === 0 ? (
+        <div className="rounded-card border border-dashed border-line p-8 text-center">
+          <p className="text-sm text-ink-muted">Nobody is waiting. New requests show up here by themselves.</p>
+          <Button size="sm" className="mt-3" onClick={onBack}>
+            Back to the crew
+          </Button>
+        </div>
+      ) : (
+        <ul className="divide-y divide-line overflow-hidden rounded-card border border-line bg-surface">
           {list.map((r) => (
-            <li key={r.user.id} className="flex items-center gap-3 rounded-control border border-line bg-raised/50 p-2.5">
+            <li key={r.user.id} className="flex items-center gap-3 px-4 py-3">
               <ProfileTrigger handle={r.user.handle} className="shrink-0">
-                <Avatar name={r.user.displayName} src={r.user.avatarUrl} size={34} />
+                <Avatar name={r.user.displayName} src={r.user.avatarUrl} size={38} frame={r.user.avatarFrame} />
               </ProfileTrigger>
               <div className="min-w-0 flex-1">
                 <ProfileTrigger handle={r.user.handle} className="block truncate text-left text-sm font-semibold hover:underline">
@@ -327,16 +393,41 @@ function RequestsModal({ crew, busy, onClose, onDecide, onAll }: { crew: CrewDTO
           ))}
           {list.length === 0 && <li className="py-6 text-center text-sm text-ink-muted">Nobody matches that.</li>}
         </ul>
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line pt-3">
-          <Button size="sm" variant="ghost" loading={busy === "all-no"} onClick={() => onAll(false)}>
-            Decline all
-          </Button>
-          <Button size="sm" variant="primary" disabled={!room} loading={busy === "all-ok"} onClick={() => onAll(true)}>
-            {!room ? "Crew is full" : crew.requests.length <= room ? `Accept all ${crew.requests.length}` : `Accept the first ${room}`}
-          </Button>
-        </div>
-      </div>
-    </Modal>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Join (or ask to join) the community or group a crew belongs to, right from the crew. The crew page reloads
+ * itself afterwards (SpaceService tells the app memberships changed), and its own Join button appears.
+ */
+function JoinSpaceButton({ space, crewOpen }: { space: NonNullable<CrewDTO["viewer"]["joinSpace"]>; crewOpen: boolean }) {
+  const toast = useToast();
+  const { requireAuth } = useAuth();
+  const [busy, setBusy] = useState(false);
+  if (space.requested)
+    return (
+      <Button size="sm" disabled>
+        <Icon name="clock" size={14} /> Asked to join {space.name}
+      </Button>
+    );
+  async function go() {
+    if (!requireAuth()) return;
+    setBusy(true);
+    try {
+      const res = await SpaceService.join(space.slug, space.sub ?? undefined);
+      toast(res.data.status === "joined" || res.data.status === "already_member" ? `You joined ${space.name}. ${crewOpen ? "Now join the crew." : "Now ask to join the crew."}` : res.data.message, "success");
+    } catch (e) {
+      toast(errorMessage(e), "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Button size="sm" variant="primary" loading={busy} onClick={() => void go()}>
+      {space.ask ? "Ask to join" : "Join"} {space.name}
+    </Button>
   );
 }
 
@@ -436,15 +527,30 @@ function EditCrewModal({ crew, onClose, onSaved }: { crew: CrewDTO; onClose: () 
   );
 }
 
-/** The crew's own chat: simple, text only, refreshed every few seconds while you look at it. */
-function CrewChat({ crewId }: { crewId: string }) {
+/**
+ * The crew's own chat: text, with replies (tap ↩ on a message). New messages arrive live; having it open marks
+ * it read (and tells `onRead`, so the unread counts around it drop at once).
+ */
+function CrewChat({ crewId, onRead }: { crewId: string; onRead?: () => void }) {
   const toast = useToast();
   const { data, setData } = useApi(() => CrewService.messages(crewId), [crewId], { key: `crew-chat:${crewId}` });
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
+  const [replyTo, setReplyTo] = useState<CrewMessageDTO | null>(null);
+  const [flash, setFlash] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const messages = data ?? [];
   const lastId = messages[messages.length - 1]?.id;
+
+  // the server marks it read whenever messages are fetched: let the counts around us follow
+  const readRef = useRef(onRead);
+  useEffect(() => {
+    readRef.current = onRead;
+  });
+  useEffect(() => {
+    if (data) readRef.current?.();
+  }, [data, lastId]);
 
   // new messages: instantly when realtime is on (a ping per message), and a slower check as a safety net
   const fetchNew = useCallback(async () => {
@@ -458,7 +564,8 @@ function CrewChat({ crewId }: { crewId: string }) {
   const { connected } = useRealtime();
   useRealtimeEvent(() => void fetchNew(), { filter: (e) => e.type === "crew" && e.crewId === crewId && !!e.chat });
   useEffect(() => {
-    const t = setInterval(() => document.visibilityState === "visible" && void fetchNew(), connected ? 30_000 : 4000);
+    // (also tells the server you're still reading, so you aren't notified about a chat you're looking at)
+    const t = setInterval(() => document.visibilityState === "visible" && void fetchNew(), connected ? 60_000 : 4000);
     return () => clearInterval(t);
   }, [fetchNew, connected]);
 
@@ -466,16 +573,33 @@ function CrewChat({ crewId }: { crewId: string }) {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
   }, [messages.length]);
 
+  function reply(m: CrewMessageDTO) {
+    setReplyTo(m);
+    inputRef.current?.focus();
+  }
+
+  /** jump to the message a reply quotes, and light it up for a moment */
+  function show(id: string) {
+    const el = listRef.current?.querySelector<HTMLElement>(`[data-msg="${id}"]`);
+    if (!el) return;
+    el.scrollIntoView({ block: "center", behavior: "smooth" });
+    setFlash(id);
+    setTimeout(() => setFlash((f) => (f === id ? null : f)), 1400);
+  }
+
   async function send() {
     const body = text.trim();
     if (!body || sending) return;
+    const answering = replyTo;
     setSending(true);
     setText("");
+    setReplyTo(null);
     try {
-      const res = await CrewService.send(crewId, body);
+      const res = await CrewService.send(crewId, body, answering?.id);
       setData((prev) => [...(prev ?? []).filter((m) => m.id !== res.data.id), res.data]);
     } catch (e) {
       setText(body);
+      setReplyTo(answering);
       toast(errorMessage(e), "error");
     } finally {
       setSending(false);
@@ -492,17 +616,44 @@ function CrewChat({ crewId }: { crewId: string }) {
           <p className="pt-10 text-center text-sm text-ink-muted">Say hi and sort out the plan: who&apos;s bringing what, splitting a ride, running late.</p>
         ) : (
           messages.map((m: CrewMessageDTO) => (
-            <div key={m.id} className={cx("flex gap-2.5", m.mine && "flex-row-reverse")}>
+            <div key={m.id} data-msg={m.id} className={cx("group/msg flex items-end gap-2.5", m.mine && "flex-row-reverse")}>
               <Avatar name={m.author.displayName} src={m.author.avatarUrl} size={28} />
-              <div className={cx("max-w-[80%] rounded-2xl px-3 py-2", m.mine ? "bg-accent text-accent-ink" : "bg-raised")}>
+              <div className={cx("max-w-[80%] rounded-2xl px-3 py-2 transition-shadow", m.mine ? "bg-accent text-accent-ink" : "bg-raised", flash === m.id && "ring-2 ring-accent-text")}>
                 {!m.mine && <p className="text-[11px] font-semibold opacity-80">{m.author.displayName}</p>}
+                {m.replyTo && (
+                  <button type="button" onClick={() => show(m.replyTo!.id)} className={cx("mt-0.5 mb-1 block w-full rounded-lg border-l-2 px-2 py-1 text-left text-[12px]", m.mine ? "border-accent-ink/50 bg-accent-ink/10" : "border-accent-text bg-surface/70")}>
+                    <span className="block font-semibold">{m.replyTo.author}</span>
+                    <span className="line-clamp-2 opacity-80">{m.replyTo.body}</span>
+                  </button>
+                )}
                 <p className="text-sm break-words whitespace-pre-wrap">{m.body}</p>
                 <p className="mt-0.5 text-right font-mono text-[10px] opacity-60">{formatTime(m.createdAt)}</p>
               </div>
+              <button
+                type="button"
+                onClick={() => reply(m)}
+                aria-label={`Reply to ${m.author.displayName}`}
+                title="Reply"
+                className="mb-1 inline-flex size-7 shrink-0 items-center justify-center rounded-full text-ink-muted opacity-60 transition hover:bg-raised hover:text-ink focus:opacity-100 md:opacity-0 md:group-hover/msg:opacity-100"
+              >
+                <Icon name="reply" size={14} />
+              </button>
             </div>
           ))
         )}
       </div>
+      {replyTo && (
+        <div className="flex items-center gap-2 border-t border-line bg-raised/50 px-4 py-2 text-[13px]">
+          <Icon name="reply" size={14} className="shrink-0 text-ink-muted" />
+          <span className="min-w-0 flex-1 truncate">
+            Replying to <span className="font-semibold">{replyTo.mine ? "yourself" : replyTo.author.displayName}</span>
+            <span className="text-ink-muted"> · {replyTo.body}</span>
+          </span>
+          <button type="button" onClick={() => setReplyTo(null)} aria-label="Cancel reply" className="inline-flex size-6 items-center justify-center rounded-full text-ink-muted hover:bg-line hover:text-ink">
+            <Icon name="x" size={13} />
+          </button>
+        </div>
+      )}
       <form
         className="flex items-end gap-2 border-t border-line p-3"
         onSubmit={(e) => {
@@ -514,18 +665,23 @@ function CrewChat({ crewId }: { crewId: string }) {
           Message the crew
         </label>
         <textarea
+          ref={inputRef}
           id="crew-msg"
           rows={1}
           value={text}
           maxLength={1000}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+            if (e.key === "Escape" && replyTo) {
+              e.preventDefault();
+              e.stopPropagation();
+              setReplyTo(null);
+            } else if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();
               void send();
             }
           }}
-          placeholder="Message the crew"
+          placeholder={replyTo ? `Reply to ${replyTo.mine ? "yourself" : replyTo.author.displayName}` : "Message the crew"}
           style={{ fieldSizing: "content" } as React.CSSProperties}
           className="max-h-32 min-h-10 flex-1 resize-none rounded-[1.25rem] border border-line bg-raised px-4 py-2 text-sm focus:border-accent-text focus:outline-none"
         />

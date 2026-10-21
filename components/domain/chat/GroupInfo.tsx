@@ -15,8 +15,8 @@ import { LIMITS } from "@/lib/constants";
 import type { SubcommunityDTO } from "@/lib/types";
 import { UserName } from "@/components/ui/UserName";
 
-/** Right pane while you're inside a group: what it is, whose it is, who runs it. */
-export function GroupInfo({ group: g, onLeave, onNavigate }: { group: SubcommunityDTO; onLeave: () => void; onNavigate?: () => void }) {
+/** A group's About (opened from its name menu): what it is, whose it is, who runs it, share. Leave is in that menu. */
+export function GroupInfo({ group: g, onNavigate }: { group: SubcommunityDTO; onNavigate?: () => void }) {
   const parentHref = `/communities/${g.parent.slug}`;
   const base = `${parentHref}?g=${g.slug}`;
   const canSeeStaff = g.viewer.canView && !g.moderationOnly;
@@ -24,7 +24,7 @@ export function GroupInfo({ group: g, onLeave, onNavigate }: { group: Subcommuni
   const v = g.viewer;
 
   return (
-    <div className="flex flex-col gap-6 px-5 py-5 pt-14 lg:pt-5">
+    <div className="flex flex-col gap-6">
       <section>
         <Link href={parentHref} onClick={onNavigate} className="inline-flex items-center gap-1.5 text-[13px] font-medium text-accent-text hover:underline">
           <Icon name="arrow-left" size={13} /> Group of {g.parent.name}
@@ -42,7 +42,7 @@ export function GroupInfo({ group: g, onLeave, onNavigate }: { group: Subcommuni
         <p className={g.description ? "mt-3 text-sm leading-relaxed whitespace-pre-wrap text-ink" : "mt-3 text-sm text-ink-muted"}>{g.description || "No description yet."}</p>
         <div className="mt-4 flex flex-wrap items-center gap-2">
           {v.isMember ? (
-            v.role === "owner" ? <Chip tone="accent">You own this</Chip> : <Button size="sm" onClick={onLeave}>Leave</Button>
+            v.role === "owner" && <Chip tone="accent">You own this</Chip>
           ) : v.canManage ? (
             <Button size="sm" variant="primary" href={`${base}&view=members`} onClick={onNavigate}>
               <Icon name="userplus" size={13} /> Add yourself

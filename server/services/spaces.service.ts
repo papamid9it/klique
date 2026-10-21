@@ -34,6 +34,7 @@ import { loadBriefs, toPosts } from "../serializers";
 import { escapeRegex, newInviteCode, recountMembers, sid } from "./helpers";
 import { rateLimit } from "../http/rate-limit";
 import { notify } from "./push.service";
+import { leaveSpaceCrews } from "./crews.service";
 
 /* ------------------------------------------------------------------ */
 /* Resolving a space from URL params                                   */
@@ -159,6 +160,8 @@ export async function leaveSpace(viewer: IUser, space: Space, access: SpaceAcces
   await ChannelMember.deleteMany({ userId: viewer._id, ...spaceFilter(space) });
   await recountMembers(space.community._id, space.sub?._id ?? null);
   if (!space.sub) await dropParentOnlyGroups(space.community._id, [viewer._id]);
+  // their crews here go with it (the leave button warned them)
+  await leaveSpaceCrews(viewer._id, space.community._id, space.sub?._id ?? null);
   return { left: true, cancelledRequest: false };
 }
 
@@ -242,6 +245,16 @@ export async function changeRole(viewer: IUser, space: Space, access: SpaceAcces
   if (sid(target.userId) === sid(viewer._id)) throw forbidden("You can't change your own role.");
   if (!canSetRole(access.role, target.role, role)) throw forbidden("Only the owner can change roles.");
   await Membership.updateOne({ _id: target._id }, { role });
+  if (role !== target.role) {
+    const href = space.sub ? `/communities/${space.community.slug}?g=${space.sub.slug}` : `/communities/${space.community.slug}`;
+    notify(
+      [target.userId],
+      role === "admin"
+        ? { title: `You're now an admin of ${spaceLabel(space)}`, body: `${viewer.displayName} made you an admin. You can manage members, channels and events there.`, data: { href } }
+        : { title: `You're no longer an admin of ${spaceLabel(space)}`, body: "You're still a member.", data: { href } },
+      { category: "community", ref: `community:${sid(space.community._id)}` },
+    );
+  }
   return { userId, role };
 }
 
@@ -269,6 +282,7 @@ export async function removeMember(viewer: IUser, space: Space, access: SpaceAcc
 
   await recountMembers(space.community._id, space.sub?._id ?? null);
   if (!space.sub) await dropParentOnlyGroups(space.community._id, [target.userId]);
+  await leaveSpaceCrews(target.userId, space.community._id, space.sub?._id ?? null);
   return { userId, removed: true, banned: ban };
 }
 

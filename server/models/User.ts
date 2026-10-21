@@ -36,6 +36,9 @@ export interface IUser {
   notifyPrefs?: Record<string, { inApp?: boolean; push?: boolean }>;
   /** points balance (lib/points); changed only with atomic $inc next to a PointTxn */
   points?: number;
+  /** Hype earned (lib/ranks) and the rank it reached (never goes down) */
+  hype?: number;
+  rank?: number;
   /** set by a site admin: the account can't sign in or use the API */
   suspendedAt?: Date | null;
   suspendedReason?: string;
@@ -71,6 +74,8 @@ const UserSchema = new Schema<IUser>(
     isDemo: { type: Boolean, default: false },
     notifyPrefs: { type: Schema.Types.Mixed, default: {} },
     points: { type: Number, default: 0, min: 0 },
+    hype: { type: Number, default: 0, min: 0 },
+    rank: { type: Number, default: 1, min: 1 },
     suspendedAt: { type: Date, default: null },
     suspendedReason: { type: String, default: "", maxlength: 300 },
   },

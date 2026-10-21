@@ -14,6 +14,8 @@ import { ConfirmModal } from "@/components/domain/space/parts";
 import { useToast } from "@/components/providers/ToastProvider";
 import { Dropdown, type MenuEntry } from "@/components/ui/Dropdown";
 import { Icon, type IconName } from "@/components/ui/Icon";
+import { crewLeaveWarning } from "@/components/domain/crews/parts";
+import { CountBadge } from "@/components/ui/CountBadge";
 import { cx } from "@/components/ui/cx";
 import { compactCount } from "@/lib/format";
 import type { BoardDTO, ChannelCategoryDTO, ChannelDTO, ChannelGroupDTO, ChannelsDTO, CommunityDTO, MyCrewDTO } from "@/lib/types";
@@ -36,7 +38,7 @@ async function copy(text: string, toast: (m: string, t?: "success" | "error") =>
 
 /**
  * Left pane of the community workspace, laid out like Discord: the community name is a dropdown
- * (invite, settings, create, leave), the non-chat views sit under it, then the channel tree.
+ * (about, invite, settings, create, leave), the non-chat views sit under it, then the channel tree.
  * Every management action lives in a dropdown; every change is re-authorized on the server.
  */
 export function ChannelList({
@@ -52,6 +54,7 @@ export function ChannelList({
   onNavigate,
   onLeave,
   onReport,
+  onAbout,
   crews = [],
   activeCrew = null,
 }: {
@@ -70,6 +73,8 @@ export function ChannelList({
   onNavigate?: () => void;
   onLeave: () => void;
   onReport: () => void;
+  /** open the community's (or the open group's) About: description, admins, what's coming up, share */
+  onAbout: () => void;
   /** crews you're in (or asked to join) for this community's events */
   crews?: MyCrewDTO[];
   /** id of the crew being viewed */
@@ -107,6 +112,7 @@ export function ChannelList({
   const inviteCommunity = () => (c.privacy === "private" && manage ? go(`${base}?settings=invites`) : void copy(absoluteUrl(base), toast, "Community link copied"));
 
   const headerMenu: MenuEntry[] = [
+    { label: "About this community", icon: "info", onSelect: onAbout },
     { label: "Invite people", icon: "userplus", onSelect: inviteCommunity },
     ...(manage ? ([{ label: "Community settings", icon: "sliders", onSelect: () => go(`${base}?settings=overview`) }] as MenuEntry[]) : []),
     ...(manage || c.canCreateGroup ? ([{ type: "sep" }] as MenuEntry[]) : []),
@@ -233,7 +239,7 @@ export function ChannelList({
         open={!!leavingGroup}
         onClose={() => setLeavingGroup(null)}
         title={`Leave ${leavingGroup?.name}?`}
-        description={leavingGroup?.visibility === "private" ? "It's invite-only, so you'll need a new invite to get back in." : "You can rejoin any time."}
+        description={(leavingGroup?.visibility === "private" ? "It's invite-only, so you'll need a new invite to get back in." : "You can rejoin any time.") + crewLeaveWarning(crews, leavingGroup?.slug ?? null)}
         confirmLabel="Leave group"
         onConfirm={async () => {
           if (!leavingGroup) return;
@@ -308,9 +314,10 @@ export function ChannelList({
                 >
                   <Icon name="pin" size={16} className="shrink-0" />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[14px] font-medium">From {x.area}</span>
+                    <span className={cx("block truncate text-[14px]", x.unreadCount && !on ? "font-semibold text-ink" : "font-medium")}>From {x.area}</span>
                     <span className="block truncate text-[11.5px] opacity-80">{x.standing === "pending" ? "Asked to join · " : ""}{x.eventTitle}</span>
                   </span>
+                  {!on && <CountBadge n={x.unreadCount ?? 0} />}
                 </SoftLink>
               </li>
             );
@@ -344,6 +351,7 @@ export function ChannelList({
     const gBase = `${base}?g=${g.slug}`;
     const gManage = g.role === "owner" || g.role === "admin";
     const gMenu: MenuEntry[] = [
+      { label: "About this group", icon: "info", onSelect: onAbout },
       { label: "Invite people", icon: "userplus", onSelect: () => (g.visibility === "private" && gManage ? go(`${gBase}&settings=invites`) : void copy(absoluteUrl(gBase), toast, "Group link copied")) },
       ...(gManage
         ? ([
@@ -564,13 +572,7 @@ function ChannelRow({ ch, href, active, menu, onNavigate }: { ch: ChannelDTO; hr
         <Icon name={ch.type === "announcement" ? "megaphone" : ch.type === "voice" ? "mic" : "hash"} size={16} className="shrink-0" />
         <span className="truncate">{ch.name}</span>
         {ch.visibility !== "all" && <Icon name="lock" size={12} className="shrink-0 opacity-70" aria-label={ch.visibility === "invite" ? "Invite-only channel" : "Admins only"} />}
-        {!active && ch.mentions > 0 ? (
-          <span className="ml-auto inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-accent px-1.5 text-[11px] leading-none font-bold text-accent-ink" aria-label={`${ch.mentions} mentions`}>
-            {ch.mentions > 99 ? "99+" : ch.mentions}
-          </span>
-        ) : (
-          ch.unread && !active && <span className="ml-auto size-2 shrink-0 rounded-full bg-accent" aria-label="Unread messages" />
-        )}
+        {!active && <CountBadge n={Math.max(ch.unreadCount ?? 0, ch.mentions)} mention={ch.mentions > 0} className="ml-auto" label={ch.mentions > 0 ? `${ch.unreadCount || ch.mentions} unread, ${ch.mentions} mention you` : `${ch.unreadCount} unread`} />}
       </SoftLink>
       {menu && (
         <span className="absolute top-1/2 right-1.5 -translate-y-1/2 opacity-100 transition focus-within:opacity-100 has-[[aria-expanded=true]]:opacity-100 md:opacity-0 md:group-hover/ch:opacity-100">

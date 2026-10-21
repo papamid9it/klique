@@ -1,5 +1,5 @@
 import "server-only";
-import type { Types } from "mongoose";
+import { Types } from "mongoose";
 import type { AdDTO, AdInput, AdminAdDTO, AdSlot } from "@/lib/types";
 import { isInterestId } from "@/lib/constants";
 import { parseScope, scopesOverlap, WORLD } from "@/lib/places";
@@ -67,8 +67,8 @@ export async function serveAds(
   const chosen = pickWeighted(eligible, q.count);
   if (!chosen.length) return [];
   const dtos = new Map((await toEvents(chosen.filter((a) => a.kind === "event").map((a) => visible.get(sid(a.eventId!))!), viewer)).map((e) => [e.id, e]));
-  // being sent counts as being shown (the slot is always on screen when it's asked for)
-  await Ad.updateMany({ _id: { $in: chosen.map((a) => a._id) } }, { $inc: { impressions: 1 } });
+  // Not counted as a view here: a page can ask more than once (e.g. before it knows your city), and some slots are
+  // hidden on phones. The browser reports a view once the ad is actually on screen (recordView).
 
   return chosen.map((a) => {
     const ev = a.kind === "event" ? (dtos.get(sid(a.eventId!)) ?? null) : null;
@@ -84,6 +84,12 @@ export async function serveAds(
       event: ev,
     };
   });
+}
+
+/** The ad was on screen (the browser reports it once per showing). What advertisers see as "views". */
+export async function recordView(id: string) {
+  if (Types.ObjectId.isValid(id)) await Ad.updateOne({ _id: id, status: "active" }, { $inc: { impressions: 1 } });
+  return { ok: true };
 }
 
 export async function recordClick(id: string) {

@@ -37,6 +37,8 @@ export interface IAdCampaign {
   reviewedBy: Types.ObjectId | null;
   reviewedAt: Date | null;
   paymentRef: string | null;
+  /** the Paystack checkout for paymentRef, reused if they press Pay again */
+  paymentUrl: string | null;
   paymentMethod: "paystack" | "manual" | null;
   paidAt: Date | null;
   /** the running ad, once paid */
@@ -73,6 +75,7 @@ const AdCampaignSchema = new Schema<IAdCampaign>(
     reviewedBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
     reviewedAt: { type: Date, default: null },
     paymentRef: { type: String, default: null },
+    paymentUrl: { type: String, default: null },
     paymentMethod: { type: String, enum: ["paystack", "manual", null], default: null },
     paidAt: { type: Date, default: null },
     adId: { type: Schema.Types.ObjectId, ref: "Ad", default: null },

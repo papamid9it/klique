@@ -142,6 +142,11 @@ export interface NotifyMeta {
   many?: (n: number) => string;
   /** what changed, so open pages can refresh themselves: "crew:<id>", "community:<id>", "topic:<id>"… */
   ref?: string;
+  /**
+   * With `groupKey`: push only the first one of a bundle (while it sits unread, later ones just update the
+   * inbox line). For chatty things like crew chat.
+   */
+  pushOnce?: boolean;
 }
 
 const INBOX_DAYS = 60;
@@ -175,11 +180,17 @@ async function fanOut(userIds: (Types.ObjectId | string)[], p: PushPayload, meta
   if (!meta) return deliver(ids, p);
   const rows = await User.find({ _id: { $in: ids } }).select("notifyPrefs").lean<Pick<IUser, "_id" | "notifyPrefs">[]>();
   const inApp: string[] = [];
-  const push: string[] = [];
+  let push: string[] = [];
   for (const u of rows) {
     const pref = notifyPrefsOf(u.notifyPrefs)[meta.category];
     if (pref.inApp) inApp.push(sid(u._id));
     if (pref.push) push.push(sid(u._id));
+  }
+  if (meta.pushOnce && meta.groupKey && push.length) {
+    // already buzzed for this bundle and they haven't looked yet: don't buzz again
+    const open = await Notification.find({ userId: { $in: push }, groupKey: meta.groupKey, read: false }).select("userId").lean<{ userId: Types.ObjectId }[]>();
+    const skip = new Set(open.map((o) => sid(o.userId)));
+    push = push.filter((id) => !skip.has(id));
   }
   await Promise.all([inApp.length ? toInbox(inApp, p, meta) : null, push.length ? deliver(push, p) : null]);
   publish(

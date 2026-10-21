@@ -60,8 +60,8 @@ export function useMutualCommunities(view: ProfileView | null): CommunityCardDTO
 }
 
 /**
- * The action row shared by the popover and the modal: Message · friend button · "⋯" menu.
- * Owns the block and report dialogs so both surfaces behave identically.
+ * The action row shared by the popover and the modal: Message · friend button · "⋯" menu (the modal only; the
+ * popover stays simple and its "View full profile" leads to the menu). Owns the block and report dialogs.
  */
 export function ProfileActions({
   view,
@@ -69,6 +69,7 @@ export function ProfileActions({
   onReload,
   onNavigate,
   layout = "row",
+  menu: withMenu = true,
 }: {
   view: ProfileView;
   onFriendship: (s: FriendStatusDTO) => void;
@@ -76,6 +77,8 @@ export function ProfileActions({
   /** called when the action leaves this surface (opens a conversation, another page) */
   onNavigate: () => void;
   layout?: "row" | "stack";
+  /** show the "⋯" menu (remove friend, view as a page, block, report) */
+  menu?: boolean;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -146,7 +149,7 @@ export function ProfileActions({
           <Icon name="message" size={15} /> Message
         </Button>
         <FriendButton handle={p.handle} status={view.friendship} onChange={onFriendship} noMenu />
-        <OverflowMenu items={menu} label="Profile options" align="left" />
+        {withMenu && <OverflowMenu items={menu} label="Profile options" align="left" />}
       </div>
       {!view.messaging.allowed && view.messaging.message && (
         <p className="mt-2 inline-flex items-start gap-1.5 text-[12px] text-ink-muted">
@@ -154,7 +157,7 @@ export function ProfileActions({
         </p>
       )}
       <Modal open={blockOpen} onClose={() => setBlockOpen(false)} size="sm" title={view.blockedByMe ? `Unblock @${p.handle}?` : `Block @${p.handle}?`}
-        description={view.blockedByMe ? "They'll be able to find and interact with you again, subject to your privacy settings." : "You won't be able to message each other. You can unblock them any time in Settings."}
+        description={view.blockedByMe ? "They'll be able to find and interact with you again, subject to your privacy settings." : "You won't be able to message each other. You can unblock them any time in Settings → Blocked people."}
       >
         <div className="flex justify-end gap-2">
           <Button onClick={() => setBlockOpen(false)}>Cancel</Button>

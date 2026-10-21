@@ -16,6 +16,8 @@ import { TopicsPanel } from "@/components/domain/topics/TopicsPanel";
 import { CrewService } from "@/app/services/CrewService";
 import { CrewsBoard } from "@/components/domain/crews/CrewsBoard";
 import { CrewView } from "@/components/domain/crews/CrewView";
+import { crewLeaveWarning } from "@/components/domain/crews/parts";
+import { useAppEvent } from "@/lib/appEvents";
 import { ChannelList, orderChannels, type GroupView, type WorkspaceView } from "@/components/domain/chat/ChannelList";
 import { ChatPane } from "@/components/domain/chat/ChatPane";
 import { CommunityInfo } from "@/components/domain/chat/CommunityInfo";
@@ -31,6 +33,7 @@ import { GroupsView } from "@/components/domain/space/GroupsView";
 import { CommunitySettings } from "@/components/domain/space/CommunitySettings";
 import { MembersPanel } from "@/components/domain/space/MembersPanel";
 import { ConfirmModal, SpaceError } from "@/components/domain/space/parts";
+import { Modal } from "@/components/ui/Modal";
 import { SpaceEvents } from "@/components/domain/space/SpaceEvents";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useToast } from "@/components/providers/ToastProvider";
@@ -63,7 +66,8 @@ const GROUP_VIEWS: Record<Exclude<GroupView, "updates">, { label: string; icon: 
 
 /**
  * A community is a chat space: channels on the left (grouped in categories), the conversation in the
- * middle, and the community's info on the right. Events, groups, members and settings are views in the
+ * middle. The right side only opens for a topic's comments or a call; the community's (or group's) about,
+ * admins and what's coming up open from its name menu instead ("About"). Events, groups, members and settings are views in the
  * middle pane. URL: /communities/<slug>?c=<channel>  or  ?view=events|groups|members|manage
  * A group is a section of the same workspace: ?g=<group>&c=<channel>  or  ?g=<group>&view=updates|events|members|manage
  */
@@ -105,12 +109,12 @@ function CommunityWorkspace({ slug }: { slug: string }) {
   const myCrews = useApi(canUse && user ? () => CrewService.mineIn(slug) : null, [slug, user?.id, canUse], { key: `my-crews:${slug}` });
   const reloadCrews = myCrews.reload;
   const crewOpen = sp.get("crew");
-  const [leavingGroup, setLeavingGroup] = useState(false);
   const [deletingGroup, setDeletingGroup] = useState(false);
 
   const wide = useMediaQuery("(min-width: 80rem)");
   const [leftOpen, setLeftOpen] = useState(false);
   const [rightOpen, setRightOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [reporting, setReporting] = useState(false);
 
@@ -134,6 +138,12 @@ function CommunityWorkspace({ slug }: { slug: string }) {
     },
     { filter: (e) => e.type === "notify" && e.ref === `community:${communityId}`, debounceMs: 300 },
   );
+  // you joined or left here from somewhere else on the page (a crew's "Join" button): everything follows
+  useAppEvent("membership", () => {
+    void reload();
+    void reloadChannels();
+    void myCrews.reload();
+  });
   // your crews changed (someone joined, you were accepted, a crew was called off): the left panel follows
   useRealtimeEvent(() => void myCrews.reload(), { filter: (e) => e.type === "crew" || (e.type === "notify" && e.category === "crews"), debounceMs: 500 });
 
@@ -162,7 +172,7 @@ function CommunityWorkspace({ slug }: { slug: string }) {
 
   const markReadLocally = useCallback(
     (channelSlug: string) => {
-      const clear = (list: ChannelDTO[]) => list.map((x) => (x.slug === channelSlug ? { ...x, unread: false, mentions: 0 } : x));
+      const clear = (list: ChannelDTO[]) => list.map((x) => (x.slug === channelSlug ? { ...x, unread: false, unreadCount: 0, mentions: 0 } : x));
       if (gSlug) {
         groupChannels.setData((d: ChannelsDTO | null) => (d ? { ...d, channels: clear(d.channels) } : d));
         channels.setData((d: ChannelsDTO | null) => (d ? { ...d, groups: d.groups.map((x) => (x.slug === gSlug ? { ...x, channels: clear(x.channels) } : x)) } : d));
@@ -173,10 +183,23 @@ function CommunityWorkspace({ slug }: { slug: string }) {
       const d = channels.data;
       if (d) {
         const all = [...(gSlug ? d.channels : clear(d.channels)), ...d.groups.flatMap((x) => (x.slug === gSlug ? clear(x.channels) : x.channels))];
-        mutateApi<MyCommunityDTO[]>("my-communities", (list) => list.map((m) => (m.slug === slug ? { ...m, unread: all.some((x) => x.unread), mentions: all.reduce((n, x) => n + (x.mentions ?? 0), 0) } : m)));
+        const crewUnread = (myCrews.data ?? []).reduce((n, x) => n + (x.unreadCount ?? 0), 0);
+        mutateApi<MyCommunityDTO[]>("my-communities", (list) =>
+          list.map((m) => (m.slug === slug ? { ...m, unread: all.some((x) => x.unread) || crewUnread > 0, unreadCount: Math.min(99, all.reduce((n, x) => n + (x.unreadCount ?? 0), 0) + crewUnread), mentions: all.reduce((n, x) => n + (x.mentions ?? 0), 0) } : m)),
+        );
       }
     },
-    [channels, groupChannels, gSlug, slug],
+    [channels, groupChannels, gSlug, slug, myCrews.data],
+  );
+  /** opening a crew's chat reads it: its count and the rail's drop at once */
+  const markCrewReadLocally = useCallback(
+    (crewId: string) => {
+      const was = (myCrews.data ?? []).find((x) => x.id === crewId)?.unreadCount ?? 0;
+      if (!was) return;
+      myCrews.setData((list) => (list ? list.map((x) => (x.id === crewId ? { ...x, unreadCount: 0 } : x)) : list));
+      mutateApi<MyCommunityDTO[]>("my-communities", (list) => list.map((m) => (m.slug === slug ? { ...m, unreadCount: Math.max(0, (m.unreadCount ?? 0) - was) } : m)));
+    },
+    [myCrews, slug],
   );
 
   // the channel list with a preview section for a group you're looking at but haven't joined
@@ -272,18 +295,14 @@ function CommunityWorkspace({ slug }: { slug: string }) {
     void reload();
     void reloadChannels();
   };
-  const leaveGroup = async () => {
-    await SpaceService.leave(slug, gSlug!);
-    toast("You left the group", "success");
-    setLeavingGroup(false);
-    await Promise.all([group.reload(), reloadChannels(), groupChannels.reload()]);
-  };
   const leave = async () => {
     await SpaceService.leave(slug);
     toast(`You left ${c.name}`, "success");
     setLeaving(false);
-    await reload();
+    await Promise.all([reload(), myCrews.reload()]);
   };
+  /** leaving takes you out of its crews too: say which, before they confirm */
+  const crewWarning = (inGroup: string | null) => crewLeaveWarning(myCrews.data ?? [], inGroup);
 
   const list = (onNavigate?: () => void) =>
     listData ? (
@@ -296,7 +315,7 @@ function CommunityWorkspace({ slug }: { slug: string }) {
     );
   const channelTree = (onNavigate?: () => void) =>
     listData ? (
-      <ChannelList community={c} data={listData} activeChannel={activeChannel?.slug ?? null} activeGroup={gSlug} view={view} boards={boards} activeBoard={activeBoard?.slug ?? null} onBoardsChanged={() => void boardsApi.reload()} onChanged={() => void reloadChannels()} onNavigate={onNavigate} onLeave={() => setLeaving(true)} onReport={() => setReporting(true)} crews={myCrews.data ?? []} activeCrew={crewOpen} />
+      <ChannelList community={c} data={listData} activeChannel={activeChannel?.slug ?? null} activeGroup={gSlug} view={view} boards={boards} activeBoard={activeBoard?.slug ?? null} onBoardsChanged={() => void boardsApi.reload()} onChanged={() => void reloadChannels()} onNavigate={onNavigate} onLeave={() => setLeaving(true)} onReport={() => setReporting(true)} onAbout={() => (onNavigate?.(), setAboutOpen(true))} crews={myCrews.data ?? []} activeCrew={crewOpen} />
     ) : channels.error ? (
       <div className="p-4">
         <ErrorState title="Couldn't load channels" message={channels.error} onRetry={channels.reload} />
@@ -318,24 +337,16 @@ function CommunityWorkspace({ slug }: { slug: string }) {
     softNavigate(`/communities/${slug}?${q.toString()}`);
   };
   const voiceChannel = !view && activeChannel?.type === "voice" ? activeChannel : null;
-  // the right panel follows what you're looking at: a topic's comments, a call's roster, or the community card
-  const sideKind = threadId ? "comments" : voiceChannel ? "voice" : "about";
+  // the right panel only opens for what you're looking at: a topic's comments or a call's roster
+  const sideKind = threadId ? "comments" : voiceChannel ? "voice" : null;
   const side = (onNavigate?: () => void) =>
     sideKind === "comments" ? (
       <TopicSide onClose={closeTopic} bare={!!onNavigate} />
     ) : sideKind === "voice" && voiceChannel ? (
       <VoiceSide channel={voiceChannel} communityName={g ? g.name : c.name} snapshot={voice} />
-    ) : (
-      info(onNavigate)
-    );
-  const sideLabel = sideKind === "comments" ? "Topic" : sideKind === "voice" ? "Voice info" : g ? "About this group" : "About this community";
-
-  const info = (onNavigate?: () => void) =>
-    g ? (
-      <GroupInfo group={g} onLeave={() => setLeavingGroup(true)} onNavigate={onNavigate} />
-    ) : (
-      <CommunityInfo community={c} onJoined={joined} onNavigate={onNavigate} onLeave={() => setLeaving(true)} />
-    );
+    ) : null;
+  const sideLabel = sideKind === "comments" ? "Topic" : "Voice info";
+  const closeAbout = () => setAboutOpen(false);
 
   const headerIcon: IconName = crewOpen ? "pin" : view ? viewTable[view].icon : activeChannel?.type === "announcement" ? "megaphone" : activeChannel?.type === "voice" ? "mic" : "hash";
   const headerTitle = crewOpen ? "Crew" : view === "topics" && !g && activeBoard ? activeBoard.name : view ? viewTable[view].label : (activeChannel?.name ?? "Channels");
@@ -413,16 +424,18 @@ function CommunityWorkspace({ slug }: { slug: string }) {
             </h2>
             {!view && activeChannel?.topic && <p className="hidden truncate text-xs text-ink-muted sm:block">{activeChannel.topic}</p>}
           </div>
-          <button type="button" onClick={() => setRightOpen(true)} aria-label={sideLabel} className="inline-flex size-10 shrink-0 items-center justify-center rounded-full text-ink hover:bg-raised xl:hidden">
-            <Icon name={sideKind === "comments" ? "message" : sideKind === "voice" ? "mic" : "info"} size={19} />
-          </button>
+          {sideKind && (
+            <button type="button" onClick={() => setRightOpen(true)} aria-label={sideLabel} className="inline-flex size-10 shrink-0 items-center justify-center rounded-full text-ink hover:bg-raised xl:hidden">
+              <Icon name={sideKind === "comments" ? "message" : "mic"} size={19} />
+            </button>
+          )}
         </header>
 
         {gp ? (
           gp
         ) : crewOpen ? (
           <Scroll inner wide>
-            <CrewView key={crewOpen} id={crewOpen} embedded onChanged={() => void reloadCrews()} />
+            <CrewView key={crewOpen} id={crewOpen} tab={sp.get("tab")} embedded onChanged={() => void reloadCrews()} onRead={() => markCrewReadLocally(crewOpen)} />
           </Scroll>
         ) : view === "crews" ? (
           <Scroll inner wide>
@@ -501,9 +514,11 @@ function CommunityWorkspace({ slug }: { slug: string }) {
         )}
       </section>
 
-      <aside className={cx("hidden shrink-0 border-l border-line xl:block", sideKind === "about" ? "w-80 overflow-y-auto" : sideKind === "comments" ? "w-[30rem] overflow-hidden 2xl:w-[34rem]" : "w-[24rem] overflow-hidden")} aria-label={sideLabel}>
-        {side()}
-      </aside>
+      {sideKind && (
+        <aside className={cx("hidden shrink-0 border-l border-line xl:block", sideKind === "comments" ? "w-[30rem] overflow-hidden 2xl:w-[34rem]" : "w-[24rem] overflow-hidden")} aria-label={sideLabel}>
+          {side()}
+        </aside>
+      )}
 
       {settingsReq && canSettings && (g ? (
         <GroupSettings
@@ -532,19 +547,28 @@ function CommunityWorkspace({ slug }: { slug: string }) {
         {list(closeLeft)}
       </SlideOver>
       {/* below xl the right panel is a drawer; an open topic opens it by itself, and closing it closes the topic */}
-      <SlideOver open={rightOpen || (sideKind === "comments" && !wide)} onClose={sideKind === "comments" ? () => (setRightOpen(false), closeTopic()) : closeRight} side="right" title={sideLabel} wide={sideKind === "comments"}>
+      <SlideOver open={(rightOpen && !!sideKind) || (sideKind === "comments" && !wide)} onClose={sideKind === "comments" ? () => (setRightOpen(false), closeTopic()) : closeRight} side="right" title={sideLabel} wide={sideKind === "comments"}>
         {side(sideKind === "comments" ? () => (setRightOpen(false), closeTopic()) : closeRight)}
       </SlideOver>
+
+      {/* About (from the community or group name menu): what it is, who runs it, what's coming up, share */}
+      <Modal open={aboutOpen} onClose={closeAbout} title={g ? "About this group" : "About this community"} size="lg">
+        {aboutOpen &&
+          (g ? (
+            <GroupInfo group={g} onNavigate={closeAbout} />
+          ) : (
+            <CommunityInfo community={c} onJoined={joined} onNavigate={closeAbout} />
+          ))}
+      </Modal>
 
       <ConfirmModal
         open={leaving}
         onClose={() => setLeaving(false)}
         title={`Leave ${c.name}?`}
-        description={c.privacy === "private" ? "This is a private community. You'll need an invite or approval to get back in." : "You can rejoin any time."}
+        description={(c.privacy === "private" ? "This is a private community. You'll need an invite or approval to get back in." : "You can rejoin any time.") + crewWarning(null)}
         confirmLabel="Leave community"
         onConfirm={leave}
       />
-      <ConfirmModal open={leavingGroup} onClose={() => setLeavingGroup(false)} title={`Leave ${g?.name ?? "group"}?`} description={g?.visibility === "private" ? "It's invite-only, so you'll need a new invite to get back in." : "You can rejoin any time."} confirmLabel="Leave group" onConfirm={leaveGroup} />
       <ConfirmModal
         open={deletingGroup}
         onClose={() => setDeletingGroup(false)}

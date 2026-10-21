@@ -6,6 +6,7 @@ import { cx } from "@/components/ui/cx";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
+import { FriendService } from "@/app/services/FriendService";
 import { MessageService } from "@/app/services/MessageService";
 import { ProfileService } from "@/app/services/ProfileService";
 import { SafetyService } from "@/app/services/SafetyService";
@@ -28,6 +29,7 @@ import { useApi } from "@/lib/hooks/useApi";
 import type { EventDTO, ProfileView } from "@/lib/types";
 import { ProfileBanner } from "@/components/domain/profile/ProfileParts";
 import { UserName } from "@/components/ui/UserName";
+import { RankBadge } from "@/components/ui/RankBadge";
 
 function Stat({ value, label }: { value: number; label: string }) {
   return (
@@ -101,9 +103,23 @@ export default function ProfilePage() {
   const updateEvent = (list: "upcomingEvents" | "hostedEvents") => (next: EventDTO) =>
     setData((d) => (d ? { ...d, [list]: d[list].map((e) => (e.id === next.id ? next : e)) } : d));
 
+  // everything else you can do about this person lives in this one "⋯" menu
   const menu = isSelf
     ? []
     : [
+        ...(view.friendship.state === "friends"
+          ? [{
+              label: "Remove friend",
+              icon: "x" as const,
+              danger: true,
+              onSelect: () => {
+                FriendService.remove(profile.handle).then(
+                  () => { setData((d) => (d ? { ...d, friendship: { state: "none" } } : d)); toast("Removed from your friends", "success"); },
+                  (e) => toast(errorMessage(e), "error"),
+                );
+              },
+            }]
+          : []),
         { label: view.blockedByMe ? "Unblock" : "Block", icon: "ban" as const, danger: !view.blockedByMe, onSelect: () => setBlockOpen(true) },
         { label: "Report", icon: "flag" as const, danger: true, onSelect: () => setReportOpen(true) },
       ];
@@ -120,29 +136,32 @@ export default function ProfilePage() {
         <ProfileBanner handle={profile.handle} bannerUrl={profile.bannerUrl} bannerColor={profile.bannerColor} className="h-28 sm:h-36" />
         <div className="px-5 pb-6 sm:px-8">
           <div className="-mt-12 flex items-end justify-between gap-3 sm:-mt-14">
-            <Avatar name={profile.displayName} src={profile.avatarUrl} frame={profile.avatarFrame} size={104} className="border-4 border-surface" />
-            <div className="flex items-center gap-2 pb-1">
+            <Avatar name={profile.displayName} src={profile.avatarUrl} frame={profile.avatarFrame} size={104} className="shrink-0 border-4 border-surface" />
+            {/* on a phone the row must fit beside the picture: Message drops to its icon, and it wraps rather than spill off the card */}
+            <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 pb-1">
               {isSelf ? (
                 <>
                   <Button href="/settings#profile">
                     <Icon name="edit" size={15} /> Edit profile
                   </Button>
-                  {/* phones have no sidebar, so Settings lives here too */}
-                  {/* phones have no sidebar: settings, ads and the rest live in this menu */}
-                  <UserMenu
-                    align="right"
-                    trigger={({ open, props }) => (
-                      <button {...props} aria-label="Account menu" title="Settings, ads and more" className={cx("inline-flex size-10 items-center justify-center rounded-full border border-line bg-surface text-ink hover:bg-raised", open && "bg-raised")}>
-                        <Icon name="more" size={18} />
-                      </button>
-                    )}
-                  />
+                  {/* phones have no sidebar: settings, ads and the rest live in this menu. On desktop the
+                      sidebar's profile card opens the same menu, so it isn't repeated here. */}
+                  <span className="lg:hidden">
+                    <UserMenu
+                      align="right"
+                      trigger={({ open, props }) => (
+                        <button {...props} aria-label="Account menu" title="Settings, ads and more" className={cx("inline-flex size-10 items-center justify-center rounded-full border border-line bg-surface text-ink hover:bg-raised", open && "bg-raised")}>
+                          <Icon name="more" size={18} />
+                        </button>
+                      )}
+                    />
+                  </span>
                 </>
               ) : (
                 <>
-                  <FriendButton handle={profile.handle} status={view.friendship} onChange={(friendship) => setData((d) => (d ? { ...d, friendship } : d))} />
-                  <Button variant="primary" onClick={message} disabled={!view.messaging.allowed} loading={busy === "msg"}>
-                    <Icon name="message" size={15} /> Message
+                  <FriendButton handle={profile.handle} status={view.friendship} noMenu onChange={(friendship) => setData((d) => (d ? { ...d, friendship } : d))} />
+                  <Button variant="primary" onClick={message} disabled={!view.messaging.allowed} loading={busy === "msg"} aria-label="Message" className="max-sm:aspect-square max-sm:px-0">
+                    <Icon name="message" size={15} /> <span className="max-sm:hidden">Message</span>
                   </Button>
                   <OverflowMenu items={menu} label="Profile options" />
                 </>
@@ -151,6 +170,7 @@ export default function ProfilePage() {
           </div>
 
           <h1 className="display mt-4 text-[clamp(1.9rem,4.5vw,2.75rem)] break-words"><UserName name={profile.displayName} effect={profile.nameEffect} /></h1>
+          <RankBadge rank={profile.rank} always className="mt-2" />
           <p className="mt-1 font-mono text-[13px] text-ink-muted">
             @{profile.handle}
             {visible && place && (
@@ -269,7 +289,7 @@ export default function ProfilePage() {
 
       {/* ------------------------------ dialogs ------------------------------ */}
       <Modal open={blockOpen} onClose={() => setBlockOpen(false)} size="sm" title={view.blockedByMe ? `Unblock @${profile.handle}?` : `Block @${profile.handle}?`}
-        description={view.blockedByMe ? "They'll be able to find and interact with you again, subject to your privacy settings." : "You won't be able to message each other. You can unblock them any time in Settings."}
+        description={view.blockedByMe ? "They'll be able to find and interact with you again, subject to your privacy settings." : "You won't be able to message each other. You can unblock them any time in Settings → Blocked people."}
       >
         <div className="flex justify-end gap-2">
           <Button onClick={() => setBlockOpen(false)}>Cancel</Button>

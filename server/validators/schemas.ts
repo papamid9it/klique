@@ -493,7 +493,7 @@ export const crewUpdateSchema = z
 
 export const crewJoinSchema = z.object({ message: text(200).default("") });
 export const crewDecisionSchema = z.object({ accept: z.boolean() });
-export const crewMessageSchema = z.object({ body: text(1000, 1) });
+export const crewMessageSchema = z.object({ body: text(1000, 1), replyToId: z.string().regex(/^[a-f0-9]{24}$/).nullish() });
 export const crewMessagesQuery = z.object({ after: z.string().regex(/^[a-f0-9]{24}$/).optional() });
 
 /* --------------------------- notifications -------------------------- */
@@ -539,3 +539,37 @@ export const adPricingSchema = z.object({
 export const adReviewSchema = z.object({ action: z.enum(["approve", "changes", "reject", "mark-paid"]), note: z.string().trim().max(500).default("") });
 export const adCampaignListQuery = z.object({ status: z.enum(["review", "approved", "running", "all"]).default("review") });
 export const adVerifySchema = z.object({ reference: z.string().trim().min(6).max(80) });
+
+/* ------------------------------ points ------------------------------ */
+
+const pointsN = z.number().int().min(0).max(1_000_000);
+export const pointsConfigSchema = z.object({
+  packs: z
+    .array(z.object({ id: z.string().trim().regex(/^[a-z0-9-]{1,24}$/), points: z.number().int().min(1).max(1_000_000), price: z.number().int().min(100).max(10_000_000) }))
+    .min(1)
+    .max(8)
+    .optional(),
+  unlockDays: z.number().int().min(1).max(365).optional(),
+  defaultPrice: z.object({ frame: pointsN, name: pointsN }).partial().optional(),
+  prices: z.record(z.string().regex(/^(frame|name):[a-z0-9-]+$/), pointsN).optional(),
+});
+export const styleUnlockSchema = z.object({ key: z.string().regex(/^(frame|name):[a-z0-9-]+$/), autoRenew: z.boolean().optional() });
+export const autoRenewSchema = z.object({ key: z.string().regex(/^(frame|name):[a-z0-9-]+$/), autoRenew: z.boolean() });
+export const buyPointsSchema = z.object({ packId: z.string().trim().min(1).max(24) });
+export const pointsHistoryQuery = z.object({ before: z.string().datetime().optional() });
+export const adminPointsAdjustSchema = z.object({ who: z.string().trim().min(1).max(40), amount: z.number().int().min(-1_000_000).max(1_000_000), note: z.string().trim().max(200).default("") });
+export const adminPointsUserQuery = z.object({ who: z.string().trim().min(1).max(40) });
+
+/* ------------------------------ ranks ------------------------------ */
+
+const hypeN = z.number().int().min(0).max(10_000);
+export const ranksConfigSchema = z.object({
+  ranks: z
+    .array(z.object({ name: z.string().trim().min(1).max(20), hype: z.number().int().min(0).max(10_000_000), points: z.number().int().min(0).max(1_000_000) }))
+    .min(2)
+    .max(10)
+    .optional(),
+  actions: z.object({ attend: hypeN, hostAttendee: hypeN, crew: hypeN }).partial().optional(),
+  dailyCap: z.number().int().min(1).max(1_000_000).optional(),
+});
+export const attendanceSchema = z.object({ userIds: z.array(z.string().regex(/^[a-f0-9]{24}$/)).min(1).max(500), attended: z.boolean() });

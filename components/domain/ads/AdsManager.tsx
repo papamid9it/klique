@@ -373,8 +373,8 @@ export function AdsTable({ list }: { list: AdCampaignDTO[] }) {
             <p className="mt-2 text-sm">{phaseLine(c, now)}</p>
             {c.status === "paid" && (
               <p className="mt-1 flex gap-4 font-mono text-xs text-ink-muted">
-                <span>{c.impressions.toLocaleString("en-NG")} views</span>
-                <span>{c.clicks.toLocaleString("en-NG")} taps</span>
+                <span>{c.impressions.toLocaleString("en-NG")} {c.impressions === 1 ? "view" : "views"}</span>
+                <span>{c.clicks.toLocaleString("en-NG")} {c.clicks === 1 ? "tap" : "taps"}</span>
                 <span>{rate(c.impressions, c.clicks)}</span>
               </p>
             )}

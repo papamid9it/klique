@@ -1,4 +1,5 @@
 import ApiClient from "@/app/ApiCore";
+import { emitAppEvent } from "@/lib/appEvents";
 import type {
   Envelope,
   InviteDTO,
@@ -16,15 +17,21 @@ const api = new ApiClient();
  * A "space" is a community OR a group (subcommunity) inside one. Both expose the
  * same sub-resources, so these calls take `(slug, subSlug?)`: omit `subSlug` for a community.
  */
+const changed = <T,>(res: T): T => {
+  emitAppEvent("membership");
+  return res;
+};
+
 const base = (slug: string, subSlug?: string) =>
   subSlug ? `/api/communities/${slug}/groups/${subSlug}` : `/api/communities/${slug}`;
 
 export const SpaceService = {
+  // both tell the rest of the app (crew pages and the like) that your memberships changed
   join: (slug: string, subSlug?: string, input: { message?: string } = {}) =>
-    api.post<Envelope<JoinResult>>(`${base(slug, subSlug)}/join`, input),
+    api.post<Envelope<JoinResult>>(`${base(slug, subSlug)}/join`, input).then(changed),
   /** Also cancels a pending join request. */
   leave: (slug: string, subSlug?: string) =>
-    api.post<Envelope<{ left: boolean; cancelledRequest: boolean }>>(`${base(slug, subSlug)}/leave`),
+    api.post<Envelope<{ left: boolean; cancelledRequest: boolean }>>(`${base(slug, subSlug)}/leave`).then(changed),
 
   members: (slug: string, subSlug?: string, page = 1, q?: string) =>
     api.get<Envelope<Paginated<MemberDTO>>>(`${base(slug, subSlug)}/members`, { page, q }),

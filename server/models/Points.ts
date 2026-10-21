@@ -74,7 +74,7 @@ export const PointPurchase: Model<IPointPurchase> = (models.PointPurchase as Mod
 
 /**
  * One design someone may wear until `expiresAt` ("frame:fire"). Renewing pushes `expiresAt` on; when it passes
- * without renewing, the design comes off their profile and this row is removed.
+ * without renewing, the design comes off their profile and the row is marked ended.
  */
 export interface IStyleUnlock {
   _id: Types.ObjectId;
@@ -86,6 +86,8 @@ export interface IStyleUnlock {
   source: "points" | "gift";
   /** the "ends in 3 days" notice went out for this expiresAt */
   remindedFor: Date | null;
+  /** it ran out and came off their profile (the row stays, so it's never handed out free again) */
+  endedAt: Date | null;
   createdAt: Date;
 }
 
@@ -97,10 +99,11 @@ const StyleUnlockSchema = new Schema<IStyleUnlock>(
     autoRenew: { type: Boolean, default: false },
     source: { type: String, enum: ["points", "gift"], default: "points" },
     remindedFor: { type: Date, default: null },
+    endedAt: { type: Date, default: null },
   },
   { timestamps: { createdAt: true, updatedAt: false } },
 );
 StyleUnlockSchema.index({ userId: 1, key: 1 }, { unique: true });
-StyleUnlockSchema.index({ expiresAt: 1 });
+StyleUnlockSchema.index({ endedAt: 1, expiresAt: 1 });
 
 export const StyleUnlock: Model<IStyleUnlock> = (models.StyleUnlock as Model<IStyleUnlock>) || model<IStyleUnlock>("StyleUnlock", StyleUnlockSchema);
