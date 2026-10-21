@@ -4,7 +4,10 @@ import webpush from "web-push";
 import { expoAccessToken, webPushConfig } from "../env";
 import { PushToken } from "../models/PushToken";
 import { WebPushSubscription, type IWebPushSubscription } from "../models/WebPushSubscription";
-import type { IUser } from "../models/User";
+import { User, type IUser } from "../models/User";
+import { Notification } from "../models/Notification";
+import { notifyPrefsOf, type NotifyCategory } from "@/lib/notifications";
+import { publish, rtChannel } from "./realtime";
 import { sid } from "./helpers";
 
 /**
@@ -39,9 +42,12 @@ const clip = (s: string, n = 140) => (s.length > n ? `${s.slice(0, n - 1)}…` :
 
 /** Where tapping the notification takes you in the web app. */
 export function urlFor(data: Record<string, string>): string {
+  if (data.href) return data.href;
   switch (data.type) {
     case "event":
       return `/events/${data.id}`;
+    case "crew":
+      return `/crews/${data.id}`;
     case "dm":
       return `/messages/${data.conversationId}`;
     case "group":
@@ -125,10 +131,67 @@ async function deliverPhones(ids: string[], p: PushPayload) {
   }
 }
 
+/* ------------------------- the inbox ----------------------------- */
+
+/** What kind of notification this is, for the person's settings and for bundling. */
+export interface NotifyMeta {
+  category: NotifyCategory;
+  /** bundle with an unread notification that has the same key ("crew-req:<id>") instead of adding a new line */
+  groupKey?: string;
+  /** the wording once `n` have bundled, e.g. n => `${n} people want to join your crew` */
+  many?: (n: number) => string;
+  /** what changed, so open pages can refresh themselves: "crew:<id>", "community:<id>", "topic:<id>"… */
+  ref?: string;
+}
+
+const INBOX_DAYS = 60;
+
+async function toInbox(ids: string[], p: PushPayload, meta: NotifyMeta) {
+  const href = urlFor(p.data);
+  const expiresAt = new Date(Date.now() + INBOX_DAYS * 24 * 60 * 60 * 1000);
+  await Promise.all(
+    ids.map(async (userId) => {
+      if (meta.groupKey) {
+        const open = await Notification.findOne({ userId, groupKey: meta.groupKey, read: false }).select("count").lean<{ _id: Types.ObjectId; count: number }>();
+        if (open) {
+          const count = open.count + 1;
+          await Notification.updateOne({ _id: open._id }, { $set: { title: meta.many?.(count) ?? p.title, body: p.body, href, expiresAt }, $inc: { count: 1 } });
+          return;
+        }
+      }
+      await Notification.create({ userId, category: meta.category, title: p.title, body: p.body, href, groupKey: meta.groupKey ?? null, expiresAt });
+    }),
+  );
+}
+
+/**
+ * Tell people about something, the way each of them asked: an inbox entry (the bell), a push to their phone
+ * and browsers, or neither (Settings → Notifications). Open tabs get a realtime ping either way, so whatever
+ * they're looking at refreshes itself. Without `meta` it's a plain push (kept for old callers).
+ */
+async function fanOut(userIds: (Types.ObjectId | string)[], p: PushPayload, meta?: NotifyMeta) {
+  const ids = [...new Set(userIds.map(sid))];
+  if (!ids.length) return;
+  if (!meta) return deliver(ids, p);
+  const rows = await User.find({ _id: { $in: ids } }).select("notifyPrefs").lean<Pick<IUser, "_id" | "notifyPrefs">[]>();
+  const inApp: string[] = [];
+  const push: string[] = [];
+  for (const u of rows) {
+    const pref = notifyPrefsOf(u.notifyPrefs)[meta.category];
+    if (pref.inApp) inApp.push(sid(u._id));
+    if (pref.push) push.push(sid(u._id));
+  }
+  await Promise.all([inApp.length ? toInbox(inApp, p, meta) : null, push.length ? deliver(push, p) : null]);
+  publish(
+    ids.map((id) => rtChannel.user(id)),
+    { type: "notify", category: meta.category, ref: meta.ref ?? null, inbox: inApp.length > 0 },
+  );
+}
+
 /** Send after the response has gone out (and keep serverless functions alive until it's done). */
-export function notify(userIds: (Types.ObjectId | string)[], payload: PushPayload) {
+export function notify(userIds: (Types.ObjectId | string)[], payload: PushPayload, meta?: NotifyMeta) {
   if (!userIds.length) return;
-  const run = () => deliver(userIds, payload).catch((err) => console.warn("[push]", (err as Error)?.message));
+  const run = () => fanOut(userIds, payload, meta).catch((err) => console.warn("[notify]", (err as Error)?.message));
   try {
     after(run);
   } catch {
@@ -137,4 +200,4 @@ export function notify(userIds: (Types.ObjectId | string)[], payload: PushPayloa
 }
 
 /** Await-able version for the reminder job (it already runs inside its own request). */
-export const notifyNow = deliver;
+export const notifyNow = fanOut;

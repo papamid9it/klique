@@ -15,9 +15,11 @@ import { assertPlace, escapeRegex, sid } from "./helpers";
 import { hostedEventsOf, upcomingRsvpEventsOf } from "./events.service";
 import { friendStatus, mutualFriends } from "./friends.service";
 import { messagingEligibility, unreadTotal } from "./messaging.service";
+import { unreadNotificationCount } from "./notifications.service";
 
 export async function getMe(viewer: IUser): Promise<UserMe> {
-  return toMe(viewer, await unreadTotal(viewer._id));
+  const [dms, bell] = await Promise.all([unreadTotal(viewer._id), unreadNotificationCount(viewer._id)]);
+  return toMe(viewer, dms, bell);
 }
 
 export async function updateMe(viewer: IUser, patch: z.infer<typeof profileUpdateSchema>): Promise<UserMe> {

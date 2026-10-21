@@ -5,7 +5,7 @@ export interface IAdminAction {
   _id: Types.ObjectId;
   adminId: Types.ObjectId;
   action: string;
-  targetType: "user" | "event" | "community" | "report" | "draft" | "source" | "post" | "message" | "channelMessage" | "subcommunity" | "ad";
+  targetType: "user" | "event" | "community" | "report" | "draft" | "source" | "post" | "message" | "channelMessage" | "subcommunity" | "ad" | "points";
   targetId: Types.ObjectId | null;
   /** what the target was called at the time, so the log still reads after it's deleted */
   targetLabel: string;

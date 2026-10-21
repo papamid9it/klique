@@ -36,6 +36,8 @@ export function CommunityRail({ activeSlug, horizontal, onNavigate }: { activeSl
   }, [authed, reload, connected]);
   // activity in any of your communities: refresh the unread dots
   useRealtimeEvent(() => void reload(), { filter: (e) => e.type === "channel", debounceMs: 1500 });
+  // you were let into a community (or added to a group): its icon appears
+  useRealtimeEvent(() => void reload(), { filter: (e) => e.type === "notify" && e.category === "community", debounceMs: 500 });
 
 
   if (status === "loading" || (authed && loading && !data)) {

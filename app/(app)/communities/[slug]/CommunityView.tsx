@@ -13,6 +13,9 @@ import { TopicService } from "@/app/services/TopicService";
 import { TopicDetailProvider, TopicSide } from "@/components/domain/topics/TopicThread";
 import { VoiceSide, type VoiceSnapshot } from "@/components/domain/voice/VoicePanel";
 import { TopicsPanel } from "@/components/domain/topics/TopicsPanel";
+import { CrewService } from "@/app/services/CrewService";
+import { CrewsBoard } from "@/components/domain/crews/CrewsBoard";
+import { CrewView } from "@/components/domain/crews/CrewView";
 import { ChannelList, orderChannels, type GroupView, type WorkspaceView } from "@/components/domain/chat/ChannelList";
 import { ChatPane } from "@/components/domain/chat/ChatPane";
 import { CommunityInfo } from "@/components/domain/chat/CommunityInfo";
@@ -39,20 +42,22 @@ import { SlideOver } from "@/components/ui/SlideOver";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 
 import { useRealtime, useRealtimeEvent } from "@/components/providers/RealtimeProvider";
-import { useApi } from "@/lib/hooks/useApi";
+import { mutateApi, useApi } from "@/lib/hooks/useApi";
 import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { softNavigate } from "@/lib/nav";
-import type { ChannelDTO, ChannelGroupDTO, ChannelsDTO, CommunityDTO } from "@/lib/types";
+import type { ChannelDTO, ChannelGroupDTO, ChannelsDTO, CommunityDTO, MyCommunityDTO } from "@/lib/types";
 
 const VIEWS: Record<WorkspaceView, { label: string; icon: IconName }> = {
   topics: { label: "Topics", icon: "topics" },
   events: { label: "Events", icon: "calendar" },
+  crews: { label: "Crews", icon: "pin" },
   groups: { label: "Groups", icon: "folder" },
   members: { label: "Members", icon: "users" },
 };
 
 const GROUP_VIEWS: Record<Exclude<GroupView, "updates">, { label: string; icon: IconName }> = {
   events: { label: "Events", icon: "calendar" },
+  crews: { label: "Crews", icon: "pin" },
   members: { label: "Members", icon: "users" },
 };
 
@@ -96,6 +101,10 @@ function CommunityWorkspace({ slug }: { slug: string }) {
   const g = gSlug ? group.data : null;
   const gReadable = !!g && !g.moderationOnly && g.viewer.canView;
   const groupChannels = useApi(canUse && gSlug && gReadable ? () => ChannelService.list({ slug, sub: gSlug }) : null, [slug, gSlug, user?.id, gReadable, g?.viewer.isMember], { key: `channels:${slug}:${gSlug}` });
+  // crews you're in for this community's events: listed on the left, one tap from their chat
+  const myCrews = useApi(canUse && user ? () => CrewService.mineIn(slug) : null, [slug, user?.id, canUse], { key: `my-crews:${slug}` });
+  const reloadCrews = myCrews.reload;
+  const crewOpen = sp.get("crew");
   const [leavingGroup, setLeavingGroup] = useState(false);
   const [deletingGroup, setDeletingGroup] = useState(false);
 
@@ -117,6 +126,16 @@ function CommunityWorkspace({ slug }: { slug: string }) {
   // activity in this community: refresh unread badges and the channel list right away
   const communityId = c?.id;
   useRealtimeEvent(() => void reloadChannels(), { filter: (e) => e.type === "channel" && e.communityId === communityId, debounceMs: 1200 });
+  // you were let in (or added to a group): the community opens up without a refresh
+  useRealtimeEvent(
+    () => {
+      void reload();
+      void reloadChannels();
+    },
+    { filter: (e) => e.type === "notify" && e.ref === `community:${communityId}`, debounceMs: 300 },
+  );
+  // your crews changed (someone joined, you were accepted, a crew was called off): the left panel follows
+  useRealtimeEvent(() => void myCrews.reload(), { filter: (e) => e.type === "crew" || (e.type === "notify" && e.category === "crews"), debounceMs: 500 });
 
   const closeLeft = useCallback(() => setLeftOpen(false), []);
   const closeRight = useCallback(() => setRightOpen(false), []);
@@ -139,7 +158,7 @@ function CommunityWorkspace({ slug }: { slug: string }) {
   const [voice, setVoice] = useState<VoiceSnapshot | null>(null);
   const activeBoard = boards.find((b) => b.slug === sp.get("b")) ?? boards[0] ?? null;
   const requestedChannel = sp.get("c");
-  const activeChannel: ChannelDTO | null = view ? null : (pool.find((x) => x.slug === requestedChannel) ?? pool.find((x) => x.slug === "general") ?? pool[0] ?? null);
+  const activeChannel: ChannelDTO | null = view || crewOpen ? null : (pool.find((x) => x.slug === requestedChannel) ?? pool.find((x) => x.slug === "general") ?? pool[0] ?? null);
 
   const markReadLocally = useCallback(
     (channelSlug: string) => {
@@ -150,8 +169,14 @@ function CommunityWorkspace({ slug }: { slug: string }) {
       } else {
         channels.setData((d: ChannelsDTO | null) => (d ? { ...d, channels: clear(d.channels) } : d));
       }
+      // the community's icon in the left rail drops its dot / mention count straight away
+      const d = channels.data;
+      if (d) {
+        const all = [...(gSlug ? d.channels : clear(d.channels)), ...d.groups.flatMap((x) => (x.slug === gSlug ? clear(x.channels) : x.channels))];
+        mutateApi<MyCommunityDTO[]>("my-communities", (list) => list.map((m) => (m.slug === slug ? { ...m, unread: all.some((x) => x.unread), mentions: all.reduce((n, x) => n + (x.mentions ?? 0), 0) } : m)));
+      }
     },
-    [channels, groupChannels, gSlug],
+    [channels, groupChannels, gSlug, slug],
   );
 
   // the channel list with a preview section for a group you're looking at but haven't joined
@@ -271,7 +296,7 @@ function CommunityWorkspace({ slug }: { slug: string }) {
     );
   const channelTree = (onNavigate?: () => void) =>
     listData ? (
-      <ChannelList community={c} data={listData} activeChannel={activeChannel?.slug ?? null} activeGroup={gSlug} view={view} boards={boards} activeBoard={activeBoard?.slug ?? null} onBoardsChanged={() => void boardsApi.reload()} onChanged={() => void reloadChannels()} onNavigate={onNavigate} onLeave={() => setLeaving(true)} onReport={() => setReporting(true)} />
+      <ChannelList community={c} data={listData} activeChannel={activeChannel?.slug ?? null} activeGroup={gSlug} view={view} boards={boards} activeBoard={activeBoard?.slug ?? null} onBoardsChanged={() => void boardsApi.reload()} onChanged={() => void reloadChannels()} onNavigate={onNavigate} onLeave={() => setLeaving(true)} onReport={() => setReporting(true)} crews={myCrews.data ?? []} activeCrew={crewOpen} />
     ) : channels.error ? (
       <div className="p-4">
         <ErrorState title="Couldn't load channels" message={channels.error} onRetry={channels.reload} />
@@ -312,8 +337,8 @@ function CommunityWorkspace({ slug }: { slug: string }) {
       <CommunityInfo community={c} onJoined={joined} onNavigate={onNavigate} onLeave={() => setLeaving(true)} />
     );
 
-  const headerIcon: IconName = view ? viewTable[view].icon : activeChannel?.type === "announcement" ? "megaphone" : activeChannel?.type === "voice" ? "mic" : "hash";
-  const headerTitle = view === "topics" && !g && activeBoard ? activeBoard.name : view ? viewTable[view].label : (activeChannel?.name ?? "Channels");
+  const headerIcon: IconName = crewOpen ? "pin" : view ? viewTable[view].icon : activeChannel?.type === "announcement" ? "megaphone" : activeChannel?.type === "voice" ? "mic" : "hash";
+  const headerTitle = crewOpen ? "Crew" : view === "topics" && !g && activeBoard ? activeBoard.name : view ? viewTable[view].label : (activeChannel?.name ?? "Channels");
   const headerPrefix = g ? `${g.name} · ` : `${c.name} · `;
   // the community's owner (or a site admin) can look into any group; to chat they add themselves first
   const groupGate = !g || g.viewer.isMember ? null : g.viewer.canManage ? (
@@ -395,6 +420,14 @@ function CommunityWorkspace({ slug }: { slug: string }) {
 
         {gp ? (
           gp
+        ) : crewOpen ? (
+          <Scroll inner wide>
+            <CrewView key={crewOpen} id={crewOpen} embedded onChanged={() => void reloadCrews()} />
+          </Scroll>
+        ) : view === "crews" ? (
+          <Scroll inner wide>
+            <CrewsBoard slug={slug} sub={gSlug} eventId={sp.get("e")} onChanged={() => void reloadCrews()} />
+          </Scroll>
         ) : view === "events" ? (
           <Scroll inner full>
             <SectionHeader title="Events" />

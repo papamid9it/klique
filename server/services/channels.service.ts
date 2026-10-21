@@ -554,7 +554,7 @@ export async function postMessage(viewer: IUser, space: Space, access: SpaceAcce
     title: `${viewer.displayName} in #${channel.name}`,
     body: previewOf({ body: sticker ? "" : body, sticker, images }),
     data: { type: "channel", communitySlug: space.community.slug, channelSlug: channel.slug, ...(space.sub ? { subSlug: space.sub.slug } : {}) },
-  });
+  }, { category: "mentions", groupKey: `chat:${sid(channel._id)}`, many: (n) => `${n} mentions and replies in #${channel.name}`, ref: `channel:${sid(channel._id)}` });
   return (await toMessages([doc.toObject()], viewer, access, space))[0];
 }
 

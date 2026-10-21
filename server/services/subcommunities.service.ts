@@ -162,6 +162,6 @@ export async function addGroupMembers(viewer: IUser, slug: string, subSlug: stri
     );
   }
   await recountMembers(space.community._id, space.sub!._id);
-  if (fresh.length) notify(fresh, { title: space.sub!.name, body: `${viewer.displayName} added you to this group in ${space.community.name}.`, data: { type: "group", communitySlug: space.community.slug, subSlug: space.sub!.slug } });
+  if (fresh.length) notify(fresh, { title: space.sub!.name, body: `${viewer.displayName} added you to this group in ${space.community.name}.`, data: { type: "group", communitySlug: space.community.slug, subSlug: space.sub!.slug } }, { category: "community", ref: `community:${String(space.community._id)}` });
   return { added: fresh.length, memberCount: count + fresh.length };
 }

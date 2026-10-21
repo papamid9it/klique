@@ -5,6 +5,7 @@ import { CommunityService } from "@/app/services/CommunityService";
 import { CommunityCard } from "@/components/domain/CommunityCard";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
+import { Modal } from "@/components/ui/Modal";
 import { CardGridSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { INTERESTS, isInterestId, type InterestId } from "@/lib/constants";
@@ -31,6 +32,7 @@ export function CommunitiesBrowser({ initialInterest, scope = "discover" }: { in
     { keepPrevious: true, key: `communities:${scope}:${where}:${interest}:${dq}` },
   );
   const filtered = !!(interest || q);
+  const [kindsOpen, setKindsOpen] = useState(false);
 
   return (
     <div>
@@ -45,7 +47,26 @@ export function CommunitiesBrowser({ initialInterest, scope = "discover" }: { in
             <ScopeButton />
           </div>
         </div>
-        <div className="no-bar -mx-1 flex gap-2 overflow-x-auto px-1" role="group" aria-label="Interest">
+        {/* phones: one button for the kind, the choices open in a panel */}
+        <button type="button" onClick={() => setKindsOpen(true)} className="inline-flex h-10 items-center gap-2 rounded-full border border-line bg-surface px-4 text-sm font-semibold sm:hidden">
+          <Icon name="sliders" size={15} />
+          {interest ? `${INTERESTS.find((i) => i.id === interest)?.glyph ?? ""} ${INTERESTS.find((i) => i.id === interest)?.short ?? "Kind"}` : "All kinds"}
+          <Icon name="chevron-down" size={14} className="text-ink-muted" />
+        </button>
+        <Modal open={kindsOpen} onClose={() => setKindsOpen(false)} title="What kind of community?">
+          <div className="flex flex-wrap gap-2">
+            {[{ id: "", name: "All", glyph: "" }, ...INTERESTS].map((i) => {
+              const on = interest === i.id;
+              return (
+                <button key={i.id || "all"} type="button" aria-pressed={on} onClick={() => { setInterest(isInterestId(i.id) ? i.id : ""); setKindsOpen(false); }} className={`inline-flex h-9 items-center gap-1.5 rounded-full border px-3.5 text-[13px] font-semibold transition ${on ? "border-transparent bg-accent text-accent-ink" : "border-line bg-surface text-ink-muted hover:text-ink"}`}>
+                  {i.glyph && <span aria-hidden="true">{i.glyph}</span>}
+                  {"short" in i ? i.short : i.name}
+                </button>
+              );
+            })}
+          </div>
+        </Modal>
+        <div className="hidden flex-wrap gap-2 sm:flex" role="group" aria-label="Interest">
           {[{ id: "", name: "All", glyph: "" }, ...INTERESTS].map((i) => {
             const on = interest === i.id;
             return (

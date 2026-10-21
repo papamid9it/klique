@@ -8,6 +8,7 @@ import { EmptyState, ErrorState } from "@/components/ui/States";
 import { Icon } from "@/components/ui/Icon";
 import { usePaged } from "@/lib/hooks/useApi";
 import type { EventDTO } from "@/lib/types";
+import { useRealtimeEvent } from "@/components/providers/RealtimeProvider";
 
 export function SpaceEvents({ slug, subSlug, canHost }: { slug: string; subSlug?: string; canHost: boolean }) {
   const { items, loading, loadingMore, error, hasMore, loadMore, reload, setItems } = usePaged<EventDTO>(
@@ -15,6 +16,8 @@ export function SpaceEvents({ slug, subSlug, canHost }: { slug: string; subSlug?
     [slug, subSlug],
     { key: `space-events:${slug}:${subSlug ?? ""}` },
   );
+  // a new event was posted here (or one changed): the list updates by itself
+  useRealtimeEvent(() => void reload(), { filter: (e) => e.type === "notify" && e.category === "events", debounceMs: 800 });
   const hostHref = `/events/new?community=${encodeURIComponent(slug)}${subSlug ? `&sub=${encodeURIComponent(subSlug)}` : ""}`;
 
   return (

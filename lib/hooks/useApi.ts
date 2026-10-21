@@ -46,6 +46,26 @@ function cachePut(key: string | undefined, value: unknown) {
 export const recallApi = cacheGet;
 export const rememberApi = cachePut;
 
+/**
+ * Every mounted useApi with the same key shows the same thing: when one of them gets new data (a fetch, or a
+ * local edit), the others take it too. So the community rail, the realtime listener and the preloader, which
+ * all read "my-communities", never disagree.
+ */
+const listeners = new Map<string, Set<(v: unknown, from: object) => void>>();
+function broadcast(key: string | undefined, value: unknown, from: object) {
+  if (!key) return;
+  listeners.get(key)?.forEach((fn) => fn(value, from));
+}
+
+/** Change cached data by key from anywhere, and update every component showing it. */
+export function mutateApi<T>(key: string, update: (prev: T) => T) {
+  const prev = cache.get(key) as T | undefined;
+  if (prev === undefined) return;
+  const next = update(prev);
+  cachePut(key, next);
+  broadcast(key, next, {});
+}
+
 export interface CacheOptions {
   /**
    * Identity of this request (include every input that changes the result). With a key, the last result is
@@ -85,14 +105,27 @@ export function useApi<T>(fetcher: (() => Promise<Envelope<T>>) | null, deps: un
   const keyRef = useRef(cacheKey);
   keyRef.current = cacheKey;
 
-  // local edits (optimistic updates) go into the cache too, so they survive leaving and coming back
+  // local edits (optimistic updates) go into the cache too, so they survive leaving and coming back,
+  // and reach any other component showing the same key
+  const self = useRef({});
   const setData = useCallback((next: T | null | ((prev: T | null) => T | null)) => {
     setDataRaw((prev) => {
       const v = typeof next === "function" ? (next as (p: T | null) => T | null)(prev) : next;
       cachePut(keyRef.current, v);
+      if (v !== null) queueMicrotask(() => broadcast(keyRef.current, v, self.current));
       return v;
     });
   }, []);
+  useEffect(() => {
+    if (!cacheKey) return;
+    const fn = (v: unknown, from: object) => {
+      if (from !== self.current) setDataRaw(v as T);
+    };
+    let set = listeners.get(cacheKey);
+    if (!set) listeners.set(cacheKey, (set = new Set()));
+    set.add(fn);
+    return () => void set.delete(fn);
+  }, [cacheKey]);
 
   const run = useCallback(async (initial: boolean) => {
     const fn = fetcherRef.current;

@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { UserMenu } from "@/components/layout/UserMenu";
+import { cx } from "@/components/ui/cx";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
@@ -121,9 +123,21 @@ export default function ProfilePage() {
             <Avatar name={profile.displayName} src={profile.avatarUrl} frame={profile.avatarFrame} size={104} className="border-4 border-surface" />
             <div className="flex items-center gap-2 pb-1">
               {isSelf ? (
-                <Button href="/settings#profile">
-                  <Icon name="edit" size={15} /> Edit profile
-                </Button>
+                <>
+                  <Button href="/settings#profile">
+                    <Icon name="edit" size={15} /> Edit profile
+                  </Button>
+                  {/* phones have no sidebar, so Settings lives here too */}
+                  {/* phones have no sidebar: settings, ads and the rest live in this menu */}
+                  <UserMenu
+                    align="right"
+                    trigger={({ open, props }) => (
+                      <button {...props} aria-label="Account menu" title="Settings, ads and more" className={cx("inline-flex size-10 items-center justify-center rounded-full border border-line bg-surface text-ink hover:bg-raised", open && "bg-raised")}>
+                        <Icon name="more" size={18} />
+                      </button>
+                    )}
+                  />
+                </>
               ) : (
                 <>
                   <FriendButton handle={profile.handle} status={view.friendship} onChange={(friendship) => setData((d) => (d ? { ...d, friendship } : d))} />

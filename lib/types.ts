@@ -65,6 +65,10 @@ export interface UserMe extends UserProfile {
   privacy: UserPrivacy;
   dmPolicy: DmPolicy;
   unreadMessages: number;
+  /** unread entries in the notification inbox (the bell) */
+  unreadNotifications: number;
+  /** points balance (spent on picture frames and name styles) */
+  points: number;
   /** a site admin (opens /admin) */
   isAdmin: boolean;
 }
@@ -153,6 +157,8 @@ export interface CommunityCardDTO {
   id: Id;
   slug: string;
   name: string;
+  /** an official Klique city community ("Klique Lagos") */
+  official: boolean;
   /** short preview. For a locked private community this is empty. */
   description: string;
   interest: InterestId;
@@ -293,9 +299,82 @@ export interface EventDTO {
   audience: EventAudience;
   goingCount: number;
   interestedCount: number;
+  /** crews heading there together */
+  crewCount: number;
   isPast: boolean;
   isFull: boolean;
   viewer: { rsvp: RsvpStatus | null; saved: boolean; isHost: boolean; canEdit: boolean };
+}
+
+/* ------------------------------ crews ------------------------------- */
+
+export type CrewJoinMode = "open" | "approval";
+/** where the viewer stands with a crew */
+export type CrewStanding = "host" | "member" | "pending" | null;
+
+/** A crew in a list: enough to decide whether to join. The exact meetup point stays hidden until you're in. */
+export interface CrewCardDTO {
+  id: Id;
+  eventId: Id;
+  area: string;
+  note: string;
+  meetupAt: ISODate;
+  joinMode: CrewJoinMode;
+  maxMembers: number;
+  memberCount: number;
+  host: UserBrief;
+  /** a few faces of who's in, host first */
+  faces: UserBrief[];
+  isFull: boolean;
+  /** the event has started: no more joining */
+  closed: boolean;
+  /** the community (and group) the event lives in, where the crew is shown; null for events outside any community */
+  space: { slug: string; sub: string | null } | null;
+  viewer: { standing: CrewStanding };
+}
+
+/** A crew you're in (or asked to join), for the community's left panel. */
+export interface MyCrewDTO {
+  id: Id;
+  area: string;
+  eventId: Id;
+  eventTitle: string;
+  meetupAt: ISODate;
+  memberCount: number;
+  standing: Exclude<CrewStanding, null>;
+  /** the group the event lives in, if any */
+  sub: string | null;
+}
+
+export interface CrewDTO extends CrewCardDTO {
+  /** null unless you're in the crew */
+  meetupPoint: string | null;
+  event: { id: Id; title: string; startsAt: ISODate; endsAt: ISODate | null; venue: string; online: boolean; coverImage: string | null; city: CityId; country: string };
+  members: UserBrief[];
+  /** join requests waiting (host only) */
+  requests: { user: UserBrief; message: string; createdAt: ISODate }[];
+  /** when it all disappears */
+  expiresAt: ISODate;
+  viewer: { standing: CrewStanding; canEdit: boolean; canChat: boolean; canJoin: boolean; joinBlockedReason: string | null };
+}
+
+export interface EventCrewsDTO {
+  crews: CrewCardDTO[];
+  /** your crew for this event (hosting, in, or asked), if any */
+  mine: Id | null;
+  canStart: boolean;
+  /** why you can't start one, in words */
+  startBlockedReason: string | null;
+  /** you could join a crew here (signed in, verified, a member of the event's community or group) */
+  canJoin: boolean;
+}
+
+export interface CrewMessageDTO {
+  id: Id;
+  body: string;
+  createdAt: ISODate;
+  author: UserBrief;
+  mine: boolean;
 }
 
 /** Where the signed-in person may host events. */
@@ -662,6 +741,10 @@ export type RealtimeEvent =
   | { type: "channel"; communityId: Id; channelId: Id }
   | { type: "dm"; conversationId: Id }
   | { type: "topic"; communityId: Id; topicId: Id }
+  /** something was sent to you (see lib/notifications); `ref` says what changed ("crew:<id>"…) so open pages refresh */
+  | { type: "notify"; category: string; ref: string | null; inbox: boolean }
+  /** something changed in a crew you're in (someone joined or left, a new chat message…) */
+  | { type: "crew"; crewId: Id; chat?: boolean }
   /** the connection came back after a gap: refetch whatever is on screen */
   | { type: "resync" };
 
@@ -773,6 +856,8 @@ export interface SourceDTO {
 export interface AdminSummaryDTO {
   reports: Record<ReportStatus, number>;
   pendingDrafts: number;
+  /** ad requests waiting for review */
+  pendingAds: number;
 }
 
 export type AdminUserFilter = "all" | "new" | "admins" | "suspended" | "unverified";
@@ -941,4 +1026,138 @@ export interface PromoteOptionsDTO {
   prices: Record<string, Record<string, number>>;
   review: boolean;
   promotions: PromotionDTO[];
+}
+
+/* --------------------------- notifications --------------------------- */
+
+export interface NotificationDTO {
+  id: Id;
+  category: string;
+  title: string;
+  body: string;
+  href: string;
+  /** how many bundled into this one */
+  count: number;
+  read: boolean;
+  updatedAt: ISODate;
+}
+
+/* ------------------------------- ad requests ------------------------------- */
+
+export type AdCampaignStatus = "pending" | "changes" | "rejected" | "approved" | "paid" | "cancelled";
+/** where an ad request is, in words people use: waiting, needs changes, … running, ended */
+export type AdCampaignPhase = "pending" | "changes" | "rejected" | "approved" | "scheduled" | "live" | "ended" | "cancelled";
+
+export interface AdCampaignDTO {
+  id: Id;
+  kind: "event" | "community" | "brand";
+  status: AdCampaignStatus;
+  phase: AdCampaignPhase;
+  advertiser: string;
+  title: string;
+  body: string;
+  imageUrl: string | null;
+  ctaLabel: string;
+  url: string;
+  event: { id: Id; title: string; startsAt: ISODate; coverImage: string | null } | null;
+  community: { slug: string; name: string; coverImage: string | null } | null;
+  placements: string[];
+  reach: "city" | "country" | "world";
+  place: string | null;
+  placeLabel: string;
+  days: number;
+  startOn: ISODate | null;
+  amount: number;
+  currency: string;
+  reviewNote: string;
+  paymentMethod: "paystack" | "manual" | null;
+  paidAt: ISODate | null;
+  startsAt: ISODate | null;
+  endsAt: ISODate | null;
+  impressions: number;
+  clicks: number;
+  createdAt: ISODate;
+  updatedAt: ISODate;
+  /** who asked (admin view) */
+  user?: UserBrief;
+  /** card payment through Paystack is set up */
+  canPayOnline: boolean;
+}
+
+export interface AdCampaignInput {
+  kind: "event" | "community" | "brand";
+  eventId?: string;
+  communitySlug?: string;
+  advertiser?: string;
+  title?: string;
+  body?: string;
+  imageUrl?: string | null;
+  ctaLabel?: string;
+  url?: string;
+  placements: string[];
+  reach: "city" | "country" | "world";
+  place?: string | null;
+  days: number;
+  startOn?: string | null;
+}
+
+/* ------------------------------ points ------------------------------ */
+
+export interface StyleUnlockDTO {
+  /** "frame:fire", "name:gold-shimmer" */
+  key: string;
+  name: string;
+  expiresAt: string;
+  autoRenew: boolean;
+  /** "gift": free (worn before points existed, or given by an admin) */
+  source: "points" | "gift";
+  /** what renewing costs now */
+  price: number;
+}
+
+export interface PointTxnDTO {
+  id: string;
+  amount: number;
+  balanceAfter: number;
+  kind: "purchase" | "unlock" | "renew" | "grant" | "revoke" | "earn";
+  note: string;
+  createdAt: string;
+}
+
+/** Your points: balance, what you've unlocked, prices, packs to buy and your history. */
+export interface PointsWalletDTO {
+  balance: number;
+  config: import("./points").PointsConfig;
+  unlocks: StyleUnlockDTO[];
+  history: PointTxnDTO[];
+  hasMoreHistory: boolean;
+  /** card payments are set up (Paystack keys present) */
+  canBuy: boolean;
+}
+
+export interface PointSaleDTO {
+  id: string;
+  user: UserBrief | null;
+  points: number;
+  amount: number;
+  status: "pending" | "paid";
+  createdAt: string;
+  paidAt: string | null;
+}
+
+export interface AdminPointsOverviewDTO {
+  /** naira and points sold, last 30 days and all time */
+  sales: { last30: { amount: number; points: number; count: number }; all: { amount: number; points: number; count: number } };
+  /** points people hold right now */
+  outstanding: number;
+  /** designs being worn on points right now */
+  activeUnlocks: number;
+  recent: PointSaleDTO[];
+}
+
+export interface AdminPointsUserDTO {
+  user: UserBrief;
+  balance: number;
+  unlocks: StyleUnlockDTO[];
+  history: PointTxnDTO[];
 }

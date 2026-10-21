@@ -26,6 +26,8 @@ import { hiddenUserIds } from "./blocks";
 import { assertPlace, escapeRegex, PAGE_SIZE, recountRsvps, sid } from "./helpers";
 import { notify } from "./push.service";
 import { resolveSpaceFor } from "./spaces.service";
+import { purgeCrews, syncCrewExpiry } from "./crews.service";
+import { officialCommunityFor } from "./official.service";
 import { Membership } from "../models/Membership";
 
 /** Events stay "upcoming" until 3 hours after they start (when no end time is set). */
@@ -213,6 +215,9 @@ export async function createEvent(viewer: IUser, input: z.infer<typeof eventCrea
     throw new ApiError(422, "Choose the community this group belongs to.", { errors: { communitySlug: "Required with a group" } });
   } else {
     assertCanHostPublic(viewer); // site admins only
+    // every event lives in a community: Klique's own go into that city's official one ("Klique Lagos")
+    if (!input.interest) throw new ApiError(422, "Pick an interest for this event.", { errors: { interest: "Pick an interest" } });
+    space = { community: await officialCommunityFor(viewer, { country: input.country, region: input.region, city: input.city, interest: input.interest }), sub: null };
   }
 
   const interest = input.interest ?? space?.community.interest;
@@ -253,6 +258,8 @@ export async function createEvent(viewer: IUser, input: z.infer<typeof eventCrea
     notify(
       members.map((m) => m.userId),
       { title: `New event in ${space.sub?.name ?? space.community.name}`, body: `${doc.title} · ${when(doc.startsAt)}`, data: { type: "event", id: sid(doc._id) } },
+      // several new events from one place bundle into one line
+      { category: "events", groupKey: `new-events:${sid(space.sub?._id ?? space.community._id)}`, many: (n) => `${n} new events in ${space!.sub?.name ?? space!.community.name}`, ref: `event:${sid(doc._id)}` },
     );
   }
   return getEvent(viewer, sid(doc._id));
@@ -295,6 +302,8 @@ export async function updateEvent(viewer: IUser, id: string, patch: z.infer<type
   if (patch.cancelled !== undefined) set.cancelled = patch.cancelled;
 
   await Event.updateOne({ _id: event._id }, set);
+  // crews disappear a day after the event: follow a new time
+  if (set.startsAt !== undefined || set.endsAt !== undefined) await syncCrewExpiry({ _id: event._id, startsAt: (set.startsAt as Date | undefined) ?? event.startsAt, endsAt: set.endsAt !== undefined ? (set.endsAt as Date | null) : event.endsAt });
   if (set.coverImage !== undefined && event.coverImage && event.coverImage !== set.coverImage) deleteUploads([event.coverImage]);
 
   // People who said they're going hear about a cancellation or a new time.
@@ -307,6 +316,7 @@ export async function updateEvent(viewer: IUser, id: string, patch: z.infer<type
       cancelledNow
         ? { title: "Event cancelled", body: `${set.title ?? event.title} has been cancelled.`, data: { type: "event", id } }
         : { title: "New time", body: `${set.title ?? event.title} is now ${when(patch.startsAt as Date)}.`, data: { type: "event", id } },
+      { category: "events", ref: `event:${id}` },
     );
   }
   return getEvent(viewer, id);
@@ -332,7 +342,7 @@ export async function deleteEvent(viewer: IUser, id: string) {
 
 /** Delete an event with its RSVPs and saves (no permission check: callers do that). */
 export async function purgeEvent(event: Pick<IEvent, "_id" | "coverImage">) {
-  await Promise.all([Event.deleteOne({ _id: event._id }), Rsvp.deleteMany({ eventId: event._id }), SavedEvent.deleteMany({ eventId: event._id })]);
+  await Promise.all([Event.deleteOne({ _id: event._id }), Rsvp.deleteMany({ eventId: event._id }), SavedEvent.deleteMany({ eventId: event._id }), purgeCrews({ eventId: event._id })]);
   deleteUploads([event.coverImage]);
 }
 

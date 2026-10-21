@@ -113,7 +113,7 @@ export async function promoteOptions(viewer: IUser, eventId: string): Promise<Pr
   };
 }
 
-async function paystack<T>(path: string, init?: { method?: string; body?: unknown }): Promise<T> {
+export async function paystack<T>(path: string, init?: { method?: string; body?: unknown }): Promise<T> {
   const cfg = paystackConfig();
   if (!cfg) throw new ApiError(503, "Promotions aren't available yet.");
   const res = await fetch(`${cfg.baseUrl}${path}`, {
@@ -222,7 +222,9 @@ export async function handlePaystackWebhook(rawBody: string, signature: string |
   if (evt.event === "charge.success" && evt.data?.reference) {
     // re-check with Paystack rather than trusting the payload's numbers
     const data = await paystack<{ status: string; amount: number; currency: string; channel?: string; paid_at?: string }>(`/transaction/verify/${encodeURIComponent(evt.data.reference)}`);
-    await fulfil(evt.data.reference, data);
+    // ad requests (kad_…) start their run; event promotions (klq_…) as before
+    if (evt.data.reference.startsWith("kad_")) await (await import("./ad-campaigns.service")).fulfilCampaign(evt.data.reference, data);
+    else await fulfil(evt.data.reference, data);
   }
   return true;
 }

@@ -32,6 +32,10 @@ export interface IUser {
   /** bump to invalidate every issued login token */
   tokenVersion: number;
   isDemo?: boolean;
+  /** which notifications they want, in the app and as push (lib/notifications: missing = on) */
+  notifyPrefs?: Record<string, { inApp?: boolean; push?: boolean }>;
+  /** points balance (lib/points); changed only with atomic $inc next to a PointTxn */
+  points?: number;
   /** set by a site admin: the account can't sign in or use the API */
   suspendedAt?: Date | null;
   suspendedReason?: string;
@@ -65,6 +69,8 @@ const UserSchema = new Schema<IUser>(
     dmPolicy: { type: String, enum: ["everyone", "shared", "nobody"], default: "shared" },
     tokenVersion: { type: Number, default: 0 },
     isDemo: { type: Boolean, default: false },
+    notifyPrefs: { type: Schema.Types.Mixed, default: {} },
+    points: { type: Number, default: 0, min: 0 },
     suspendedAt: { type: Date, default: null },
     suspendedReason: { type: String, default: "", maxlength: 300 },
   },

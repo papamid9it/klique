@@ -4,6 +4,8 @@ import { JobRun } from "../models/JobRun";
 import { Rsvp } from "../models/Rsvp";
 import { when } from "./events.service";
 import { notifyNow } from "./push.service";
+import { runCrewReminders } from "./crews.service";
+import { runAdLifecycle } from "./ad-campaigns.service";
 
 /**
  * "Starting soon" reminders to everyone going, on their phones (mobile app) and browsers (desktop and web app).
@@ -26,9 +28,14 @@ export async function runReminders(): Promise<{ events: number; notified: number
     await notifyNow(
       going.map((g) => g.userId),
       { title: "Starting soon", body: `${e.title} · ${when(e.startsAt)}`, data: { type: "event", id: String(e._id) } },
+      { category: "events", ref: `event:${String(e._id)}` },
     );
     notified += going.length;
   }
+  // crews hear about an hour before their own meetup time
+  notified += await runCrewReminders(now);
+  // ads: "ends tomorrow" and "ended" (with results)
+  notified += await runAdLifecycle(now);
   return { events: due.length, notified };
 }
 

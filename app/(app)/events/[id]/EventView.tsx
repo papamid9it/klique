@@ -31,6 +31,8 @@ import { CURRENCIES, formatDateLong, formatDateShort, formatPrice, formatTime } 
 import { useApi } from "@/lib/hooks/useApi";
 import { useEventActions } from "@/lib/hooks/useEventActions";
 import type { EventDTO } from "@/lib/types";
+import { EventCrews } from "@/components/domain/crews/EventCrews";
+import { crewsHref } from "@/components/domain/crews/parts";
 
 /** Lagos (UTC+1) wall-clock parts for form inputs. */
 function lagosInputs(iso: string) {
@@ -346,6 +348,9 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
               </>
             )}
           </section>
+
+          {/* events outside any community keep their crews here; the rest live in their community's Crews view */}
+          {!event.isPast && !cancelled && !event.community && <EventCrews event={event} />}
         </div>
 
         <aside className="space-y-3 lg:sticky lg:top-6 lg:self-start">
@@ -356,7 +361,7 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
                   <Icon name="check" className="text-accent-text" /> You&apos;re hosting
                 </p>
                 {event.audience === "public" && !event.isPast && !cancelled && (
-                  <Button href={`/events/${event.id}/promote`} variant="secondary" className="w-full">
+                  <Button href={`/ads/new?event=${event.id}`} variant="secondary" className="w-full">
                     <Icon name="megaphone" size={15} /> Promote this event
                   </Button>
                 )}
@@ -397,6 +402,18 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
               <Icon name="bookmark" /> {event.viewer.saved ? "Saved" : "Save for later"}
             </Button>
           </div>
+          {!event.online && !event.isPast && !cancelled && (
+            <div className="space-y-2 rounded-card border border-line bg-surface p-4">
+              <p className="flex items-center gap-2 text-sm font-semibold">
+                <Icon name="pin" size={16} className="text-accent-text" />
+                {event.crewCount ? `${event.crewCount} ${event.crewCount === 1 ? "crew" : "crews"} going together` : "Going alone?"}
+              </p>
+              <p className="text-xs text-ink-muted">{event.crewCount ? "Join people heading there from near you." : "Start a crew from your area and meet up first."}</p>
+              <Button href={crewsHref(event)} variant="secondary" className="w-full">
+                <Icon name="users" size={15} /> {event.crewCount ? "Find crews" : "Find or start a crew"}
+              </Button>
+            </div>
+          )}
           {!event.isPast && !event.viewer.isHost && partnerAd && <SponsoredBox ad={partnerAd} image={false} />}
           <div className="flex flex-wrap gap-2">
             <ShareButton path={`/events/${event.id}`} text={`${event.title} — ${formatDateShort(event.startsAt)}`} />

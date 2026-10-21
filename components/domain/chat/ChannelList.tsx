@@ -16,11 +16,11 @@ import { Dropdown, type MenuEntry } from "@/components/ui/Dropdown";
 import { Icon, type IconName } from "@/components/ui/Icon";
 import { cx } from "@/components/ui/cx";
 import { compactCount } from "@/lib/format";
-import type { BoardDTO, ChannelCategoryDTO, ChannelDTO, ChannelGroupDTO, ChannelsDTO, CommunityDTO } from "@/lib/types";
+import type { BoardDTO, ChannelCategoryDTO, ChannelDTO, ChannelGroupDTO, ChannelsDTO, CommunityDTO, MyCrewDTO } from "@/lib/types";
 import { CategoryModal, ChannelSettings, CreateChannelModal } from "./ChannelFormModal";
 
-export type WorkspaceView = "topics" | "events" | "groups" | "members";
-export type GroupView = "updates" | "events" | "members";
+export type WorkspaceView = "topics" | "events" | "crews" | "groups" | "members";
+export type GroupView = "updates" | "events" | "crews" | "members";
 
 import { orderChannels } from "./order";
 export { orderChannels };
@@ -52,6 +52,8 @@ export function ChannelList({
   onNavigate,
   onLeave,
   onReport,
+  crews = [],
+  activeCrew = null,
 }: {
   community: CommunityDTO;
   data: ChannelsDTO;
@@ -68,6 +70,10 @@ export function ChannelList({
   onNavigate?: () => void;
   onLeave: () => void;
   onReport: () => void;
+  /** crews you're in (or asked to join) for this community's events */
+  crews?: MyCrewDTO[];
+  /** id of the crew being viewed */
+  activeCrew?: string | null;
 }) {
   const toast = useToast();
   const router = useRouter();
@@ -114,6 +120,7 @@ export function ChannelList({
 
   const nav: { id: WorkspaceView; label: string; icon: IconName; count?: number | null; show: boolean }[] = [
     { id: "events", label: "Events", icon: "calendar", count: c.upcomingEventCount, show: true },
+    { id: "crews", label: "Crews", icon: "pin", show: true },
     // groups are private: the folder only appears once you're in one (the owner and site admins see them all)
     { id: "groups", label: "Groups", icon: "folder", count: c.subcommunityCount, show: (c.subcommunityCount ?? 0) > 0 },
     { id: "members", label: "Members", icon: "users", count: c.memberCount, show: c.viewer.isMember },
@@ -282,6 +289,36 @@ export function ChannelList({
     </li>
   );
 
+  /** "Your crews": the crews you're going with, one tap from their chat. */
+  const crewSection = (list: MyCrewDTO[]) =>
+    list.length > 0 && (
+      <section className="mt-3" aria-label="Your crews">
+        <p className="px-2 py-1 text-[11px] font-bold tracking-[0.08em] text-ink-muted uppercase">Your crews</p>
+        <ul className="space-y-0.5">
+          {list.map((x) => {
+            const on = activeCrew === x.id;
+            return (
+              <li key={x.id}>
+                <SoftLink
+                  href={`${base}?${x.sub ? `g=${x.sub}&` : ""}crew=${x.id}`}
+                  scroll={false}
+                  onClick={onNavigate}
+                  aria-current={on ? "page" : undefined}
+                  className={cx("flex items-center gap-2.5 rounded-control px-2.5 py-1.5 transition", on ? "bg-raised text-ink" : "text-ink-muted hover:bg-raised/60 hover:text-ink")}
+                >
+                  <Icon name="pin" size={16} className="shrink-0" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[14px] font-medium">From {x.area}</span>
+                    <span className="block truncate text-[11.5px] opacity-80">{x.standing === "pending" ? "Asked to join · " : ""}{x.eventTitle}</span>
+                  </span>
+                </SoftLink>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+    );
+
   /** Discord's server header: the name is the menu button. */
   const headerButton = (name: string, locked: boolean, menu: MenuEntry[], label: string) => (
     <Dropdown
@@ -319,6 +356,7 @@ export function ChannelList({
     ];
     const gNav: { id: GroupView; label: string; icon: IconName; show: boolean }[] = [
       { id: "events", label: "Events", icon: "calendar", show: true },
+      { id: "crews", label: "Crews", icon: "pin", show: true },
       { id: "members", label: "Members", icon: "users", show: g.role !== null },
     ];
     return (
@@ -331,6 +369,7 @@ export function ChannelList({
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-2 py-3">
           <ul className="space-y-0.5">{gNav.filter((n) => n.show).map((n) => navLink(`${gBase}&view=${n.id}`, view === n.id, n.label, n.icon))}</ul>
+          {crewSection(crews.filter((x) => x.sub === g.slug))}
           <div className="my-3 h-px bg-line" />
           <div className="flex items-center pr-1">
             <p className="flex-1 px-2 py-1 text-[11px] font-bold tracking-[0.08em] text-ink-muted uppercase">Channels</p>
@@ -374,6 +413,7 @@ export function ChannelList({
             .filter((n) => n.show)
             .map((n) => navLink(`${base}?view=${n.id}`, view === n.id, n.label, n.icon, n.count))}
         </ul>
+        {crewSection(crews)}
 
         {(boards.length > 0 || manage) && (
           <section className="mt-3" aria-label="Boards">

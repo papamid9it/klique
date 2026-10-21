@@ -28,6 +28,8 @@ export function DmSidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { connected } = useRealtime();
   const inbox = useApi(authed ? () => MessageService.inbox() : null, [authed], { key: "dm-inbox" });
   const summary = useApi(authed ? () => FriendService.summary() : null, [authed], { key: "friends-summary" });
+  // a friend request or an accept: the counts update by themselves
+  useRealtimeEvent(() => void summary.reload(), { filter: (e) => e.type === "notify" && e.category === "friends", debounceMs: 400 });
 
   const reloadInbox = inbox.reload;
   const reloadSummary = summary.reload;

@@ -7,6 +7,7 @@ import { ScopeButton } from "@/components/domain/places/ScopeButton";
 import { usePlace } from "@/components/providers/PlaceProvider";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
+import { Modal } from "@/components/ui/Modal";
 import { cx } from "@/components/ui/cx";
 import { RowSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/States";
@@ -77,6 +78,9 @@ export function EventsExplorer() {
   const o = overview.data;
   const counts = Object.fromEntries((o?.places ?? []).map((p) => [p.scope, p.count]));
   const filtered = !!(interest || date !== "any" || day || free || format !== "any" || q);
+  // how many filters are on, for the phone's Filters button
+  const activeFilters = [interest, date !== "any" || day, free, format !== "any"].filter(Boolean).length;
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const clear = () => {
     setInterest("");
     setDate("any");
@@ -142,7 +146,65 @@ export function EventsExplorer() {
           </div>
         </header>
 
-        <div className="no-bar -mx-4 mt-5 flex gap-2 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0" role="group" aria-label="Quick places">
+        {/* phones: a search box and one Filters button; everything else opens in a panel */}
+        <div className="mt-5 flex items-center gap-2 sm:hidden">
+          <div className="relative min-w-0 flex-1">
+            <Icon name="search" size={15} className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-ink-muted" />
+            <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search events…" aria-label="Search events" className="h-11 w-full rounded-full border border-line bg-surface pr-3 pl-10 text-sm placeholder:text-ink-muted/70 focus:border-accent-text" />
+          </div>
+          <button type="button" onClick={() => setFiltersOpen(true)} className={cx("relative inline-flex h-11 shrink-0 items-center gap-2 rounded-full border px-4 text-sm font-semibold", activeFilters ? "border-accent-text bg-surface text-ink" : "border-line bg-surface text-ink")}>
+            <Icon name="sliders" size={15} /> Filters
+            {activeFilters > 0 && <span className="inline-flex size-5 items-center justify-center rounded-full bg-accent text-[11px] font-bold text-accent-ink">{activeFilters}</span>}
+          </button>
+        </div>
+        <Modal open={filtersOpen} onClose={() => setFiltersOpen(false)} title="Filter events">
+          <div className="space-y-5">
+            <fieldset>
+              <legend className="eyebrow mb-2">Where</legend>
+              <div className="flex flex-wrap gap-2">
+                {unique.map((sc) => (
+                  <Pill key={scopeToString(sc)} on={scopeToString(sc) === place.where} onClick={() => place.setScope(sc)}>
+                    <span aria-hidden="true">{scopeFlag(sc)}</span> {sc === home && home.level !== "world" ? `Near me · ${scopeLabel(sc)}` : scopeLabel(sc)}
+                  </Pill>
+                ))}
+              </div>
+            </fieldset>
+            <fieldset>
+              <legend className="eyebrow mb-2">Format</legend>
+              <div className="flex flex-wrap gap-2">
+                {([["any", "All"], ["in-person", "In person"], ["online", "Online"]] as const).map(([id, label]) => (
+                  <Pill key={id} on={format === id} onClick={() => setFormat(id)}>{label}</Pill>
+                ))}
+                <Pill on={free} onClick={() => setFree((f) => !f)}>Free only</Pill>
+              </div>
+            </fieldset>
+            <fieldset>
+              <legend className="eyebrow mb-2">When</legend>
+              <div className="flex flex-wrap gap-2">
+                {WHEN.map((w) => (
+                  <Pill key={w.id} on={!day && date === w.id} onClick={() => { setDay(""); setDate(w.id); }}>{w.label}</Pill>
+                ))}
+              </div>
+            </fieldset>
+            <fieldset>
+              <legend className="eyebrow mb-2">Kind</legend>
+              <div className="flex flex-wrap gap-2">
+                <Pill on={!interest} onClick={() => setInterest("")}>All kinds</Pill>
+                {INTERESTS.map((i) => (
+                  <Pill key={i.id} on={interest === i.id} onClick={() => setInterest(interest === i.id ? "" : i.id)}>
+                    <span aria-hidden="true">{i.glyph}</span> {i.short}
+                  </Pill>
+                ))}
+              </div>
+            </fieldset>
+            <div className="flex items-center justify-between gap-2 border-t border-line pt-4">
+              <Button variant="ghost" onClick={clear} disabled={!filtered}>Clear all</Button>
+              <Button variant="primary" onClick={() => setFiltersOpen(false)}>Show events</Button>
+            </div>
+          </div>
+        </Modal>
+
+        <div className="mt-5 hidden flex-wrap gap-2 sm:flex" role="group" aria-label="Quick places">
           {unique.map((s) => (
             <Pill key={scopeToString(s)} on={scopeToString(s) === place.where} onClick={() => place.setScope(s)}>
               <span aria-hidden="true">{scopeFlag(s)}</span> {s === home && home.level !== "world" ? `Near me · ${scopeLabel(s)}` : scopeLabel(s)}
@@ -151,7 +213,7 @@ export function EventsExplorer() {
         </div>
 
         {/* ------------------------------ filters ------------------------------ */}
-        <div role="search" aria-label="Filter events" className="mt-5 space-y-3 rounded-card border border-line bg-surface p-3.5">
+        <div role="search" aria-label="Filter events" className="mt-5 hidden space-y-3 rounded-card border border-line bg-surface p-3.5 sm:block">
           <div className="flex flex-wrap items-center gap-2.5">
             <div className="relative min-w-48 flex-1">
               <Icon name="search" size={15} className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-ink-muted" />

@@ -39,6 +39,7 @@ import { escapeRegex, sid } from "./helpers";
 import { purgeCommunity } from "./communities.service";
 import { purgeEvent } from "./events.service";
 import { deleteUploads } from "./media.service";
+import { AdCampaign } from "../models/AdCampaign";
 
 /** Everything here is for site admins only (ADMIN_EMAILS). */
 export function assertAdmin(viewer: IUser) {
@@ -454,6 +455,7 @@ export async function listAdminCommunities(q: { q: string; sort: "members" | "ne
 export async function adminDeleteCommunity(admin: IUser, id: string, note = "") {
   const c = await Community.findById(id).lean<ICommunity>();
   if (!c) throw notFound("That community is gone.");
+  if (c.official) throw forbidden("Official Klique communities can't be deleted: Klique's own events live there.");
   await purgeCommunity(c);
   await logAction(admin, "community.delete", "community", c._id, c.name, note, null);
   return { deleted: true };
@@ -463,8 +465,8 @@ export async function adminDeleteCommunity(admin: IUser, id: string, note = "") 
 
 /** The tab counts in the admin menu. */
 export async function adminSummary(): Promise<AdminSummaryDTO> {
-  const [reports, pendingDrafts] = await Promise.all([reportCounts(), EventDraft.countDocuments({ status: "pending" })]);
-  return { reports, pendingDrafts };
+  const [reports, pendingDrafts, pendingAds] = await Promise.all([reportCounts(), EventDraft.countDocuments({ status: "pending" }), AdCampaign.countDocuments({ status: "pending" })]);
+  return { reports, pendingDrafts, pendingAds };
 }
 
 export async function adminOverview(): Promise<AdminOverviewDTO> {

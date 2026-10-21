@@ -10,6 +10,7 @@ import { Event } from "../models/Event";
 import { Invitation } from "../models/Invitation";
 import { Membership } from "../models/Membership";
 import { MembershipRequest } from "../models/MembershipRequest";
+import { Crew, CrewMember, CrewMessage } from "../models/Crew";
 import { Post } from "../models/Post";
 import { Rsvp, SavedEvent } from "../models/Rsvp";
 import { Subcommunity } from "../models/Subcommunity";
@@ -121,6 +122,8 @@ export async function purgeSpaceData(communityId: Types.ObjectId, subcommunityId
     Event.deleteMany(where),
     eventIds.length ? Rsvp.deleteMany({ eventId: { $in: eventIds } }) : null,
     eventIds.length ? SavedEvent.deleteMany({ eventId: { $in: eventIds } }) : null,
+    // their crews (with members and chat) go too
+    eventIds.length ? Crew.find({ eventId: { $in: eventIds } }).distinct("_id").then((ids) => Promise.all([Crew.deleteMany({ _id: { $in: ids } }), CrewMember.deleteMany({ crewId: { $in: ids } }), CrewMessage.deleteMany({ crewId: { $in: ids } })])) : null,
   ]);
 }
 

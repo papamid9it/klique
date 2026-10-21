@@ -22,6 +22,7 @@ import { PlaceFields } from "@/components/domain/places/PlaceFields";
 import { PasswordBlock } from "@/components/domain/account/PasswordBlock";
 import { DeleteAccount } from "@/components/domain/account/DeleteAccount";
 import { DeviceSettings } from "@/components/domain/account/DeviceSettings";
+import { NotificationSettings } from "@/components/domain/account/NotificationSettings";
 import { ResendButton } from "@/components/domain/account/EmailStatus";
 import { StylePicker, type StyleDraft } from "@/components/domain/account/StylePicker";
 import { UserName } from "@/components/ui/UserName";
@@ -33,14 +34,14 @@ import { useApi } from "@/lib/hooks/useApi";
 import { MOODS, type MoodId } from "@/lib/moods";
 import type { UserMe } from "@/lib/types";
 
-type Tab = "account" | "profile" | "style" | "privacy" | "appearance";
-const GROUPS: { title: string; items: { id: Tab; label: string; icon: "user" | "edit" | "asterisk" | "shield" | "sliders" }[] }[] = [
+type Tab = "account" | "profile" | "style" | "privacy" | "notifications" | "appearance";
+const GROUPS: { title: string; items: { id: Tab; label: string; icon: "user" | "edit" | "asterisk" | "shield" | "sliders" | "bell" }[] }[] = [
   { title: "User settings", items: [{ id: "account", label: "My Account", icon: "user" }, { id: "profile", label: "Profile", icon: "edit" }, { id: "style", label: "Profile style", icon: "asterisk" }, { id: "privacy", label: "Privacy & Safety", icon: "shield" }] },
-  { title: "App settings", items: [{ id: "appearance", label: "Appearance", icon: "sliders" }] },
+  { title: "App settings", items: [{ id: "notifications", label: "Notifications", icon: "bell" }, { id: "appearance", label: "Appearance", icon: "sliders" }] },
 ];
-const TITLES: Record<Tab, string> = { account: "My Account", profile: "Profile", style: "Profile style", privacy: "Privacy & Safety", appearance: "Appearance" };
+const TITLES: Record<Tab, string> = { account: "My Account", profile: "Profile", style: "Profile style", privacy: "Privacy & Safety", notifications: "Notifications", appearance: "Appearance" };
 /** old anchors (#messages, #safety, #mood…) still land somewhere sensible */
-const HASH: Record<string, Tab> = { account: "account", profile: "profile", style: "style", design: "style", privacy: "privacy", messages: "privacy", safety: "privacy", appearance: "appearance", mood: "appearance" };
+const HASH: Record<string, Tab> = { account: "account", profile: "profile", style: "style", design: "style", privacy: "privacy", messages: "privacy", safety: "privacy", appearance: "appearance", mood: "appearance", notifications: "notifications" };
 
 /** A titled block inside a tab: small caps heading, optional intro, then the content. */
 function Block({ title, intro, children }: { title: string; intro?: string; children: React.ReactNode }) {
@@ -352,10 +353,6 @@ function AccountTab({ me, go, onSignOut, onEverywhere, busy }: { me: UserMe; go:
         </div>
       </Block>
 
-      <Block title="Notifications" intro="For the browser you're using now.">
-        <DeviceSettings />
-      </Block>
-
       <Block title="Delete account" intro="Permanently remove your account and personal data from klique.">
         <DeleteAccount me={me} />
       </Block>
@@ -450,7 +447,7 @@ function StyleTab({ me }: { me: UserMe }) {
             {error}
           </p>
         )}
-        <div className="sticky bottom-4 flex items-center gap-3">
+        <div className="flex items-center gap-3 pt-1">
           <Button type="submit" variant="primary" loading={busy} disabled={!dirty}>
             Save style
           </Button>
@@ -605,6 +602,16 @@ export default function SettingsPage() {
                 <PrefsSections me={user} />
                 <Block title="Blocked people" intro="People you've blocked can't message you.">
                   <BlockedList />
+                </Block>
+              </div>
+            )}
+            {tab === "notifications" && (
+              <div className="space-y-6">
+                <Block title="What you hear about" intro="Only things addressed to you or waiting on you. Several of the same kind bundle into one line. Ordinary chat never notifies; it shows as unread dots and counts.">
+                  <NotificationSettings />
+                </Block>
+                <Block title="This browser" intro="Push to this computer or phone browser. The app on your phone asks separately.">
+                  <DeviceSettings />
                 </Block>
               </div>
             )}

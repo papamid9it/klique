@@ -13,7 +13,7 @@ import { PageTitle } from "@/components/layout/PageTitle";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { PlaceFields } from "@/components/domain/places/PlaceFields";
 import { usePlace } from "@/components/providers/PlaceProvider";
-import { currencyOf, type Place } from "@/lib/places";
+import { cityName, currencyOf, type Place } from "@/lib/places";
 import { ImageField } from "@/components/ui/ImageField";
 import { Button } from "@/components/ui/Button";
 import { SelectField, TextArea, TextField } from "@/components/ui/Field";
@@ -64,7 +64,7 @@ function NewEventForm() {
   }, [status, requireAuth]);
 
   // Events are posted from inside a community by its owner and admins (a group's by the group's), for that
-  // community only. Site admins can pick any community, or none for a public event.
+  // community only. Site admins can pick any community; left empty, it goes into the city's official one ("Klique Lagos").
   const hosting = useApi(status === "authed" ? () => EventService.hosting() : null, [status]);
   const communities = useMemo(() => hosting.data?.communities ?? [], [hosting.data]);
   const siteAdmin = !!hosting.data?.siteAdmin;
@@ -221,6 +221,7 @@ function NewEventForm() {
         <legend className="px-1 text-[13px] font-medium">Where it&apos;s posted</legend>
         {siteAdmin ? (
           <AdminCommunityPicker
+            officialName={`Klique ${place.city ? cityName(place.country, place.city) : "(pick a city)"}`}
             value={communitySlug}
             name={pickedCommunity?.name ?? null}
             onChange={(slug) => {
@@ -251,7 +252,7 @@ function NewEventForm() {
             {pickedSub ? "Groups are private, so the event is for the group's members only." : "This community is private, so the event will be members-only."}
           </p>
         ) : (
-          <p className="text-xs text-ink-muted">{communitySlug ? "This community is public, so anyone can see the event." : "Not tied to a community: a public event anyone can see."}</p>
+          <p className="text-xs text-ink-muted">{communitySlug ? "This community is public, so anyone can see the event." : "Goes into the official Klique community for this city (created the first time it's needed). Public: anyone can see it."}</p>
         )}
       </fieldset>
 
@@ -290,8 +291,8 @@ export default function NewEventPage() {
   );
 }
 
-/** Site admins: post in any community (search by name), or in none for a public event. */
-function AdminCommunityPicker({ value, name, onChange, error }: { value: string; name: string | null; onChange: (slug: string) => void; error?: string }) {
+/** Site admins: post in any community (search by name), or leave it to the city's official Klique community. */
+function AdminCommunityPicker({ value, name, officialName, onChange, error }: { value: string; name: string | null; officialName: string; onChange: (slug: string) => void; error?: string }) {
   const [q, setQ] = useState("");
   const dq = useDebounced(q.trim(), 250);
   const results = useApi(dq ? () => AdminService.communities({ q: dq, sort: "members" }) : null, [dq]);
@@ -299,14 +300,14 @@ function AdminCommunityPicker({ value, name, onChange, error }: { value: string;
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <Icon name={value ? "users" : "globe"} size={15} className="text-ink-muted" />
-        <span className="font-semibold">{value ? (name ?? value) : "No community: public event"}</span>
+        <span className="font-semibold">{value ? (name ?? value) : `${officialName} (official)`}</span>
         {value && (
           <button type="button" onClick={() => onChange("")} className="ml-auto text-xs font-semibold text-accent-text hover:underline">
-            Make it public instead
+            Use {officialName} instead
           </button>
         )}
       </div>
-      <TextField label="Post in a community (optional)" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search communities by name" error={error} />
+      <TextField label="Or post in another community" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search communities by name" error={error} />
       {dq && (
         <ul className="max-h-56 space-y-1 overflow-y-auto">
           {results.loading ? (

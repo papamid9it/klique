@@ -250,7 +250,7 @@ export async function sendMessage(viewer: IUser, id: string, input: string | { b
     },
   );
   emitDm([viewer._id, otherId], convo._id);
-  notify([otherId], { title: viewer.displayName, body: preview, data: { type: "dm", conversationId: sid(convo._id) } });
+  notify([otherId], { title: viewer.displayName, body: preview, data: { type: "dm", conversationId: sid(convo._id) } }, { category: "messages", ref: `dm:${sid(convo._id)}` });
   const row = msg.toObject() as IMessage;
   const replies = await replyRefs([row]);
   return toMessage(row, viewer._id, [], row.replyToId ? (replies.get(sid(row.replyToId)) ?? null) : null);

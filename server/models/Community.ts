@@ -20,6 +20,8 @@ export interface ICommunity {
   channelsReady?: boolean;
   /** who may create groups inside this community */
   groupPolicy: "admins" | "members" | "off";
+  /** an official Klique community for a city ("Klique Lagos"): home of admin-posted and imported events */
+  official?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -40,12 +42,15 @@ const CommunitySchema = new Schema<ICommunity>(
     memberCount: { type: Number, default: 0 },
     channelsReady: { type: Boolean, default: false },
     groupPolicy: { type: String, enum: ["admins", "members", "off"], default: "admins" },
+    official: { type: Boolean, default: false },
   },
   { timestamps: true },
 );
 
 CommunitySchema.index({ privacy: 1, country: 1, city: 1, interest: 1, memberCount: -1 });
 CommunitySchema.index({ name: "text", description: "text" });
+// one official community per city
+CommunitySchema.index({ country: 1, city: 1 }, { unique: true, partialFilterExpression: { official: true } });
 
 export const Community: Model<ICommunity> =
   (models.Community as Model<ICommunity>) || model<ICommunity>("Community", CommunitySchema);

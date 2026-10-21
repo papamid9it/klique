@@ -124,17 +124,29 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     void resync.current?.();
   }, [membershipKey]);
 
-  // a new DM: refresh the unread count in the sidebar
+  // a new DM or notification: refresh the unread counts in the sidebar
   const lastMe = useRef(0);
   useEffect(
     () =>
       on((e) => {
-        if (e.type !== "dm" || Date.now() - lastMe.current < 3000) return;
-        lastMe.current = Date.now();
-        void refresh();
+        // a new DM, or anything for the bell: refresh the unread counts in the sidebar
+        // (several at once become one refresh, a moment after the last)
+        if (e.type !== "dm" && !(e.type === "notify" && e.inbox)) return;
+        if (lastMe.current) window.clearTimeout(lastMe.current);
+        lastMe.current = window.setTimeout(() => {
+          lastMe.current = 0;
+          void refresh();
+        }, 400);
       }),
     [on, refresh],
   );
+
+  // no live connection (not set up, or offline for a while): check the unread counts now and then instead
+  useEffect(() => {
+    if (!authed || connected) return;
+    const t = window.setInterval(() => document.visibilityState === "visible" && void refresh(), 45_000);
+    return () => window.clearInterval(t);
+  }, [authed, connected, refresh]);
 
   const value = useMemo(() => ({ connected, on }), [connected, on]);
   return <RealtimeCtx.Provider value={value}>{children}</RealtimeCtx.Provider>;

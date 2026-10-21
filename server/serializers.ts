@@ -12,6 +12,7 @@ import type {
   ViewerAccess,
 } from "@/lib/types";
 import { Community, type ICommunity } from "./models/Community";
+import { Crew } from "./models/Crew";
 import type { IEvent } from "./models/Event";
 import { Membership, type IMembership } from "./models/Membership";
 import { MembershipRequest } from "./models/MembershipRequest";
@@ -60,7 +61,7 @@ export const toProfile = (u: IUser): UserProfile => ({
   joinedAt: u.createdAt.toISOString(),
 });
 
-export const toMe = (u: IUser, unreadMessages = 0): UserMe => ({
+export const toMe = (u: IUser, unreadMessages = 0, unreadNotifications = 0): UserMe => ({
   ...toProfile(u),
   email: u.email,
   emailVerified: !!u.emailVerifiedAt,
@@ -70,6 +71,8 @@ export const toMe = (u: IUser, unreadMessages = 0): UserMe => ({
   privacy: { profileVisibility: u.profileVisibility, attendancePublic: u.attendancePublic },
   dmPolicy: u.dmPolicy,
   unreadMessages,
+  unreadNotifications,
+  points: u.points ?? 0,
   isAdmin: isSiteAdmin(u),
 });
 
@@ -84,7 +87,7 @@ export async function loadBriefs(ids: (Types.ObjectId | string)[]): Promise<Map<
   return new Map(users.map((u) => [sid(u._id), toBrief(u)]));
 }
 
-const GHOST: UserBrief = { id: "", handle: "deleted", displayName: "Deleted user", avatarUrl: null, country: "NG", city: "lagos" };
+export const GHOST: UserBrief = { id: "", handle: "deleted", displayName: "Deleted user", avatarUrl: null, country: "NG", city: "lagos" };
 
 /* ---------------------------- communities --------------------------- */
 
@@ -129,6 +132,7 @@ export function communityCard(c: ICommunity, access: SpaceAccess): CommunityCard
     id: sid(c._id),
     slug: c.slug,
     name: c.name,
+    official: !!c.official,
     description: locked ? "" : c.description,
     interest: c.interest,
     country: c.country ?? "NG",
@@ -220,7 +224,7 @@ export async function toEvents(events: IEvent[], viewer: IUser | null): Promise<
   const subIds = events.map((e) => e.subcommunityId).filter(Boolean) as Types.ObjectId[];
   const eventIds = events.map((e) => e._id);
 
-  const [hosts, communities, subs, rsvps, saved] = await Promise.all([
+  const [hosts, communities, subs, rsvps, saved, crewCounts] = await Promise.all([
     loadBriefs(hostIds),
     communityIds.length
       ? Community.find({ _id: { $in: communityIds } })
@@ -236,7 +240,9 @@ export async function toEvents(events: IEvent[], viewer: IUser | null): Promise<
       ? Rsvp.find({ userId: viewer._id, eventId: { $in: eventIds } }).lean<{ eventId: Types.ObjectId; status: "going" | "interested" }[]>()
       : [],
     viewer ? SavedEvent.find({ userId: viewer._id, eventId: { $in: eventIds } }).select("eventId").lean<{ eventId: Types.ObjectId }[]>() : [],
+    Crew.aggregate<{ _id: Types.ObjectId; n: number }>([{ $match: { eventId: { $in: eventIds } } }, { $group: { _id: "$eventId", n: { $sum: 1 } } }]),
   ]);
+  const crewMap = new Map(crewCounts.map((c) => [sid(c._id), c.n]));
 
   const communityMap = new Map(communities.map((c) => [sid(c._id), c]));
   const subMap = new Map(subs.map((s) => [sid(s._id), s]));
@@ -273,6 +279,7 @@ export async function toEvents(events: IEvent[], viewer: IUser | null): Promise<
       audience: e.audience,
       goingCount: e.goingCount,
       interestedCount: e.interestedCount,
+      crewCount: crewMap.get(sid(e._id)) ?? 0,
       isPast: end < now,
       isFull: e.capacity !== null && e.goingCount >= e.capacity,
       viewer: {

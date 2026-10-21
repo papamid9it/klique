@@ -139,6 +139,7 @@ export async function deleteCommunity(viewer: IUser, slug: string) {
   const space = await resolveSpace(slug);
   const access = await spaceAccess(space, viewer);
   if (access.role !== "owner") throw forbidden("Only the owner can delete a community.");
+  if (space.community.official) throw forbidden("Official Klique communities can't be deleted: Klique's own events live there.");
   await purgeCommunity(space.community);
   return { deleted: true };
 }

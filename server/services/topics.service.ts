@@ -16,6 +16,7 @@ import { emitTopic } from "./realtime";
 import { hiddenUserIds } from "./blocks";
 import { escapeRegex, sid, topicFileUrls } from "./helpers";
 import type { IUser } from "../models/User";
+import { notify } from "./push.service";
 
 const PAGE = 10;
 const COMMENT_CAP = 500;
@@ -324,14 +325,26 @@ export async function createComment(viewer: IUser, space: Space, access: SpaceAc
   if (t.locked && !access.canManage) throw forbidden("This topic is locked.");
   rateLimit(`comment:${sid(viewer._id)}`, 30, 5 * 60_000);
   let parentId: Types.ObjectId | null = null;
+  let parentAuthor: Types.ObjectId | null = null;
   if (input.parentId) {
-    const parent = await TopicComment.findOne({ _id: input.parentId, topicId: t._id }).select("_id deletedAt").lean<Pick<ITopicComment, "_id" | "deletedAt">>();
+    const parent = await TopicComment.findOne({ _id: input.parentId, topicId: t._id }).select("_id deletedAt authorId").lean<Pick<ITopicComment, "_id" | "deletedAt" | "authorId">>();
     if (!parent) throw notFound("The comment you're replying to is gone.");
     parentId = parent._id;
+    parentAuthor = parent.deletedAt ? null : parent.authorId;
   }
   const doc = await TopicComment.create({ topicId: t._id, communityId: t.communityId, authorId: viewer._id, parentId, body: input.body });
   emitTopic(t.communityId, t._id);
   await Topic.updateOne({ _id: t._id }, { $inc: { commentCount: 1 }, $set: { lastActivityAt: doc.createdAt } });
+  // the topic's author and the person answered hear about it (never yourself), bundled per topic
+  const board = await Board.findById(t.boardId).select("slug").lean<{ slug: string }>();
+  const href = `/communities/${space.community.slug}?view=topics${board ? `&b=${board.slug}` : ""}&t=${sid(t._id)}`;
+  const me = sid(viewer._id);
+  if (parentAuthor && sid(parentAuthor) !== me) {
+    notify([parentAuthor], { title: `${viewer.displayName} replied to your comment`, body: input.body.slice(0, 140), data: { href } }, { category: "replies", groupKey: `topic:${sid(t._id)}`, many: (n) => `${n} new replies and comments on "${t.title}"`, ref: `topic:${sid(t._id)}` });
+  }
+  if (sid(t.authorId) !== me && (!parentAuthor || sid(parentAuthor) !== sid(t.authorId))) {
+    notify([t.authorId], { title: `${viewer.displayName} commented on "${t.title}"`, body: input.body.slice(0, 140), data: { href } }, { category: "replies", groupKey: `topic:${sid(t._id)}`, many: (n) => `${n} new comments on "${t.title}"`, ref: `topic:${sid(t._id)}` });
+  }
   const [topic] = await toTopics([{ ...t, commentCount: t.commentCount + 1 }], viewer);
   return (await toComments([doc.toObject() as ITopicComment], viewer, topic))[0];
 }

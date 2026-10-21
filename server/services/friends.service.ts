@@ -8,6 +8,7 @@ import { User, type IUser } from "../models/User";
 import { loadBriefs } from "../serializers";
 import { blockedEitherWay, hiddenUserIds } from "./blocks";
 import { sid } from "./helpers";
+import { notify } from "./push.service";
 
 type Id = Types.ObjectId | string;
 const otherOf = (f: IFriendship, me: Id) => (sid(f.requesterId) === sid(me) ? f.recipientId : f.requesterId);
@@ -91,10 +92,12 @@ export async function sendRequest(viewer: IUser, handle: string): Promise<Friend
     if (sid(existing.requesterId) === sid(viewer._id)) return { state: "outgoing", requestId: sid(existing._id) };
     // They already asked you: asking back is a yes.
     await Friendship.updateOne({ _id: existing._id }, { status: "accepted", acceptedAt: new Date() });
+    notify([existing.requesterId], { title: `${viewer.displayName} accepted your friend request`, body: "You can message each other now.", data: { href: `/people/${viewer.handle}` } }, { category: "friends", ref: "friends" });
     return { state: "friends", requestId: sid(existing._id) };
   }
   try {
     const f = await Friendship.create({ pairKey: key, requesterId: viewer._id, recipientId: target._id });
+    notify([target._id], { title: `${viewer.displayName} sent you a friend request`, body: `@${viewer.handle}`, data: { href: "/messages/friends" } }, { category: "friends", groupKey: "friend-req", many: (n) => `${n} new friend requests`, ref: "friends" });
     return { state: "outgoing", requestId: sid(f._id) };
   } catch (e) {
     if ((e as { code?: number }).code === 11000) return friendStatus(viewer._id, target._id); // both asked at once
@@ -116,6 +119,7 @@ export async function respondToRequest(viewer: IUser, id: string, action: "accep
   if (action === "accept") {
     if (await blockedEitherWay(f.requesterId, f.recipientId)) throw notFound("We couldn't find that request.");
     await Friendship.updateOne({ _id: f._id }, { status: "accepted", acceptedAt: new Date() });
+    notify([f.requesterId], { title: `${viewer.displayName} accepted your friend request`, body: "You can message each other now.", data: { href: `/people/${viewer.handle}` } }, { category: "friends", ref: "friends" });
   } else {
     await Friendship.deleteOne({ _id: f._id });
   }

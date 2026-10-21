@@ -2,7 +2,7 @@ import { Types } from "mongoose";
 import type { Role, ViewerAccess } from "@/lib/types";
 import { forbidden, notFound } from "../http/errors";
 import type { IChannel } from "../models/Channel";
-import type { ICommunity } from "../models/Community";
+import { Community, type ICommunity } from "../models/Community";
 import type { IEvent } from "../models/Event";
 import { Membership, type IMembership } from "../models/Membership";
 import { MembershipRequest } from "../models/MembershipRequest";
@@ -161,14 +161,23 @@ export function assertSubVisibleOrHidden(space: Space, access: SpaceAccess) {
 
 /* ------------------------------ events ------------------------------ */
 
-/** Mongo filter of events this viewer is allowed to see. Use it in EVERY event list/search query. */
+/**
+ * Mongo filter of events this viewer is allowed to see. Use it in EVERY event list/search query.
+ * The rule: everyone sees events from public communities (and public events outside any community). Events in a
+ * private community are for its members only, and a group's events (groups are always private) for the group's
+ * members only. The host always sees their own.
+ */
 export async function eventVisibilityFilter(viewer: IUser | null): Promise<Record<string, unknown>> {
-  const publicOnly = { audience: "public" };
+  // A group's event is never public, and neither is one in a community that's private now, whatever the
+  // event's stored audience says (it's kept in sync, but the community's current privacy is what counts).
+  const [privateIds, memberships] = await Promise.all([
+    Community.find({ privacy: "private" }).select("_id").lean<{ _id: Types.ObjectId }[]>(),
+    viewer
+      ? Membership.find({ userId: viewer._id, status: "active" }).select("communityId subcommunityId").lean<Pick<IMembership, "communityId" | "subcommunityId">[]>()
+      : Promise.resolve([] as Pick<IMembership, "communityId" | "subcommunityId">[]),
+  ]);
+  const publicOnly = { audience: "public", subcommunityId: null, communityId: { $nin: privateIds.map((c) => c._id) } };
   if (!viewer) return publicOnly;
-
-  const memberships = await Membership.find({ userId: viewer._id, status: "active" })
-    .select("communityId subcommunityId")
-    .lean<Pick<IMembership, "communityId" | "subcommunityId">[]>();
 
   const communityIds = memberships.filter((m) => !m.subcommunityId).map((m) => m.communityId);
   const subIds = memberships.filter((m) => m.subcommunityId).map((m) => m.subcommunityId!);
@@ -177,23 +186,28 @@ export async function eventVisibilityFilter(viewer: IUser | null): Promise<Recor
     $or: [
       publicOnly,
       // community events, but never a group's: those belong to the group whatever their stored audience
-      { audience: "community", communityId: { $in: communityIds }, subcommunityId: null },
-      { subcommunityId: { $in: subIds }, audience: { $ne: "public" } },
+      { communityId: { $in: communityIds }, subcommunityId: null },
+      { subcommunityId: { $in: subIds } },
       { hostId: viewer._id },
     ],
   };
 }
 
 export async function canViewEvent(event: IEvent, viewer: IUser | null): Promise<boolean> {
-  if (event.audience === "public") return true;
+  if (viewer && String(event.hostId) === String(viewer._id)) return true;
+  if (event.audience === "public" && !event.subcommunityId) {
+    // trust the community's current privacy over the stored audience
+    if (!event.communityId) return true;
+    const c = await Community.findById(event.communityId).select("privacy").lean<Pick<ICommunity, "privacy">>();
+    if (!c || c.privacy === "public") return true;
+  }
   if (!viewer) return false;
-  if (String(event.hostId) === String(viewer._id)) return true;
 
   if (event.subcommunityId) {
     const m = await findMembership(viewer._id, event.communityId!, event.subcommunityId);
     return activeRole(m) !== null;
   }
-  if (event.audience === "community" && event.communityId) {
+  if (event.communityId) {
     const m = await findMembership(viewer._id, event.communityId, null);
     return activeRole(m) !== null;
   }

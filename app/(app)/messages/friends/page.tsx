@@ -22,6 +22,7 @@ import { cx } from "@/components/ui/cx";
 import { useApi } from "@/lib/hooks/useApi";
 import type { FriendStatusDTO, UserBrief } from "@/lib/types";
 import { UserName } from "@/components/ui/UserName";
+import { useRealtimeEvent } from "@/components/providers/RealtimeProvider";
 
 type Tab = "all" | "pending" | "add";
 
@@ -38,6 +39,13 @@ export default function FriendsPage() {
   const friends = useApi(authed ? () => FriendService.list() : null, [authed], { key: "friends" });
   const requests = useApi(authed ? () => FriendService.requests() : null, [authed], { key: "friend-requests" });
   const suggestions = useApi(authed ? () => FriendService.suggestions() : null, [authed], { key: "friend-suggestions" });
+  useRealtimeEvent(
+    () => {
+      void friends.reload();
+      void requests.reload();
+    },
+    { filter: (e) => e.type === "notify" && e.category === "friends", debounceMs: 400 },
+  );
   const [q, setQ] = useState("");
   const [handle, setHandle] = useState("");
   const [adding, setAdding] = useState(false);

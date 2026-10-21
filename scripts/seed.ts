@@ -498,7 +498,7 @@ async function main() {
       // deterministic stock photo per community (picsum.photos); swap for real covers anytime
       coverImage: `https://picsum.photos/seed/klique-${c.key}/960/540`,
       ownerId: uid(c.owner),
-      groupPolicy: c.key === COMMUNITIES[0].key ? "members" : "admins",
+      groupPolicy: "admins",
       createdAt,
     });
     communities.set(c.key, doc._id);

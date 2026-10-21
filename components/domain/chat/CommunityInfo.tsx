@@ -38,7 +38,13 @@ export function CommunityInfo({ community: c, onJoined, onNavigate, onLeave }: {
       <section aria-labelledby="about-h">
         <Cover src={c.coverImage} seed={c.id} interest={c.interest} className="aspect-[16/8] rounded-card" />
         <div className="mt-4 flex flex-wrap items-center gap-1.5">
-          <InterestChip id={c.interest} />
+          {c.official ? (
+            <Chip>
+              <Icon name="check" size={11} /> Official
+            </Chip>
+          ) : (
+            <InterestChip id={c.interest} />
+          )}
           <Chip>
             <Icon name={c.privacy === "private" ? "lock" : "globe"} size={11} /> {c.privacy === "private" ? "Private" : "Public"}
           </Chip>

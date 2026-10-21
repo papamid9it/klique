@@ -12,6 +12,8 @@ import { dateChip, formatTime } from "@/lib/format";
 import { useEventActions } from "@/lib/hooks/useEventActions";
 import { flag, placeShort } from "@/lib/places";
 import type { EventDTO } from "@/lib/types";
+import { crewsHref } from "@/components/domain/crews/parts";
+import { SoftLink } from "@/components/ui/SoftLink";
 
 /** Compact one-line event for the list view: date · poster · what and where · RSVP. */
 export function EventRow({ event, onChange }: { event: EventDTO; onChange: (e: EventDTO) => void }) {
@@ -40,6 +42,11 @@ export function EventRow({ event, onChange }: { event: EventDTO; onChange: (e: E
             {event.online ? <Icon name="globe" size={12} /> : <span aria-hidden="true">{flag(event.country)}</span>}
             <span className="truncate">{event.online ? "Online" : `${event.venue} · ${placeShort(event)}`}</span>
           </span>
+          {!event.online && !event.isPast && (
+            <SoftLink href={crewsHref(event)} scroll={false} className="inline-flex items-center gap-1 font-medium text-accent-text hover:underline">
+              <Icon name="users" size={12} /> {event.crewCount ? `${event.crewCount} ${event.crewCount === 1 ? "crew" : "crews"} going` : "Find a crew"}
+            </SoftLink>
+          )}
         </p>
       </div>
       <div className="hidden shrink-0 flex-col items-end gap-1.5 md:flex">

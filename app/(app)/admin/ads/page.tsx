@@ -1,6 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { AdminService } from "@/app/services/AdminService";
+import { AdPricingForm, AdRequests } from "@/components/domain/admin/AdRequests";
 import { errorMessage } from "@/app/ApiCore";
 import { AdService } from "@/app/services/AdService";
 import { AdEditor, SLOTS } from "@/components/domain/admin/AdEditor";
@@ -192,10 +195,49 @@ function AdsContent() {
   );
 }
 
+type View = "requests" | "ads" | "pricing";
+
+/** Admin → Ads: ads people sent (to review), every ad on Klique, and what ads cost. */
+function AdsAdmin() {
+  const sp = useSearchParams();
+  const router = useRouter();
+  const v = sp.get("view");
+  const view: View = v === "ads" || v === "pricing" ? v : "requests";
+  const { data: summary } = useApi(() => AdminService.summary(), [], { key: "admin-summary" });
+  return (
+    <>
+      <div className="mb-5">
+        <Segmented
+          label="Ads"
+          value={view}
+          onChange={(next) => router.replace(`/admin/ads?view=${next}`, { scroll: false })}
+          options={[
+            { id: "requests", label: "Requests", count: summary?.pendingAds ?? null },
+            { id: "ads", label: "All ads" },
+            { id: "pricing", label: "Pricing" },
+          ]}
+        />
+      </div>
+      {view === "ads" ? (
+        <AdsContent />
+      ) : (
+        <>
+          <AdminHeader title={view === "requests" ? "Ad requests" : "Ad pricing"}>
+            {view === "requests" ? "Ads people sent. Approve one and they're asked to pay; it starts once paid. Ask for changes or reject with a reason they'll see." : "What ads cost. People see these prices when they create an ad; the server works out the total from them."}
+          </AdminHeader>
+          {view === "requests" ? <AdRequests /> : <AdPricingForm />}
+        </>
+      )}
+    </>
+  );
+}
+
 export default function AdminAdsPage() {
   return (
     <AdminGate>
-      <AdsContent />
+      <Suspense fallback={null}>
+        <AdsAdmin />
+      </Suspense>
     </AdminGate>
   );
 }

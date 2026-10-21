@@ -40,10 +40,10 @@ export function ScopeButton({
           <Icon name="chevron-down" size={22} className="shrink-0 text-ink-muted transition group-hover:text-ink" />
         </button>
       ) : variant === "pill" ? (
-        <button type="button" onClick={() => setOpen(true)} aria-haspopup="dialog" className={cx("inline-flex h-9 items-center gap-1.5 rounded-full border border-line bg-surface pr-2.5 pl-3 text-[13px] font-semibold text-ink", className)}>
-          <span aria-hidden="true">{scopeFlag(scope)}</span>
-          <span className="max-w-[7.5rem] truncate">{scopeLabel(scope)}</span>
-          <Icon name="chevron-down" size={13} className="text-ink-muted" />
+        <button type="button" onClick={() => setOpen(true)} aria-haspopup="dialog" title={scopeLabel(scope)} className={cx("inline-flex h-9 min-w-0 items-center gap-1.5 rounded-full border border-line bg-surface pr-2.5 pl-3 text-[13px] font-semibold text-ink", className)}>
+          <span aria-hidden="true" className="shrink-0">{scopeFlag(scope)}</span>
+          <span className="min-w-0 truncate">{scopeLabel(scope)}</span>
+          <Icon name="chevron-down" size={13} className="shrink-0 text-ink-muted" />
         </button>
       ) : (
         <button type="button" onClick={() => setOpen(true)} aria-haspopup="dialog" className={cx("flex h-11 w-full items-center gap-2.5 rounded-control border border-line bg-surface px-3.5 text-left hover:bg-raised", className)}>

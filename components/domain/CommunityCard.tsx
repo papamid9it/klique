@@ -49,6 +49,12 @@ export function CommunityCard({ community, onChange, tag }: { community: Communi
             {c.name}
           </Link>
           {c.privacy === "private" && <Icon name="lock" size={14} className="shrink-0 text-ink-muted" />}
+          {c.official && (
+            <span className="inline-flex size-4 shrink-0 items-center justify-center rounded-full bg-accent text-accent-ink" title="Official Klique community">
+              <Icon name="check" size={10} />
+              <span className="sr-only">Official</span>
+            </span>
+          )}
         </h3>
         <p className="mt-1 line-clamp-2 min-h-10 text-[13px] text-ink-muted">
           {c.locked ? "A private community. Request to join and an admin will take a look." : c.description || `${getInterest(c.interest).name} in ${c.neighborhood || placeShort(c)}.`}

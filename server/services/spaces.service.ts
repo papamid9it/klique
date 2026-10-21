@@ -33,6 +33,7 @@ import {
 import { loadBriefs, toPosts } from "../serializers";
 import { escapeRegex, newInviteCode, recountMembers, sid } from "./helpers";
 import { rateLimit } from "../http/rate-limit";
+import { notify } from "./push.service";
 
 /* ------------------------------------------------------------------ */
 /* Resolving a space from URL params                                   */
@@ -115,6 +116,13 @@ export async function joinSpace(
       ...spaceFilter(space),
       message: input.message ?? "",
     });
+    // the people who decide hear about it, bundled: one line per community however many ask
+    const staff = await Membership.find({ communityId: space.community._id, subcommunityId: null, status: "active", role: { $in: ["owner", "admin"] } }).select("userId").lean<{ userId: Types.ObjectId }[]>();
+    notify(
+      staff.map((m) => m.userId),
+      { title: `${viewer.displayName} wants to join ${space.community.name}`, body: input.message ? `"${input.message}"` : "Tap to review the request.", data: { href: `/communities/${space.community.slug}?settings=requests` } },
+      { category: "admin", groupKey: `join-req:${sid(space.community._id)}`, many: (n) => `${n} people want to join ${space.community.name}`, ref: `requests:${sid(space.community._id)}` },
+    );
     return { status: "requested", message: "Request sent. An admin will take a look." };
   }
 
@@ -298,6 +306,7 @@ export async function decideRequest(
     if (existing?.status === "banned") throw forbidden("That person is banned from here.");
     await addMember(space, req.userId); // also marks the request approved
     await MembershipRequest.updateOne({ _id: req._id }, { decidedBy: viewer._id });
+    notify([req.userId], { title: `You're in ${spaceLabel(space)}`, body: "Your request to join was approved. Come say hi.", data: { href: `/communities/${space.community.slug}` } }, { category: "community", ref: `community:${sid(space.community._id)}` });
   } else {
     await MembershipRequest.updateOne({ _id: req._id }, { status: "rejected", decidedBy: viewer._id, decidedAt: new Date() });
   }

@@ -4,7 +4,6 @@ import { DiscoverService } from "@/app/services/DiscoverService";
 import { EventHero } from "@/components/domain/EventHero";
 import { useAds } from "@/components/domain/ads/Sponsored";
 import { BrowseScenes, EventSection, WeekStrip, YourPlans } from "@/components/domain/home/HomeSections";
-import { ScopeButton } from "@/components/domain/places/ScopeButton";
 import { usePlace } from "@/components/providers/PlaceProvider";
 import { Button } from "@/components/ui/Button";
 import { CardGridSkeleton, Skeleton } from "@/components/ui/Skeleton";
@@ -45,7 +44,6 @@ export default function DiscoverPage() {
             {now ? formatEyebrowDate(now) : " "} · {label}
           </p>
           <h1 className="display text-[clamp(2.25rem,5vw,3.25rem)]">Find your people.</h1>
-          <div className="mt-3 max-w-xs"><ScopeButton /></div>
         </div>
       </header>
 

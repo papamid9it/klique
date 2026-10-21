@@ -4,6 +4,7 @@ import { DM_POLICIES, LIMITS, PROFILE_VISIBILITY, REPORT_REASONS } from "@/lib/c
 import { FRAME_IDS, NAME_EFFECT_IDS } from "@/lib/cosmetics";
 import { MOOD_IDS } from "@/lib/moods";
 import { REACTION_IDS, STICKER_IDS } from "@/lib/reactions";
+import { NOTIFY_CATEGORY_IDS } from "@/lib/notifications";
 import { blankToUndef, handle, httpUrl, interestId, objectId, pageQuery, placeDefault, placeOptional, placeRequired, whereParam } from "./common";
 
 const text = (max: number, min = 0) => z.string().trim().min(min).max(max);
@@ -465,3 +466,76 @@ export const sidebarsQuery = z.object({
     .transform((v) => v.split(",").map((x) => x.trim().toLowerCase()).filter((x) => /^[a-z0-9-]{1,80}$/.test(x)))
     .pipe(z.array(z.string()).min(1, "Pass at least one community").max(20)),
 });
+
+/* ------------------------------- crews ------------------------------ */
+
+const crewFields = {
+  area: text(40, 2),
+  meetupPoint: text(120, 2),
+  meetupAt: isoDate,
+  note: text(300).default(""),
+  joinMode: z.enum(["open", "approval"]).default("approval"),
+  maxMembers: z.number().int().min(2, "A crew is at least 2 people").max(100, "A crew can have up to 100 people").default(10),
+};
+
+export const crewCreateSchema = z.object(crewFields);
+
+export const crewUpdateSchema = z
+  .object({
+    area: crewFields.area.optional(),
+    meetupPoint: crewFields.meetupPoint.optional(),
+    meetupAt: isoDate.optional(),
+    note: text(300).optional(),
+    joinMode: z.enum(["open", "approval"]).optional(),
+    maxMembers: z.number().int().min(2).max(100).optional(),
+  })
+  .refine((v) => Object.keys(v).length > 0, "Nothing to change");
+
+export const crewJoinSchema = z.object({ message: text(200).default("") });
+export const crewDecisionSchema = z.object({ accept: z.boolean() });
+export const crewMessageSchema = z.object({ body: text(1000, 1) });
+export const crewMessagesQuery = z.object({ after: z.string().regex(/^[a-f0-9]{24}$/).optional() });
+
+/* --------------------------- notifications -------------------------- */
+
+export const notificationsQuery = z.object({
+  before: z.string().datetime().optional(),
+  category: z.enum(NOTIFY_CATEGORY_IDS as [string, ...string[]]).optional(),
+  unread: z.preprocess((v) => v === "1" || v === "true", z.boolean()).optional(),
+});
+export const notificationsReadSchema = z
+  .object({ ids: z.array(objectId).max(100).optional(), all: z.literal(true).optional() })
+  .refine((v) => v.all || (v.ids && v.ids.length > 0), "Nothing to mark");
+const channelPref = z.object({ inApp: z.boolean().optional(), push: z.boolean().optional() });
+export const notifyPrefsSchema = z.partialRecord(z.enum(NOTIFY_CATEGORY_IDS as [string, ...string[]]), channelPref);
+
+/* ------------------------------- ad requests ------------------------------ */
+
+export const adCampaignSchema = z.object({
+  kind: z.enum(["event", "community", "brand"]),
+  eventId: z.string().trim().max(40).optional(),
+  communitySlug: z.string().trim().max(80).optional(),
+  advertiser: z.string().trim().max(80).optional(),
+  title: z.string().trim().max(120).optional(),
+  body: z.string().trim().max(200).optional(),
+  imageUrl: z.string().trim().max(1000).nullable().optional(),
+  ctaLabel: z.string().trim().max(24).optional(),
+  url: z.string().trim().max(1000).optional(),
+  placements: z.array(z.string()).min(1, "Pick at least one placement").max(10),
+  reach: z.enum(["city", "country", "world"]),
+  place: z.string().trim().max(120).nullable().optional(),
+  days: z.number().int().min(1).max(365),
+  startOn: isoDate.nullable().optional().transform((d) => (d ? d.toISOString() : null)),
+});
+
+const naira = z.number().int().min(0).max(100_000_000);
+export const adPricingSchema = z.object({
+  perDay: z.partialRecord(z.enum(["home-feed", "home-rail", "events-list", "event-page", "search"]), naira).optional(),
+  reach: z.partialRecord(z.enum(["city", "country", "world"]), z.number().min(0.1).max(100)).optional(),
+  minDays: z.number().int().min(1).max(365).optional(),
+  maxDays: z.number().int().min(1).max(365).optional(),
+});
+
+export const adReviewSchema = z.object({ action: z.enum(["approve", "changes", "reject", "mark-paid"]), note: z.string().trim().max(500).default("") });
+export const adCampaignListQuery = z.object({ status: z.enum(["review", "approved", "running", "all"]).default("review") });
+export const adVerifySchema = z.object({ reference: z.string().trim().min(6).max(80) });

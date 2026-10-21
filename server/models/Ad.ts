@@ -37,6 +37,8 @@ export interface IAd {
   clicks: number;
   /** set when a host paid for it through Paystack */
   promotionId: Types.ObjectId | null;
+  /** set when someone's approved, paid ad request (AdCampaign) became this ad */
+  campaignId?: Types.ObjectId | null;
   /** paid promotions waiting for an admin (PROMOTION_REVIEW=1); the run starts when approved */
   pendingReview: boolean;
   createdBy: Types.ObjectId;
@@ -67,6 +69,7 @@ const AdSchema = new Schema<IAd>(
     clicks: { type: Number, default: 0 },
     promotionId: { type: Schema.Types.ObjectId, ref: "Promotion", default: null },
     pendingReview: { type: Boolean, default: false },
+    campaignId: { type: Schema.Types.ObjectId, ref: "AdCampaign", default: null },
     createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
   },
   { timestamps: true },

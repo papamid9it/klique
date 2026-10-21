@@ -17,6 +17,7 @@ import { Subcommunity, type ISubcommunity } from "../models/Subcommunity";
 import { User, type IUser } from "../models/User";
 import { WebPushSubscription } from "../models/WebPushSubscription";
 import { purgeEvent } from "./events.service";
+import { removeUserFromCrews } from "./crews.service";
 import { recountMembers, recountRsvps } from "./helpers";
 import { deleteUploads } from "./media.service";
 
@@ -61,6 +62,7 @@ export async function deleteAccount(viewer: IUser, input: { password?: string; c
     );
   }
 
+  await removeUserFromCrews(user._id);
   const hosted = await Event.find({ hostId: user._id }).select("_id coverImage").lean<Pick<IEvent, "_id" | "coverImage">[]>();
   for (const e of hosted) await purgeEvent(e);
 

@@ -9,11 +9,14 @@ import { Button } from "@/components/ui/Button";
 import { RowSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { useApi } from "@/lib/hooks/useApi";
+import { useRealtimeEvent } from "@/components/providers/RealtimeProvider";
 
 /** Pending join requests for a private community. */
 export function RequestsPanel({ slug, onDecided }: { slug: string; onDecided?: () => void }) {
   const toast = useToast();
   const { data, loading, error, reload, setData } = useApi(() => SpaceService.requests(slug), [slug]);
+  // a new request arrives while you're looking: it appears
+  useRealtimeEvent(() => void reload(), { filter: (e) => e.type === "notify" && e.category === "admin", debounceMs: 400 });
   const [busy, setBusy] = useState<string | null>(null);
 
   async function decide(id: string, action: "approve" | "reject") {

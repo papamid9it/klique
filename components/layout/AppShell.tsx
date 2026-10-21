@@ -53,6 +53,26 @@ function Shell({ children }: { children: ReactNode }) {
     );
   }
 
+  // Ads Manager and Notifications bring their own left panel: slim icon rail · their panel · page.
+  if (/^\/(ads|notifications)(\/|$)/.test(pathname)) {
+    return (
+      <div className="min-h-dvh lg:grid lg:grid-cols-[76px_minmax(0,1fr)]">
+        <a href="#main" className={SKIP}>
+          Skip to content
+        </a>
+        <Sidebar compact />
+        <div className="min-w-0">
+          <MobileTopBar />
+          <VerifyBanner />
+          <main id="main" className="min-w-0">
+            {children}
+          </main>
+        </div>
+        <MobileNav />
+      </div>
+    );
+  }
+
   // The suggestions rail belongs to the home feed only; every other page gets the room instead.
   const home = pathname === "/";
   const wide = ["/events", "/saved", "/communities", "/search"].includes(pathname.replace(/\/$/, "")) || pathname.startsWith("/people/");
