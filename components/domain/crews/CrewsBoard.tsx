@@ -1,22 +1,24 @@
 "use client";
 
 import { useState } from "react";
-import { CrewService } from "@/app/services/CrewService";
 import { EventService } from "@/app/services/EventService";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
-import { RowSkeleton, Skeleton } from "@/components/ui/Skeleton";
+import { RowSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { cx } from "@/components/ui/cx";
 import { formatDateShort } from "@/lib/format";
 import { useApi } from "@/lib/hooks/useApi";
-import { useAppEvent } from "@/lib/appEvents";
-import { useRealtimeEvent } from "@/components/providers/RealtimeProvider";
 import { softNavigate } from "@/lib/nav";
 import type { EventDTO } from "@/lib/types";
-import { CrewRow, crewHref } from "./parts";
+import { CrewResults, useEventCrews } from "./CrewSearch";
+import { crewHref } from "./parts";
 import { StartCrewModal } from "./StartCrewModal";
+
+/** past this many upcoming events, the picker is a dropdown instead of a row of chips */
+const CHIP_LIMIT = 6;
+const crewsLabel = (n: number) => (n ? `${n} ${n === 1 ? "crew" : "crews"}` : "no crews yet");
 
 /**
  * A community's (or group's) "Crews" view: pick one of its upcoming in-person events, see the crews heading
@@ -45,7 +47,26 @@ export function CrewsBoard({ slug, sub, eventId, onChanged }: { slug: string; su
         <p className="text-sm text-ink-muted">Go together. Pick an event, join a crew from near you, or start one.</p>
       </div>
 
-      {/* one chip per upcoming event; the chosen one shows its crews below */}
+      {/* one chip per upcoming event (a dropdown when there are many); the chosen one shows its crews below */}
+      {upcoming.length > CHIP_LIMIT ? (
+        <label className="block">
+          <span className="mb-1.5 block text-[13px] font-medium">Event · {upcoming.length} coming up</span>
+          <span className="relative block">
+            <select
+              value={event.id}
+              onChange={(e) => softNavigate(`${base}&e=${e.target.value}`, { replace: true })}
+              className="h-11 w-full appearance-none truncate rounded-control border border-line bg-raised pr-9 pl-3.5 text-sm text-ink focus:border-accent-text focus:outline-none"
+            >
+              {upcoming.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.title} · {formatDateShort(e.startsAt)} · {crewsLabel(e.crewCount ?? 0)}
+                </option>
+              ))}
+            </select>
+            <Icon name="chevron-down" size={16} className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-ink-muted" />
+          </span>
+        </label>
+      ) : (
       <div role="tablist" aria-label="Events" className="no-bar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
         {upcoming.map((e) => {
           const on = e.id === event.id;
@@ -60,12 +81,13 @@ export function CrewsBoard({ slug, sub, eventId, onChanged }: { slug: string; su
             >
               <span className="block max-w-56 truncate text-sm font-semibold">{e.title}</span>
               <span className="block text-xs text-ink-muted">
-                {formatDateShort(e.startsAt)} · {e.crewCount ? `${e.crewCount} ${e.crewCount === 1 ? "crew" : "crews"}` : "no crews yet"}
+                {formatDateShort(e.startsAt)} · {crewsLabel(e.crewCount ?? 0)}
               </span>
             </button>
           );
         })}
       </div>
+      )}
 
       <EventCrewList key={event.id} event={event} onChanged={onChanged} />
     </div>
@@ -74,12 +96,9 @@ export function CrewsBoard({ slug, sub, eventId, onChanged }: { slug: string; su
 
 function EventCrewList({ event, onChanged }: { event: EventDTO; onChanged: () => void }) {
   const { requireAuth } = useAuth();
-  const { data, loading, error, reload } = useApi(() => CrewService.forEvent(event.id), [event.id], { key: `crews:${event.id}` });
-  // joined or left the community (Join buttons appear), or a crew of yours changed: the list follows
-  useAppEvent("membership", () => void reload());
-  useRealtimeEvent(() => void reload(), { filter: (e) => e.type === "crew" && !e.chat, debounceMs: 400 });
+  const crewsApi = useEventCrews(event.id);
+  const { data, reload } = crewsApi;
   const [starting, setStarting] = useState(false);
-  const crews = data?.crews ?? [];
   const start = () => requireAuth() && setStarting(true);
 
   return (
@@ -104,17 +123,16 @@ function EventCrewList({ event, onChanged }: { event: EventDTO; onChanged: () =>
       </div>
 
       {/* outside the community (or group), or not signed in: say what it takes, before the list */}
-      {data && !data.canJoin && !data.mine && data.startBlockedReason && crews.length > 0 && (
+      {data && !data.canJoin && !data.mine && data.startBlockedReason && data.total > 0 && (
         <p className="flex items-center gap-2 rounded-control border border-line bg-raised px-3.5 py-2.5 text-sm">
           <Icon name="lock" size={15} className="shrink-0 text-ink-muted" />
           {data.startBlockedReason}
         </p>
       )}
-      {loading ? (
-        <Skeleton className="h-28" />
-      ) : error ? (
-        <ErrorState message={error} onRetry={reload} />
-      ) : crews.length === 0 ? (
+      <CrewResults
+        crews={crewsApi}
+        onStart={data?.canStart ? start : undefined}
+        empty={
         <div className="rounded-card border border-dashed border-line p-6 text-center">
           <p className="text-sm font-medium">No crews for this one yet</p>
           <p className="mx-auto mt-1 max-w-sm text-sm text-ink-muted">{data?.canStart ? "Start one from your area. Pick a public meetup spot, and people heading the same way can join you." : (data?.startBlockedReason ?? "")}</p>
@@ -124,17 +142,8 @@ function EventCrewList({ event, onChanged }: { event: EventDTO; onChanged: () =>
             </Button>
           )}
         </div>
-      ) : (
-        <>
-          <ul className="space-y-2.5">
-            {crews.map((c) => (
-              <li key={c.id}>
-                <CrewRow crew={c} joinable={data?.canJoin ?? true} />
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
+        }
+      />
       <p className="text-xs text-ink-muted">
         Crews disappear a day after the event. Meet in public places.
       </p>

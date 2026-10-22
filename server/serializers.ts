@@ -282,7 +282,8 @@ export async function toEvents(events: IEvent[], viewer: IUser | null): Promise<
       capacity: e.capacity,
       coverImage: e.coverImage,
       host: hosts.get(sid(e.hostId)) ?? GHOST,
-      organizer: e.organizerName ? { name: e.organizerName, url: e.sourceUrl ?? null } : null,
+      // an event found elsewhere: who runs it, and its own page ("More info / tickets")
+      organizer: e.organizerName || e.sourceUrl ? { name: e.organizerName ?? "", url: e.sourceUrl ?? null } : null,
       community: c ? { slug: c.slug, name: c.name, privacy: c.privacy, official: isKlique(c) } : null,
       subcommunity: s ? { slug: s.slug, name: s.name } : null,
       audience: e.audience,

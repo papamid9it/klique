@@ -1,5 +1,5 @@
 import ApiClient from "@/app/ApiCore";
-import type { BoardDTO, Envelope, Paginated, TopicCommentDTO, TopicDTO, TopicDetailDTO, TopicMediaDTO, TopicSort } from "@/lib/types";
+import type { BoardSidebarDTO, BoardDTO, Envelope, Paginated, TopicCommentDTO, TopicDTO, TopicDetailDTO, TopicMediaDTO, TopicSort } from "@/lib/types";
 
 const api = new ApiClient();
 const base = (slug: string) => `/api/communities/${slug}/topics`;
@@ -17,7 +17,9 @@ export const TopicService = {
   list: (slug: string, params: { board?: string; sort?: TopicSort; q?: string; page?: number } = {}) => api.get<Envelope<Paginated<TopicDTO>>>(base(slug), { ...params }),
   boards: (slug: string) => api.get<Envelope<BoardDTO[]>>(`/api/communities/${slug}/boards`, undefined, { ttl: 30 }),
   createBoard: (slug: string, input: { name: string; description?: string; postPolicy?: "members" | "admins" }) => api.post<Envelope<BoardDTO>>(`/api/communities/${slug}/boards`, input),
-  updateBoard: (slug: string, boardId: string, patch: { name?: string; description?: string; postPolicy?: "members" | "admins" }) => api.patch<Envelope<BoardDTO>>(`/api/communities/${slug}/boards/${boardId}`, patch),
+  updateBoard: (slug: string, boardId: string, patch: { name?: string; description?: string; rules?: string; postPolicy?: "members" | "admins" }) => api.patch<Envelope<BoardDTO>>(`/api/communities/${slug}/boards/${boardId}`, patch),
+  /** trending topics and top contributors this week, for the sidebar beside a board */
+  boardSidebar: (slug: string, boardId: string) => api.get<Envelope<BoardSidebarDTO>>(`/api/communities/${slug}/boards/${boardId}/sidebar`),
   removeBoard: (slug: string, boardId: string) => api.delete<Envelope<{ deleted: boolean }>>(`/api/communities/${slug}/boards/${boardId}`),
   get: (slug: string, topicId: string) => api.get<Envelope<TopicDetailDTO>>(`${base(slug)}/${topicId}`),
   create: (slug: string, input: TopicInput) => api.post<Envelope<TopicDTO>>(base(slug), input),

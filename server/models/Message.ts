@@ -1,4 +1,5 @@
-import { Schema, model, models, type Model, type Types } from "mongoose";
+import { Schema, type Model, type Types } from "mongoose";
+import { defineModel } from "./define";
 
 export interface IMessage {
   _id: Types.ObjectId;
@@ -6,6 +7,8 @@ export interface IMessage {
   senderId: Types.ObjectId;
   body: string;
   sticker: string | null;
+  /** a picture sticker (someone's saved sticker: one of our uploads); the message has no text then */
+  stickerUrl?: string | null;
   images: string[];
   replyToId: Types.ObjectId | null;
   /** set when the sender changed the text after sending */
@@ -21,6 +24,7 @@ const MessageSchema = new Schema<IMessage>(
     senderId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     body: { type: String, default: "", trim: true, maxlength: 2000 },
     sticker: { type: String, default: null, maxlength: 20 },
+    stickerUrl: { type: String, default: null, maxlength: 600 },
     images: { type: [String], default: [] },
     replyToId: { type: Schema.Types.ObjectId, default: null },
     editedAt: { type: Date, default: null },
@@ -31,4 +35,4 @@ const MessageSchema = new Schema<IMessage>(
 
 MessageSchema.index({ conversationId: 1, createdAt: -1 });
 
-export const Message: Model<IMessage> = (models.Message as Model<IMessage>) || model<IMessage>("Message", MessageSchema);
+export const Message: Model<IMessage> = defineModel<IMessage>("Message", MessageSchema);

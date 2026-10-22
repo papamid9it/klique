@@ -8,7 +8,7 @@ function AdminInboxPageContent() {
   const { summary, refresh } = useAdmin();
   return (
     <>
-      <AdminHeader title="Event inbox">Events found on other sites, waiting for a look. Nothing here is public until you approve it.</AdminHeader>
+      <AdminHeader title="Event finder">Find events by place, category and date from official APIs and the pages you add, review them, then post the good ones. Nothing here is public until you post it.</AdminHeader>
       <EventInbox pending={summary?.pendingDrafts ?? null} onChanged={refresh} />
     </>
   );

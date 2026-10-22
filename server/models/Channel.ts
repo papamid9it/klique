@@ -1,4 +1,5 @@
 import { Schema, model, models, type Model, type Types } from "mongoose";
+import { defineModel } from "./define";
 
 /**
  * Chat structure of a community, Discord-style:
@@ -45,6 +46,8 @@ export interface IChannel {
   /** "managers": hidden from regular members entirely (a staff room). */
   visibility: ChannelVisibility;
   position: number;
+  /** slow mode: seconds each person waits between messages (0 = off); owners/admins don't wait */
+  slowModeSec: number;
   /** denormalised for the unread dot and "last active" */
   lastMessageId: Types.ObjectId | null;
   lastMessageAt: Date | null;
@@ -63,6 +66,7 @@ const ChannelSchema = new Schema<IChannel>(
     type: { type: String, enum: ["text", "announcement", "voice"], default: "text" },
     visibility: { type: String, enum: ["all", "managers", "invite"], default: "all" },
     position: { type: Number, default: 0 },
+    slowModeSec: { type: Number, default: 0, min: 0, max: 3600 },
     lastMessageId: { type: Schema.Types.ObjectId, default: null },
     lastMessageAt: { type: Date, default: null },
     createdById: { type: Schema.Types.ObjectId, ref: "User", required: true },
@@ -72,7 +76,7 @@ const ChannelSchema = new Schema<IChannel>(
 ChannelSchema.index({ communityId: 1, subcommunityId: 1, slug: 1 }, { unique: true });
 ChannelSchema.index({ communityId: 1, subcommunityId: 1, categoryId: 1, position: 1 });
 
-export const Channel: Model<IChannel> = (models.Channel as Model<IChannel>) || model<IChannel>("Channel", ChannelSchema);
+export const Channel: Model<IChannel> = defineModel<IChannel>("Channel", ChannelSchema);
 
 /**
  * The slug index changed shape when groups got channels. `syncIndexes` drops the old one, once per
@@ -96,6 +100,8 @@ export interface IChannelMessage {
   authorId: Types.ObjectId;
   body: string;
   sticker: string | null;
+  /** a picture sticker (someone's saved sticker: one of our uploads); the message has no text then */
+  stickerUrl?: string | null;
   images: string[];
   replyToId: Types.ObjectId | null;
   /** set when an owner or admin pins it to the channel */
@@ -118,6 +124,7 @@ const MessageSchema = new Schema<IChannelMessage>(
     authorId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     body: { type: String, default: "", maxlength: 2000 },
     sticker: { type: String, default: null, maxlength: 20 },
+    stickerUrl: { type: String, default: null, maxlength: 600 },
     images: { type: [String], default: [] },
     replyToId: { type: Schema.Types.ObjectId, default: null },
     pinnedAt: { type: Date, default: null },
@@ -132,10 +139,12 @@ const MessageSchema = new Schema<IChannelMessage>(
 // Cursor pagination walks _id (time-ordered) within a channel.
 MessageSchema.index({ channelId: 1, _id: -1 });
 MessageSchema.index({ channelId: 1, mentions: 1, _id: 1 });
+// slow mode: someone's latest message in a channel
+MessageSchema.index({ channelId: 1, authorId: 1, _id: -1 });
 MessageSchema.index({ channelId: 1, pinnedAt: -1 }, { partialFilterExpression: { pinnedAt: { $type: "date" } } });
 
 export const ChannelMessage: Model<IChannelMessage> =
-  (models.ChannelMessage as Model<IChannelMessage>) || model<IChannelMessage>("ChannelMessage", MessageSchema);
+  defineModel<IChannelMessage>("ChannelMessage", MessageSchema);
 
 export interface IChannelRead {
   _id: Types.ObjectId;

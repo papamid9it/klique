@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { ChannelService, type SpaceRef } from "@/app/services/ChannelService";
+import type { SpaceRef } from "@/app/services/ChannelService";
+import { channelSource, type ChatSource } from "@/app/services/ChatSource";
 import { ReportDialog } from "@/components/domain/ReportDialog";
 import { ConfirmModal } from "@/components/domain/space/parts";
 import { useAuth } from "@/components/providers/AuthProvider";
@@ -12,16 +13,17 @@ import { Icon } from "@/components/ui/Icon";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { cx } from "@/components/ui/cx";
-import { LIMITS } from "@/lib/constants";
-import { useChat } from "@/lib/hooks/useChat";
+import { LIMITS, slowModeLabel } from "@/lib/constants";
+import { useChat, type SendError } from "@/lib/hooks/useChat";
 import { useAttachments } from "@/lib/hooks/useAttachments";
+import { useStickers } from "@/lib/hooks/useStickers";
 import { useDebounced } from "@/lib/hooks/useApi";
 import { activeMention } from "@/lib/mentions";
 import type { ChannelDTO, ChannelMessageDTO, ReplyRefDTO, UserBrief } from "@/lib/types";
 import { AttachmentStrip } from "./AttachmentStrip";
 import { Message } from "./Message";
 import { ReplyingTo } from "./ReplyQuote";
-import { StickerPicker } from "./Reactions";
+import { StickerPicker, type StickerChoice } from "./Reactions";
 
 const GROUP_GAP_MS = 5 * 60 * 1000;
 const dayKey = (iso: string) => new Date(iso).toLocaleDateString("en-CA", { timeZone: "Africa/Lagos" });
@@ -42,10 +44,32 @@ function dayLabel(iso: string) {
  *  - `isMember`: the viewer belongs to this space (community or group)
  *  - `gate`: what to show instead of the composer for someone who isn't a member (a join button)
  */
-export function ChatPane({ space, channel, isMember, gate, onRead }: { space: SpaceRef; channel: ChannelDTO; isMember: boolean; gate: ReactNode; onRead: () => void }) {
+export function ChatPane({
+  space,
+  source,
+  channel,
+  isMember,
+  gate,
+  onRead,
+  intro,
+  placeholder,
+}: {
+  /** a community or group channel (or pass `source` for any other chat, like a crew's) */
+  space?: SpaceRef;
+  source?: ChatSource;
+  channel: ChannelDTO;
+  isMember: boolean;
+  gate: ReactNode;
+  onRead: () => void;
+  /** replaces the "Welcome to #channel" start of the conversation */
+  intro?: (empty: boolean) => ReactNode;
+  /** composer hint (default "Message #channel") */
+  placeholder?: string;
+}) {
   const { user } = useAuth();
   const toast = useToast();
-  const chat = useChat(space, channel.slug, channel.id);
+  const [src] = useState(() => source ?? channelSource(space!, channel.slug, channel.id));
+  const chat = useChat(src);
   const { items, hasOlder, loading, loadingOlder, loadOlder } = chat;
 
   const scroller = useRef<HTMLDivElement>(null);
@@ -58,6 +82,8 @@ export function ChatPane({ space, channel, isMember, gate, onRead }: { space: Sp
   const [reporting, setReporting] = useState<ChannelMessageDTO | null>(null);
   const [replyTo, setReplyTo] = useState<ChannelMessageDTO | null>(null);
   const [pinTick, setPinTick] = useState(0);
+  const stickers = useStickers();
+  const saveSticker = (url: string) => void stickers.save(url).then((err) => toast(err ?? "Saved to your stickers.", err ? "error" : "success"));
 
   /** Scroll to a message that is already loaded and flash it. */
   const jump = useCallback(
@@ -116,8 +142,8 @@ export function ChatPane({ space, channel, isMember, gate, onRead }: { space: Sp
     if (!isMember || loading || !newestId || newestId.startsWith("pending-") || lastMarked.current === newestId) return;
     if (document.visibilityState !== "visible" || !atBottom.current) return;
     lastMarked.current = newestId;
-    void ChannelService.markRead(space, channel.slug).then(onRead, () => undefined);
-  }, [newestId, loading, isMember, space, channel.slug, onRead]);
+    void src.markRead().then(onRead, () => undefined);
+  }, [newestId, loading, isMember, src, onRead]);
 
   const onScroll = useCallback(() => {
     const el = scroller.current;
@@ -140,7 +166,7 @@ export function ChatPane({ space, channel, isMember, gate, onRead }: { space: Sp
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PinnedBar space={space} channel={channel} tick={pinTick} onJump={jump} onUnpin={(id) => void chat.pin(id, false).then((err) => (err ? toast(err, "error") : setPinTick((n) => n + 1)))} />
+      <PinnedBar source={src} tick={pinTick} onJump={jump} onUnpin={(id) => void chat.pin(id, false).then((err) => (err ? toast(err, "error") : setPinTick((n) => n + 1)))} />
       <div className="relative min-h-0 flex-1">
         <div ref={scroller} onScroll={onScroll} className="kq-calm h-full overflow-y-auto overscroll-contain pb-3" role="log" aria-live="polite" aria-relevant="additions" aria-label={`Messages in ${channel.name}`}>
           {loading ? (
@@ -174,7 +200,7 @@ export function ChatPane({ space, channel, isMember, gate, onRead }: { space: Sp
                   )}
                 </div>
               ) : (
-                <ChannelIntro channel={channel} empty={!items.length} />
+                intro ? intro(!items.length) : <ChannelIntro channel={channel} empty={!items.length} />
               )}
               <ul ref={content}>
                 {items.map((m, i) => {
@@ -190,7 +216,7 @@ export function ChatPane({ space, channel, isMember, gate, onRead }: { space: Sp
                           <span className="h-px flex-1 bg-line" />
                         </li>
                       )}
-                      <Message m={m} showHead={showHead} mine={!!user && m.author.id === user.id} meId={user?.id ?? null} onDelete={setDeleting} onEdit={(msg, body) => chat.edit(msg.id, body)} onReport={user ? setReporting : undefined} onReply={isMember && channel.canPost ? setReplyTo : undefined} onPin={(msg, pinned) => void chat.pin(msg.id, pinned).then((err) => (err ? toast(err, "error") : setPinTick((n) => n + 1)))} onJump={jump} canReact={isMember && !!user} onReact={(msg, kind) => void chat.react(msg.id, kind).then((err) => err && toast(err, "error"))} />
+                      <Message m={m} showHead={showHead} mine={!!user && m.author.id === user.id} meId={user?.id ?? null} onDelete={setDeleting} onEdit={(msg, body) => chat.edit(msg.id, body)} onReport={user ? setReporting : undefined} onReply={isMember && channel.canPost ? setReplyTo : undefined} onPin={(msg, pinned) => void chat.pin(msg.id, pinned).then((err) => (err ? toast(err, "error") : setPinTick((n) => n + 1)))} onJump={jump} canReact={isMember && !!user} onReact={(msg, kind) => void chat.react(msg.id, kind).then((err) => err && toast(err, "error"))} onSaveSticker={user ? saveSticker : undefined} />
                     </div>
                   );
                 })}
@@ -206,7 +232,7 @@ export function ChatPane({ space, channel, isMember, gate, onRead }: { space: Sp
         )}
       </div>
 
-      <Composer space={space} channel={channel} isMember={isMember} gate={gate} send={chat.send} onSent={() => (atBottom.current = true)} replyTo={replyTo} onClearReply={() => setReplyTo(null)} />
+      <Composer source={src} placeholder={placeholder} channel={channel} isMember={isMember} gate={gate} send={chat.send} onSent={() => (atBottom.current = true)} replyTo={replyTo} onClearReply={() => setReplyTo(null)} />
 
       <ConfirmModal
         open={!!deleting}
@@ -231,19 +257,20 @@ export function ChatPane({ space, channel, isMember, gate, onRead }: { space: Sp
 }
 
 /** A thin strip under the channel header listing pinned messages (owners and admins can unpin). */
-function PinnedBar({ space, channel, tick, onJump, onUnpin }: { space: SpaceRef; channel: ChannelDTO; tick: number; onJump: (id: string) => void; onUnpin: (id: string) => void }) {
+function PinnedBar({ source, tick, onJump, onUnpin }: { source: ChatSource; tick: number; onJump: (id: string) => void; onUnpin: (id: string) => void }) {
   const [pins, setPins] = useState<ChannelMessageDTO[]>([]);
   const [open, setOpen] = useState(false);
   useEffect(() => {
+    if (!source.pins) return;
     let live = true;
-    ChannelService.pins(space, channel.slug).then(
+    source.pins().then(
       (r) => live && setPins(r.data),
       () => live && setPins([]),
     );
     return () => {
       live = false;
     };
-  }, [space, channel.slug, tick]);
+  }, [source, tick]);
   if (!pins.length) return null;
   const top = pins[0];
   return (
@@ -251,7 +278,7 @@ function PinnedBar({ space, channel, tick, onJump, onUnpin }: { space: SpaceRef;
       <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex w-full items-center gap-2 px-4 py-2 text-left text-[13px] sm:px-6">
         <Icon name="pushpin" size={14} className="shrink-0 text-accent-text" />
         <span className="shrink-0 font-semibold">{pins.length} pinned</span>
-        <span className="min-w-0 flex-1 truncate text-ink-muted">{top.author.displayName}: {top.body || "Photo"}</span>
+        <span className="min-w-0 flex-1 truncate text-ink-muted">{top.author.displayName}: {top.body || (top.sticker || top.stickerUrl ? "Sticker" : "Photo")}</span>
         <Icon name="chevron-down" size={14} className={cx("shrink-0 text-ink-muted transition", open && "rotate-180")} />
       </button>
       {open && (
@@ -261,7 +288,7 @@ function PinnedBar({ space, channel, tick, onJump, onUnpin }: { space: SpaceRef;
               <button type="button" onClick={() => (setOpen(false), onJump(p.id))} className="flex min-w-0 flex-1 items-center gap-2 text-left text-[13px]">
                 <Avatar name={p.author.displayName} src={p.author.avatarUrl} frame={p.author.avatarFrame} size={22} />
                 <span className="shrink-0 font-semibold">{p.author.displayName}</span>
-                <span className="truncate text-ink-muted">{p.body || "Photo"}</span>
+                <span className="truncate text-ink-muted">{p.body || (p.sticker || p.stickerUrl ? "Sticker" : "Photo")}</span>
               </button>
               {p.canPin && (
                 <button type="button" onClick={() => onUnpin(p.id)} className="shrink-0 rounded-full px-2 py-1 text-[12px] font-semibold text-ink-muted hover:bg-line hover:text-ink">
@@ -304,7 +331,8 @@ function ChannelIntro({ channel, empty }: { channel: ChannelDTO; empty: boolean 
 /* ----------------------------- composer ----------------------------- */
 
 function Composer({
-  space,
+  source,
+  placeholder,
   channel,
   isMember,
   gate,
@@ -313,11 +341,12 @@ function Composer({
   replyTo,
   onClearReply,
 }: {
-  space: SpaceRef;
+  source: ChatSource;
+  placeholder?: string;
   channel: ChannelDTO;
   isMember: boolean;
   gate: ReactNode;
-  send: (input: { body: string; sticker?: string; images?: string[]; replyTo?: ReplyRefDTO | null }, me: NonNullable<ReturnType<typeof useAuth>["user"]>) => Promise<string | null>;
+  send: (input: { body: string; sticker?: string; stickerUrl?: string; images?: string[]; replyTo?: ReplyRefDTO | null }, me: NonNullable<ReturnType<typeof useAuth>["user"]>) => Promise<SendError | null>;
   onSent: () => void;
   replyTo: ChannelMessageDTO | null;
   onClearReply: () => void;
@@ -334,6 +363,7 @@ function Composer({
   const [active, setActive] = useState(0);
   const query = useDebounced(mention?.query ?? null, 150);
   const ticket = useRef(0);
+  const slow = useSlowMode(channel);
 
   // Fetch tag suggestions for "@que" as you type (the server only returns people who can read this channel).
   useEffect(() => {
@@ -342,7 +372,7 @@ function Composer({
       return;
     }
     const mine = ++ticket.current;
-    ChannelService.mentionable(space, channel.slug, query).then(
+    source.mentionable(query).then(
       (r) => {
         if (mine !== ticket.current) return;
         setOptions(r.data);
@@ -350,7 +380,7 @@ function Composer({
       },
       () => mine === ticket.current && setOptions([]),
     );
-  }, [query, space, channel.slug, channel.canPost]);
+  }, [query, source, channel.canPost]);
 
   const resize = () => {
     const el = area.current;
@@ -379,28 +409,34 @@ function Composer({
   async function submit() {
     const body = text.trim();
     const images = attach.urls;
-    if ((!body && !images.length) || !user || attach.uploading) return;
-    const reply = replyTo ? { id: replyTo.id, authorName: replyTo.author.displayName, snippet: replyTo.body.slice(0, 120) || (replyTo.images.length ? "Photo" : "Message"), deleted: false } : null;
+    if ((!body && !images.length) || !user || attach.uploading || slow.left > 0) return;
+    const reply = replyTo ? { id: replyTo.id, authorName: replyTo.author.displayName, snippet: replyTo.body.slice(0, 120) || (replyTo.sticker || replyTo.stickerUrl ? "Sticker" : replyTo.images.length ? "Photo" : "Message"), deleted: false } : null;
     setText("");
     attach.clear();
     onClearReply();
     setMention(null);
     requestAnimationFrame(resize);
     onSent();
+    slow.sent();
     const err = await send({ body, images, replyTo: reply }, user);
     if (err) {
       setText((t) => t || body); // never lose what they typed
       attach.restore(images);
-      toast(err, "error");
+      slow.failed(err.retryAfter);
+      if (!err.retryAfter) toast(err.message, "error");
       requestAnimationFrame(resize);
     }
   }
 
-  async function sendSticker(id: string) {
-    if (!user) return;
+  async function sendSticker(choice: StickerChoice) {
+    if (!user || slow.left > 0) return;
     onSent();
-    const err = await send({ body: "", sticker: id }, user);
-    if (err) toast(err, "error");
+    slow.sent();
+    const err = await send({ body: "", ...choice }, user);
+    if (err) {
+      slow.failed(err.retryAfter);
+      if (!err.retryAfter) toast(err.message, "error");
+    }
   }
 
   const bar = "border-t border-line bg-canvas px-4 py-3 sm:px-6";
@@ -457,13 +493,25 @@ function Composer({
           ))}
         </ul>
       )}
-      {replyTo && <ReplyingTo name={replyTo.author.displayName} snippet={replyTo.body.slice(0, 80) || "Photo"} onCancel={onClearReply} />}
+      {slow.on && (
+        <p className="mb-1.5 flex items-center gap-1.5 px-1 text-[12px] text-ink-muted" aria-live="polite">
+          <Icon name="timer" size={13} className="shrink-0" />
+          {slow.left > 0 ? (
+            <>
+              Slow mode is on. You can send again in <span className="font-mono font-semibold text-ink">{formatWait(slow.left)}</span>
+            </>
+          ) : (
+            <>Slow mode is on: one message every {slowModeLabel(channel.slowModeSec)}{channel.slowModeExempt ? ". You're exempt as an owner or admin." : "."}</>
+          )}
+        </p>
+      )}
+      {replyTo && <ReplyingTo name={replyTo.author.displayName} snippet={replyTo.body.slice(0, 80) || (replyTo.sticker || replyTo.stickerUrl ? "Sticker" : "Photo")} onCancel={onClearReply} />}
       <AttachmentStrip urls={attach.urls} progress={attach.progress} error={attach.error} onRemove={attach.remove} />
       <div className="flex items-end gap-2 rounded-card border border-line bg-surface p-2 focus-within:border-accent-text">
         {attach.enabled && (
           <>
             <input ref={fileInput} type="file" hidden multiple accept=".jpg,.jpeg,.png,.webp,.gif,.avif,.heic,.heif" onChange={(e) => (void attach.add(e.target.files), (e.target.value = ""))} aria-label="Choose pictures" />
-            <button type="button" onClick={() => fileInput.current?.click()} disabled={attach.full || attach.uploading} aria-label="Add pictures" title="Add pictures" className="inline-flex size-10 shrink-0 items-center justify-center rounded-full text-ink-muted transition hover:bg-raised hover:text-ink disabled:opacity-40">
+            <button type="button" onClick={() => fileInput.current?.click()} disabled={attach.full || attach.uploading || slow.left > 0} aria-label="Add pictures" title="Add pictures" className="inline-flex size-10 shrink-0 items-center justify-center rounded-full text-ink-muted transition hover:bg-raised hover:text-ink disabled:opacity-40">
               <Icon name="image" size={20} />
             </button>
           </>
@@ -482,7 +530,7 @@ function Composer({
           aria-activedescendant={open ? `mention-${options[active]?.id}` : undefined}
           value={text}
           maxLength={LIMITS.messageBody}
-          placeholder={`Message #${channel.name}`}
+          placeholder={placeholder ?? `Message #${channel.name}`}
           onChange={(e) => {
             setText(e.target.value);
             trackMention(e.target.value, e.target.selectionStart ?? e.target.value.length);
@@ -523,19 +571,66 @@ function Composer({
           className="max-h-[180px] min-h-10 flex-1 resize-none bg-transparent px-2.5 py-2 text-[15px] leading-relaxed text-ink placeholder:text-ink-muted/70 focus:outline-none"
         />
         <span className="relative">
-          <button type="button" onClick={() => setStickers((o) => !o)} aria-label="Stickers" aria-expanded={stickers} title="Stickers" className="inline-flex size-10 shrink-0 items-center justify-center rounded-full text-ink-muted transition hover:bg-raised hover:text-ink">
+          <button type="button" onClick={() => setStickers((o) => !o)} disabled={slow.left > 0} aria-label="Stickers" aria-expanded={stickers} title="Stickers" className="inline-flex size-10 shrink-0 items-center justify-center rounded-full text-ink-muted transition hover:bg-raised hover:text-ink disabled:opacity-40">
             <Icon name="sticker" size={20} />
           </button>
-          {stickers && <StickerPicker onPick={(id) => void sendSticker(id)} onClose={() => setStickers(false)} className="absolute right-0 bottom-full mb-2" />}
+          {stickers && <StickerPicker onPick={(c) => void sendSticker(c)} onClose={() => setStickers(false)} className="absolute right-0 bottom-full mb-2" />}
         </span>
         {left < 200 && <span className={cx("pb-2.5 font-mono text-[11px]", left < 0 ? "text-danger" : "text-ink-muted")}>{left}</span>}
-        <button type="submit" disabled={(!text.trim() && !attach.urls.length) || attach.uploading} aria-label="Send message" className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-accent text-accent-ink transition active:scale-95 disabled:opacity-40">
-          <Icon name="send" size={17} />
-        </button>
+        {slow.left > 0 ? (
+          <span role="timer" aria-label={`You can send again in ${formatWait(slow.left)}`} className="inline-flex h-10 min-w-10 shrink-0 items-center justify-center rounded-full bg-raised px-2.5 font-mono text-[12px] font-semibold text-ink-muted">
+            {formatWait(slow.left)}
+          </span>
+        ) : (
+          <button type="submit" disabled={(!text.trim() && !attach.urls.length) || attach.uploading} aria-label="Send message" className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-accent text-accent-ink transition active:scale-95 disabled:opacity-40">
+            <Icon name="send" size={17} />
+          </button>
+        )}
       </div>
       <p className="mt-1.5 hidden px-1 text-[11px] text-ink-muted sm:block">
         <kbd className="font-mono">Enter</kbd> to send · <kbd className="font-mono">Shift + Enter</kbd> for a new line · <kbd className="font-mono">@</kbd> to tag someone · paste a link to preview it
       </p>
     </form>
   );
+}
+
+/** "0:42", "4:05", "1:00:00" */
+function formatWait(sec: number) {
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = String(sec % 60).padStart(2, "0");
+  return h ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
+}
+
+/**
+ * Slow mode in the composer: after you send, the countdown runs and sending waits until it ends. The server is
+ * the judge (it refuses early messages and says how long is left); this only mirrors it. A change to the
+ * channel's setting applies at once: turned off, the wait ends; shortened, it never runs past the new interval.
+ */
+function useSlowMode(channel: ChannelDTO) {
+  const sec = channel.slowModeExempt ? 0 : (channel.slowModeSec ?? 0);
+  const [from, setFrom] = useState<{ at: number; wait: number } | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  const until = from && sec ? from.at + Math.min(from.wait, sec) * 1000 : 0;
+  useEffect(() => {
+    if (!until) return;
+    setNow(Date.now());
+    const t = setInterval(() => {
+      const n = Date.now();
+      setNow(n);
+      if (n >= until) clearInterval(t);
+    }, 250);
+    return () => clearInterval(t);
+  }, [until]);
+  return {
+    /** the channel has slow mode (shown to everyone who can post, exempt or not) */
+    on: (channel.slowModeSec ?? 0) > 0,
+    /** whole seconds left before you can send (0: go ahead) */
+    left: until ? Math.max(0, Math.ceil((until - now) / 1000)) : 0,
+    sent: () => {
+      if (sec) setFrom({ at: Date.now(), wait: sec });
+    },
+    /** the server said no: wait what it says (or nothing, if it refused for another reason) */
+    failed: (retryAfter?: number) => setFrom(retryAfter ? { at: Date.now(), wait: retryAfter } : null),
+  };
 }

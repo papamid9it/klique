@@ -14,6 +14,8 @@ import { useToast } from "@/components/providers/ToastProvider";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { cdn } from "@/lib/cdn";
+import { focalStyle, splitFocal } from "@/lib/focal";
+import { useMediaViewer } from "@/components/providers/MediaViewerProvider";
 import { cx } from "@/components/ui/cx";
 import { Modal } from "@/components/ui/Modal";
 import { useApi } from "@/lib/hooks/useApi";
@@ -25,13 +27,33 @@ function hash(s: string) {
   return Math.abs(h);
 }
 
+/** A profile picture that opens full size when tapped (when there is one). */
+export function ZoomAvatar({ url, name, children }: { url?: string | null; name: string; children: React.ReactNode }) {
+  const view = useMediaViewer();
+  if (!url) return <>{children}</>;
+  return (
+    <button type="button" onClick={() => view([url])} aria-label={`View ${name}'s picture full screen`} className="shrink-0 cursor-zoom-in rounded-full">
+      {children}
+    </button>
+  );
+}
+
 /** Banner strip: a gradient from the accent tokens, rotated per person so everyone isn't identical. */
-export function ProfileBanner({ handle, className, bannerUrl, bannerColor }: { handle: string; className?: string; bannerUrl?: string | null; bannerColor?: string | null }) {
+export function ProfileBanner({ handle, className, bannerUrl, bannerColor, zoomable }: { handle: string; className?: string; bannerUrl?: string | null; bannerColor?: string | null; zoomable?: boolean }) {
   const angle = 100 + (hash(handle) % 160);
+  const view = useMediaViewer();
   if (bannerUrl) {
-    return (
+    // shown as the person positioned it (lib/focal); tapping opens the whole picture when `zoomable`
+    const pic = (
       // eslint-disable-next-line @next/next/no-img-element
-      <img src={cdn(bannerUrl, { w: 1200 })} alt="" aria-hidden="true" loading="lazy" className={cx("w-full object-cover", className)} />
+      <img src={cdn(bannerUrl, { w: 1200 })} alt="" aria-hidden="true" loading="lazy" style={focalStyle(splitFocal(bannerUrl).focal)} className="size-full object-cover" />
+    );
+    return zoomable ? (
+      <button type="button" onClick={() => view([bannerUrl])} aria-label="View banner full screen" className={cx("block w-full cursor-zoom-in overflow-hidden", className)}>
+        {pic}
+      </button>
+    ) : (
+      <div className={cx("w-full overflow-hidden", className)}>{pic}</div>
     );
   }
   if (bannerColor) {

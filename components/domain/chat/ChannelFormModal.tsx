@@ -12,7 +12,7 @@ import { Icon } from "@/components/ui/Icon";
 import { cx } from "@/components/ui/cx";
 import { Modal } from "@/components/ui/Modal";
 import { SaveBar, SettingsBlock, SettingsShell, type SettingsGroup } from "@/components/ui/SettingsShell";
-import { VOICE_ENABLED } from "@/lib/constants";
+import { SLOW_MODE_STEPS, VOICE_ENABLED, slowModeLabel } from "@/lib/constants";
 import { useDebounced } from "@/lib/hooks/useApi";
 import type { ChannelCategoryDTO, ChannelDTO, ChannelType, ChannelVisibility, UserBrief } from "@/lib/types";
 
@@ -180,12 +180,13 @@ export function ChannelSettings({
   const [type, setType] = useState<ChannelType>(channel.type);
   const [visibility, setVisibility] = useState<ChannelVisibility>(channel.visibility);
   const [categoryId, setCategoryId] = useState<string>(channel.categoryId ?? "");
+  const [slowModeSec, setSlowModeSec] = useState(channel.slowModeSec ?? 0);
   const [guests, setGuests] = useState<UserBrief[]>([]);
   const [busy, setBusy] = useState(false);
   const [errs, setErrs] = useState<Record<string, string>>({});
   const [deleting, setDeleting] = useState(false);
 
-  const dirty = name !== channel.name || topic !== (channel.topic ?? "") || type !== channel.type || visibility !== channel.visibility || categoryId !== (channel.categoryId ?? "");
+  const dirty = name !== channel.name || topic !== (channel.topic ?? "") || type !== channel.type || visibility !== channel.visibility || categoryId !== (channel.categoryId ?? "") || slowModeSec !== (channel.slowModeSec ?? 0);
 
   useEffect(() => {
     if (channel.visibility !== "invite") return;
@@ -229,6 +230,7 @@ export function ChannelSettings({
     setType(channel.type);
     setVisibility(channel.visibility);
     setCategoryId(channel.categoryId ?? "");
+    setSlowModeSec(channel.slowModeSec ?? 0);
     setErrs({});
   }
 
@@ -236,7 +238,7 @@ export function ChannelSettings({
     setBusy(true);
     setErrs({});
     try {
-      const res = await ChannelService.update(space, channel.slug, { name: name.trim(), topic: topic.trim(), type, visibility, categoryId: inGroup ? null : categoryId || null });
+      const res = await ChannelService.update(space, channel.slug, { name: name.trim(), topic: topic.trim(), type, visibility, categoryId: inGroup ? null : categoryId || null, slowModeSec });
       // Switching a channel to private: add whoever was picked.
       if (visibility === "invite" && channel.visibility !== "invite") {
         for (const g of guests) await ChannelService.addGuest(space, res.data.slug, g.id);
@@ -281,6 +283,15 @@ export function ChannelSettings({
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
+                </option>
+              ))}
+            </SelectField>
+          )}
+          {type !== "voice" && (
+            <SelectField label="Slow mode" value={String(slowModeSec)} onChange={(e) => setSlowModeSec(Number(e.target.value))} hint="How long each member waits between messages. Owners and admins aren't held back." error={errs.slowModeSec}>
+              {SLOW_MODE_STEPS.map((s) => (
+                <option key={s} value={s}>
+                  {s ? slowModeLabel(s) : "Off"}
                 </option>
               ))}
             </SelectField>

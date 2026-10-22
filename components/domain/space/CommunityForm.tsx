@@ -127,7 +127,7 @@ export function CommunityForm({
         </fieldset>
       )}
 
-      <ImageField kind="photo" label="Cover image (optional)" value={v.coverImage} onChange={(u) => set("coverImage", u)} error={errors.coverImage} hint="A wide picture. We'll use artwork if you skip it." />
+      <ImageField kind="photo" label="Cover image (optional)" value={v.coverImage} onChange={(u) => set("coverImage", u)} error={errors.coverImage} reposition={{ aspect: 16 / 9 }} hint="A wide picture. We'll use artwork if you skip it." />
 
       {general && Object.keys(errors).length === 0 && (
         <p role="alert" className="text-sm font-medium text-danger">

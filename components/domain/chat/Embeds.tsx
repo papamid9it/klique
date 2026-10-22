@@ -1,5 +1,6 @@
 "use client";
 
+import { isDataSaver } from "@/lib/data-saver";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { LinkService } from "@/app/services/LinkService";
 import { useAuth } from "@/components/providers/AuthProvider";
@@ -139,7 +140,7 @@ function LinkCard({ url, enabled, near }: { url: string; enabled: boolean; near:
       )}
       {data.description && <p className="mt-1 line-clamp-3 text-[13px] leading-relaxed text-ink-muted">{data.description}</p>}
       {data.videoUrl ? (
-        <video controls preload={near ? "metadata" : "none"} poster={data.image ?? undefined} className="mt-2 max-h-72 w-full rounded-control bg-black">
+        <video controls preload={near && !isDataSaver() ? "metadata" : "none"} poster={data.image ?? undefined} className="mt-2 max-h-72 w-full rounded-control bg-black">
           <source src={data.videoUrl} />
         </video>
       ) : (
@@ -173,7 +174,7 @@ function EmbedBody({ url, signedIn, near }: { url: string; signedIn: boolean; ne
       return <PlayableVideo provider="Vimeo" thumb={vimeo?.image ?? null} src={`https://player.vimeo.com/video/${kind.id}?autoplay=1`} href={url} title={vimeo?.title} />;
     case "video":
       return (
-        <video controls preload={near ? "metadata" : "none"} className="max-h-80 max-w-full rounded-card bg-black">
+        <video controls preload={near && !isDataSaver() ? "metadata" : "none"} className="max-h-80 max-w-full rounded-card bg-black">
           <source src={kind.src} />
         </video>
       );

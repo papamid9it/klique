@@ -62,7 +62,7 @@ export async function maybeRunReminders() {
   const claimed = await JobRun.findOneAndUpdate(
     { _id: "reminders", lastRunAt: { $lt: new Date(now - EVERY_MS) } },
     { $set: { lastRunAt: new Date(now) } },
-    { new: true },
+    { returnDocument: "after" },
   ).lean();
   if (!claimed) {
     // first run ever: create the row (a duplicate key from a racing server just means it won)

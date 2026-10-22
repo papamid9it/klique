@@ -116,6 +116,13 @@ export const expoAccessToken = (): string | null => process.env.EXPO_ACCESS_TOKE
 /** Shared secret for the reminder cron (`/api/cron/reminders`). Without it the endpoint refuses everyone. */
 export const cronSecret = (): string | null => process.env.CRON_SECRET?.trim() || null;
 
+/* ------------------------------ Event finder ------------------------------ */
+
+/** Optional: Ticketmaster Discovery API key (developer.ticketmaster.com). Without it the finder skips Ticketmaster. */
+export const ticketmasterKey = (): string | null => process.env.TICKETMASTER_API_KEY?.trim() || null;
+/** Optional: Eventbrite private token (eventbrite.com/platform). Needed to read organisers' events from Eventbrite's API. */
+export const eventbriteToken = (): string | null => process.env.EVENTBRITE_TOKEN?.trim() || null;
+
 /** Site admins: these emails can open /admin, review reports and post public events. */
 export const adminEmails = (): Set<string> =>
   new Set((process.env.ADMIN_EMAILS ?? "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean));

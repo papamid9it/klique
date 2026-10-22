@@ -101,7 +101,7 @@ export function CommunityWizard({ onSubmit }: { onSubmit: (input: CommunityInput
 
         {step === 1 && (
           <div className="space-y-5">
-            <ImageField kind="photo" label="Cover image (optional)" value={coverImage} onChange={setCoverImage} error={errors.coverImage} fallback={<span className="text-lg font-bold text-ink-muted">{initial}</span>} />
+            <ImageField kind="photo" label="Cover image (optional)" value={coverImage} onChange={setCoverImage} error={errors.coverImage} reposition={{ aspect: 16 / 9 }} fallback={<span className="text-lg font-bold text-ink-muted">{initial}</span>} />
             <TextField label="Community name" value={name} onChange={(e) => setName(e.target.value)} maxLength={LIMITS.communityName} required autoFocus error={errors.name} placeholder="Lekki Skate Crew" />
             <SelectField label="What's it about?" value={interest} onChange={(e) => isInterestId(e.target.value) && setInterest(e.target.value)} error={errors.interest}>
               {categories.map((i) => (

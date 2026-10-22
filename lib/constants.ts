@@ -111,6 +111,7 @@ export const LIMITS = {
   topicMedia: 6,
   boardName: 30,
   boardDescription: 120,
+  boardRules: 1000,
   maxBoards: 12,
   topicComment: 3000,
   messageBody: 2000,
@@ -159,3 +160,14 @@ export const TRENDING_MIN_COMMENTS = 30;
  * them back (LiveKit keys must be set; see .env.example).
  */
 export const VOICE_ENABLED = false;
+
+/** Slow mode choices for a channel, in seconds (0 = off): how long each person waits between messages. */
+export const SLOW_MODE_STEPS = [0, 5, 10, 30, 60, 120, 300, 600, 900, 1800, 3600] as const;
+
+/** "5s", "2m", "1h" (and "Off" for 0). */
+export function slowModeLabel(sec: number): string {
+  if (!sec) return "Off";
+  if (sec < 60) return `${sec}s`;
+  if (sec < 3600) return `${Math.round(sec / 60)}m`;
+  return `${Math.round(sec / 3600)}h`;
+}

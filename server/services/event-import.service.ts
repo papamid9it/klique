@@ -1,260 +1,101 @@
 import "server-only";
-import http from "node:http";
-import https from "node:https";
 import type { Types } from "mongoose";
-import { isInterestId, type InterestId } from "@/lib/constants";
-import type { DraftDTO, DraftPatch, ImportResult, SourceDTO } from "@/lib/types";
-import { COUNTRIES, currencyOf, getCountry, isCountryCode, regionsOf, slugify } from "@/lib/places";
-import { ApiError, badRequest, notFound } from "../http/errors";
-import { EventDraft, EventSource, type IEventDraft, type IEventSource } from "../models/EventDraft";
+import { isInterestId } from "@/lib/constants";
+import type { DraftBulkResult, DraftDTO, DraftPatch, FinderQueryDTO, FinderRunDTO, SavedSearchDTO, SourceDTO } from "@/lib/types";
+import { getCountry, slugify } from "@/lib/places";
+import { badRequest, notFound } from "../http/errors";
+import { EventDraft, EventSource, FinderRun, SavedSearch, type IEventDraft, type IEventSource, type IFinderRun, type ISavedSearch } from "../models/EventDraft";
 import { Event } from "../models/Event";
 import type { IUser } from "../models/User";
-import { assertPublicHttpUrl, safeLookup } from "../net-guard";
+import { assertPublicHttpUrl } from "../net-guard";
 import { eventCreateSchema } from "../validators/schemas";
 import { createEvent } from "./events.service";
+import { assertScrapable } from "./finder/http";
+import { eventbriteOrgId } from "./finder/providers";
+import { createRun, cronFinder, stepRun } from "./finder/run";
 
 /**
- * The event finder. Ticketing and venue sites (Eventbrite, Tix, Meetup, most WordPress event plugins…) publish
- * each event's details as schema.org "Event" data inside the page, for Google. We read that, never the
- * page's layout, so it keeps working when a site is redesigned. A listing page usually links to its events
- * with an ItemList, so we follow those links too.
- *
- * Everything found becomes a pending draft in the admin inbox; nothing is public until an admin approves it.
- * Fetches go through the same SSRF guard as link previews (public hosts only, every redirect re-checked).
+ * The event finder (Admin → Event finder). A search becomes a job (see finder/run.ts) that reads official
+ * APIs, the pages / calendars / feeds saved here, and any links pasted in, a source at a time. Everything it
+ * finds lands in the review queue as a pending draft; nothing is public until an admin posts it.
  */
 
-const TIMEOUT_MS = 8000;
-const MAX_BYTES = 3 * 1024 * 1024;
-const MAX_REDIRECTS = 4;
-const MAX_FOLLOW = 15;
-
-function fetchPage(start: URL, redirects = 0): Promise<{ html: string; url: URL }> {
-  return new Promise((resolve, reject) => {
-    const mod = start.protocol === "https:" ? https : http;
-    const req = mod.request(
-      start,
-      {
-        method: "GET",
-        lookup: safeLookup as never,
-        timeout: TIMEOUT_MS,
-        headers: { "User-Agent": "Mozilla/5.0 (compatible; klique-eventbot/1.0; +https://klique.ng)", Accept: "text/html,application/xhtml+xml", "Accept-Language": "en" },
-      },
-      (res) => {
-        const status = res.statusCode ?? 0;
-        if (status >= 300 && status < 400 && res.headers.location) {
-          res.resume();
-          if (redirects >= MAX_REDIRECTS) return reject(new Error("Too many redirects"));
-          try {
-            return fetchPage(assertPublicHttpUrl(new URL(res.headers.location, start).toString()), redirects + 1).then(resolve, reject);
-          } catch (e) {
-            return reject(e);
-          }
-        }
-        if (status < 200 || status >= 300) {
-          res.resume();
-          return reject(new Error(`The page answered ${status}`));
-        }
-        if (!/text\/html|application\/xhtml/i.test(String(res.headers["content-type"] ?? ""))) {
-          res.resume();
-          return reject(new Error("That link isn't a web page"));
-        }
-        const chunks: Buffer[] = [];
-        let size = 0;
-        res.on("data", (c: Buffer) => {
-          size += c.length;
-          if (size > MAX_BYTES) return res.destroy(new Error("The page is too big"));
-          chunks.push(c);
-        });
-        res.on("end", () => resolve({ html: Buffer.concat(chunks).toString("utf8"), url: start }));
-        res.on("error", reject);
-      },
-    );
-    req.on("timeout", () => req.destroy(new Error("The site took too long to answer")));
-    req.on("error", reject);
-    req.end();
-  });
-}
-
-/* ------------------------------ parsing ----------------------------- */
-
-type Json = Record<string, unknown>;
-const asArray = <T>(v: T | T[] | undefined | null): T[] => (v == null ? [] : Array.isArray(v) ? v : [v]);
-const str = (v: unknown): string => (typeof v === "string" ? v.trim() : typeof v === "number" ? String(v) : "");
-const typesOf = (o: Json): string[] => asArray(o["@type"] as string | string[]).map(String);
-const isEventType = (t: string) => /Event$|^Festival$/i.test(t) && !/^(Action|Business)Event$/i.test(t);
-
-function decodeEntities(s: string): string {
-  return s
-    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
-    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;|&apos;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&");
-}
-const plain = (html: string) => decodeEntities(html.replace(/<br\s*\/?>/gi, "\n").replace(/<\/p>/gi, "\n\n").replace(/<[^>]+>/g, "")).replace(/\n{3,}/g, "\n\n").trim();
-
-/** Every JSON-LD object on the page, flattened out of arrays and @graph. */
-function jsonLd(html: string): Json[] {
-  const out: Json[] = [];
-  const walk = (v: unknown) => {
-    if (Array.isArray(v)) return v.forEach(walk);
-    if (v && typeof v === "object") {
-      const o = v as Json;
-      out.push(o);
-      if (o["@graph"]) walk(o["@graph"]);
-    }
-  };
-  for (const m of html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)) {
-    try {
-      walk(JSON.parse(m[1].trim()));
-    } catch {
-      /* one broken block shouldn't hide the others */
-    }
-  }
-  return out;
-}
-
-const INTEREST_WORDS: [InterestId, RegExp][] = [
-  ["skate", /\bskat(e|ing|eboard)/i],
-  ["running", /\b(run|running|marathon|5k|10k|jog)/i],
-  ["photography", /\b(photo|photography|photowalk|camera)/i],
-  ["film", /\b(film|cinema|movie|screening)/i],
-  ["dance", /\b(dance|dancing|choreograph|ballet)/i],
-  ["streetwear", /\b(streetwear|fashion|thrift|sneaker|pop-?up shop)/i],
-  ["art", /\b(art|exhibition|gallery|painting|museum)/i],
-  ["music", /\b(music|concert|gig|live|dj|band|afrobeats|amapiano|festival|party)/i],
-];
-const guessInterest = (text: string): InterestId => INTEREST_WORDS.find(([, rx]) => rx.test(text))?.[0] ?? "music";
-
-function countryCode(v: unknown): string {
-  const raw = str(typeof v === "object" && v ? (v as Json).name ?? (v as Json)["@id"] : v);
-  if (!raw) return "";
-  if (isCountryCode(raw.toUpperCase())) return raw.toUpperCase();
-  const hit = COUNTRIES.find((c) => c.name.toLowerCase() === raw.toLowerCase());
-  return hit?.code ?? "";
-}
-
-function regionSlug(country: string, v: unknown): string {
-  const name = str(v).toLowerCase().replace(/\s+(state|region|province|county)$/i, "");
-  if (!name) return "";
-  return regionsOf(country).find((r) => r.name.toLowerCase().replace(/\s+(state|region|province|county)$/i, "") === name || r.slug === slugify(name))?.slug ?? "";
-}
-
-type DraftFields = Omit<IEventDraft, "_id" | "status" | "eventId" | "reviewedBy" | "createdAt" | "updatedAt">;
-
-function toDraft(o: Json, pageUrl: URL, siteName: string): DraftFields | null {
-  const title = decodeEntities(str(o.name));
-  const startsAt = str(o.startDate) ? new Date(str(o.startDate)) : null;
-  if (!title || !startsAt || Number.isNaN(startsAt.getTime())) return null;
-  const endsAt = str(o.endDate) ? new Date(str(o.endDate)) : null;
-
-  const locations = asArray(o.location as Json | Json[]);
-  const place = locations.find((l) => l && typeof l === "object" && !typesOf(l).includes("VirtualLocation")) as Json | undefined;
-  const virtual = locations.find((l) => l && typeof l === "object" && typesOf(l).includes("VirtualLocation")) as Json | undefined;
-  const online = !place && (!!virtual || /Online/i.test(str(o.eventAttendanceMode)));
-  const address = (place?.address && typeof place.address === "object" ? place.address : {}) as Json;
-  const country = countryCode(address.addressCountry) || "NG";
-  const city = slugify(str(address.addressLocality) || (typeof place?.address === "string" ? String(place.address).split(",").slice(-2, -1)[0] ?? "" : ""));
-
-  const offers = asArray(o.offers as Json | Json[]).filter((x) => x && typeof x === "object");
-  const prices = offers.map((x) => Number(str(x.price) || str(x.lowPrice))).filter((n) => Number.isFinite(n) && n >= 0);
-  const currency = str(offers[0]?.priceCurrency).toUpperCase() || currencyOf(country);
-
-  const image = asArray(o.image as unknown).map((i) => (typeof i === "string" ? i : str((i as Json)?.url)))[0] ?? "";
-  const organizer = asArray(o.organizer as Json | Json[])[0];
-  const description = plain(str(o.description)).slice(0, 4000);
-  let url = pageUrl.toString();
-  try {
-    if (str(o.url)) url = new URL(str(o.url), pageUrl).toString();
-  } catch {
-    /* keep the page's own address */
-  }
-
-  return {
-    sourceUrl: url.slice(0, 1000),
-    sourceName: siteName,
-    title: title.slice(0, 200),
-    description,
-    interest: guessInterest(`${title} ${description}`),
-    organizerName: decodeEntities(str(organizer && typeof organizer === "object" ? organizer.name : organizer)).slice(0, 120),
-    country,
-    region: regionSlug(country, address.addressRegion),
-    city,
-    venue: (online ? str(virtual?.url) || "Online" : decodeEntities(str(place?.name)) || str(address.streetAddress)).slice(0, 200),
-    online,
-    startsAt,
-    endsAt: endsAt && !Number.isNaN(endsAt.getTime()) ? endsAt : null,
-    price: prices.length ? Math.round(Math.min(...prices)) : 0,
-    currency: /^[A-Z]{3}$/.test(currency) ? currency : currencyOf(country),
-    coverImage: /^https?:\/\//.test(image) ? image.slice(0, 1000) : null,
-  };
-}
-
-const siteNameOf = (html: string, url: URL) => decodeEntities(html.match(/<meta[^>]+property=["']og:site_name["'][^>]+content=["']([^"']+)/i)?.[1] ?? url.hostname.replace(/^www\./, "")).slice(0, 120);
-
-/** Events on one page, plus the event pages a listing links to (ItemList). */
-async function findEvents(rawUrl: string): Promise<DraftFields[]> {
-  let start: URL;
-  try {
-    start = assertPublicHttpUrl(rawUrl);
-  } catch {
-    throw badRequest("Enter a full public link, starting with https://");
-  }
-  const { html, url } = await fetchPage(start);
-  const site = siteNameOf(html, url);
-  const objects = jsonLd(html);
-  const found = objects.filter((o) => typesOf(o).some(isEventType)).map((o) => toDraft(o, url, site)).filter((d): d is DraftFields => !!d);
-
-  // A listing page: follow its ItemList links (only when the page itself had no full events).
-  if (!found.length) {
-    const links = objects
-      .filter((o) => typesOf(o).includes("ItemList"))
-      .flatMap((o) => asArray(o.itemListElement as Json | Json[]))
-      .map((it) => str(it?.url) || str((it?.item as Json | undefined)?.url) || str(it?.item))
-      .filter(Boolean);
-    for (const link of [...new Set(links)].slice(0, MAX_FOLLOW)) {
-      try {
-        const page = await fetchPage(assertPublicHttpUrl(new URL(link, url).toString()));
-        const s = siteNameOf(page.html, page.url);
-        for (const o of jsonLd(page.html).filter((x) => typesOf(x).some(isEventType))) {
-          const d = toDraft(o, page.url, s);
-          if (d) found.push(d);
-        }
-      } catch {
-        /* one dead link shouldn't stop the rest */
-      }
-    }
-  }
-  return found;
-}
+const DAY = 86_400_000;
 
 /* ------------------------------ service ----------------------------- */
 
-/** Find events at a link and add the new, upcoming ones to the inbox as pending drafts. */
-export async function importFromUrl(rawUrl: string): Promise<ImportResult> {
-  let found: DraftFields[];
+/* ------------------------------- runs ------------------------------- */
+
+const iso = (d: Date | null | undefined) => (d ? d.toISOString() : null);
+
+export const runDto = (r: IFinderRun): FinderRunDTO => ({
+  id: String(r._id),
+  status: r.status,
+  trigger: r.trigger ?? "admin",
+  query: { country: r.query.country, region: r.query.region, city: r.query.city, interests: r.query.interests, from: r.query.from.toISOString(), to: r.query.to.toISOString(), includeSources: r.query.includeSources, urls: r.query.urls },
+  tasks: r.tasks.map((t) => ({ kind: t.kind, label: t.label, status: t.status, found: t.found, added: t.added, note: t.note })),
+  done: r.tasks.filter((t) => t.status === "done" || t.status === "failed").length,
+  found: r.found,
+  added: r.added,
+  duplicates: r.duplicates,
+  filtered: r.filtered,
+  createdAt: r.createdAt.toISOString(),
+  finishedAt: iso(r.finishedAt),
+});
+
+function checkUrl(raw: string): string {
+  let u: URL;
   try {
-    found = await findEvents(rawUrl);
+    u = assertPublicHttpUrl(raw);
+  } catch {
+    throw badRequest(`"${raw.slice(0, 80)}" isn't a full public link (it should start with https://)`);
+  }
+  try {
+    if (!eventbriteOrgId(u.toString())) assertScrapable(u);
   } catch (e) {
-    if (e instanceof ApiError) throw e;
-    throw badRequest(`Couldn't read that page: ${(e as Error).message}.`);
+    throw badRequest((e as Error).message);
   }
-  const now = Date.now();
-  const result: ImportResult = { found: found.length, added: 0, skipped: 0, past: 0 };
-  for (const d of found) {
-    if (d.startsAt && +d.startsAt < now) {
-      result.past++;
-      continue;
-    }
-    const res = await EventDraft.updateOne({ sourceUrl: d.sourceUrl }, { $setOnInsert: { ...d, status: "pending" } }, { upsert: true });
-    if (res.upsertedCount) result.added++;
-    else result.skipped++;
-  }
-  return result;
+  return u.toString();
 }
+
+/** "Find events": record the job. The page then asks for its steps (and the cron finishes anything left). */
+export async function startSearch(admin: IUser, q: Omit<FinderQueryDTO, "from" | "to"> & { from: string; to: string }): Promise<FinderRunDTO> {
+  if (q.country && !getCountry(q.country)) throw badRequest("Pick a country.");
+  const from = new Date(q.from);
+  const to = new Date(q.to);
+  if (Number.isNaN(+from) || Number.isNaN(+to) || to <= from) throw badRequest("Pick a date range that ends after it starts.");
+  if (+to - +from > 366 * DAY) throw badRequest("Search up to a year at a time.");
+  const urls = [...new Set(q.urls.map((u) => u.trim()).filter(Boolean))].slice(0, 20).map(checkUrl);
+  if (!q.includeSources && !urls.length && !q.country) throw badRequest("Pick a place, or add a link to read.");
+  const run = await createRun({ country: q.country.toUpperCase(), region: q.region, city: slugify(q.city), interests: q.interests.filter((i) => isInterestId(i)), from, to, includeSources: q.includeSources, urls }, admin._id);
+  return runDto(run);
+}
+
+/** Paste a link: read it (and the event pages it lists) for upcoming events anywhere. */
+export async function importFromUrl(admin: IUser, rawUrl: string): Promise<FinderRunDTO> {
+  const from = new Date();
+  return startSearch(admin, { country: "", region: "", city: "", interests: [], from: from.toISOString(), to: new Date(+from + 365 * DAY).toISOString(), includeSources: false, urls: [rawUrl] });
+}
+
+/** Work on a job for a few seconds (one source at a time) and say where it is. */
+export async function stepSearch(id: string): Promise<FinderRunDTO> {
+  const run = await stepRun(id, 12_000);
+  if (!run) throw notFound("That search is gone.");
+  return runDto(run);
+}
+
+export async function getRun(id: string): Promise<FinderRunDTO> {
+  const run = await FinderRun.findById(id).lean<IFinderRun>();
+  if (!run) throw notFound("That search is gone.");
+  return runDto(run);
+}
+
+export async function recentRuns(): Promise<FinderRunDTO[]> {
+  return (await FinderRun.find().sort({ createdAt: -1 }).limit(8).lean<IFinderRun[]>()).map(runDto);
+}
+
+/** The nightly cron: saved searches (one at a time), the saved pages, and anything left unfinished. */
+export const nightlyFinder = () => cronFinder();
 
 const toDto = (d: IEventDraft): DraftDTO => ({
   id: String(d._id),
@@ -275,6 +116,10 @@ const toDto = (d: IEventDraft): DraftDTO => ({
   price: d.price,
   currency: d.currency,
   coverImage: d.coverImage,
+  provider: d.provider ?? "page",
+  sourceImage: d.sourceImage ?? null,
+  imageReusable: !!d.imageReusable,
+  timezone: d.timezone ?? "",
   eventId: d.eventId ? String(d.eventId) : null,
   createdAt: d.createdAt.toISOString(),
 });
@@ -307,14 +152,18 @@ function cleanPatch(p: DraftPatch): Partial<IEventDraft> {
 }
 
 export async function updateDraft(id: string, patch: DraftPatch): Promise<DraftDTO> {
-  const d = await EventDraft.findOneAndUpdate({ _id: id, status: "pending" }, { $set: cleanPatch(patch) }, { new: true }).lean<IEventDraft>();
+  const d = await EventDraft.findOneAndUpdate({ _id: id, status: "pending" }, { $set: cleanPatch(patch) }, { returnDocument: "after" }).lean<IEventDraft>();
   if (!d) throw notFound("That draft is gone or was already reviewed.");
   return toDto(d);
 }
 
-/** Publish a draft as a real public event, hosted by the approving admin and credited to its organiser. */
-export async function approveDraft(admin: IUser, id: string, patch: DraftPatch = {}): Promise<{ eventId: string; title: string }> {
-  const d = await EventDraft.findOneAndUpdate({ _id: id, status: "pending" }, { $set: cleanPatch(patch) }, { new: true }).lean<IEventDraft>();
+/**
+ * Publish a draft as a real event, hosted by the approving admin and credited to its organiser, with the
+ * source kept as its "More info / tickets" link. It goes into Klique (everyone sees it) unless a community
+ * (or group) is chosen.
+ */
+export async function approveDraft(admin: IUser, id: string, patch: DraftPatch = {}, where: { communitySlug?: string; subSlug?: string } = {}): Promise<{ eventId: string; title: string }> {
+  const d = await EventDraft.findOneAndUpdate({ _id: id, status: "pending" }, { $set: cleanPatch(patch) }, { returnDocument: "after" }).lean<IEventDraft>();
   if (!d) throw notFound("That draft is gone or was already reviewed.");
   const input = eventCreateSchema.parse({
     title: d.title,
@@ -330,8 +179,10 @@ export async function approveDraft(admin: IUser, id: string, patch: DraftPatch =
     priceNaira: d.price,
     currency: d.currency,
     coverImage: d.coverImage || null,
+    ...(where.communitySlug ? { communitySlug: where.communitySlug, subSlug: where.subSlug || undefined } : {}),
   });
-  const ev = await createEvent(admin, input);
+  // a reviewed import isn't someone spamming events: the daily posting limit doesn't apply
+  const ev = await createEvent(admin, input, { reviewedImport: true });
   await Event.updateOne({ _id: ev.id }, { organizerName: d.organizerName || d.sourceName || null, sourceUrl: d.sourceUrl });
   await EventDraft.updateOne({ _id: d._id }, { status: "approved", eventId: ev.id as unknown as Types.ObjectId, reviewedBy: admin._id });
   return { eventId: ev.id, title: ev.title };
@@ -343,6 +194,26 @@ export async function rejectDraft(admin: IUser, id: string) {
   return { rejected: true, title: d.title };
 }
 
+/** Post (or reject) many drafts at once. Each one stands alone: one failing doesn't stop the rest. */
+export async function bulkDrafts(admin: IUser, ids: string[], action: "approve" | "reject", where: { communitySlug?: string; subSlug?: string } = {}): Promise<DraftBulkResult> {
+  const out: DraftBulkResult = { done: [], failed: [] };
+  const titles = new Map((await EventDraft.find({ _id: { $in: ids } }).select("title").lean<{ _id: Types.ObjectId; title: string }[]>()).map((d) => [String(d._id), d.title]));
+  for (const id of ids) {
+    try {
+      if (action === "approve") {
+        const r = await approveDraft(admin, id, {}, where);
+        out.done.push({ id, title: r.title, eventId: r.eventId });
+      } else {
+        const r = await rejectDraft(admin, id);
+        out.done.push({ id, title: r.title });
+      }
+    } catch (e) {
+      out.failed.push({ id, title: titles.get(id) ?? "", message: (e as Error).message });
+    }
+  }
+  return out;
+}
+
 /* ------------------------------ sources ----------------------------- */
 
 const sourceDto = (s: IEventSource): SourceDTO => ({ id: String(s._id), url: s.url, name: s.name, lastRunAt: s.lastRunAt?.toISOString() ?? null, lastFound: s.lastFound, lastError: s.lastError });
@@ -352,13 +223,8 @@ export async function listSources(): Promise<SourceDTO[]> {
 }
 
 export async function addSource(url: string, name: string): Promise<SourceDTO> {
-  let u: URL;
-  try {
-    u = assertPublicHttpUrl(url);
-  } catch {
-    throw badRequest("Enter a full public link, starting with https://");
-  }
-  const s = await EventSource.findOneAndUpdate({ url: u.toString() }, { $setOnInsert: { url: u.toString(), name: name.trim().slice(0, 120) || u.hostname.replace(/^www\./, "") } }, { upsert: true, new: true }).lean<IEventSource>();
+  const u = new URL(checkUrl(url));
+  const s = await EventSource.findOneAndUpdate({ url: u.toString() }, { $setOnInsert: { url: u.toString(), name: name.trim().slice(0, 120) || u.hostname.replace(/^www\./, "") } }, { upsert: true, returnDocument: "after" }).lean<IEventSource>();
   return sourceDto(s!);
 }
 
@@ -367,18 +233,44 @@ export async function removeSource(id: string): Promise<SourceDTO | null> {
   return s ? sourceDto(s) : null;
 }
 
-/** Check every source page (the nightly run, or "Check now" in the admin page). */
-export async function runSources(): Promise<{ sources: number; added: number }> {
-  const sources = await EventSource.find().lean<IEventSource[]>();
-  let added = 0;
-  for (const s of sources) {
-    try {
-      const r = await importFromUrl(s.url);
-      added += r.added;
-      await EventSource.updateOne({ _id: s._id }, { lastRunAt: new Date(), lastFound: r.found, lastError: "" });
-    } catch (e) {
-      await EventSource.updateOne({ _id: s._id }, { lastRunAt: new Date(), lastError: (e as Error).message.slice(0, 300) });
-    }
-  }
-  return { sources: sources.length, added };
+/** "Check now": a job over every saved page, anywhere, for the next six months. */
+export async function checkSourcesNow(admin: IUser): Promise<FinderRunDTO> {
+  if (!(await EventSource.exists({}))) throw badRequest("Add a page first.");
+  const from = new Date();
+  return runDto(await createRun({ country: "", region: "", city: "", interests: [], from, to: new Date(+from + 180 * DAY), includeSources: true, urls: [] }, admin._id));
+}
+
+/* --------------------------- saved searches --------------------------- */
+
+const searchDto = (x: ISavedSearch): SavedSearchDTO => ({ id: String(x._id), name: x.name, country: x.country, region: x.region, city: x.city, interests: x.interests, days: x.days, includeSources: x.includeSources, daily: x.daily, lastRunAt: iso(x.lastRunAt), lastAdded: x.lastAdded });
+
+export async function listSearches(): Promise<SavedSearchDTO[]> {
+  return (await SavedSearch.find().sort({ createdAt: 1 }).lean<ISavedSearch[]>()).map(searchDto);
+}
+
+export async function saveSearch(admin: IUser, input: { name: string; country: string; region: string; city: string; interests: string[]; days: number; includeSources: boolean }): Promise<SavedSearchDTO> {
+  if (!getCountry(input.country)) throw badRequest("Pick a country.");
+  if ((await SavedSearch.countDocuments()) >= 20) throw badRequest("You can keep up to 20 saved searches.");
+  const doc = await SavedSearch.create({ ...input, country: input.country.toUpperCase(), city: slugify(input.city), interests: input.interests.filter((i) => isInterestId(i)), daily: true, createdBy: admin._id });
+  return searchDto(doc.toObject());
+}
+
+export async function updateSearch(id: string, patch: { daily?: boolean; name?: string; days?: number }): Promise<SavedSearchDTO> {
+  const x = await SavedSearch.findByIdAndUpdate(id, { $set: patch }, { returnDocument: "after" }).lean<ISavedSearch>();
+  if (!x) throw notFound("That saved search is gone.");
+  return searchDto(x);
+}
+
+export async function removeSearch(id: string) {
+  await SavedSearch.deleteOne({ _id: id });
+  return { removed: true };
+}
+
+/** Run a saved search now (the same job the cron would start tonight). */
+export async function runSearchNow(admin: IUser, id: string): Promise<FinderRunDTO> {
+  const x = await SavedSearch.findById(id).lean<ISavedSearch>();
+  if (!x) throw notFound("That saved search is gone.");
+  const from = new Date();
+  await SavedSearch.updateOne({ _id: x._id }, { lastRunAt: new Date() });
+  return runDto(await createRun({ country: x.country, region: x.region, city: x.city, interests: x.interests, from, to: new Date(+from + x.days * DAY), includeSources: x.includeSources, urls: [] }, admin._id, "saved", x._id));
 }

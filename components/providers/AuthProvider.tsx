@@ -1,5 +1,6 @@
 "use client";
 
+import { useHydrated } from "@/lib/hooks/useHydrated";
 import { useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { isApiError } from "@/app/ApiCore";
@@ -102,8 +103,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
-export function useAuth() {
+/**
+ * Who's signed in. While a component hydrates it sees what the server rendered ("loading", nobody), even if
+ * the sign-in check already came back, so a part of the page that hydrates late (inside Suspense) matches its
+ * HTML; the real answer follows straight after. Actions (requireAuth, signOut…) always work on the real state.
+ */
+export function useAuth(): AuthCtx {
   const c = useContext(Ctx);
+  const hydrated = useHydrated();
   if (!c) throw new Error("useAuth must be used inside <Providers>");
-  return c;
+  return hydrated ? c : { ...c, user: null, status: "loading" };
 }

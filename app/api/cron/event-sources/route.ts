@@ -2,12 +2,13 @@ import { NextResponse, type NextRequest } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { connectDb } from "@/server/db";
 import { cronSecret } from "@/server/env";
-import { runSources } from "@/server/services/event-import.service";
+import { nightlyFinder } from "@/server/services/event-import.service";
 
 /**
- * The nightly event finder: checks every source page saved in /admin and adds new upcoming events to the
- * inbox as pending drafts (nothing goes live until an admin approves it). Call it once a night from any
- * scheduler with the CRON_SECRET: `Authorization: Bearer <secret>` or `?secret=<secret>`.
+ * The nightly event finder (vercel.json runs it at 04:00 UTC, a quiet hour): starts each daily saved search
+ * (one at a time), checks the saved pages, and finishes any search an admin left running. Everything found
+ * goes to the review queue as pending; nothing goes live until an admin posts it. Call it from any scheduler
+ * with the CRON_SECRET: `Authorization: Bearer <secret>` or `?secret=<secret>`.
  */
 export const maxDuration = 300;
 
@@ -23,5 +24,5 @@ function authorised(req: NextRequest) {
 export async function GET(req: NextRequest) {
   if (!authorised(req)) return NextResponse.json({ success: false, message: "Not allowed." }, { status: 401 });
   await connectDb();
-  return NextResponse.json({ success: true, ...(await runSources()) });
+  return NextResponse.json({ success: true, ...(await nightlyFinder()) });
 }

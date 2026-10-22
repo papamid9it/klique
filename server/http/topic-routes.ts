@@ -1,6 +1,6 @@
 import { boardCreateSchema, boardUpdateSchema, commentCreateSchema, commentUpdateSchema, topicCreateSchema, topicListQuery, topicUpdateSchema } from "../validators/schemas";
 import { resolveSpaceFor } from "../services/spaces.service";
-import { createBoard, deleteBoard, listBoards, updateBoard } from "../services/boards.service";
+import { boardSidebar, createBoard, deleteBoard, listBoards, updateBoard } from "../services/boards.service";
 import { createComment, createTopic, deleteComment, deleteTopic, getTopic, listTopics, toggleLike, topicFeed, trendingTopics, updateComment, updateTopic } from "../services/topics.service";
 import { remember } from "../cache";
 import { created, readJson, readQuery, withApi } from "./api";
@@ -25,6 +25,12 @@ export const boardUpdate = withApi<Slug & { boardId: string }, "required">({ aut
   const patch = await readJson(req, boardUpdateSchema);
   const { space, access } = await resolveSpaceFor(viewer, params.slug);
   return updateBoard(viewer, space, access, params.boardId, patch);
+});
+
+/** GET …/boards/:boardId/sidebar — trending topics and top contributors this week, for the desktop sidebar. */
+export const boardSidebarGet = withApi<Slug & { boardId: string }>({ auth: "optional" }, async ({ params, viewer }) => {
+  const { space, access } = await resolveSpaceFor(viewer, params.slug);
+  return boardSidebar(viewer, space, access, params.boardId);
 });
 
 export const boardDelete = withApi<Slug & { boardId: string }, "required">({ auth: "required" }, async ({ params, viewer }) => {

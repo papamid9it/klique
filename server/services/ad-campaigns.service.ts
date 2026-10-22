@@ -280,7 +280,7 @@ export async function payCampaign(viewer: IUser, id: string): Promise<{ authoriz
 
 /** Turn a paid ad request into a running ad. Safe to call any number of times. */
 async function startRun(c: IAdCampaign, method: "paystack" | "manual", paidAt = new Date()): Promise<void> {
-  const claimed = await AdCampaign.findOneAndUpdate({ _id: c._id, status: "approved" }, { $set: { status: "paid", paymentMethod: method, paidAt } }, { new: true }).lean<IAdCampaign>();
+  const claimed = await AdCampaign.findOneAndUpdate({ _id: c._id, status: "approved" }, { $set: { status: "paid", paymentMethod: method, paidAt } }, { returnDocument: "after" }).lean<IAdCampaign>();
   if (!claimed) return; // already started (the webhook and the redirect arriving together)
   const now = Date.now();
   const startsAt = new Date(Math.max(now, +(claimed.startOn ?? 0)));

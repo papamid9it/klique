@@ -1,9 +1,12 @@
-import { Schema, model, models, type Model, type Types } from "mongoose";
+import { Schema, type Model, type Types } from "mongoose";
+import { defineModel } from "./define";
 
-/** One person's reaction of one kind on one message (a channel message or a direct message). Toggled on/off. */
+/** One person's reaction of one kind on one message (a channel message, a direct message or a crew chat message). Toggled on/off. */
+export type ReactionTarget = "channel" | "dm" | "crew";
+
 export interface IReaction {
   _id: Types.ObjectId;
-  targetType: "channel" | "dm";
+  targetType: ReactionTarget;
   targetId: Types.ObjectId;
   userId: Types.ObjectId;
   kind: string;
@@ -12,7 +15,7 @@ export interface IReaction {
 
 const ReactionSchema = new Schema<IReaction>(
   {
-    targetType: { type: String, enum: ["channel", "dm"], required: true },
+    targetType: { type: String, enum: ["channel", "dm", "crew"], required: true },
     targetId: { type: Schema.Types.ObjectId, required: true },
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     kind: { type: String, required: true, maxlength: 20 },
@@ -23,4 +26,4 @@ const ReactionSchema = new Schema<IReaction>(
 ReactionSchema.index({ targetType: 1, targetId: 1, userId: 1 }, { unique: true });
 ReactionSchema.index({ userId: 1 });
 
-export const Reaction: Model<IReaction> = (models.Reaction as Model<IReaction>) || model<IReaction>("Reaction", ReactionSchema);
+export const Reaction: Model<IReaction> = defineModel<IReaction>("Reaction", ReactionSchema);

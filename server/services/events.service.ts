@@ -1,6 +1,7 @@
 import type { QueryFilter, Types } from "mongoose";
 import { assertCanHostInSpace, assertCanHostPublic, isSiteAdmin } from "../policies/hosting";
 import { deleteUploads } from "./media.service";
+import { sameFile } from "@/lib/focal";
 import { assertVerified } from "./account.service";
 import type { z } from "zod";
 import { dateRangeFor, startOfLagosDay, type DateFilter } from "@/lib/dates";
@@ -204,9 +205,10 @@ function validateTimes(startsAt: Date, endsAt: Date | null | undefined, mustBeFu
   if (Object.keys(errors).length) throw new ApiError(422, Object.values(errors)[0], { errors });
 }
 
-export async function createEvent(viewer: IUser, input: z.infer<typeof eventCreateSchema>): Promise<EventDTO> {
+/** `reviewedImport`: a site admin posting events the finder found, after review (many at once is expected). */
+export async function createEvent(viewer: IUser, input: z.infer<typeof eventCreateSchema>, opts: { reviewedImport?: boolean } = {}): Promise<EventDTO> {
   assertVerified(viewer);
-  rateLimit(`event-create:${sid(viewer._id)}`, 20, 24 * 60 * 60 * 1000);
+  if (!(opts.reviewedImport && isSiteAdmin(viewer))) rateLimit(`event-create:${sid(viewer._id)}`, 20, 24 * 60 * 60 * 1000);
   assertPlace(input, true);
   validateTimes(input.startsAt, input.endsAt, true);
 
@@ -316,7 +318,7 @@ export async function updateEvent(viewer: IUser, id: string, patch: z.infer<type
   await Event.updateOne({ _id: event._id }, set);
   // crews disappear a day after the event: follow a new time
   if (set.startsAt !== undefined || set.endsAt !== undefined) await syncCrewExpiry({ _id: event._id, startsAt: (set.startsAt as Date | undefined) ?? event.startsAt, endsAt: set.endsAt !== undefined ? (set.endsAt as Date | null) : event.endsAt });
-  if (set.coverImage !== undefined && event.coverImage && event.coverImage !== set.coverImage) deleteUploads([event.coverImage]);
+  if (set.coverImage !== undefined && event.coverImage && !sameFile(event.coverImage, set.coverImage)) deleteUploads([event.coverImage]);
 
   // People who said they're going hear about a cancellation or a new time.
   const cancelledNow = patch.cancelled === true && !event.cancelled;

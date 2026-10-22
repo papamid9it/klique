@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { cdn } from "@/lib/cdn";
+import { focalStyle, splitFocal } from "@/lib/focal";
 import { getInterest, type InterestId } from "@/lib/constants";
 import { cx } from "./cx";
 
@@ -133,7 +134,7 @@ export function Cover({
         <ArtCover seed={seed} interest={interest} className="absolute inset-0" />
       ) : (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={cdn(src, { w: 1200 })} alt="" loading="lazy" onError={() => setFailed(true)} className={cx("absolute inset-0 size-full", fit === "cover" ? "object-cover" : "object-contain")} />
+        <img src={cdn(src, { w: 1200 })} alt="" loading="lazy" onError={() => setFailed(true)} style={fit === "cover" ? focalStyle(splitFocal(src).focal) : undefined} className={cx("absolute inset-0 size-full", fit === "cover" ? "object-cover" : "object-contain")} />
       )}
       {children}
     </div>

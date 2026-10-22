@@ -12,5 +12,5 @@ export const GET = withApi({ auth: "required" }, async ({ req, viewer }) => {
 export const POST = withApi({ auth: "required", limit: { name: "admin-import", max: 30, windowMs: 60_000 } }, async ({ req, viewer }) => {
   assertAdmin(viewer);
   const { url } = await readJson(req, adminImportSchema);
-  return created(await importFromUrl(url));
+  return created(await importFromUrl(viewer, url));
 });

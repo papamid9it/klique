@@ -4,6 +4,7 @@ import { useEffect, type ReactNode } from "react";
 import { CategoryService } from "@/app/services/CategoryService";
 import { setCategories } from "@/lib/constants";
 import { AuthProvider } from "./AuthProvider";
+import { MediaViewerProvider } from "./MediaViewerProvider";
 import { PlaceProvider } from "./PlaceProvider";
 import { RealtimeProvider } from "./RealtimeProvider";
 import { ProfileCardProvider } from "./ProfileCardProvider";
@@ -25,7 +26,9 @@ export function Providers({ children }: { children: ReactNode }) {
         <RealtimeProvider>
           <ThemeProvider>
             <PlaceProvider>
-              <ProfileCardProvider>{children}</ProfileCardProvider>
+              <ProfileCardProvider>
+                <MediaViewerProvider>{children}</MediaViewerProvider>
+              </ProfileCardProvider>
             </PlaceProvider>
           </ThemeProvider>
         </RealtimeProvider>

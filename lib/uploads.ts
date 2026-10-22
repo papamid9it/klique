@@ -51,7 +51,7 @@ export const UPLOAD_SPECS: Record<UploadKind, UploadSpec> = {
 
 /** How big things get after compression. */
 export const MEDIA_LIMITS = {
-  avatarPx: 512,
+  avatarPx: 1024,
   photoPx: 1920,
   photoSmallPx: 640,
   videoLongEdgePx: 1280,

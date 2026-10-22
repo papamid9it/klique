@@ -5,7 +5,8 @@ import { MEDIA_LIMITS, UPLOAD_SPECS, type UploadKind } from "./uploads";
 /**
  * Shrinks and compresses pictures and videos on the device, before anything is uploaded. Storage (Cloudflare R2)
  * keeps files exactly as sent, so this is where sizes are decided:
- *  - profile pictures: a 512×512 square, cropped from the centre
+ *  - profile pictures: at most 1024px on the long edge, uncropped (people choose what shows in the circle
+ *    afterwards; see lib/focal)
  *  - photos: at most 1920px on the long edge, plus a 640px copy for thumbnails
  *  - videos: at most 1280px on the long edge (720p), re-encoded as H.264 MP4 (VP9 WebM where the browser can't
  *    make H.264), plus a still frame to show before it plays
@@ -71,7 +72,7 @@ export async function compressImage(kind: Exclude<UploadKind, "video">, file: Bl
   }
   try {
     if (kind === "avatar") {
-      const c = draw(bmp, bmp.width, bmp.height, { w: MEDIA_LIMITS.avatarPx, h: MEDIA_LIMITS.avatarPx, crop: true });
+      const c = draw(bmp, bmp.width, bmp.height, { w: MEDIA_LIMITS.avatarPx, h: MEDIA_LIMITS.avatarPx });
       return { files: [{ variant: "main", blob: await encode(c, 0.85) }], width: c.width, height: c.height, duration: null };
     }
     const big = draw(bmp, bmp.width, bmp.height, { w: MEDIA_LIMITS.photoPx, h: MEDIA_LIMITS.photoPx });

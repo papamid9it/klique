@@ -57,7 +57,7 @@ export async function setPointsConfig(input: z.infer<typeof pointsConfigSchema>)
  */
 async function move(userId: Types.ObjectId, amount: number, kind: PointTxnKind, note: string, ref: string | null = null, byId: Types.ObjectId | null = null): Promise<number | null> {
   const filter = amount < 0 ? { _id: userId, points: { $gte: -amount } } : { _id: userId };
-  const u = await User.findOneAndUpdate(filter, { $inc: { points: amount } }, { new: true }).select("points").lean<Pick<IUser, "points">>();
+  const u = await User.findOneAndUpdate(filter, { $inc: { points: amount } }, { returnDocument: "after" }).select("points").lean<Pick<IUser, "points">>();
   if (!u) return null;
   const balance = u.points ?? 0;
   await PointTxn.create({ userId, amount, balanceAfter: balance, kind, note, ref, byId });
@@ -184,7 +184,7 @@ export async function buyPack(viewer: IUser, packId: string): Promise<{ authoriz
 
 /** Credit a paid pack once (the webhook and the redirect can both arrive; only the first one counts). */
 async function creditPurchase(p: IPointPurchase, paidAt: Date): Promise<boolean> {
-  const claimed = await PointPurchase.findOneAndUpdate({ _id: p._id, status: "pending" }, { $set: { status: "paid", paidAt } }, { new: true }).lean<IPointPurchase>();
+  const claimed = await PointPurchase.findOneAndUpdate({ _id: p._id, status: "pending" }, { $set: { status: "paid", paidAt } }, { returnDocument: "after" }).lean<IPointPurchase>();
   if (!claimed) return false;
   const balance = await move(claimed.userId, claimed.points, "purchase", `Bought ${claimed.points.toLocaleString("en-NG")} points`, claimed.reference);
   notify(

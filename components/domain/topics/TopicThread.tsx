@@ -185,6 +185,21 @@ export function TopicSide({ onClose, bare }: { onClose: () => void; bare?: boole
   useEffect(() => {
     scroller.current?.scrollTo({ top: 0 });
   }, [id]);
+  // deleted from the list beside it: nothing left to comment on
+  useTopicEvents((e) => {
+    if (e.type === "removed" && e.id === id) onClose();
+  });
+  // beside the board on a wide screen the post is already in the list: only its comments here.
+  // (the drawer on phones and narrow screens keeps the post at the top)
+  if (!bare) {
+    return !preview && error ? (
+      <div className="p-4">
+        <SpaceError status={status} message={error} onRetry={reload} />
+      </div>
+    ) : (
+      <TopicComments key={id} title={preview?.title} onClose={onClose} />
+    );
+  }
   return (
     <div className="flex h-full min-h-0 flex-col">
       <header className={cx("flex min-h-14 shrink-0 items-center gap-2 border-b border-line pl-4", bare ? "pr-14" : "pr-2")}>
@@ -309,7 +324,7 @@ interface TreeCtx {
  * pinned at the bottom. With `inline`: a section under the post for phones, tablets and laptops (Reddit-style),
  * with the composer first and the page doing the scrolling.
  */
-export function TopicComments({ inline }: { inline?: boolean } = {}) {
+export function TopicComments({ inline, title, onClose }: { inline?: boolean; /** the topic's title in the header (desktop panel) */ title?: string; onClose?: () => void } = {}) {
   const { user, requireAuth } = useAuth();
   const { data, loading, slug, setComment, addComment, dropComment, markDeleted } = useDetail();
   const now = useNow();
@@ -388,10 +403,18 @@ export function TopicComments({ inline }: { inline?: boolean } = {}) {
 
   return (
     <section id={inline ? "topic-comments" : undefined} aria-label="Comments" className={inline ? "mt-4 scroll-mt-4 rounded-card border border-line bg-surface/40 pb-2" : "flex h-full min-h-0 flex-col"}>
-      <header className={cx("flex min-h-14 shrink-0 items-center gap-2 px-4", !inline && "border-b border-line")}>
-        <Icon name="message" size={17} className="text-ink-muted" />
-        <h2 className="text-[15px] font-semibold tracking-[-0.01em]">Comments</h2>
-        {t && <span className="font-mono text-xs text-ink-muted">{t.commentCount}</span>}
+      <header className={cx("flex min-h-14 shrink-0 items-center gap-2 px-4", !inline && "border-b border-line", onClose && "pr-2")}>
+        <Icon name="message" size={17} className="shrink-0 text-ink-muted" />
+        <h2 className="min-w-0 truncate text-[15px] font-semibold tracking-[-0.01em]" title={title}>
+          {title ? `Comments · ${title}` : "Comments"}
+        </h2>
+        {t && <span className="shrink-0 font-mono text-xs text-ink-muted">{t.commentCount}</span>}
+        <span className="flex-1" />
+        {onClose && (
+          <button type="button" onClick={onClose} aria-label="Close comments" title="Close" className="inline-flex size-9 shrink-0 items-center justify-center rounded-full text-ink-muted transition hover:bg-raised hover:text-ink">
+            <Icon name="x" size={18} />
+          </button>
+        )}
       </header>
 
       {inline && composer}

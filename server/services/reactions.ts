@@ -1,14 +1,14 @@
 import { Types } from "mongoose";
 import { REACTIONS, type ReactionKind } from "@/lib/reactions";
 import type { ReactionDTO } from "@/lib/types";
-import { Reaction } from "../models/Reaction";
+import { Reaction, type ReactionTarget } from "../models/Reaction";
 import { sid } from "./helpers";
 
 type Id = Types.ObjectId | string;
 const ORDER = new Map<string, number>(REACTIONS.map((r, i) => [r.id, i]));
 
 /** Counts per kind for each message, plus whether `viewerId` used each one. Messages with no reactions map to []. */
-export async function summarizeReactions(targetType: "channel" | "dm", ids: Id[], viewerId: Id | null): Promise<Map<string, ReactionDTO[]>> {
+export async function summarizeReactions(targetType: ReactionTarget, ids: Id[], viewerId: Id | null): Promise<Map<string, ReactionDTO[]>> {
   const out = new Map<string, ReactionDTO[]>();
   if (!ids.length) return out;
   const rows = await Reaction.aggregate<{ _id: { t: Types.ObjectId; k: string }; n: number; mine: number }>([
@@ -29,7 +29,7 @@ export async function summarizeReactions(targetType: "channel" | "dm", ids: Id[]
  * One reaction per person per message. Same kind again removes it; a different kind replaces it.
  * Returns the message's fresh summary.
  */
-export async function toggleReaction(targetType: "channel" | "dm", targetId: Id, userId: Id, kind: ReactionKind): Promise<ReactionDTO[]> {
+export async function toggleReaction(targetType: ReactionTarget, targetId: Id, userId: Id, kind: ReactionKind): Promise<ReactionDTO[]> {
   const who = { targetType, targetId: new Types.ObjectId(sid(targetId)), userId: new Types.ObjectId(sid(userId)) };
   const current = await Reaction.findOne(who).select("kind").lean<{ kind: string }>();
   if (current?.kind === kind) {
@@ -43,6 +43,6 @@ export async function toggleReaction(targetType: "channel" | "dm", targetId: Id,
   return (await summarizeReactions(targetType, [targetId], userId)).get(sid(targetId)) ?? [];
 }
 
-export async function purgeReactions(targetType: "channel" | "dm", ids: Id[]) {
+export async function purgeReactions(targetType: ReactionTarget, ids: Id[]) {
   if (ids.length) await Reaction.deleteMany({ targetType, targetId: { $in: ids.map((i) => new Types.ObjectId(sid(i))) } });
 }

@@ -1,7 +1,9 @@
 import "server-only";
 import { Types } from "mongoose";
 import type { z } from "zod";
-import type { CrewCardDTO, CrewDTO, CrewMessageDTO, CrewStanding, EventCrewsDTO, MyCrewDTO } from "@/lib/types";
+import { extractMentionHandles } from "@/lib/mentions";
+import type { ReactionKind } from "@/lib/reactions";
+import type { ChannelMessageDTO, CrewCardDTO, CrewDTO, CrewStanding, EventCrewsDTO, MyCrewDTO, ReactionDTO, UserBrief } from "@/lib/types";
 import { badRequest, conflict, forbidden, notFound } from "../http/errors";
 import { rateLimit } from "../http/rate-limit";
 import { Crew, CrewMember, CrewMessage, CrewRead, type ICrew, type ICrewMember, type ICrewMessage, type ICrewRead } from "../models/Crew";
@@ -11,16 +13,22 @@ import { Membership } from "../models/Membership";
 import { Notification } from "../models/Notification";
 import { MembershipRequest } from "../models/MembershipRequest";
 import { Subcommunity, type ISubcommunity } from "../models/Subcommunity";
-import type { IUser } from "../models/User";
+import { User, type IUser } from "../models/User";
 import { canViewEvent } from "../policies/access";
 import { isSiteAdmin } from "../policies/hosting";
 import { GHOST, loadBriefs } from "../serializers";
 import type { crewCreateSchema, crewUpdateSchema } from "../validators/schemas";
 import { assertVerified } from "./account.service";
 import { hiddenUserIds } from "./blocks";
-import { sid } from "./helpers";
+import { escapeRegex, sid } from "./helpers";
+import { purgeCrewChat } from "./crew-chat-purge";
+import { deleteUploads } from "./media.service";
+import { mentionBriefs } from "./mentions";
 import { notify, notifyNow } from "./push.service";
 import { publish, rtChannel } from "./realtime";
+import { purgeReactions, summarizeReactions, toggleReaction } from "./reactions";
+import { previewOf, toReplyRef } from "./replies";
+import { assertStickerUrl, noteStickerUse } from "./stickers.service";
 
 /**
  * Crews: people going to the same event together. The rules, all checked here:
@@ -178,14 +186,36 @@ async function spaceOf(event: Pick<IEvent, "communityId" | "subcommunityId">): P
 
 const standingOf = (m: Pick<ICrewMember, "role" | "status">): CrewStanding => (m.status === "pending" ? "pending" : m.role === "host" ? "host" : "member");
 
-/** An event's crews, yours first, then the fullest-looking ones (busy crews feel safer to join). */
-export async function listEventCrews(viewer: IUser | null, eventId: string): Promise<EventCrewsDTO> {
+/** the most crews one list shows, however far "Load more" goes */
+const MAX_CREW_LIST = 200;
+
+/**
+ * An event's crews, yours first, then the fullest-looking ones (busy crews feel safer to join). `q` finds crews by
+ * where they're coming from ("Yaba", "oshodi"): the area and the public note, never the members-only meetup point.
+ * `limit` is how many to show (the list grows by "Load more"); `total` is how many match.
+ */
+export async function listEventCrews(viewer: IUser | null, eventId: string, opts: { q?: string; limit?: number } = {}): Promise<EventCrewsDTO> {
   const event = await visibleEvent(viewer, oid(eventId, "event"));
   const hidden = await hiddenUserIds(viewer?._id ?? null);
-  const crews = await Crew.find({ eventId: event._id, hostId: { $nin: hidden } }).sort({ memberCount: -1, createdAt: 1 }).limit(200).lean<ICrew[]>();
-  const cards = await toCards(crews, event, viewer);
+  const limit = Math.min(Math.max(opts.limit ?? 10, 1), MAX_CREW_LIST);
+  const q = opts.q?.trim();
+  const filter: Record<string, unknown> = { eventId: event._id, hostId: { $nin: hidden } };
+  if (q) {
+    const rx = new RegExp(escapeRegex(q), "i");
+    filter.$or = [{ area: rx }, { note: rx }];
+  }
+  const mineRow = viewer ? await CrewMember.findOne({ eventId: event._id, userId: viewer._id }).select("crewId").lean<{ crewId: Types.ObjectId }>() : null;
+  // yours goes first (when it matches), the rest page after it
+  const mineCrew = mineRow ? await Crew.findOne({ ...filter, _id: mineRow.crewId }).lean<ICrew>() : null;
+  const [rest, total] = await Promise.all([
+    Crew.find(mineCrew ? { ...filter, _id: { $ne: mineCrew._id } } : filter)
+      .sort({ memberCount: -1, createdAt: 1 })
+      .limit(mineCrew ? limit - 1 : limit)
+      .lean<ICrew[]>(),
+    Crew.countDocuments(filter),
+  ]);
+  const cards = await toCards(mineCrew ? [mineCrew, ...rest] : rest, event, viewer);
   const mineCard = cards.find((c) => c.viewer.standing);
-  const mineRow = viewer && !mineCard ? await CrewMember.findOne({ eventId: event._id, userId: viewer._id }).select("crewId").lean<{ crewId: Types.ObjectId }>() : null;
 
   let reason: string | null = null;
   if (!viewer) reason = "Sign in to start a crew.";
@@ -200,6 +230,8 @@ export async function listEventCrews(viewer: IUser | null, eventId: string): Pro
 
   return {
     crews: mineCard ? [mineCard, ...cards.filter((c) => c !== mineCard)] : cards,
+    total,
+    hasMore: total > cards.length,
     mine: mineCard?.id ?? (mineRow ? sid(mineRow.crewId) : null),
     canStart: reason === null,
     startBlockedReason: reason,
@@ -534,68 +566,191 @@ async function assertInCrew(viewer: IUser, crewId: string) {
 }
 
 const snippet = (s: string, n = 120) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+const PAGE = 50;
 
-async function toMessages(rows: ICrewMessage[], viewer: IUser): Promise<CrewMessageDTO[]> {
+/**
+ * Crew chat speaks the same message shape as community channels, so the same chat screen shows both: pictures and
+ * GIFs, stickers, replies, reactions, @mentions, editing and deleting. `channelId` is the crew's id.
+ */
+async function toMessages(rows: ICrewMessage[], viewer: IUser, crew: Pick<ICrew, "_id" | "hostId">): Promise<ChannelMessageDTO[]> {
+  if (!rows.length) return [];
+  const me = sid(viewer._id);
   const parentIds = rows.map((r) => r.replyToId).filter((x): x is Types.ObjectId => !!x);
-  const parents = parentIds.length ? await CrewMessage.find({ _id: { $in: parentIds } }).select("userId body").lean<Pick<ICrewMessage, "_id" | "userId" | "body">[]>() : [];
-  const briefs = await loadBriefs([...rows.map((r) => r.userId), ...parents.map((p) => p.userId)]);
-  const parentBy = new Map(parents.map((p) => [sid(p._id), p]));
+  const parents = parentIds.length ? await CrewMessage.find({ _id: { $in: parentIds }, crewId: crew._id }).lean<ICrewMessage[]>() : [];
+  const [briefs, reactions, mentionMap] = await Promise.all([
+    loadBriefs([...rows.map((r) => r.userId), ...parents.map((p) => p.userId)]),
+    summarizeReactions("crew", rows.map((r) => r._id), viewer._id),
+    mentionBriefs(rows.flatMap((r) => (r.deletedAt ? [] : (r.mentions ?? [])))),
+  ]);
+  const replyMap = new Map(parents.map((p) => [sid(p._id), toReplyRef({ ...p, images: p.images ?? [] }, (briefs.get(sid(p.userId)) ?? GHOST).displayName)]));
+  const isHost = sid(crew.hostId) === me;
   return rows.map((r) => {
-    const p = r.replyToId ? parentBy.get(sid(r.replyToId)) : undefined;
+    const gone = !!r.deletedAt;
+    const mine = sid(r.userId) === me;
+    const mentions = gone ? [] : (r.mentions ?? []).flatMap((id) => mentionMap.get(sid(id)) ?? []);
     return {
       id: sid(r._id),
-      body: r.body,
+      channelId: sid(crew._id),
+      body: gone ? "" : r.body,
+      sticker: gone ? null : (r.sticker ?? null),
+      stickerUrl: gone ? null : (r.stickerUrl ?? null),
+      images: gone ? [] : (r.images ?? []),
+      replyTo: gone || !r.replyToId ? null : (replyMap.get(sid(r.replyToId)) ?? null),
+      pinned: false,
+      canPin: false,
+      reactions: gone ? [] : (reactions.get(sid(r._id)) ?? []),
+      deleted: gone,
       createdAt: r.createdAt.toISOString(),
       author: briefs.get(sid(r.userId)) ?? GHOST,
-      mine: sid(r.userId) === sid(viewer._id),
-      replyTo: p ? { id: sid(p._id), author: (briefs.get(sid(p.userId)) ?? GHOST).displayName, body: snippet(p.body) } : null,
+      canDelete: !gone && (mine || isHost),
+      canEdit: !gone && mine && !r.sticker && !r.stickerUrl,
+      editedAt: gone || !r.editedAt ? null : r.editedAt.toISOString(),
+      mentions,
+      mentionsMe: mentions.some((m) => m.id === me),
     };
   });
 }
 
-/** The latest 100 messages, oldest first; with `after`, only newer ones (for polling). */
-export async function listCrewMessages(viewer: IUser, crewId: string, after?: string): Promise<CrewMessageDTO[]> {
+/** Handles in `body` that belong to people in this crew (and that the author can see). */
+async function crewMentions(viewer: IUser, crewId: Types.ObjectId, body: string): Promise<Types.ObjectId[]> {
+  const handles = extractMentionHandles(body);
+  if (!handles.length) return [];
+  const [users, hidden] = await Promise.all([User.find({ handle: { $in: handles } }).select("_id").lean<{ _id: Types.ObjectId }[]>(), hiddenUserIds(viewer._id)]);
+  const hide = new Set(hidden.map(sid));
+  const ids = users.map((u) => u._id).filter((id) => !hide.has(sid(id)) && sid(id) !== sid(viewer._id));
+  if (!ids.length) return [];
+  const inCrew = await CrewMember.find({ crewId, userId: { $in: ids }, status: "active" }).select("userId").lean<{ userId: Types.ObjectId }[]>();
+  return inCrew.map((m) => m.userId);
+}
+
+/**
+ * A page of the chat, oldest first: the newest page, the page `before` a message (scrolling up), or only the ones
+ * `after` a message (polling). Looking at the newest messages marks the chat read.
+ */
+export async function listCrewMessages(viewer: IUser, crewId: string, q: { before?: string; after?: string } = {}): Promise<{ items: ChannelMessageDTO[]; hasMore: boolean }> {
   const { crew } = await assertInCrew(viewer, crewId);
-  const rows = await CrewMessage.find({ crewId: crew._id, ...(after ? { _id: { $gt: new Types.ObjectId(after) } } : {}) })
-    .sort({ _id: -1 })
-    .limit(100)
-    .lean<ICrewMessage[]>();
-  // looking at the chat reads it (an empty poll still says you're looking)
-  if (rows[0]) await markCrewRead(viewer._id, crew, rows[0]._id);
-  else await CrewRead.updateOne({ userId: viewer._id, crewId: crew._id }, { $set: { readAt: new Date() }, $setOnInsert: { lastReadMessageId: null, expiresAt: crew.expiresAt } }, { upsert: true }).catch(() => {});
-  return toMessages(rows.reverse(), viewer);
+  const filter: Record<string, unknown> = { crewId: crew._id };
+  if (q.after) filter._id = { $gt: new Types.ObjectId(q.after) };
+  else if (q.before) filter._id = { $lt: new Types.ObjectId(q.before) };
+  const rows = await CrewMessage.find(filter).sort({ _id: q.after ? 1 : -1 }).limit(PAGE + 1).lean<ICrewMessage[]>();
+  const hasMore = rows.length > PAGE;
+  const page = rows.slice(0, PAGE);
+  const ordered = q.after ? page : page.reverse();
+  if (!q.before) {
+    // looking at the chat reads it (an empty poll still says you're looking)
+    const newest = ordered[ordered.length - 1];
+    if (newest) await markCrewRead(viewer._id, crew, newest._id);
+    else await CrewRead.updateOne({ userId: viewer._id, crewId: crew._id }, { $set: { readAt: new Date() }, $setOnInsert: { lastReadMessageId: null, expiresAt: crew.expiresAt } }, { upsert: true }).catch(() => {});
+  }
+  return { items: await toMessages(ordered, viewer, crew), hasMore: q.after ? false : hasMore };
+}
+
+/** Mark everything up to the newest message read (the chat is on screen). */
+export async function markCrewChatRead(viewer: IUser, crewId: string) {
+  const { crew } = await assertInCrew(viewer, crewId);
+  const newest = await CrewMessage.findOne({ crewId: crew._id }).sort({ _id: -1 }).select("_id").lean<{ _id: Types.ObjectId }>();
+  if (newest) await markCrewRead(viewer._id, crew, newest._id);
+  return { read: true };
+}
+
+/** People in the crew you can tag, matching what you've typed after "@". */
+export async function crewMentionable(viewer: IUser, crewId: string, q?: string): Promise<UserBrief[]> {
+  const { crew } = await assertInCrew(viewer, crewId);
+  const rows = await CrewMember.find({ crewId: crew._id, status: "active", userId: { $ne: viewer._id } }).select("userId").lean<{ userId: Types.ObjectId }[]>();
+  const briefs = await loadBriefs(rows.map((r) => r.userId));
+  const needle = (q ?? "").toLowerCase();
+  return [...briefs.values()].filter((b) => !needle || b.handle.toLowerCase().includes(needle) || b.displayName.toLowerCase().includes(needle)).slice(0, 8);
 }
 
 /** People whose open chat checked in within the last 3 minutes are reading along: no notification for them. */
 const READING_MS = 3 * 60_000;
 
-export async function postCrewMessage(viewer: IUser, crewId: string, body: string, replyToId: string | null = null): Promise<CrewMessageDTO> {
+export async function postCrewMessage(viewer: IUser, crewId: string, input: { body: string; sticker?: string; stickerUrl?: string; images?: string[] }, replyToId: string | null = null): Promise<ChannelMessageDTO> {
   const { crew, event } = await assertInCrew(viewer, crewId);
+  const sticker = input.sticker ?? null;
+  const stickerUrl = input.stickerUrl && !sticker ? assertStickerUrl(input.stickerUrl) : null;
+  const isSticker = !!sticker || !!stickerUrl;
+  const body = isSticker ? "" : input.body;
+  const images = isSticker ? [] : (input.images ?? []);
+  const said = previewOf({ body, sticker, stickerUrl, images });
   rateLimit(`crew-msg:${sid(viewer._id)}`, 30, 60_000);
   const parent = replyToId ? await CrewMessage.findOne({ _id: oid(replyToId, "message"), crewId: crew._id }).select("userId").lean<Pick<ICrewMessage, "_id" | "userId">>() : null;
   if (replyToId && !parent) throw notFound("That message is gone.");
-  const row = (await CrewMessage.create({ crewId: crew._id, userId: viewer._id, body, replyToId: parent?._id ?? null, expiresAt: crew.expiresAt })).toObject();
+  const mentions = isSticker ? [] : await crewMentions(viewer, crew._id, body);
+  const row = (await CrewMessage.create({ crewId: crew._id, userId: viewer._id, body, sticker, stickerUrl, images, mentions, replyToId: parent?._id ?? null, expiresAt: crew.expiresAt })).toObject() as ICrewMessage;
+  noteStickerUse(viewer._id, stickerUrl);
   await markCrewRead(viewer._id, crew, row._id, false);
   void pingCrew(crew._id, { chat: true });
 
-  // tell the rest of the crew, except anyone reading along right now
+  // tell the rest of the crew, except anyone reading along right now; tags and replies reach you either way
   const [members, reading] = await Promise.all([
     CrewMember.find({ crewId: crew._id, status: "active", userId: { $ne: viewer._id } }).select("userId").lean<{ userId: Types.ObjectId }[]>(),
     CrewRead.find({ crewId: crew._id, readAt: { $gte: new Date(Date.now() - READING_MS) } }).select("userId").lean<{ userId: Types.ObjectId }[]>(),
   ]);
   const busy = new Set(reading.map((r) => sid(r.userId)));
   const away = members.map((m) => m.userId).filter((u) => !busy.has(sid(u)));
-  const repliedTo = parent && sid(parent.userId) !== sid(viewer._id) && away.some((u) => sid(u) === sid(parent.userId)) ? parent.userId : null;
   const where = `crew from ${crew.area}`;
   const data = { type: "crew", id: sid(crew._id) };
-  if (repliedTo) {
-    notify([repliedTo], { title: `${viewer.displayName} replied to you`, body: `${snippet(body, 100)} · ${where}`, data }, { category: "mentions", groupKey: `crew-reply:${sid(crew._id)}`, many: (n) => `${n} replies to you in your ${where}`, ref: `crew:${sid(crew._id)}`, pushOnce: true });
+  const forYou = new Map<string, Types.ObjectId>();
+  if (parent && sid(parent.userId) !== sid(viewer._id) && away.some((u) => sid(u) === sid(parent.userId))) forYou.set(sid(parent.userId), parent.userId);
+  for (const m of mentions) if (away.some((u) => sid(u) === sid(m))) forYou.set(sid(m), m);
+  if (forYou.size) {
+    notify([...forYou.values()], { title: `${viewer.displayName} ${parent && forYou.has(sid(parent.userId)) ? "replied to you" : "tagged you"}`, body: `${snippet(said, 100)} · ${where}`, data }, { category: "mentions", groupKey: `crew-reply:${sid(crew._id)}`, many: (n) => `${n} replies and tags for you in your ${where}`, ref: `crew:${sid(crew._id)}`, pushOnce: true });
   }
-  const rest = away.filter((u) => !repliedTo || sid(u) !== sid(repliedTo));
+  const rest = away.filter((u) => !forYou.has(sid(u)));
   if (rest.length) {
-    notify(rest, { title: `${viewer.displayName} in your ${where}`, body: `${snippet(body, 100)} · ${event.title}`, data }, { category: "crews", groupKey: `crew-chat:${sid(crew._id)}`, many: (n) => `${n} new messages in your ${where}`, ref: `crew:${sid(crew._id)}`, pushOnce: true });
+    notify(rest, { title: `${viewer.displayName} in your ${where}`, body: `${snippet(said, 100)} · ${event.title}`, data }, { category: "crews", groupKey: `crew-chat:${sid(crew._id)}`, many: (n) => `${n} new messages in your ${where}`, ref: `crew:${sid(crew._id)}`, pushOnce: true });
   }
-  return (await toMessages([row], viewer))[0];
+  return (await toMessages([row], viewer, crew))[0];
+}
+
+async function loadCrewMessage(crewId: Types.ObjectId, messageId: string): Promise<ICrewMessage> {
+  const msg = await CrewMessage.findOne({ _id: oid(messageId, "message"), crewId }).lean<ICrewMessage>();
+  if (!msg || msg.deletedAt) throw notFound("That message is gone.");
+  return msg;
+}
+
+/** Change the text of your own message. */
+export async function editCrewMessage(viewer: IUser, crewId: string, messageId: string, body: string): Promise<ChannelMessageDTO> {
+  const { crew } = await assertInCrew(viewer, crewId);
+  rateLimit(`crew-edit:${sid(viewer._id)}`, 30, 60_000);
+  const msg = await loadCrewMessage(crew._id, messageId);
+  if (sid(msg.userId) !== sid(viewer._id)) throw forbidden("You can only edit your own messages.");
+  if (msg.sticker || msg.stickerUrl) throw forbidden("Stickers can't be edited. Delete it and send another.");
+  const next = body.trim();
+  const mentions = await crewMentions(viewer, crew._id, next);
+  const editedAt = next === msg.body ? (msg.editedAt ?? null) : new Date();
+  await CrewMessage.updateOne({ _id: msg._id }, { $set: { body: next, mentions, editedAt } });
+  void pingCrew(crew._id, { chat: true });
+  return (await toMessages([{ ...msg, body: next, mentions, editedAt }], viewer, crew))[0];
+}
+
+/** Delete your own message; the host can remove anyone's. Its pictures go with it. */
+export async function deleteCrewMessage(viewer: IUser, crewId: string, messageId: string) {
+  const { crew } = await assertInCrew(viewer, crewId);
+  const msg = await loadCrewMessage(crew._id, messageId);
+  if (sid(msg.userId) !== sid(viewer._id) && sid(crew.hostId) !== sid(viewer._id)) throw forbidden("Only the host can remove other people's messages.");
+  await CrewMessage.updateOne({ _id: msg._id }, { $set: { body: "", sticker: null, stickerUrl: null, images: [], mentions: [], deletedAt: new Date() } });
+  await purgeReactions("crew", [msg._id]);
+  deleteUploads(msg.images ?? []);
+  void pingCrew(crew._id, { chat: true });
+  return { deleted: true };
+}
+
+export async function reactToCrewMessage(viewer: IUser, crewId: string, messageId: string, kind: ReactionKind): Promise<ReactionDTO[]> {
+  const { crew } = await assertInCrew(viewer, crewId);
+  rateLimit(`react:${sid(viewer._id)}`, 60, 30_000);
+  const msg = await loadCrewMessage(crew._id, messageId);
+  const out = await toggleReaction("crew", msg._id, viewer._id, kind);
+  void pingCrew(crew._id, { chat: true });
+  return out;
+}
+
+export async function crewReactions(viewer: IUser, crewId: string, ids: string[]): Promise<Record<string, ReactionDTO[]>> {
+  const { crew } = await assertInCrew(viewer, crewId);
+  const valid = await CrewMessage.find({ _id: { $in: ids }, crewId: crew._id }).select("_id").lean<{ _id: Types.ObjectId }[]>();
+  const map = await summarizeReactions("crew", valid.map((v) => v._id), viewer._id);
+  return Object.fromEntries(valid.map((v) => [sid(v._id), map.get(sid(v._id)) ?? []]));
 }
 
 /* ------------------------------------------------------------------ */
@@ -606,7 +761,7 @@ export async function postCrewMessage(viewer: IUser, crewId: string, body: strin
 export async function purgeCrews(where: Record<string, unknown>) {
   const ids = await Crew.find(where).distinct("_id");
   if (!ids.length) return;
-  await Promise.all([Crew.deleteMany({ _id: { $in: ids } }), CrewMember.deleteMany({ crewId: { $in: ids } }), CrewMessage.deleteMany({ crewId: { $in: ids } }), CrewRead.deleteMany({ crewId: { $in: ids } })]);
+  await Promise.all([Crew.deleteMany({ _id: { $in: ids } }), CrewMember.deleteMany({ crewId: { $in: ids } }), purgeCrewChat({ crewId: { $in: ids } }), CrewRead.deleteMany({ crewId: { $in: ids } })]);
 }
 
 /** An event's times changed: its crews now disappear a day after the new end. */
@@ -657,7 +812,7 @@ export async function removeUserFromCrews(userId: Types.ObjectId) {
     await CrewMember.deleteOne({ _id: r._id });
     if (r.status === "active") await Crew.updateOne({ _id: r.crewId, memberCount: { $gt: 1 } }, { $inc: { memberCount: -1 } });
   }
-  await CrewMessage.deleteMany({ userId });
+  await purgeCrewChat({ userId });
   await CrewRead.deleteMany({ userId });
 }
 

@@ -1,5 +1,9 @@
 import "server-only";
 import { after } from "next/server";
+import { ChannelMessage } from "../models/Channel";
+import { CrewMessage } from "../models/Crew";
+import { Message } from "../models/Message";
+import { SavedSticker } from "../models/SavedSticker";
 import { deleteObject, keyFromUrl } from "./r2";
 
 /**
@@ -27,11 +31,35 @@ export function variantKeys(key: string): string[] {
   return [key, `${base}_sm.webp`, `${base}_sm.jpg`];
 }
 
-/** Delete these uploads once the response is on its way. Foreign URLs are skipped. */
-export function deleteUploads(urls: (string | null | undefined)[]) {
-  const keys = [...new Set(urls.filter((u): u is string => !!u).map((u) => keyFromUrl(u)).filter((k): k is string => !!k).flatMap(variantKeys))];
-  if (!keys.length) return;
+/** Of these links, the ones someone still uses as a sticker (saved, or sent in a chat). */
+export async function stillStickers(urls: string[]): Promise<Set<string>> {
+  if (!urls.length) return new Set();
+  const q = { $in: urls };
+  const [saved, dms, channel, crew] = await Promise.all([
+    SavedSticker.distinct("url", { url: q }),
+    Message.distinct("stickerUrl", { stickerUrl: q, deletedAt: null }),
+    ChannelMessage.distinct("stickerUrl", { stickerUrl: q, deletedAt: null }),
+    CrewMessage.distinct("stickerUrl", { stickerUrl: q }),
+  ]);
+  return new Set([...saved, ...dms, ...channel, ...crew].map(String));
+}
+
+/**
+ * Delete these uploads once the response is on its way. Foreign URLs are skipped, and so are pictures someone
+ * saved or sent as a sticker (deleting the message they came from leaves the sticker working), unless `force`
+ * (a moderator removing something): then the stickers made from it go too.
+ */
+export function deleteUploads(urls: (string | null | undefined)[], opts: { force?: boolean } = {}) {
+  const ours = [...new Set(urls.filter((u): u is string => !!u).map((u) => u.split("#")[0]).filter((u) => !!keyFromUrl(u)))];
+  if (!ours.length) return;
   const run = async () => {
+    let gone = ours;
+    if (opts.force) await SavedSticker.deleteMany({ url: { $in: ours } }).catch(() => undefined);
+    else {
+      const kept = await stillStickers(ours).catch(() => new Set(ours)); // can't tell: keep them all (the nightly sweep decides later)
+      gone = ours.filter((u) => !kept.has(u));
+    }
+    const keys = [...new Set(gone.map((u) => keyFromUrl(u)!).flatMap(variantKeys))];
     await Promise.all(keys.map((k) => deleteObject(k).catch((err: unknown) => console.warn("[media] delete failed:", k, (err as Error)?.message))));
   };
   try {

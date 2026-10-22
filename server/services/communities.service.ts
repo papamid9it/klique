@@ -1,5 +1,6 @@
 import { parseScope, scopeFilter } from "@/lib/places";
 import { deleteUploads } from "./media.service";
+import { sameFile } from "@/lib/focal";
 import { assertVerified } from "./account.service";
 import type { QueryFilter, Types } from "mongoose";
 import type { z } from "zod";
@@ -123,7 +124,7 @@ export async function updateCommunity(viewer: IUser, slug: string, patch: z.infe
   if (patch.groupPolicy !== undefined) set.groupPolicy = patch.groupPolicy;
 
   await Community.updateOne({ _id: space.community._id }, set);
-  if (set.coverImage !== undefined && space.community.coverImage && space.community.coverImage !== set.coverImage) deleteUploads([space.community.coverImage]);
+  if (set.coverImage !== undefined && space.community.coverImage && !sameFile(space.community.coverImage, set.coverImage)) deleteUploads([space.community.coverImage]);
 
   // Events hosted directly in this community inherit its privacy — keep them in sync.
   if (patch.privacy && patch.privacy !== space.community.privacy) {

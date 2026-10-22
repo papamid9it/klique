@@ -1,4 +1,5 @@
 import { Schema, model, models, type Model, type Types } from "mongoose";
+import { defineModel } from "./define";
 
 /**
  * A crew: a few people going to the same event together ("from Yaba, meeting at the bus stop at 3").
@@ -101,6 +102,16 @@ export interface ICrewMessage {
   crewId: Types.ObjectId;
   userId: Types.ObjectId;
   body: string;
+  /** a sticker instead of text: a built-in one (lib/reactions) or a saved picture sticker */
+  sticker?: string | null;
+  stickerUrl?: string | null;
+  /** up to 4 uploaded pictures or GIFs */
+  images?: string[];
+  /** crew members tagged with @handle */
+  mentions?: Types.ObjectId[];
+  editedAt?: Date | null;
+  /** soft delete: the row stays so replies keep their place */
+  deletedAt?: Date | null;
   /** the message this one answers */
   replyToId: Types.ObjectId | null;
   expiresAt: Date;
@@ -111,7 +122,13 @@ const CrewMessageSchema = new Schema<ICrewMessage>(
   {
     crewId: { type: Schema.Types.ObjectId, ref: "Crew", required: true },
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
-    body: { type: String, required: true, trim: true, maxlength: 1000 },
+    body: { type: String, default: "", trim: true, maxlength: 1000 },
+    sticker: { type: String, default: null, maxlength: 20 },
+    stickerUrl: { type: String, default: null, maxlength: 600 },
+    images: { type: [String], default: [] },
+    mentions: { type: [Schema.Types.ObjectId], default: [] },
+    editedAt: { type: Date, default: null },
+    deletedAt: { type: Date, default: null },
     replyToId: { type: Schema.Types.ObjectId, ref: "CrewMessage", default: null },
     expiresAt: { type: Date, required: true },
   },
@@ -121,7 +138,7 @@ const CrewMessageSchema = new Schema<ICrewMessage>(
 CrewMessageSchema.index({ crewId: 1, _id: -1 });
 CrewMessageSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
-export const CrewMessage: Model<ICrewMessage> = (models.CrewMessage as Model<ICrewMessage>) || model<ICrewMessage>("CrewMessage", CrewMessageSchema);
+export const CrewMessage: Model<ICrewMessage> = defineModel<ICrewMessage>("CrewMessage", CrewMessageSchema);
 
 /** How far someone has read a crew's chat, for unread counts. Goes with the crew (same `expiresAt`). */
 export interface ICrewRead {

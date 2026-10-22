@@ -159,7 +159,7 @@ export async function signInWithGoogle(p: GoogleProfile): Promise<{ user: IUser;
     const linked = await User.findByIdAndUpdate(
       byEmail._id,
       { googleId: p.sub, ...(byEmail.emailVerifiedAt ? {} : { emailVerifiedAt: new Date() }) },
-      { new: true },
+      { returnDocument: "after" },
     ).lean<IUser>();
     return { user: linked ?? byEmail, isNew: false };
   }

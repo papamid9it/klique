@@ -9,6 +9,7 @@ import { useToast } from "@/components/providers/ToastProvider";
 import { Dropdown, type MenuEntry } from "@/components/ui/Dropdown";
 import { Icon } from "@/components/ui/Icon";
 import { cx } from "@/components/ui/cx";
+import { whatsappShareUrl } from "@/lib/format";
 import type { TopicDTO } from "@/lib/types";
 import { TopicFormModal } from "./TopicFormModal";
 
@@ -42,6 +43,11 @@ export function TopicMenu({ topic, onChange, onRemoved, className }: { topic: To
           { label: topic.locked ? "Unlock comments" : "Lock comments", icon: "lock", onSelect: () => void patch({ locked: !topic.locked }, topic.locked ? "Comments unlocked" : "Comments locked") },
         ] as MenuEntry[])
       : []),
+    {
+      label: "Share on WhatsApp",
+      icon: "share",
+      onSelect: () => void window.open(whatsappShareUrl(`${topic.title} · ${topic.community.name} on klique`, absoluteUrl(topicHref(topic))), "_blank", "noopener,noreferrer"),
+    },
     {
       label: "Copy link",
       icon: "link",

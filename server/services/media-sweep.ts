@@ -1,5 +1,7 @@
 import { Ad } from "../models/Ad";
 import { Community } from "../models/Community";
+import { CrewMessage } from "../models/Crew";
+import { SavedSticker } from "../models/SavedSticker";
 import { EventDraft } from "../models/EventDraft";
 import { ChannelMessage } from "../models/Channel";
 import { Event } from "../models/Event";
@@ -60,6 +62,12 @@ async function referencedKeys(): Promise<Set<string>> {
   }
   for await (const m of ChannelMessage.find({ "images.0": { $exists: true } }).select("images").lean().cursor()) m.images.forEach(add);
   for await (const m of Message.find({ "images.0": { $exists: true } }).select("images").lean().cursor()) m.images.forEach(add);
+  // stickers: saved ones, and ones sent in chats (the message they were taken from may be long gone)
+  for await (const s of SavedSticker.find().select("url").lean().cursor()) add(s.url);
+  for await (const m of ChannelMessage.find({ stickerUrl: has }).select("stickerUrl").lean().cursor()) add(m.stickerUrl);
+  for await (const m of Message.find({ stickerUrl: has }).select("stickerUrl").lean().cursor()) add(m.stickerUrl);
+  for await (const m of CrewMessage.find({ stickerUrl: has }).select("stickerUrl").lean().cursor()) add(m.stickerUrl);
+  for await (const m of CrewMessage.find({ "images.0": { $exists: true } }).select("images").lean().cursor()) (m.images ?? []).forEach(add);
   for await (const a of Ad.find({ imageUrl: has }).select("imageUrl").lean().cursor()) add(a.imageUrl);
   for await (const d of EventDraft.find({ coverImage: has }).select("coverImage").lean().cursor()) add(d.coverImage);
   return out;

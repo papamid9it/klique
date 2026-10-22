@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { cacheLife } from "next/cache";
 import type { ReactNode } from "react";
+import { communityMetadata } from "@/lib/share-metadata";
 import { communityShare } from "@/server/services/share.service";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
@@ -9,13 +10,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   cacheLife("minutes");
   const { slug } = await params;
   const s = await communityShare(slug);
-  if (!s) return {};
-  return {
-    title: s.title,
-    description: s.description,
-    openGraph: { title: s.title, description: s.description },
-    twitter: { card: "summary_large_image", title: s.title, description: s.description },
-  };
+  return communityMetadata(slug, s);
 }
 
 export default function Layout({ children }: { children: ReactNode }) {

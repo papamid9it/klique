@@ -214,7 +214,7 @@ export async function updateAd(id: string, input: AdInput): Promise<AdminAdDTO> 
   const set = await clean(input);
   if (input.status) set.status = input.status;
   const before = await Ad.findById(id).select("imageUrl").lean<Pick<IAd, "imageUrl">>();
-  const doc = await Ad.findByIdAndUpdate(id, { $set: set }, { new: true }).lean<IAd>();
+  const doc = await Ad.findByIdAndUpdate(id, { $set: set }, { returnDocument: "after" }).lean<IAd>();
   if (!doc) throw notFound("That ad is gone.");
   if (before?.imageUrl && before.imageUrl !== doc.imageUrl) deleteUploads([before.imageUrl]);
   return (await toAdmin([doc]))[0];

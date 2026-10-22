@@ -24,7 +24,7 @@ const MENU: { title: string | null; items: Item[] }[] = [
     title: "Moderation",
     items: [
       { href: "/admin/reports", label: "Reports", icon: "flag", count: (s) => s.reports.open },
-      { href: "/admin/inbox", label: "Event inbox", icon: "ticket", count: (s) => s.pendingDrafts },
+      { href: "/admin/inbox", label: "Event finder", icon: "ticket", count: (s) => s.pendingDrafts },
     ],
   },
   {

@@ -1,13 +1,11 @@
-import { ImageResponse } from "next/og";
-import { SHARE_SIZE, ShareCard } from "@/lib/share-card";
+import { SHARE_IMAGE, shareImage } from "@/lib/share-image";
 import { eventShare } from "@/server/services/share.service";
 
-export const alt = "A event on klique.";
-export const size = SHARE_SIZE;
-export const contentType = "image/png";
+export const alt = "An event on klique.";
+export const size = { width: SHARE_IMAGE.width, height: SHARE_IMAGE.height };
+export const contentType = SHARE_IMAGE.type;
 
 export default async function Image({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const s = await eventShare(id);
-  return new ImageResponse(s ? <ShareCard eyebrow={s.eyebrow} title={s.title} lines={s.lines} image={s.image} /> : <ShareCard eyebrow="klique." title="Find your people." />, size);
+  return shareImage(await eventShare(id));
 }

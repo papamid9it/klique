@@ -29,6 +29,8 @@ const base = (s: SpaceRef) => (s.sub ? `/api/communities/${s.slug}/groups/${s.su
 export interface SendInput {
   body: string;
   sticker?: string;
+  /** a saved picture sticker */
+  stickerUrl?: string;
   images?: string[];
   replyToId?: string;
 }
@@ -39,6 +41,8 @@ export interface ChannelInput {
   type?: ChannelType;
   visibility?: ChannelVisibility;
   categoryId?: string | null;
+  /** slow mode in seconds (0 = off) */
+  slowModeSec?: number;
   /** guest list for a private channel (create only) */
   memberIds?: string[];
 }

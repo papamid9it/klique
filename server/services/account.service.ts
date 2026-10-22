@@ -86,7 +86,7 @@ export async function resetPassword(token: string, password: string): Promise<{ 
       hasPassword: true,
       $inc: { tokenVersion: 1 }, // every device signs in again
     },
-    { new: true },
+    { returnDocument: "after" },
   ).lean<IUser>();
   if (!user) throw badLink();
   // They received this link at their inbox, so the address is theirs.
@@ -116,7 +116,7 @@ export async function changePassword(viewer: IUser, input: z.infer<typeof change
   const updated = await User.findByIdAndUpdate(
     viewer._id,
     { passwordHash: await hashPassword(input.newPassword), hasPassword: true, $inc: { tokenVersion: 1 } },
-    { new: true },
+    { returnDocument: "after" },
   ).lean<IUser>();
   if (!updated) throw new ApiError(401, "Please sign in again.");
   queueMail(passwordChangedMail(updated.email, updated.displayName));

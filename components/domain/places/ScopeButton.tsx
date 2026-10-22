@@ -25,6 +25,25 @@ export function ScopeButton({
   const [open, setOpen] = useState(false);
   const scope = value ?? place.scope;
   const set = onChange ?? place.setScope;
+  // the remembered place is only known in the browser: a neutral placeholder until then, never a wrong place
+  if (!value && !place.ready) {
+    const bar = <span className="inline-block h-[0.9em] w-20 rounded bg-raised align-middle" aria-hidden="true" />;
+    return variant === "heading" ? (
+      <span className={cx("inline-flex max-w-full items-center gap-2 rounded-2xl border border-line bg-surface px-3.5 py-1 align-middle", className)} aria-busy="true">
+        {bar}
+        <Icon name="chevron-down" size={22} className="shrink-0 text-ink-muted" />
+      </span>
+    ) : variant === "pill" ? (
+      <span className={cx("inline-flex h-9 min-w-0 items-center gap-1.5 rounded-full border border-line bg-surface pr-2.5 pl-3", className)} aria-busy="true">
+        {bar}
+        <Icon name="chevron-down" size={13} className="shrink-0 text-ink-muted" />
+      </span>
+    ) : (
+      <span className={cx("flex h-11 w-full items-center gap-2.5 rounded-control border border-line bg-surface px-3.5", className)} aria-busy="true">
+        {bar}
+      </span>
+    );
+  }
 
   return (
     <>

@@ -9,7 +9,7 @@ export const MessageService = {
   /** Opens (or creates) the one-to-one conversation with `handle`. Fails clearly if they can't be messaged. */
   start: (handle: string, message?: string) => api.post<Envelope<ConversationDetailDTO>>("/api/conversations", { handle, message }),
   open: (id: string, before?: string) => api.get<Envelope<ConversationDetailDTO>>(`/api/conversations/${id}`, { before }),
-  send: (id: string, input: { body: string; sticker?: string; images?: string[]; replyToId?: string }) => api.post<Envelope<MessageDTO>>(`/api/conversations/${id}/messages`, input),
+  send: (id: string, input: { body: string; sticker?: string; stickerUrl?: string; images?: string[]; replyToId?: string }) => api.post<Envelope<MessageDTO>>(`/api/conversations/${id}/messages`, input),
   edit: (id: string, messageId: string, body: string) => api.patch<Envelope<MessageDTO>>(`/api/conversations/${id}/messages/${messageId}`, { body }),
   remove: (id: string, messageId: string) => api.delete<Envelope<{ deleted: boolean }>>(`/api/conversations/${id}/messages/${messageId}`),
   react: (id: string, messageId: string, kind: ReactionKind) => api.post<Envelope<ReactionDTO[]>>(`/api/conversations/${id}/messages/${messageId}/reactions`, { kind }),

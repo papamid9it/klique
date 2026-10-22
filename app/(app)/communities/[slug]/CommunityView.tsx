@@ -13,6 +13,7 @@ import { TopicService } from "@/app/services/TopicService";
 import { TopicDetailProvider, TopicSide } from "@/components/domain/topics/TopicThread";
 import { VoiceSide, type VoiceSnapshot } from "@/components/domain/voice/VoicePanel";
 import { TopicsPanel } from "@/components/domain/topics/TopicsPanel";
+import { BoardSidebar } from "@/components/domain/topics/BoardSidebar";
 import { CrewService } from "@/app/services/CrewService";
 import { CrewsBoard } from "@/components/domain/crews/CrewsBoard";
 import { CrewView } from "@/components/domain/crews/CrewView";
@@ -41,6 +42,7 @@ import { Button } from "@/components/ui/Button";
 import { Icon, type IconName } from "@/components/ui/Icon";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cx } from "@/components/ui/cx";
+import { slowModeLabel } from "@/lib/constants";
 import { SlideOver } from "@/components/ui/SlideOver";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 
@@ -338,14 +340,18 @@ function CommunityWorkspace({ slug }: { slug: string }) {
   };
   const voiceChannel = !view && activeChannel?.type === "voice" ? activeChannel : null;
   // the right panel only opens for what you're looking at: a topic's comments or a call's roster
-  const sideKind = threadId ? "comments" : voiceChannel ? "voice" : null;
+  // on a wide screen a board with no topic open gets its sidebar (trending, rules, contributors, events)
+  const boardSide = view === "topics" && !g && !threadId && activeBoard ? activeBoard : null;
+  const sideKind = threadId ? "comments" : voiceChannel ? "voice" : boardSide ? "board" : null;
   const side = (onNavigate?: () => void) =>
     sideKind === "comments" ? (
       <TopicSide onClose={closeTopic} bare={!!onNavigate} />
     ) : sideKind === "voice" && voiceChannel ? (
       <VoiceSide channel={voiceChannel} communityName={g ? g.name : c.name} snapshot={voice} />
+    ) : sideKind === "board" && boardSide ? (
+      <BoardSidebar slug={slug} communityId={c.id} board={boardSide} onBoardChanged={() => void boardsApi.reload()} />
     ) : null;
-  const sideLabel = sideKind === "comments" ? "Topic" : "Voice info";
+  const sideLabel = sideKind === "comments" ? "Topic" : sideKind === "board" ? "About this board" : "Voice info";
   const closeAbout = () => setAboutOpen(false);
 
   const headerIcon: IconName = crewOpen ? "pin" : view ? viewTable[view].icon : activeChannel?.type === "announcement" ? "megaphone" : activeChannel?.type === "voice" ? "mic" : "hash";
@@ -412,6 +418,8 @@ function CommunityWorkspace({ slug }: { slug: string }) {
       <aside className="hidden w-64 shrink-0 border-r border-line bg-surface/40 lg:block">{list()}</aside>
 
       <section className="flex min-w-0 flex-1 flex-col" aria-label={view ? viewTable[view].label : "Conversation"}>
+        {/* an open crew brings its own header (with the info button), like a channel's */}
+        {!(crewOpen && !gp) && (
         <header className="flex min-h-14 items-center gap-2 border-b border-line px-3 sm:px-5">
           <button type="button" onClick={() => setLeftOpen(true)} aria-label="Open channels" className="inline-flex size-10 shrink-0 items-center justify-center rounded-full text-ink hover:bg-raised lg:hidden">
             <Icon name="menu" size={20} />
@@ -424,19 +432,25 @@ function CommunityWorkspace({ slug }: { slug: string }) {
             </h2>
             {!view && activeChannel?.topic && <p className="hidden truncate text-xs text-ink-muted sm:block">{activeChannel.topic}</p>}
           </div>
-          {sideKind && (
+          {!view && !!activeChannel?.slowModeSec && (
+            <span title={`Slow mode: one message every ${slowModeLabel(activeChannel.slowModeSec)}`} className="inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 font-mono text-[11px] font-semibold text-ink-muted">
+              <Icon name="timer" size={14} />
+              <span className="sr-only">Slow mode:</span>
+              {slowModeLabel(activeChannel.slowModeSec)}
+            </span>
+          )}
+          {sideKind && sideKind !== "board" && (
             <button type="button" onClick={() => setRightOpen(true)} aria-label={sideLabel} className="inline-flex size-10 shrink-0 items-center justify-center rounded-full text-ink hover:bg-raised xl:hidden">
               <Icon name={sideKind === "comments" ? "message" : "mic"} size={19} />
             </button>
           )}
         </header>
+        )}
 
         {gp ? (
           gp
         ) : crewOpen ? (
-          <Scroll inner wide>
-            <CrewView key={crewOpen} id={crewOpen} tab={sp.get("tab")} embedded onChanged={() => void reloadCrews()} onRead={() => markCrewReadLocally(crewOpen)} />
-          </Scroll>
+          <CrewView key={crewOpen} id={crewOpen} tab={sp.get("tab")} embedded onMenu={() => setLeftOpen(true)} onChanged={() => void reloadCrews()} onRead={() => markCrewReadLocally(crewOpen)} />
         ) : view === "crews" ? (
           <Scroll inner wide>
             <CrewsBoard slug={slug} sub={gSlug} eventId={sp.get("e")} onChanged={() => void reloadCrews()} />
@@ -447,7 +461,7 @@ function CommunityWorkspace({ slug }: { slug: string }) {
             <SpaceEvents slug={slug} subSlug={gSlug ?? undefined} canHost={g ? g.viewer.canManage : c.canHostEvents} />
           </Scroll>
         ) : view === "topics" && !g ? (
-          <Scroll inner wide>
+          <Scroll inner>
             <TopicsPanel slug={slug} communityName={c.name} isMember={member} openId={threadId} board={activeBoard} />
           </Scroll>
         ) : view === "updates" && g ? (
@@ -515,7 +529,7 @@ function CommunityWorkspace({ slug }: { slug: string }) {
       </section>
 
       {sideKind && (
-        <aside className={cx("hidden shrink-0 border-l border-line xl:block", sideKind === "comments" ? "w-[30rem] overflow-hidden 2xl:w-[34rem]" : "w-[24rem] overflow-hidden")} aria-label={sideLabel}>
+        <aside className={cx("hidden shrink-0 border-l border-line xl:block", sideKind === "comments" ? "w-[30rem] overflow-hidden 2xl:w-[34rem]" : sideKind === "board" ? "w-[22rem] overflow-hidden 2xl:w-[24rem]" : "w-[24rem] overflow-hidden")} aria-label={sideLabel}>
           {side()}
         </aside>
       )}
@@ -547,7 +561,7 @@ function CommunityWorkspace({ slug }: { slug: string }) {
         {list(closeLeft)}
       </SlideOver>
       {/* below xl the right panel is a drawer; an open topic opens it by itself, and closing it closes the topic */}
-      <SlideOver open={(rightOpen && !!sideKind) || (sideKind === "comments" && !wide)} onClose={sideKind === "comments" ? () => (setRightOpen(false), closeTopic()) : closeRight} side="right" title={sideLabel} wide={sideKind === "comments"}>
+      <SlideOver open={(rightOpen && !!sideKind && sideKind !== "board") || (sideKind === "comments" && !wide)} onClose={sideKind === "comments" ? () => (setRightOpen(false), closeTopic()) : closeRight} side="right" title={sideLabel} wide={sideKind === "comments"}>
         {side(sideKind === "comments" ? () => (setRightOpen(false), closeTopic()) : closeRight)}
       </SlideOver>
 

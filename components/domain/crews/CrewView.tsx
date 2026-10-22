@@ -2,13 +2,15 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRealtime, useRealtimeEvent } from "@/components/providers/RealtimeProvider";
 import { softNavigate } from "@/lib/nav";
 import { useAppEvent } from "@/lib/appEvents";
 import { SpaceService } from "@/app/services/SpaceService";
 import { errorMessage, isApiError } from "@/app/ApiCore";
 import { CrewService } from "@/app/services/CrewService";
+import { crewSource } from "@/app/services/ChatSource";
+import { ChatPane } from "@/components/domain/chat/ChatPane";
 import { ConfirmModal, SpaceError } from "@/components/domain/space/parts";
 import { ShareButton } from "@/components/domain/ShareButton";
 import { useAuth } from "@/components/providers/AuthProvider";
@@ -21,19 +23,20 @@ import { TextArea, TextField } from "@/components/ui/Field";
 import { Icon } from "@/components/ui/Icon";
 import { Modal } from "@/components/ui/Modal";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { SlideOver } from "@/components/ui/SlideOver";
 import { cx } from "@/components/ui/cx";
 import { formatDateLong, formatDateShort, formatTime, relativeStamp } from "@/lib/format";
 import { useApi, useNow } from "@/lib/hooks/useApi";
-import type { CrewDTO, CrewJoinMode, CrewMessageDTO } from "@/lib/types";
+import type { ChannelDTO, CrewDTO, CrewJoinMode } from "@/lib/types";
 import { Faces, StandingTag, crewHref, fromLagos, lagosInputs } from "./parts";
 
 /**
  * One crew: where and when to meet (members only), who's in, join / ask / leave, the host's requests, and the chat.
  * `embedded`: shown inside its community's workspace (the left panel lists your crews); `onChanged` lets that
  * panel refresh when you join, leave or call a crew off. On its own page, a crew that belongs to a community
- * moves into that community.
+ * moves into that community. `onMenu` opens the community's channel list on phones (the crew owns the header).
  */
-export function CrewView({ id, embedded, onChanged, onRead, tab }: { id: string; embedded?: boolean; onChanged?: () => void; onRead?: () => void; tab?: string | null }) {
+export function CrewView({ id, embedded, onChanged, onRead, onMenu, tab }: { id: string; embedded?: boolean; onChanged?: () => void; onRead?: () => void; onMenu?: () => void; tab?: string | null }) {
   const router = useRouter();
   const { data: crew, loading, error, status, reload, setData } = useApi(() => CrewService.get(id), [id], { key: `crew:${id}` });
   // someone asked, joined, left or was let in (you included): the page updates by itself
@@ -61,19 +64,27 @@ export function CrewView({ id, embedded, onChanged, onRead, tab }: { id: string;
 
   if (loading || target) {
     return (
-      <div className={cx("space-y-4", !embedded && "mx-auto max-w-3xl")} aria-busy="true">
-        <Skeleton className="h-6 w-40" />
-        <Skeleton className="h-48" />
-        <Skeleton className="h-32" />
-      </div>
+      <Page>
+        <div className="space-y-4" aria-busy="true">
+          <Skeleton className="h-6 w-40" />
+          <Skeleton className="h-48" />
+          <Skeleton className="h-32" />
+        </div>
+      </Page>
     );
   }
-  if (error || !crew) return <SpaceError status={status} message={error} onRetry={reload} backHref="/events" backLabel="Back to events" />;
+  if (error || !crew)
+    return (
+      <Page>
+        <SpaceError status={status} message={error} onRetry={reload} backHref="/events" backLabel="Back to events" />
+      </Page>
+    );
   return (
     <Crew
       crew={crew}
       tab={tab ?? null}
       onRead={onRead}
+      onMenu={onMenu}
       embedded={!!embedded}
       onChange={(c) => {
         setData(c);
@@ -91,7 +102,16 @@ const crewTabHref = (crew: CrewDTO, tab: string | null) => {
   return tab ? `${base}${base.includes("?") ? "&" : "?"}tab=${tab}` : base;
 };
 
-function Crew({ crew, tab, embedded, onChange, onGone, onRead, reload }: { crew: CrewDTO; tab: string | null; embedded: boolean; onChange: (c: CrewDTO) => void; onGone?: () => void; onRead?: () => void; reload: () => Promise<void> }) {
+/** A scrolling page column, for everything that isn't the chat (loading, the way in, the requests list). */
+function Page({ children }: { children: ReactNode }) {
+  return (
+    <div className="h-full min-h-0 flex-1 overflow-y-auto">
+      <div className="mx-auto max-w-3xl px-4 py-6 sm:px-8">{children}</div>
+    </div>
+  );
+}
+
+function Crew({ crew, tab, embedded, onChange, onGone, onRead, onMenu, reload }: { crew: CrewDTO; tab: string | null; embedded: boolean; onChange: (c: CrewDTO) => void; onGone?: () => void; onRead?: () => void; onMenu?: () => void; reload: () => Promise<void> }) {
   const router = useRouter();
   const toast = useToast();
   const { requireAuth } = useAuth();
@@ -99,6 +119,15 @@ function Crew({ crew, tab, embedded, onChange, onGone, onRead, reload }: { crew:
   const [asking, setAsking] = useState(false);
   const [editing, setEditing] = useState(false);
   const [callingOff, setCallingOff] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
+  const closeInfo = useCallback(() => setInfoOpen(false), []);
+  // the crew chat runs on the same chat screen as a community channel; it only needs a channel-shaped label
+  const [source] = useState(() => crewSource(crew.id));
+  const chatChannel = useMemo<ChannelDTO>(
+    () => ({ id: crew.id, slug: "crew", name: `Crew from ${crew.area}`, topic: "", type: "text", visibility: "invite", categoryId: null, position: 0, lastMessageAt: null, unread: false, unreadCount: 0, canPost: true, mentions: 0, slowModeSec: 0, slowModeExempt: true }),
+    [crew.id, crew.area],
+  );
+  const read = useCallback(() => onRead?.(), [onRead]);
   const v = crew.viewer;
   const isHost = v.standing === "host";
   const inCrew = v.standing === "host" || v.standing === "member";
@@ -134,29 +163,26 @@ function Crew({ crew, tab, embedded, onChange, onGone, onRead, reload }: { crew:
 
   if (tab === "requests" && isHost) {
     return (
+      <Page>
       <RequestsPage
         crew={crew}
         busy={busy}
-        embedded={embedded}
         onBack={() => go(null)}
         onDecide={(userId, name, accept) => void act(`${accept ? "ok" : "no"}:${userId}`, () => CrewService.decide(crew.id, userId, accept), accept ? `${name} is in` : undefined)}
         onAll={(accept) => void act(accept ? "all-ok" : "all-no", () => CrewService.decideAll(crew.id, accept), accept ? "Accepted" : "Declined")}
       />
+      </Page>
     );
   }
 
-  return (
-    <div className={embedded ? undefined : "mx-auto max-w-3xl"}>
-      <Link href={backHref} scroll={false} onClick={(e) => { if (embedded) { e.preventDefault(); softNavigate(backHref); } }} className="mb-4 inline-flex items-center gap-1.5 text-sm text-ink-muted hover:text-ink">
-        <Icon name="arrow-left" size={15} /> {embedded ? `Crews for ${crew.event.title}` : crew.event.title}
-      </Link>
-
-      <section className="rounded-card border border-line bg-surface p-5 sm:p-6">
+  const details = (compact: boolean) => (
+    <>
+      <section className={cx("rounded-card border border-line bg-surface", compact ? "p-4" : "p-5 sm:p-6")}>
         <div className="flex flex-wrap items-center gap-2">
           <p className="eyebrow">Crew · {formatDateShort(crew.event.startsAt)}</p>
           <StandingTag standing={v.standing} />
         </div>
-        <h1 className="mt-2 text-[clamp(1.5rem,3.5vw,2rem)] leading-tight font-bold tracking-[-0.03em]">From {crew.area}</h1>
+        <h1 className={cx("mt-2 leading-tight font-bold tracking-[-0.03em]", compact ? "text-xl" : "text-[clamp(1.5rem,3.5vw,2rem)]")}>From {crew.area}</h1>
         <p className="mt-1 text-sm text-ink-muted">
           To{" "}
           <Link href={`/events/${crew.event.id}`} className="font-medium text-accent-text hover:underline">
@@ -168,7 +194,7 @@ function Crew({ crew, tab, embedded, onChange, onGone, onRead, reload }: { crew:
           </ProfileTrigger>
         </p>
 
-        <dl className="mt-5 grid gap-3 sm:grid-cols-2">
+        <dl className={cx("mt-5 grid gap-3", !compact && "sm:grid-cols-2")}>
           <div className="flex gap-3 rounded-control border border-line bg-raised p-3">
             <dt className="mt-0.5 text-ink-muted">
               <Icon name="clock" />
@@ -266,8 +292,7 @@ function Crew({ crew, tab, embedded, onChange, onGone, onRead, reload }: { crew:
         </section>
       )}
 
-      <div className={cx("mt-5 grid gap-5", inCrew && "lg:grid-cols-[16rem_1fr]")}>
-        <section aria-label="Who's in">
+        <section aria-label="Who's in" className="mt-5">
           <h2 className="mb-2 text-base font-semibold">Who&apos;s in · {crew.memberCount}</h2>
           <ul className="space-y-1">
             {crew.members.map((m, i) => (
@@ -293,13 +318,13 @@ function Crew({ crew, tab, embedded, onChange, onGone, onRead, reload }: { crew:
             ))}
           </ul>
         </section>
-        {inCrew && <CrewChat crewId={crew.id} onRead={onRead} />}
-      </div>
-
-      <p className="mt-6 flex items-center gap-2 text-xs text-ink-muted">
-        <Icon name="clock" size={13} /> This crew and its chat disappear on {formatDateShort(crew.expiresAt)}. Meet in public, and tell someone where you&apos;re going.
+      <p className="mt-6 flex items-start gap-2 text-xs text-ink-muted">
+        <Icon name="clock" size={13} className="mt-px shrink-0" /> This crew and its chat disappear on {formatDateShort(crew.expiresAt)}. Meet in public, and tell someone where you&apos;re going.
       </p>
-
+    </>
+  );
+  const modals = (
+    <>
       {asking && <AskModal crew={crew} onClose={() => setAsking(false)} onDone={(c) => (setAsking(false), onChange(c))} />}
       {editing && <EditCrewModal crew={crew} onClose={() => setEditing(false)} onSaved={(c) => (setEditing(false), onChange(c))} />}
       <ConfirmModal
@@ -316,6 +341,90 @@ function Crew({ crew, tab, embedded, onChange, onGone, onRead, reload }: { crew:
           else router.replace(backHref);
         }}
       />
+    </>
+  );
+
+  // not in the crew: no chat, so the details (and the way in) fill the page
+  if (!inCrew) {
+    return (
+      <div className="h-full min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto max-w-3xl px-4 py-6 sm:px-8">
+          {onMenu && (
+            <button type="button" onClick={onMenu} aria-label="Open channels" className="mb-2 -ml-2 inline-flex size-10 items-center justify-center rounded-full text-ink hover:bg-raised lg:hidden">
+              <Icon name="menu" size={20} />
+            </button>
+          )}
+          <Link href={backHref} scroll={false} onClick={(e) => { if (embedded) { e.preventDefault(); softNavigate(backHref); } }} className="mb-4 inline-flex items-center gap-1.5 text-sm text-ink-muted hover:text-ink">
+            <Icon name="arrow-left" size={15} /> {embedded ? `Crews for ${crew.event.title}` : crew.event.title}
+          </Link>
+
+          {details(false)}
+        </div>
+        {modals}
+      </div>
+    );
+  }
+
+  // in the crew: the chat fills the middle like a community channel; the details sit in the right panel
+  // (a sheet on phones and narrow screens, from the info button)
+  return (
+    <div className="flex h-full min-h-0 flex-1">
+      <section className="flex min-w-0 flex-1 flex-col" aria-label="Crew chat">
+        <header className="flex min-h-14 shrink-0 items-center gap-2 border-b border-line px-3 sm:px-5">
+          {onMenu && (
+            <button type="button" onClick={onMenu} aria-label="Open channels" className="inline-flex size-10 shrink-0 items-center justify-center rounded-full text-ink hover:bg-raised lg:hidden">
+              <Icon name="menu" size={20} />
+            </button>
+          )}
+          <Link href={backHref} scroll={false} onClick={(e) => { if (embedded) { e.preventDefault(); softNavigate(backHref); } }} aria-label={`Back to crews for ${crew.event.title}`} className="inline-flex size-9 shrink-0 items-center justify-center rounded-full text-ink-muted hover:bg-raised hover:text-ink">
+            <Icon name="arrow-left" size={18} />
+          </Link>
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-[15px] font-semibold tracking-[-0.01em]">Crew from {crew.area}</h1>
+            <p className="truncate text-xs text-ink-muted">
+              {crew.event.title} · {formatDateShort(crew.meetupAt)}
+            </p>
+          </div>
+          <span className="hidden sm:block">
+            <Faces people={crew.faces} total={crew.memberCount} size={24} />
+          </span>
+          {isHost && crew.requests.length > 0 && (
+            <Button size="sm" variant="primary" onClick={() => go("requests")}>
+              Requests · {crew.requests.length}
+            </Button>
+          )}
+          <button type="button" onClick={() => setInfoOpen(true)} aria-label="Crew info" title="Crew info" className="inline-flex size-10 shrink-0 items-center justify-center rounded-full text-ink hover:bg-raised xl:hidden">
+            <Icon name="info" size={19} />
+          </button>
+        </header>
+        <ChatPane
+          key={crew.id}
+          source={source}
+          channel={chatChannel}
+          isMember
+          gate={null}
+          onRead={read}
+          placeholder="Message the crew"
+          intro={(empty) => (
+            <div className="px-4 pt-8 pb-2 sm:px-6">
+              <span className="mb-3 inline-flex size-14 items-center justify-center rounded-full bg-raised text-accent-text">
+                <Icon name="pin" size={26} />
+              </span>
+              <h2 className="text-2xl font-semibold tracking-[-0.03em]">Crew from {crew.area}</h2>
+              <p className="mt-1 text-sm text-ink-muted">
+                Going to {crew.event.title}. {empty ? "Say hi and sort out the plan: who's bringing what, splitting a ride, running late." : "Sort out the plan here."}
+              </p>
+            </div>
+          )}
+        />
+      </section>
+      <aside className="hidden w-[22rem] shrink-0 overflow-y-auto border-l border-line p-4 xl:block 2xl:w-[24rem]" aria-label="Crew info">
+        {details(true)}
+      </aside>
+      <SlideOver open={infoOpen} onClose={closeInfo} side="right" title="Crew info">
+        <div className="p-4 pt-14">{details(true)}</div>
+      </SlideOver>
+      {modals}
     </div>
   );
 }
@@ -324,7 +433,7 @@ function Crew({ crew, tab, embedded, onChange, onGone, onRead, reload }: { crew:
  * The host's queue of join requests, on its own page so the crew page never grows with it: searchable,
  * oldest first, Accept / Decline per person and both for everyone at once. Back to the crew when it's empty.
  */
-function RequestsPage({ crew, busy, embedded, onBack, onDecide, onAll }: { crew: CrewDTO; busy: string | null; embedded: boolean; onBack: () => void; onDecide: (userId: string, name: string, accept: boolean) => void; onAll: (accept: boolean) => void }) {
+function RequestsPage({ crew, busy, onBack, onDecide, onAll }: { crew: CrewDTO; busy: string | null; onBack: () => void; onDecide: (userId: string, name: string, accept: boolean) => void; onAll: (accept: boolean) => void }) {
   const [q, setQ] = useState("");
   const now = useNow();
   const needle = q.trim().toLowerCase().replace(/^@/, "");
@@ -332,7 +441,7 @@ function RequestsPage({ crew, busy, embedded, onBack, onDecide, onAll }: { crew:
   const room = Math.max(0, crew.maxMembers - crew.memberCount);
 
   return (
-    <div className={embedded ? undefined : "mx-auto max-w-3xl"}>
+    <div>
       <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1.5 text-sm text-ink-muted hover:text-ink">
         <Icon name="arrow-left" size={15} /> Crew from {crew.area}
       </button>
@@ -524,171 +633,5 @@ function EditCrewModal({ crew, onClose, onSaved }: { crew: CrewDTO; onClose: () 
         </div>
       </form>
     </Modal>
-  );
-}
-
-/**
- * The crew's own chat: text, with replies (tap ↩ on a message). New messages arrive live; having it open marks
- * it read (and tells `onRead`, so the unread counts around it drop at once).
- */
-function CrewChat({ crewId, onRead }: { crewId: string; onRead?: () => void }) {
-  const toast = useToast();
-  const { data, setData } = useApi(() => CrewService.messages(crewId), [crewId], { key: `crew-chat:${crewId}` });
-  const [text, setText] = useState("");
-  const [sending, setSending] = useState(false);
-  const [replyTo, setReplyTo] = useState<CrewMessageDTO | null>(null);
-  const [flash, setFlash] = useState<string | null>(null);
-  const listRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-  const messages = data ?? [];
-  const lastId = messages[messages.length - 1]?.id;
-
-  // the server marks it read whenever messages are fetched: let the counts around us follow
-  const readRef = useRef(onRead);
-  useEffect(() => {
-    readRef.current = onRead;
-  });
-  useEffect(() => {
-    if (data) readRef.current?.();
-  }, [data, lastId]);
-
-  // new messages: instantly when realtime is on (a ping per message), and a slower check as a safety net
-  const fetchNew = useCallback(async () => {
-    try {
-      const res = await CrewService.messages(crewId, lastId);
-      if (res.data.length) setData((prev) => [...(prev ?? []), ...res.data.filter((m) => !(prev ?? []).some((p) => p.id === m.id))]);
-    } catch {
-      /* next time */
-    }
-  }, [crewId, lastId, setData]);
-  const { connected } = useRealtime();
-  useRealtimeEvent(() => void fetchNew(), { filter: (e) => e.type === "crew" && e.crewId === crewId && !!e.chat });
-  useEffect(() => {
-    // (also tells the server you're still reading, so you aren't notified about a chat you're looking at)
-    const t = setInterval(() => document.visibilityState === "visible" && void fetchNew(), connected ? 60_000 : 4000);
-    return () => clearInterval(t);
-  }, [fetchNew, connected]);
-
-  useEffect(() => {
-    listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
-  }, [messages.length]);
-
-  function reply(m: CrewMessageDTO) {
-    setReplyTo(m);
-    inputRef.current?.focus();
-  }
-
-  /** jump to the message a reply quotes, and light it up for a moment */
-  function show(id: string) {
-    const el = listRef.current?.querySelector<HTMLElement>(`[data-msg="${id}"]`);
-    if (!el) return;
-    el.scrollIntoView({ block: "center", behavior: "smooth" });
-    setFlash(id);
-    setTimeout(() => setFlash((f) => (f === id ? null : f)), 1400);
-  }
-
-  async function send() {
-    const body = text.trim();
-    if (!body || sending) return;
-    const answering = replyTo;
-    setSending(true);
-    setText("");
-    setReplyTo(null);
-    try {
-      const res = await CrewService.send(crewId, body, answering?.id);
-      setData((prev) => [...(prev ?? []).filter((m) => m.id !== res.data.id), res.data]);
-    } catch (e) {
-      setText(body);
-      setReplyTo(answering);
-      toast(errorMessage(e), "error");
-    } finally {
-      setSending(false);
-    }
-  }
-
-  return (
-    <section aria-label="Crew chat" className="flex min-h-0 flex-col rounded-card border border-line bg-surface">
-      <h2 className="flex items-center gap-2 border-b border-line px-4 py-3 text-sm font-semibold">
-        <Icon name="message" size={15} /> Crew chat
-      </h2>
-      <div ref={listRef} className="h-80 space-y-3 overflow-y-auto px-4 py-3">
-        {messages.length === 0 ? (
-          <p className="pt-10 text-center text-sm text-ink-muted">Say hi and sort out the plan: who&apos;s bringing what, splitting a ride, running late.</p>
-        ) : (
-          messages.map((m: CrewMessageDTO) => (
-            <div key={m.id} data-msg={m.id} className={cx("group/msg flex items-end gap-2.5", m.mine && "flex-row-reverse")}>
-              <Avatar name={m.author.displayName} src={m.author.avatarUrl} size={28} />
-              <div className={cx("max-w-[80%] rounded-2xl px-3 py-2 transition-shadow", m.mine ? "bg-accent text-accent-ink" : "bg-raised", flash === m.id && "ring-2 ring-accent-text")}>
-                {!m.mine && <p className="text-[11px] font-semibold opacity-80">{m.author.displayName}</p>}
-                {m.replyTo && (
-                  <button type="button" onClick={() => show(m.replyTo!.id)} className={cx("mt-0.5 mb-1 block w-full rounded-lg border-l-2 px-2 py-1 text-left text-[12px]", m.mine ? "border-accent-ink/50 bg-accent-ink/10" : "border-accent-text bg-surface/70")}>
-                    <span className="block font-semibold">{m.replyTo.author}</span>
-                    <span className="line-clamp-2 opacity-80">{m.replyTo.body}</span>
-                  </button>
-                )}
-                <p className="text-sm break-words whitespace-pre-wrap">{m.body}</p>
-                <p className="mt-0.5 text-right font-mono text-[10px] opacity-60">{formatTime(m.createdAt)}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => reply(m)}
-                aria-label={`Reply to ${m.author.displayName}`}
-                title="Reply"
-                className="mb-1 inline-flex size-7 shrink-0 items-center justify-center rounded-full text-ink-muted opacity-60 transition hover:bg-raised hover:text-ink focus:opacity-100 md:opacity-0 md:group-hover/msg:opacity-100"
-              >
-                <Icon name="reply" size={14} />
-              </button>
-            </div>
-          ))
-        )}
-      </div>
-      {replyTo && (
-        <div className="flex items-center gap-2 border-t border-line bg-raised/50 px-4 py-2 text-[13px]">
-          <Icon name="reply" size={14} className="shrink-0 text-ink-muted" />
-          <span className="min-w-0 flex-1 truncate">
-            Replying to <span className="font-semibold">{replyTo.mine ? "yourself" : replyTo.author.displayName}</span>
-            <span className="text-ink-muted"> · {replyTo.body}</span>
-          </span>
-          <button type="button" onClick={() => setReplyTo(null)} aria-label="Cancel reply" className="inline-flex size-6 items-center justify-center rounded-full text-ink-muted hover:bg-line hover:text-ink">
-            <Icon name="x" size={13} />
-          </button>
-        </div>
-      )}
-      <form
-        className="flex items-end gap-2 border-t border-line p-3"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void send();
-        }}
-      >
-        <label htmlFor="crew-msg" className="sr-only">
-          Message the crew
-        </label>
-        <textarea
-          ref={inputRef}
-          id="crew-msg"
-          rows={1}
-          value={text}
-          maxLength={1000}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Escape" && replyTo) {
-              e.preventDefault();
-              e.stopPropagation();
-              setReplyTo(null);
-            } else if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-              e.preventDefault();
-              void send();
-            }
-          }}
-          placeholder={replyTo ? `Reply to ${replyTo.mine ? "yourself" : replyTo.author.displayName}` : "Message the crew"}
-          style={{ fieldSizing: "content" } as React.CSSProperties}
-          className="max-h-32 min-h-10 flex-1 resize-none rounded-[1.25rem] border border-line bg-raised px-4 py-2 text-sm focus:border-accent-text focus:outline-none"
-        />
-        <Button type="submit" variant="primary" size="sm" disabled={!text.trim()} aria-label="Send">
-          <Icon name="send" size={15} />
-        </Button>
-      </form>
-    </section>
   );
 }

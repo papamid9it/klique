@@ -1,5 +1,7 @@
 "use client";
 
+import { setDataSaver, type DataSaverPref } from "@/lib/data-saver";
+import { useDataSaver } from "@/lib/hooks/useDataSaver";
 import { useCategories } from "@/lib/hooks/useCategories";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -138,7 +140,7 @@ function ProfileForm({ me, onDraft }: { me: UserMe; onDraft?: (d: ProfileDraft) 
       <TextField label="Handle" value={`@${me.handle}`} readOnly hint="Your handle can't be changed." />
       <TextArea label="Bio" value={bio} onChange={(e) => setBio(e.target.value)} maxLength={LIMITS.bio} counter={LIMITS.bio} error={fieldErrors.bio} hint="A line or two about what you're into." />
       <PlaceFields value={place} onChange={(p) => { setPlace(p); }} neighborhood={neighborhood} onNeighborhood={setNeighborhood} errors={fieldErrors} />
-      <ImageField kind="avatar" shape="round" label="Profile picture" value={avatarUrl} onChange={setAvatarUrl} error={fieldErrors.avatarUrl} fallback={<Avatar name={displayName || me.displayName} size={80} />} hint="Cropped square around your face. Leave empty to use your initials." />
+      <ImageField kind="avatar" shape="round" label="Profile picture" value={avatarUrl} onChange={setAvatarUrl} error={fieldErrors.avatarUrl} fallback={<Avatar name={displayName || me.displayName} size={80} />} reposition={{ aspect: 1, round: true }} hint="After uploading, drag it to choose what shows in the circle. Leave empty to use your initials." />
 
       <fieldset>
         <legend className="text-[13px] font-medium">
@@ -676,9 +678,14 @@ export default function SettingsPage() {
               </div>
             )}
             {tab === "appearance" && (
-              <Block title="Mood" intro="Pick the look of klique. It applies instantly and follows you across devices.">
-                <MoodPicker />
-              </Block>
+              <div>
+                <Block title="Mood" intro="Pick the look of klique. It applies instantly and follows you across devices.">
+                  <MoodPicker />
+                </Block>
+                <Block title="Data saver" intro="Use less mobile data: lighter pictures, GIFs and videos wait for a tap, and nothing loads in the background. Saved on this device.">
+                  <DataSaverPicker />
+                </Block>
+              </div>
             )}
           </main>
           <div className="hidden shrink-0 md:block">
@@ -691,6 +698,32 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Data saver for this device: Auto (follows the browser's Save-Data setting and slow connections), On or Off. */
+function DataSaverPicker() {
+  const { on, pref, slow } = useDataSaver();
+  const options: { id: DataSaverPref; title: string; hint: string }[] = [
+    { id: "auto", title: "Automatic", hint: slow ? "Your connection looks slow or Data Saver is on in your browser, so it's on now." : "Turns on by itself on a slow connection or when your browser's Data Saver is on." },
+    { id: "on", title: "Always on", hint: "Lighter pictures everywhere. Tap a GIF or video to load it." },
+    { id: "off", title: "Off", hint: "Full-size pictures, GIFs play, things load ahead of time." },
+  ];
+  return (
+    <div className="space-y-2" role="radiogroup" aria-label="Data saver">
+      {options.map((o) => (
+        <label key={o.id} className="flex cursor-pointer items-center gap-3 rounded-control border border-line bg-raised p-3 transition has-[:checked]:border-accent-text has-[:checked]:bg-surface">
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold">{o.title}</span>
+            <span className="block text-xs text-ink-muted">{o.hint}</span>
+          </span>
+          <input type="radio" name="data-saver" checked={pref === o.id} onChange={() => setDataSaver(o.id)} className="size-4 accent-[var(--accent-text)]" />
+        </label>
+      ))}
+      <p className="pt-1 text-xs text-ink-muted" aria-live="polite">
+        Data saver is <span className="font-semibold text-ink">{on ? "on" : "off"}</span> right now.
+      </p>
     </div>
   );
 }

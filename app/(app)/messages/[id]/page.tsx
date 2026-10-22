@@ -1,5 +1,6 @@
 "use client";
 
+import { isDataSaver } from "@/lib/data-saver";
 import { ProfileTrigger } from "@/components/providers/ProfileCardProvider";
 import { useRealtime } from "@/components/providers/RealtimeProvider";
 import Link from "next/link";
@@ -30,7 +31,8 @@ import { useAttachments } from "@/lib/hooks/useAttachments";
 import { recallApi, rememberApi } from "@/lib/hooks/useApi";
 import { EditedTag, MessageEditor } from "@/components/domain/chat/MessageEditor";
 import { ConfirmModal } from "@/components/domain/space/parts";
-import { StickerPicker, StickerView, ReactButton, ReactionBar } from "@/components/domain/chat/Reactions";
+import { StickerPicker, StickerView, ReactButton, ReactionBar, type StickerChoice } from "@/components/domain/chat/Reactions";
+import { useStickers } from "@/lib/hooks/useStickers";
 import { applyReaction, type ReactionKind } from "@/lib/reactions";
 import type { ConversationDetailDTO, MessageDTO } from "@/lib/types";
 import { UserName } from "@/components/ui/UserName";
@@ -74,6 +76,12 @@ export default function ConversationPage() {
   const [replyTo, setReplyTo] = useState<Local | null>(null);
   const attach = useAttachments();
   const fileInput = useRef<HTMLInputElement>(null);
+  const stickers = useStickers();
+  /** "Save as sticker" for a sticker or a single picture */
+  const saveItem = (m: Local) => {
+    const url = m.stickerUrl ?? (m.images?.length === 1 ? m.images[0] : null);
+    return url ? [{ label: m.stickerUrl ? "Save sticker" : "Save as sticker", icon: "sticker" as const, onSelect: () => void stickers.save(url).then((err) => toast(err ?? "Saved to your stickers.", err ? "error" : "success")) }] : [];
+  };
 
   const jump = (mid: string) => {
     const el = document.getElementById(`msg-${mid}`);
@@ -157,7 +165,8 @@ export default function ConversationPage() {
     const off = on((e) => {
       if (e.type === "resync" || (e.type === "dm" && e.conversationId === id)) void tick();
     });
-    const t = setInterval(() => void tick(), connected ? 45_000 : 8000);
+    // data saver: without a live connection, check less often
+    const t = setInterval(() => void tick(), connected ? 45_000 : isDataSaver() ? 20_000 : 8000);
     return () => {
       off();
       clearInterval(t);
@@ -215,13 +224,13 @@ export default function ConversationPage() {
     }
   }
 
-  async function sendSticker(stickerId: string) {
+  async function sendSticker(choice: StickerChoice) {
     if (!user) return;
     const tempId = `tmp-${++tmp.current}`;
     setSendError(null);
-    setMessages((prev) => merge(prev, [{ id: tempId, conversationId: id, senderId: user.id, body: "", sticker: stickerId, images: [], replyTo: null, reactions: [], createdAt: new Date().toISOString(), mine: true, editedAt: null, deleted: false, pending: true } as Local]));
+    setMessages((prev) => merge(prev, [{ id: tempId, conversationId: id, senderId: user.id, body: "", sticker: choice.sticker ?? null, stickerUrl: choice.stickerUrl ?? null, images: [], replyTo: null, reactions: [], createdAt: new Date().toISOString(), mine: true, editedAt: null, deleted: false, pending: true } as Local]));
     try {
-      const res = await MessageService.send(id, { body: "", sticker: stickerId });
+      const res = await MessageService.send(id, { body: "", ...choice });
       setMessages((prev) => merge(prev.filter((m) => m.id !== tempId), [res.data]));
     } catch (e) {
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
@@ -230,11 +239,14 @@ export default function ConversationPage() {
   }
 
   async function send(retry?: Local) {
-    if (retry?.sticker) return sendSticker(retry.sticker);
+    if (retry?.sticker || retry?.stickerUrl) {
+      setMessages((prev) => prev.filter((m) => m.id !== retry.id));
+      return sendSticker({ sticker: retry.sticker ?? undefined, stickerUrl: retry.stickerUrl ?? undefined });
+    }
     const body = (retry?.body ?? draft).trim();
     const images = retry?.images ?? attach.urls;
     if ((!body && !images.length) || !user || attach.uploading) return;
-    const reply = retry?.replyTo ?? (replyTo ? { id: replyTo.id, authorName: replyTo.mine ? "You" : detail?.conversation.other.displayName ?? "Them", snippet: replyTo.body.slice(0, 120) || (replyTo.images.length ? "Photo" : "Message"), deleted: false } : null);
+    const reply = retry?.replyTo ?? (replyTo ? { id: replyTo.id, authorName: replyTo.mine ? "You" : detail?.conversation.other.displayName ?? "Them", snippet: replyTo.body.slice(0, 120) || (replyTo.sticker || replyTo.stickerUrl ? "Sticker" : replyTo.images.length ? "Photo" : "Message"), deleted: false } : null);
     if (body.length > LIMITS.messageBody) {
       setSendError(`Messages can be up to ${LIMITS.messageBody} characters.`);
       return;
@@ -246,7 +258,7 @@ export default function ConversationPage() {
       attach.clear();
       setReplyTo(null);
     }
-    setMessages((prev) => merge(prev.filter((m) => m.id !== tempId), [{ id: tempId, conversationId: id, senderId: user.id, body, sticker: null, images, replyTo: reply, reactions: [], createdAt: new Date().toISOString(), mine: true, editedAt: null, deleted: false, pending: true } as Local]));
+    setMessages((prev) => merge(prev.filter((m) => m.id !== tempId), [{ id: tempId, conversationId: id, senderId: user.id, body, sticker: null, stickerUrl: null, images, replyTo: reply, reactions: [], createdAt: new Date().toISOString(), mine: true, editedAt: null, deleted: false, pending: true } as Local]));
     try {
       const res = await MessageService.send(id, { body, images, replyToId: reply?.id });
       setMessages((prev) => merge(prev.filter((m) => m.id !== tempId), [res.data]));
@@ -352,15 +364,16 @@ export default function ConversationPage() {
                     <div className="rounded-2xl border border-dashed border-line px-3.5 py-2 text-sm text-ink-muted italic">Message deleted</div>
                   ) : editingId === m.id ? (
                     <MessageEditor className="w-[min(32rem,80vw)]" initial={m.body} onCancel={() => setEditingId(null)} onSave={(body) => saveEdit(m, body)} />
-                  ) : m.sticker ? (
-                    <div className={cx("px-1", m.pending && "opacity-60")}>
-                      <StickerView id={m.sticker} size={84} />
+                  ) : m.sticker || m.stickerUrl ? (
+                    <div id={`msg-${m.id}`} className={cx("flex flex-col px-1", m.mine ? "items-end" : "items-start", m.pending && "opacity-60")}>
+                      <StickerView id={m.sticker} url={m.stickerUrl} size={84} />
                       <span className="block text-right font-mono text-[10px] text-ink-muted">{m.failed ? "Not sent" : m.pending ? "Sending…" : formatTime(m.createdAt)}</span>
                     </div>
                   ) : (
                     <div id={`msg-${m.id}`} className={cx("rounded-2xl px-3.5 py-2 text-[15px] break-words whitespace-pre-wrap transition-colors", m.mine ? "rounded-br-md bg-accent text-accent-ink" : "rounded-bl-md border border-line bg-surface text-ink", m.pending && "opacity-60")}>
                       {m.replyTo && <ReplyQuote reply={m.replyTo} onJump={jump} className={cx("whitespace-normal", m.mine ? "!text-accent-ink/80 [&_span]:!text-accent-ink/80" : "")} />}
                       {m.body}
+                      {!m.body && !m.images?.length && <span className="italic opacity-70">Sticker unavailable</span>}
                       <ChatImages images={m.images ?? []} className={m.body ? "mt-1.5" : ""} />
                       <span className={cx("mt-0.5 flex items-baseline justify-end gap-1.5 font-mono text-[10px]", m.mine ? "text-accent-ink/70" : "text-ink-muted")}>
                         {m.editedAt && <EditedTag at={m.editedAt} />}
@@ -383,12 +396,13 @@ export default function ConversationPage() {
                     align="right"
                     items={[
                       ...(detail.canSend ? [{ label: "Reply", icon: "reply" as const, onSelect: () => setReplyTo(m) }] : []),
-                      ...(m.sticker ? [] : [{ label: "Edit message", icon: "edit" as const, onSelect: () => setEditingId(m.id) }]),
+                      ...(m.sticker || m.stickerUrl ? [] : [{ label: "Edit message", icon: "edit" as const, onSelect: () => setEditingId(m.id) }]),
+                      ...saveItem(m),
                       { label: "Delete message", icon: "trash" as const, danger: true, onSelect: () => setDeleteMsg(m) },
                     ]}
                   />
                 )}
-                {!m.mine && !m.pending && !m.deleted && <OverflowMenu label="Message options" className="opacity-0 transition group-hover:opacity-100 focus-within:opacity-100 max-sm:opacity-100 [&>button]:size-8 [&>button]:border-transparent [&>button]:bg-transparent" align="left" items={[...(detail.canSend ? [{ label: "Reply", icon: "reply" as const, onSelect: () => setReplyTo(m) }] : []), { label: "Report message", icon: "flag" as const, danger: true, onSelect: () => setReportMsg(m.id) }]} />}
+                {!m.mine && !m.pending && !m.deleted && <OverflowMenu label="Message options" className="opacity-0 transition group-hover:opacity-100 focus-within:opacity-100 max-sm:opacity-100 [&>button]:size-8 [&>button]:border-transparent [&>button]:bg-transparent" align="left" items={[...(detail.canSend ? [{ label: "Reply", icon: "reply" as const, onSelect: () => setReplyTo(m) }] : []), ...saveItem(m), { label: "Report message", icon: "flag" as const, danger: true, onSelect: () => setReportMsg(m.id) }]} />}
               </div>
             </div>
           );
@@ -404,7 +418,7 @@ export default function ConversationPage() {
               void send();
             }}
           >
-            {replyTo && <ReplyingTo name={replyTo.mine ? "yourself" : other.displayName} snippet={replyTo.body.slice(0, 80) || "Photo"} onCancel={() => setReplyTo(null)} />}
+            {replyTo && <ReplyingTo name={replyTo.mine ? "yourself" : other.displayName} snippet={replyTo.body.slice(0, 80) || (replyTo.sticker || replyTo.stickerUrl ? "Sticker" : "Photo")} onCancel={() => setReplyTo(null)} />}
             <AttachmentStrip urls={attach.urls} progress={attach.progress} error={attach.error} onRemove={attach.remove} />
             <div className="flex items-end gap-2">
             {attach.enabled && (
@@ -442,7 +456,7 @@ export default function ConversationPage() {
               <button type="button" onClick={() => setStickerOpen((o) => !o)} aria-label="Stickers" aria-expanded={stickerOpen} title="Stickers" className="inline-flex size-11 items-center justify-center rounded-full text-ink-muted transition hover:bg-raised hover:text-ink">
                 <Icon name="sticker" size={21} />
               </button>
-              {stickerOpen && <StickerPicker onPick={(sid) => void sendSticker(sid)} onClose={() => setStickerOpen(false)} className="absolute right-0 bottom-full mb-2" />}
+              {stickerOpen && <StickerPicker onPick={(c) => void sendSticker(c)} onClose={() => setStickerOpen(false)} className="absolute right-0 bottom-full mb-2" />}
             </span>
             <Button type="submit" variant="primary" disabled={(!draft.trim() && !attach.urls.length) || attach.uploading} aria-label="Send" className="size-11 px-0">
               <Icon name="send" size={18} />
@@ -487,7 +501,7 @@ export default function ConversationPage() {
         onConfirm={async () => {
           if (!deleteMsg) return;
           await MessageService.remove(id, deleteMsg.id);
-          setMessages((prev) => prev.map((x) => (x.id === deleteMsg.id ? { ...x, body: "", sticker: null, images: [], replyTo: null, deleted: true } : x)));
+          setMessages((prev) => prev.map((x) => (x.id === deleteMsg.id ? { ...x, body: "", sticker: null, stickerUrl: null, images: [], replyTo: null, deleted: true } : x)));
         }}
       />
       <ReportDialog open={reportUser} onClose={() => setReportUser(false)} targetType="user" targetId={other.id} subject={`@${other.handle}`} />

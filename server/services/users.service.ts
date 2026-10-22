@@ -9,6 +9,7 @@ import { Rsvp } from "../models/Rsvp";
 import { User, type IUser } from "../models/User";
 import { toBrief, toCommunityCards, toMe, toProfile } from "../serializers";
 import { deleteUploads } from "./media.service";
+import { sameFile } from "@/lib/focal";
 import type { peopleQuery, profileUpdateSchema } from "../validators/schemas";
 import { blockedByMe, blockedEitherWay, hiddenUserIds, shareCommunity } from "./blocks";
 import { assertPlace, escapeRegex, sid } from "./helpers";
@@ -45,12 +46,13 @@ export async function updateMe(viewer: IUser, patch: z.infer<typeof profileUpdat
   if (patch.attendancePublic !== undefined) set.attendancePublic = patch.attendancePublic;
   if (patch.dmPolicy !== undefined) set.dmPolicy = patch.dmPolicy as IUser["dmPolicy"];
 
-  const updated = await User.findByIdAndUpdate(viewer._id, set, { new: true, runValidators: true }).lean<IUser>();
+  const updated = await User.findByIdAndUpdate(viewer._id, set, { returnDocument: "after", runValidators: true }).lean<IUser>();
   if (!updated) throw notFound("We couldn't find your account.");
   // a replaced or removed picture/banner is gone for good: clear the old file out of storage
   deleteUploads([
-    viewer.avatarUrl && viewer.avatarUrl !== updated.avatarUrl ? viewer.avatarUrl : null,
-    viewer.bannerUrl && viewer.bannerUrl !== updated.bannerUrl ? viewer.bannerUrl : null,
+    // (moving a picture in its frame only changes the position saved on its link: same file, nothing to delete)
+    viewer.avatarUrl && !sameFile(viewer.avatarUrl, updated.avatarUrl) ? viewer.avatarUrl : null,
+    viewer.bannerUrl && !sameFile(viewer.bannerUrl, updated.bannerUrl) ? viewer.bannerUrl : null,
   ]);
   return getMe(updated);
 }

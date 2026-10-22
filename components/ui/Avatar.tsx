@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { cdn } from "@/lib/cdn";
+import { focalStyle, splitFocal } from "@/lib/focal";
 import { initials } from "@/lib/format";
 import { AvatarFrame } from "./AvatarFrame";
 import { cx } from "./cx";
@@ -29,18 +30,28 @@ function AvatarPic({ name, src, size, className }: { name: string; src?: string 
   const [failed, setFailed] = useState(false);
   const style = { width: size, height: size, fontSize: Math.max(11, size * 0.36) };
   if (src && !failed) {
-    return (
+    // the person may have moved or zoomed their picture in its circle (lib/focal)
+    const { src: file, focal } = splitFocal(src);
+    const img = (
       // eslint-disable-next-line @next/next/no-img-element
       <img
-        src={cdn(src, { w: size * 2, h: size * 2, fit: "face" })}
+        src={cdn(file, { w: size * 2, h: size * 2, fit: "face" })}
         alt=""
         width={size}
         height={size}
         loading="lazy"
         onError={() => setFailed(true)}
-        style={style}
-        className={cx("shrink-0 rounded-full object-cover", className)}
+        style={focal.z > 1 ? { ...focalStyle(focal), width: "100%", height: "100%" } : { ...style, ...focalStyle(focal) }}
+        className={cx("shrink-0 rounded-full object-cover", focal.z <= 1 && className)}
       />
+    );
+    // zoomed in: clip to the circle so the enlarged picture doesn't spill out
+    return focal.z > 1 ? (
+      <span style={style} className={cx("inline-block shrink-0 overflow-hidden rounded-full", className)}>
+        {img}
+      </span>
+    ) : (
+      img
     );
   }
   return (

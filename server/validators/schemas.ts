@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { DATE_FILTERS } from "@/lib/dates";
-import { DM_POLICIES, LIMITS, PROFILE_VISIBILITY, REPORT_REASONS } from "@/lib/constants";
+import { DM_POLICIES, LIMITS, PROFILE_VISIBILITY, REPORT_REASONS, SLOW_MODE_STEPS } from "@/lib/constants";
 import { FRAME_IDS, NAME_EFFECT_IDS } from "@/lib/cosmetics";
 import { MOOD_IDS } from "@/lib/moods";
 import { REACTION_IDS, STICKER_IDS } from "@/lib/reactions";
@@ -167,6 +167,7 @@ export const boardCreateSchema = z.object({
 export const boardUpdateSchema = z.object({
   name: text(LIMITS.boardName, 1).optional(),
   description: text(LIMITS.boardDescription).optional(),
+  rules: text(LIMITS.boardRules).optional(),
   postPolicy: z.enum(["members", "admins"]).optional(),
 });
 
@@ -269,14 +270,17 @@ export const startConversationSchema = z.object({
   handle: handle,
   message: z.string().trim().min(1).max(LIMITS.messageBody).optional(),
 });
+const stickerUrl = z.string().trim().min(1).max(600);
 const chatPayload = z
   .object({
     body: z.string().trim().max(2000).default(""),
     sticker: z.enum(STICKER_IDS).optional(),
+    /** a saved picture sticker (checked against our uploads by the service) */
+    stickerUrl: stickerUrl.optional(),
     images: z.array(mediaUrl).max(4, "Up to 4 pictures per message").default([]),
     replyToId: objectId.optional(),
   })
-  .refine((v) => v.body.length > 0 || !!v.sticker || v.images.length > 0, { message: "Write a message, add a picture or pick a sticker.", path: ["body"] });
+  .refine((v) => v.body.length > 0 || !!v.sticker || !!v.stickerUrl || v.images.length > 0, { message: "Write a message, add a picture or pick a sticker.", path: ["body"] });
 export const sendMessageSchema = chatPayload;
 export const editMessageSchema = z.object({ body: z.string().trim().min(1, "A message can't be empty.").max(2000) });
 export const messageListQuery = z.object({
@@ -317,6 +321,12 @@ export const channelUpdateSchema = z.object({
   type: z.enum(["text", "announcement", "voice"]).optional(),
   visibility: z.enum(["all", "managers", "invite"]).optional(),
   categoryId: objectId.nullable().optional(),
+  /** slow mode in seconds, one of SLOW_MODE_STEPS (0 = off) */
+  slowModeSec: z
+    .number()
+    .int()
+    .refine((n) => (SLOW_MODE_STEPS as readonly number[]).includes(n), "Pick one of the slow mode options.")
+    .optional(),
 });
 
 export const channelMemberSchema = z.object({ userId: objectId });
@@ -398,6 +408,41 @@ export const adminDraftsQuery = z.object({ status: z.enum(["pending", "approved"
 
 export const adminImportSchema = z.object({ url: z.string().trim().min(1, "Paste a link").max(1000) });
 
+/* ------------------------------ event finder ------------------------------ */
+
+const finderPlace = {
+  country: z.string().trim().toUpperCase().max(2).default(""),
+  region: z.string().trim().toLowerCase().max(40).default(""),
+  city: z.string().trim().max(60).default(""),
+  interests: z.array(z.string().trim().max(40)).max(30).default([]),
+  includeSources: z.boolean().default(true),
+};
+
+export const finderSearchSchema = z.object({
+  ...finderPlace,
+  from: z.string().refine((v) => !Number.isNaN(Date.parse(v)), "Pick a start date"),
+  to: z.string().refine((v) => !Number.isNaN(Date.parse(v)), "Pick an end date"),
+  urls: z.array(z.string().trim().max(1000)).max(20).default([]),
+});
+
+export const savedSearchSchema = z.object({
+  ...finderPlace,
+  country: z.string().trim().toUpperCase().length(2, "Pick a country"),
+  name: z.string().trim().max(80).default(""),
+  days: z.number().int().min(1).max(180).default(30),
+});
+
+export const savedSearchPatchSchema = z.object({ daily: z.boolean().optional(), name: z.string().trim().max(80).optional(), days: z.number().int().min(1).max(180).optional() });
+
+/** where approved drafts go: Klique (no slug) or a community / group */
+const draftTarget = { communitySlug: z.string().trim().max(80).optional(), subSlug: z.string().trim().max(80).optional() };
+
+export const draftBulkSchema = z.object({
+  ids: z.array(z.string().regex(/^[a-f0-9]{24}$/)).min(1, "Pick some events").max(100),
+  action: z.enum(["approve", "reject"]),
+  ...draftTarget,
+});
+
 const draftDate = z.union([z.string().refine((v) => !Number.isNaN(Date.parse(v)), "Enter a valid date and time"), z.null()]).optional();
 
 export const adminDraftPatchSchema = z.object({
@@ -415,6 +460,7 @@ export const adminDraftPatchSchema = z.object({
   price: z.number().min(0).max(100_000_000).optional(),
   currency: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/).optional(),
   coverImage: z.union([httpUrl, z.literal(""), z.null()]).optional(),
+  ...draftTarget,
 });
 
 export const adminSourceSchema = z.object({
@@ -493,8 +539,28 @@ export const crewUpdateSchema = z
 
 export const crewJoinSchema = z.object({ message: text(200).default("") });
 export const crewDecisionSchema = z.object({ accept: z.boolean() });
-export const crewMessageSchema = z.object({ body: text(1000, 1), replyToId: z.string().regex(/^[a-f0-9]{24}$/).nullish() });
-export const crewMessagesQuery = z.object({ after: z.string().regex(/^[a-f0-9]{24}$/).optional() });
+export const crewMessageSchema = z
+  .object({
+    body: text(1000).default(""),
+    sticker: z.enum(STICKER_IDS).optional(),
+    stickerUrl: stickerUrl.optional(),
+    images: z.array(mediaUrl).max(4, "Up to 4 pictures per message").default([]),
+    replyToId: z.string().regex(/^[a-f0-9]{24}$/).nullish(),
+  })
+  .refine((v) => v.body.length > 0 || !!v.sticker || !!v.stickerUrl || v.images.length > 0, { message: "Write a message, add a picture or pick a sticker.", path: ["body"] });
+export const crewEditSchema = z.object({ body: text(1000, 1) });
+
+/* ----------------------------- stickers ----------------------------- */
+
+export const saveStickerSchema = z.object({ url: stickerUrl });
+export const reorderStickersSchema = z.object({ ids: z.array(objectId).max(200) });
+/** an event's crews: `q` searches where they're coming from; `limit` grows with "Load more" */
+export const eventCrewsQuery = z.object({
+  q: z.preprocess(blankToUndef, z.string().trim().max(40).optional()),
+  limit: z.coerce.number().int().min(1).max(200).default(10),
+});
+
+export const crewMessagesQuery = z.object({ after: z.string().regex(/^[a-f0-9]{24}$/).optional(), before: z.string().regex(/^[a-f0-9]{24}$/).optional() });
 
 /* --------------------------- notifications -------------------------- */
 

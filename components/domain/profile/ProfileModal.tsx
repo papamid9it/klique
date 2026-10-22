@@ -14,7 +14,7 @@ import { getInterest } from "@/lib/constants";
 import { compactCount, dateChip } from "@/lib/format";
 import { useApi } from "@/lib/hooks/useApi";
 import type { CommunityCardDTO, EventDTO, UserBrief } from "@/lib/types";
-import { longDate, monthYear, ProfileActions, ProfileBanner, useMutualCommunities } from "./ProfileParts";
+import { longDate, monthYear, ProfileActions, ProfileBanner, useMutualCommunities, ZoomAvatar } from "./ProfileParts";
 import { UserName } from "@/components/ui/UserName";
 
 type Tab = "activity" | "friends" | "communities";
@@ -109,10 +109,12 @@ function ProfileBody({ handle, onClose, onOpenPerson }: { handle: string; onClos
     <div className="flex max-h-[88dvh] flex-col overflow-y-auto md:min-h-[28rem] md:flex-row md:overflow-hidden">
       {/* ------------------------------ identity ------------------------------ */}
       <aside className="shrink-0 border-b border-line bg-raised/40 md:w-[19rem] md:overflow-y-auto md:border-r md:border-b-0">
-        <ProfileBanner handle={p.handle} bannerUrl={p.bannerUrl} bannerColor={p.bannerColor} className="h-24" />
+        <ProfileBanner handle={p.handle} bannerUrl={p.bannerUrl} bannerColor={p.bannerColor} className="h-24" zoomable />
         <div className="px-5 pb-5">
           <span className="-mt-11 inline-block rounded-full bg-surface p-1.5">
-            <Avatar name={p.displayName} src={p.avatarUrl} frame={p.avatarFrame} size={88} />
+            <ZoomAvatar url={p.avatarUrl} name={p.displayName}>
+              <Avatar name={p.displayName} src={p.avatarUrl} frame={p.avatarFrame} size={88} />
+            </ZoomAvatar>
           </span>
           <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] break-words"><UserName name={p.displayName} effect={p.nameEffect} /></h2>
           <p className="font-mono text-[13px] text-ink-muted">@{p.handle}</p>

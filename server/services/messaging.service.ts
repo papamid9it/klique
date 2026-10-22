@@ -1,5 +1,6 @@
 import type { Types } from "mongoose";
 import { deleteUploads } from "./media.service";
+import { assertStickerUrl, noteStickerUse } from "./stickers.service";
 import type { ConversationDetailDTO, ConversationDTO, MessageDTO, MessagingEligibility } from "@/lib/types";
 import { ApiError, forbidden, notFound } from "../http/errors";
 import { rateLimit } from "../http/rate-limit";
@@ -65,6 +66,7 @@ const toMessage = (m: IMessage, viewerId: Types.ObjectId, reactions: ReactionDTO
   senderId: sid(m.senderId),
   body: m.deletedAt ? "" : m.body,
   sticker: m.deletedAt ? null : (m.sticker ?? null),
+  stickerUrl: m.deletedAt ? null : (m.stickerUrl ?? null),
   images: m.deletedAt ? [] : (m.images ?? []),
   replyTo: m.deletedAt ? null : replyTo,
   reactions: m.deletedAt ? [] : reactions,
@@ -224,8 +226,10 @@ export async function startConversation(viewer: IUser, handle: string, firstMess
   return getConversation(viewer, sid(convo._id));
 }
 
-export async function sendMessage(viewer: IUser, id: string, input: string | { body: string; sticker?: string; images?: string[]; replyToId?: string }): Promise<MessageDTO> {
+export async function sendMessage(viewer: IUser, id: string, input: string | { body: string; sticker?: string; stickerUrl?: string; images?: string[]; replyToId?: string }): Promise<MessageDTO> {
   const { body, sticker, images = [], replyToId } = typeof input === "string" ? { body: input, sticker: undefined, images: [], replyToId: undefined } : input;
+  const stickerUrl = typeof input !== "string" && input.stickerUrl && !sticker ? assertStickerUrl(input.stickerUrl) : null;
+  const isSticker = !!sticker || !!stickerUrl;
   rateLimit(`dm:${sid(viewer._id)}`, 40, 60_000);
   const convo = await loadMyConversation(viewer, id);
   const otherId = otherParticipant(convo, viewer._id);
@@ -236,8 +240,9 @@ export async function sendMessage(viewer: IUser, id: string, input: string | { b
 
   // you can only answer a message that is in this same conversation
   const replyTarget = replyToId ? await Message.findOne({ _id: replyToId, conversationId: convo._id }).select("_id").lean() : null;
-  const msg = await Message.create({ conversationId: convo._id, senderId: viewer._id, body: sticker ? "" : body, sticker: sticker ?? null, images: sticker ? [] : images, replyToId: replyTarget?._id ?? null });
-  const preview = previewOf({ body: sticker ? "" : body, sticker, images });
+  const msg = await Message.create({ conversationId: convo._id, senderId: viewer._id, body: isSticker ? "" : body, sticker: sticker ?? null, stickerUrl, images: isSticker ? [] : images, replyToId: replyTarget?._id ?? null });
+  noteStickerUse(viewer._id, stickerUrl);
+  const preview = previewOf({ body: isSticker ? "" : body, sticker, stickerUrl, images });
   await Conversation.updateOne(
     { _id: convo._id },
     {
@@ -302,7 +307,7 @@ async function refreshPreview(convo: IConversation, msg: IMessage, preview: stri
 export async function editMessage(viewer: IUser, id: string, messageId: string, body: string): Promise<MessageDTO> {
   rateLimit(`dm-edit:${sid(viewer._id)}`, 30, 60_000);
   const { convo, msg } = await loadOwnMessage(viewer, id, messageId);
-  if (msg.sticker) throw forbidden("Stickers can't be edited. Delete it and send another.");
+  if (msg.sticker || msg.stickerUrl) throw forbidden("Stickers can't be edited. Delete it and send another.");
   if (await blockedEitherWay(viewer._id, otherParticipant(convo, viewer._id))) throw forbidden("You can't change messages in this conversation.");
   const next = body.trim();
   const replies = await replyRefs([msg]);
@@ -318,7 +323,7 @@ export async function editMessage(viewer: IUser, id: string, messageId: string, 
 
 export async function deleteMessage(viewer: IUser, id: string, messageId: string) {
   const { convo, msg } = await loadOwnMessage(viewer, id, messageId);
-  await Message.updateOne({ _id: msg._id }, { $set: { body: "", sticker: null, images: [], deletedAt: new Date() } });
+  await Message.updateOne({ _id: msg._id }, { $set: { body: "", sticker: null, stickerUrl: null, images: [], deletedAt: new Date() } });
   deleteUploads(msg.images ?? []); // its photos and videos go with it
   await refreshPreview(convo, msg, "Message deleted");
   emitDm(convo.participants, convo._id);

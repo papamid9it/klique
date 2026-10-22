@@ -24,7 +24,7 @@ export const publicUrlFor = (cfg: Config, key: string) => `${cfg.publicUrl}/${ke
 export function keyFromUrl(url: string): string | null {
   const cfg = r2Config();
   if (!cfg) return null;
-  const clean = url.split("?")[0];
+  const clean = url.split(/[?#]/)[0];
   if (!clean.startsWith(`${cfg.publicUrl}/`)) return null;
   const key = decodeURIComponent(clean.slice(cfg.publicUrl.length + 1));
   return key.startsWith("klique/") ? key : null;

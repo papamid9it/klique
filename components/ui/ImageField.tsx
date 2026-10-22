@@ -6,6 +6,8 @@ import { UploadService } from "@/app/services/UploadService";
 import { useUploadStatus } from "@/lib/hooks/useUploads";
 import { checkFile, type UploadKind, UPLOAD_SPECS } from "@/lib/uploads";
 import { cdn } from "@/lib/cdn";
+import { focalStyle, splitFocal } from "@/lib/focal";
+import { ImagePositioner } from "./ImagePositioner";
 import { Button } from "./Button";
 import { Icon } from "./Icon";
 import { cx } from "./cx";
@@ -23,6 +25,7 @@ export function ImageField({
   hint,
   error,
   fallback,
+  reposition,
 }: {
   kind: Extract<UploadKind, "avatar" | "photo">;
   label: string;
@@ -33,12 +36,15 @@ export function ImageField({
   error?: string;
   /** shown in the preview box when there is no picture (an avatar with initials, an art cover…) */
   fallback?: React.ReactNode;
+  /** let people choose what part shows (drag and zoom) in a frame of this shape, after uploading and any time later */
+  reposition?: { aspect: number; round?: boolean };
 }) {
   const status = useUploadStatus();
   const input = useRef<HTMLInputElement>(null);
   const [progress, setProgress] = useState<number | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [link, setLink] = useState(false);
+  const [positioning, setPositioning] = useState<string | null>(null);
   const enabled = !!status?.[kind];
   const spec = UPLOAD_SPECS[kind];
 
@@ -51,6 +57,7 @@ export function ImageField({
     try {
       const up = await UploadService.upload(kind, file, { onProgress: setProgress });
       onChange(up.url);
+      if (reposition) setPositioning(up.url); // straight on to choosing what shows
     } catch (e) {
       setErr(errorMessage(e));
     } finally {
@@ -72,7 +79,7 @@ export function ImageField({
         <div className={cx("relative flex shrink-0 items-center justify-center overflow-hidden border border-line bg-raised", shape === "round" ? "size-20 rounded-full" : "h-24 w-40 rounded-control")}>
           {value ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={shape === "round" ? cdn(value, { w: 160, h: 160, fit: "face" }) : cdn(value, { w: 400 })} alt="" className="size-full object-cover" onError={(e) => (e.currentTarget.style.visibility = "hidden")} />
+            <img src={shape === "round" ? cdn(value, { w: 160, h: 160, fit: "face" }) : cdn(value, { w: 400 })} alt="" style={focalStyle(splitFocal(value).focal)} className="size-full object-cover" onError={(e) => (e.currentTarget.style.visibility = "hidden")} />
           ) : (
             (fallback ?? <Icon name="image" size={22} className="text-ink-muted" />)
           )}
@@ -88,6 +95,11 @@ export function ImageField({
             {enabled && (
               <Button size="sm" variant="secondary" onClick={() => input.current?.click()} loading={busy}>
                 <Icon name="image" size={15} /> {value ? "Change" : "Upload"}
+              </Button>
+            )}
+            {value && reposition && (
+              <Button size="sm" variant="ghost" onClick={() => setPositioning(value)} disabled={busy}>
+                <Icon name="move" size={15} /> Reposition
               </Button>
             )}
             {value && (
@@ -113,6 +125,20 @@ export function ImageField({
           )}
         </div>
       </div>
+      {reposition && positioning && (
+        <ImagePositioner
+          open
+          url={positioning}
+          aspect={reposition.aspect}
+          round={reposition.round}
+          title={`Position your ${label.toLowerCase().replace(/ \(optional\)$/, "")}`}
+          onClose={() => setPositioning(null)}
+          onSave={(u) => {
+            onChange(u);
+            setPositioning(null);
+          }}
+        />
+      )}
     </div>
   );
 }

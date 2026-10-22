@@ -173,7 +173,7 @@ async function fulfil(reference: string, paid: { status: string; amount: number;
   }
   // claim it, so the redirect and the webhook arriving together can't both create an ad
   // (a declined card followed by a successful retry on the same checkout still counts)
-  const claimed = await Promotion.findOneAndUpdate({ _id: p._id, status: { $in: ["pending", "failed"] } }, { status: "paid", paidAt: paid.paid_at ? new Date(paid.paid_at) : new Date(), channel: paid.channel ?? "" }, { new: true }).lean<IPromotion>();
+  const claimed = await Promotion.findOneAndUpdate({ _id: p._id, status: { $in: ["pending", "failed"] } }, { status: "paid", paidAt: paid.paid_at ? new Date(paid.paid_at) : new Date(), channel: paid.channel ?? "" }, { returnDocument: "after" }).lean<IPromotion>();
   if (!claimed) return Promotion.findById(p._id).lean<IPromotion>();
 
   const e = await Event.findById(p.eventId).select("title").lean<Pick<IEvent, "title">>();

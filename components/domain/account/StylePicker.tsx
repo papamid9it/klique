@@ -91,7 +91,7 @@ export function StylePicker({ value, onChange, name, avatarUrl, access, onLocked
           )}
         </div>
         <div className="mt-3">
-          <ImageField kind="photo" label="Or use a picture" value={value.bannerUrl} onChange={(u) => set({ bannerUrl: u })} hint="Wide pictures work best." />
+          <ImageField kind="photo" label="Or use a picture" value={value.bannerUrl} onChange={(u) => set({ bannerUrl: u })} reposition={{ aspect: 4 }} hint="Wide pictures work best. Drag it to choose what shows." />
         </div>
       </fieldset>
 

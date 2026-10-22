@@ -16,6 +16,7 @@ import { Block } from "../models/Safety";
 import { Subcommunity, type ISubcommunity } from "../models/Subcommunity";
 import { User, type IUser } from "../models/User";
 import { WebPushSubscription } from "../models/WebPushSubscription";
+import { SavedSticker } from "../models/SavedSticker";
 import { purgeEvent } from "./events.service";
 import { removeUserFromCrews } from "./crews.service";
 import { recountMembers, recountRsvps } from "./helpers";
@@ -78,6 +79,7 @@ export async function deleteAccount(viewer: IUser, input: { password?: string; c
     ChannelRead.deleteMany({ userId: user._id }),
     Rsvp.deleteMany({ userId: user._id }),
     SavedEvent.deleteMany({ userId: user._id }),
+    SavedSticker.deleteMany({ userId: user._id }),
     Friendship.deleteMany({ $or: [{ requesterId: user._id }, { recipientId: user._id }] }),
     Block.deleteMany({ $or: [{ blockerId: user._id }, { blockedId: user._id }] }),
     Reaction.deleteMany({ userId: user._id }),

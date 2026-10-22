@@ -1,7 +1,7 @@
 import { Types } from "mongoose";
 import { deleteUploads } from "./media.service";
 import type { z } from "zod";
-import type { BoardDTO } from "@/lib/types";
+import type { BoardDTO, BoardSidebarDTO } from "@/lib/types";
 import { LIMITS } from "@/lib/constants";
 import { ApiError, forbidden, notFound } from "../http/errors";
 import { rateLimit } from "../http/rate-limit";
@@ -9,7 +9,10 @@ import { Board, Topic, TopicComment, TopicLike, type IBoard, type ITopic } from 
 import { assertCanView, type Space, type SpaceAccess } from "../policies/access";
 import type { IUser } from "../models/User";
 import type { boardCreateSchema, boardUpdateSchema } from "../validators/schemas";
+import { loadBriefs } from "../serializers";
+import { hiddenUserIds } from "./blocks";
 import { sid, slugify, topicFileUrls } from "./helpers";
+import { emitTopic } from "./realtime";
 
 function assertCommunity(space: Space) {
   if (space.sub) throw notFound("Boards live in the community, not in a group.");
@@ -49,6 +52,7 @@ export async function listBoards(viewer: IUser | null, space: Space, access: Spa
     slug: b.slug,
     name: b.name,
     description: b.description,
+    rules: b.rules ?? "",
     postPolicy: b.postPolicy,
     topicCount: byId.get(sid(b._id)) ?? 0,
     canPost: !!viewer && canPostIn(b, access),
@@ -79,7 +83,7 @@ async function uniqueSlug(communityId: Types.ObjectId, name: string): Promise<st
 }
 
 async function dto(b: IBoard, access: SpaceAccess, viewer: IUser): Promise<BoardDTO> {
-  return { id: sid(b._id), slug: b.slug, name: b.name, description: b.description, postPolicy: b.postPolicy, topicCount: await Topic.countDocuments({ boardId: b._id }), canPost: !!viewer && canPostIn(b, access) };
+  return { id: sid(b._id), slug: b.slug, name: b.name, description: b.description, rules: b.rules ?? "", postPolicy: b.postPolicy, topicCount: await Topic.countDocuments({ boardId: b._id }), canPost: !!viewer && canPostIn(b, access) };
 }
 
 export async function createBoard(viewer: IUser, space: Space, access: SpaceAccess, input: z.infer<typeof boardCreateSchema>): Promise<BoardDTO> {
@@ -114,11 +118,50 @@ export async function updateBoard(viewer: IUser, space: Space, access: SpaceAcce
   }
   if (patch.description !== undefined) set.description = patch.description;
   if (patch.postPolicy !== undefined) set.postPolicy = patch.postPolicy;
-  if (Object.keys(set).length) await Board.updateOne({ _id: b._id }, { $set: set });
+  if (patch.rules !== undefined) set.rules = patch.rules;
+  if (Object.keys(set).length) {
+    await Board.updateOne({ _id: b._id }, { $set: set });
+    emitTopic(b.communityId, b._id); // open boards refresh their header and sidebar
+  }
   return dto((await Board.findById(b._id).lean<IBoard>()) as IBoard, access, viewer);
 }
 
 /** Deleting a board removes its topics (with their comments and likes). The last board can't be deleted. */
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** The sidebar beside a board on desktop: what's hot this week and who's been most active. */
+export async function boardSidebar(viewer: IUser | null, space: Space, access: SpaceAccess, boardId: string): Promise<BoardSidebarDTO> {
+  assertCommunity(space);
+  assertCanView(access, "boards");
+  const b = await loadBoard(space, boardId);
+  const since = new Date(Date.now() - WEEK_MS);
+  const hidden = viewer ? await hiddenUserIds(viewer._id) : [];
+  const active = await Topic.find({ boardId: b._id, lastActivityAt: { $gte: since }, authorId: { $nin: hidden } })
+    .select("_id title likeCount commentCount authorId createdAt")
+    .lean<Pick<ITopic, "_id" | "title" | "likeCount" | "commentCount" | "authorId" | "createdAt">[]>();
+  const trending = [...active]
+    .sort((x, y) => y.likeCount + y.commentCount - (x.likeCount + x.commentCount) || +y.createdAt - +x.createdAt)
+    .filter((t) => t.likeCount + t.commentCount > 0)
+    .slice(0, 5)
+    .map((t) => ({ id: sid(t._id), title: t.title, likeCount: t.likeCount, commentCount: t.commentCount }));
+
+  // a comment this week means its topic was active this week, so the comments are all on `active` topics
+  const comments = await TopicComment.aggregate<{ _id: Types.ObjectId; n: number }>([
+    { $match: { topicId: { $in: active.map((t) => t._id) }, createdAt: { $gte: since }, deletedAt: null, authorId: { $nin: hidden } } },
+    { $group: { _id: "$authorId", n: { $sum: 1 } } },
+  ]);
+  const score = new Map<string, { topics: number; comments: number }>();
+  for (const t of active) if (t.createdAt >= since) score.set(sid(t.authorId), { topics: (score.get(sid(t.authorId))?.topics ?? 0) + 1, comments: 0 });
+  for (const c of comments) score.set(sid(c._id), { topics: score.get(sid(c._id))?.topics ?? 0, comments: c.n });
+  const top = [...score.entries()].sort((x, y) => y[1].topics * 3 + y[1].comments - (x[1].topics * 3 + x[1].comments)).slice(0, 5);
+  const briefs = await loadBriefs(top.map(([id]) => new Types.ObjectId(id)));
+  const contributors = top.flatMap(([id, s]) => {
+    const user = briefs.get(id);
+    return user ? [{ user, ...s }] : [];
+  });
+  return { trending, contributors, canEdit: !!viewer && access.canManage };
+}
+
 export async function deleteBoard(viewer: IUser, space: Space, access: SpaceAccess, boardId: string) {
   assertCommunity(space);
   assertManager(access);

@@ -1,14 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { errorMessage, isApiError } from "@/app/ApiCore";
-import { ChannelService, type SpaceRef } from "@/app/services/ChannelService";
+import type { ChatSource } from "@/app/services/ChatSource";
 import { useRealtime } from "@/components/providers/RealtimeProvider";
+import { useDataSaver } from "@/lib/hooks/useDataSaver";
 import { applyReaction, type ReactionKind } from "@/lib/reactions";
 import { recallApi, rememberApi } from "./useApi";
-import type { ChannelMessageDTO, ReactionDTO, ReplyRefDTO, UserBrief } from "@/lib/types";
+import type { ChannelMessageDTO, ReplyRefDTO, UserBrief } from "@/lib/types";
 
 const POLL_MS = 4000;
+/** data saver: without a live connection, look for new messages less often */
+const SAVER_POLL_MS = 15_000;
+
+/** Why a message didn't go: what to say, and for slow mode how many seconds are left. */
+export interface SendError {
+  message: string;
+  retryAfter?: number;
+}
 const isReal = (m: ChannelMessageDTO) => !m.pending;
 
 /**
@@ -19,13 +28,13 @@ const isReal = (m: ChannelMessageDTO) => !m.pending;
  *  - `send()`: optimistic — the message appears at once and is replaced by the server's copy
  * Nothing here decides who may read or post: the server does, and its refusal is shown as an error.
  */
-export function useChat(space: SpaceRef, channelSlug: string, channelId?: string) {
+export function useChat(source: ChatSource) {
   const { connected, on } = useRealtime();
-  const slug = space.slug;
-  const sub = space.sub ?? null;
-  const ref = useMemo<SpaceRef>(() => ({ slug, sub }), [slug, sub]);
-  // the last messages seen in this channel paint at once when you come back; the newest page refreshes behind them
-  const cacheKey = `chat:${slug}:${sub ?? ""}:${channelSlug}`;
+  const saver = useDataSaver().on;
+  // the caller may rebuild the source each render: hold on to the first one for this chat (ChatPane is keyed per chat)
+  const [src] = useState(source);
+  // the last messages seen in this chat paint at once when you come back; the newest page refreshes behind them
+  const cacheKey = src.key;
   const [initial] = useState(() => recallApi<{ items: ChannelMessageDTO[]; hasOlder: boolean }>(cacheKey));
   const [items, setItems] = useState<ChannelMessageDTO[]>(initial?.items ?? []);
   const [hasOlder, setHasOlder] = useState(initial?.hasOlder ?? false);
@@ -55,7 +64,7 @@ export function useChat(space: SpaceRef, channelSlug: string, channelId?: string
     if (!quiet) setLoading(true);
     setError(null);
     try {
-      const res = await ChannelService.messages(ref, channelSlug);
+      const res = await src.messages();
       if (mine !== ticket.current) return;
       // keep messages still sending; everything else comes from the server's newest page
       commit((prev) => [...res.data.items, ...prev.filter((m) => m.pending)]);
@@ -67,7 +76,7 @@ export function useChat(space: SpaceRef, channelSlug: string, channelId?: string
     } finally {
       if (mine === ticket.current) setLoading(false);
     }
-  }, [ref, channelSlug, commit]);
+  }, [src, commit]);
 
   useEffect(() => {
     const cached = recallApi<{ items: ChannelMessageDTO[]; hasOlder: boolean }>(cacheKey);
@@ -94,7 +103,7 @@ export function useChat(space: SpaceRef, channelSlug: string, channelId?: string
     setLoadingOlder(true);
     const mine = ticket.current;
     try {
-      const res = await ChannelService.messages(ref, channelSlug, { before: oldest.id });
+      const res = await src.messages({ before: oldest.id });
       if (mine !== ticket.current) return false;
       const have = new Set(itemsRef.current.map((m) => m.id));
       commit((prev) => [...res.data.items.filter((m) => !have.has(m.id)), ...prev]);
@@ -107,7 +116,7 @@ export function useChat(space: SpaceRef, channelSlug: string, channelId?: string
       busyOlder.current = false;
       setLoadingOlder(false);
     }
-  }, [ref, channelSlug, commit]);
+  }, [src, commit]);
 
   // Poll for new messages.
   useEffect(() => {
@@ -128,14 +137,14 @@ export function useChat(space: SpaceRef, channelSlug: string, channelId?: string
       const mine = ticket.current;
       const startedAt = Date.now();
       try {
-        const res = await ChannelService.messages(ref, channelSlug, { after: newest.id });
+        const res = await src.messages({ after: newest.id });
         if (stopped || mine !== ticket.current) return;
         const have = new Set(itemsRef.current.map((m) => m.id));
         const fresh = res.data.items.filter((m) => !have.has(m.id));
         if (fresh.length) commit((prev) => [...prev, ...fresh]);
         // Every few ticks, pick up edits and deletions made by other people in the newest page.
         if (n++ % 3 === 0) {
-          const latest = await ChannelService.messages(ref, channelSlug);
+          const latest = await src.messages();
           if (stopped || mine !== ticket.current) return;
           const byId = new Map(latest.data.items.map((m) => [m.id, m]));
           commit((prev) =>
@@ -149,7 +158,7 @@ export function useChat(space: SpaceRef, channelSlug: string, channelId?: string
         // Other people's reactions on messages already on screen (the newest 60).
         const ids = itemsRef.current.filter((m) => isReal(m) && !m.deleted).slice(-60).map((m) => m.id);
         if (ids.length) {
-          const rx = await ChannelService.reactions(ref, channelSlug, ids);
+          const rx = await src.reactions(ids);
           if (stopped || mine !== ticket.current) return;
           commit((prev) =>
             prev.map((m) => {
@@ -171,12 +180,12 @@ export function useChat(space: SpaceRef, channelSlug: string, channelId?: string
     }
     // With the live connection up, pings trigger the fetch and the timer is only a safety net.
     const off = on((e) => {
-      if (e.type === "resync" || (e.type === "channel" && (!channelId || e.channelId === channelId))) {
+      if (e.type === "resync" || src.isLive(e)) {
         n = 0; // also pick up edits, deletions and reactions
         void tick();
       }
     });
-    const t = setInterval(tick, connected ? 30_000 : POLL_MS);
+    const t = setInterval(tick, connected ? (saver ? 60_000 : 30_000) : saver ? SAVER_POLL_MS : POLL_MS);
     const onVis = () => document.visibilityState === "visible" && void tick();
     document.addEventListener("visibilitychange", onVis);
     return () => {
@@ -185,17 +194,17 @@ export function useChat(space: SpaceRef, channelSlug: string, channelId?: string
       clearInterval(t);
       document.removeEventListener("visibilitychange", onVis);
     };
-  }, [ref, channelSlug, channelId, loading, error, commit, connected, on]);
+  }, [src, loading, error, commit, connected, on, saver]);
 
   /** Returns an error message on failure (the text is NOT lost: the caller restores it to the composer). */
   const send = useCallback(
-    async (input: { body: string; sticker?: string; images?: string[]; replyTo?: ReplyRefDTO | null }, me: UserBrief): Promise<string | null> => {
-      const { body, sticker, images = [], replyTo = null } = input;
+    async (input: { body: string; sticker?: string; stickerUrl?: string; images?: string[]; replyTo?: ReplyRefDTO | null }, me: UserBrief): Promise<SendError | null> => {
+      const { body, sticker, stickerUrl, images = [], replyTo = null } = input;
       const tempId = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-      const temp: ChannelMessageDTO = { id: tempId, channelId: "", body, sticker: sticker ?? null, images, replyTo, pinned: false, canPin: false, reactions: [], deleted: false, createdAt: new Date().toISOString(), author: me, canDelete: false, canEdit: false, editedAt: null, mentions: [], mentionsMe: false, pending: true };
+      const temp: ChannelMessageDTO = { id: tempId, channelId: "", body, sticker: sticker ?? null, stickerUrl: stickerUrl ?? null, images, replyTo, pinned: false, canPin: false, reactions: [], deleted: false, createdAt: new Date().toISOString(), author: me, canDelete: false, canEdit: false, editedAt: null, mentions: [], mentionsMe: false, pending: true };
       commit((prev) => [...prev, temp]);
       try {
-        const res = await ChannelService.send(ref, channelSlug, { body, sticker, images, replyToId: replyTo?.id });
+        const res = await src.send({ body, sticker, stickerUrl, images, replyToId: replyTo?.id });
         commit((prev) => {
           const has = prev.some((m) => m.id === res.data.id); // the poll may have fetched it first
           return has ? prev.filter((m) => m.id !== tempId) : prev.map((m) => (m.id === tempId ? res.data : m));
@@ -203,30 +212,31 @@ export function useChat(space: SpaceRef, channelSlug: string, channelId?: string
         return null;
       } catch (e) {
         commit((prev) => prev.filter((m) => m.id !== tempId));
-        return errorMessage(e);
+        const wait = isApiError(e) && e.code === "slow_mode" ? Number(e.errors?.retryAfter) : NaN;
+        return { message: errorMessage(e), ...(wait > 0 ? { retryAfter: wait } : {}) };
       }
     },
-    [ref, channelSlug, commit],
+    [src, commit],
   );
 
   const remove = useCallback(
     async (id: string): Promise<string | null> => {
       try {
-        await ChannelService.deleteMessage(ref, channelSlug, id);
+        await src.remove(id);
         commit((prev) => prev.map((m) => (m.id === id ? { ...m, body: "", images: [], pinned: false, deleted: true, canDelete: false, canEdit: false } : m)));
         return null;
       } catch (e) {
         return errorMessage(e);
       }
     },
-    [ref, channelSlug, commit],
+    [src, commit],
   );
 
   /** Save a new text for one of your messages. Returns an error message on failure (the editor stays open). */
   const edit = useCallback(
     async (id: string, body: string): Promise<string | null> => {
       try {
-        const res = await ChannelService.editMessage(ref, channelSlug, id, body);
+        const res = await src.edit(id, body);
         // keep reactions as they are on screen; take the new text, mentions and edited time from the server
         commit((prev) => prev.map((m) => (m.id === id ? { ...m, body: res.data.body, mentions: res.data.mentions, mentionsMe: res.data.mentionsMe, editedAt: res.data.editedAt } : m)));
         return null;
@@ -234,21 +244,22 @@ export function useChat(space: SpaceRef, channelSlug: string, channelId?: string
         return errorMessage(e);
       }
     },
-    [ref, channelSlug, commit],
+    [src, commit],
   );
 
   /** Pin or unpin a message (owners and admins). Returns an error message on failure. */
   const pin = useCallback(
     async (id: string, pinned: boolean): Promise<string | null> => {
       try {
-        const res = await ChannelService.pin(ref, channelSlug, id, pinned);
+        if (!src.pin) return "Pinning isn't available here.";
+        const res = await src.pin(id, pinned);
         commit((prev) => prev.map((m) => (m.id === id ? { ...m, pinned: res.data.pinned } : m)));
         return null;
       } catch (e) {
         return errorMessage(e);
       }
     },
-    [ref, channelSlug, commit],
+    [src, commit],
   );
 
   /** Toggle a reaction. Shown at once, then replaced by the server's counts (rolled back if it fails). */
@@ -258,7 +269,7 @@ export function useChat(space: SpaceRef, channelSlug: string, channelId?: string
       touched.current.set(id, Date.now());
       commit((prev) => prev.map((m) => (m.id === id ? { ...m, reactions: applyReaction(m.reactions, kind) } : m)));
       try {
-        const res = await ChannelService.react(ref, channelSlug, id, kind);
+        const res = await src.react(id, kind);
         touched.current.set(id, Date.now());
         commit((prev) => prev.map((m) => (m.id === id ? { ...m, reactions: res.data } : m)));
         return null;
@@ -267,7 +278,7 @@ export function useChat(space: SpaceRef, channelSlug: string, channelId?: string
         return errorMessage(e);
       }
     },
-    [ref, channelSlug, commit],
+    [src, commit],
   );
 
   const reload = useCallback(() => load(), [load]);

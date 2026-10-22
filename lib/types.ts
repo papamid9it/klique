@@ -392,7 +392,12 @@ export interface CrewDTO extends CrewCardDTO {
 }
 
 export interface EventCrewsDTO {
+  /** the first `limit` crews (yours first), matching `q` when searching */
   crews: CrewCardDTO[];
+  /** how many crews match */
+  total: number;
+  /** more match than are shown ("Load more") */
+  hasMore: boolean;
   /** your crew for this event (hosting, in, or asked), if any */
   mine: Id | null;
   canStart: boolean;
@@ -400,16 +405,6 @@ export interface EventCrewsDTO {
   startBlockedReason: string | null;
   /** you could join a crew here (signed in, verified, a member of the event's community or group) */
   canJoin: boolean;
-}
-
-export interface CrewMessageDTO {
-  id: Id;
-  body: string;
-  createdAt: ISODate;
-  author: UserBrief;
-  mine: boolean;
-  /** the message it answers (gone = deleted with the crew's history) */
-  replyTo: { id: Id; author: string; body: string } | null;
 }
 
 /** Where the signed-in person may host events. */
@@ -478,6 +473,8 @@ export interface MessageDTO {
   senderId: Id;
   body: string;
   sticker: string | null;
+  /** a picture sticker (see SavedStickerDTO); the message has no text then */
+  stickerUrl: string | null;
   /** up to 4 pictures */
   images: string[];
   replyTo: ReplyRefDTO | null;
@@ -488,6 +485,15 @@ export interface MessageDTO {
   editedAt: ISODate | null;
   /** unsent: body is empty */
   deleted: boolean;
+}
+
+/** A picture someone saved as a sticker. `url` is the file itself; thumbnails use its small copy (lib/cdn). */
+export interface SavedStickerDTO {
+  id: Id;
+  url: string;
+  /** times you sent it, and when last (for "Most used") */
+  uses: number;
+  lastUsedAt: ISODate | null;
 }
 
 export interface ConversationDTO {
@@ -556,6 +562,10 @@ export interface ChannelDTO {
   mentions: number;
   /** guest-list size, for private channels (owners/admins only) */
   memberCount?: number;
+  /** slow mode: seconds each person waits between messages (0 = off) */
+  slowModeSec: number;
+  /** the viewer doesn't wait (owners, admins, site admins) */
+  slowModeExempt: boolean;
 }
 
 /** A group the viewer belongs to, with the channels they can see in it. */
@@ -620,6 +630,8 @@ export interface ChannelMessageDTO {
   body: string;
   /** a sticker id (see lib/reactions.ts); the message has no text then */
   sticker: string | null;
+  /** a picture sticker (see SavedStickerDTO); the message has no text then */
+  stickerUrl: string | null;
   /** up to 4 pictures */
   images: string[];
   replyTo: ReplyRefDTO | null;
@@ -669,11 +681,23 @@ export interface BoardDTO {
   slug: string;
   name: string;
   description: string;
+  /** house rules, one per line ("" when none) */
+  rules: string;
   /** who may start topics here */
   postPolicy: "members" | "admins";
   topicCount: number;
   /** the viewer may start a topic in it right now */
   canPost: boolean;
+}
+
+/** What the desktop sidebar beside a board shows (refreshed live as people post and comment). */
+export interface BoardSidebarDTO {
+  /** the most liked and discussed topics active in the last 7 days */
+  trending: { id: Id; title: string; likeCount: number; commentCount: number }[];
+  /** who posted and commented the most here in the last 7 days */
+  contributors: { user: UserBrief; topics: number; comments: number }[];
+  /** owners and admins may edit the rules */
+  canEdit: boolean;
 }
 
 export interface TopicDTO {
@@ -784,6 +808,8 @@ export type RealtimeEvent =
   | { type: "notify"; category: string; ref: string | null; inbox: boolean }
   /** something changed in a crew you're in (someone joined or left, a new chat message…) */
   | { type: "crew"; crewId: Id; chat?: boolean }
+  /** your saved stickers changed (on another device, or this one) */
+  | { type: "stickers" }
   /** the connection came back after a gap: refetch whatever is on screen */
   | { type: "resync" };
 
@@ -867,11 +893,77 @@ export interface DraftDTO {
   price: number;
   currency: string;
   coverImage: string | null;
+  /** where it was found: an event page, a calendar, a feed, or an official API */
+  provider: "page" | "ical" | "rss" | "ticketmaster" | "eventbrite" | "link";
+  /** the source's own picture (a reference: only official APIs' pictures may be used as the cover) */
+  sourceImage: string | null;
+  imageReusable: boolean;
+  /** the time zone the source gave its times in */
+  timezone: string;
   eventId: Id | null;
   createdAt: ISODate;
 }
 
 export type DraftPatch = Partial<Pick<DraftDTO, "title" | "description" | "interest" | "organizerName" | "country" | "region" | "city" | "venue" | "online" | "startsAt" | "endsAt" | "price" | "currency" | "coverImage">>;
+
+/** What to look for in Admin → Event finder. `country` "" = anywhere. */
+export interface FinderQueryDTO {
+  country: string;
+  region: string;
+  city: string;
+  interests: string[];
+  from: ISODate;
+  to: ISODate;
+  includeSources: boolean;
+  urls: string[];
+}
+
+export interface FinderTaskDTO {
+  kind: "ticketmaster" | "eventbrite" | "source" | "url" | "follow";
+  label: string;
+  status: "pending" | "running" | "done" | "failed";
+  found: number;
+  added: number;
+  note: string;
+}
+
+/** One "Find events" job, worked through a source at a time. */
+export interface FinderRunDTO {
+  id: Id;
+  status: "running" | "done" | "failed";
+  trigger: "admin" | "saved" | "nightly";
+  query: FinderQueryDTO;
+  tasks: FinderTaskDTO[];
+  /** tasks finished (done or failed) */
+  done: number;
+  found: number;
+  added: number;
+  duplicates: number;
+  filtered: number;
+  createdAt: ISODate;
+  finishedAt: ISODate | null;
+}
+
+/** A search re-run every night; its finds only go to the review queue. */
+export interface SavedSearchDTO {
+  id: Id;
+  name: string;
+  country: string;
+  region: string;
+  city: string;
+  interests: string[];
+  days: number;
+  includeSources: boolean;
+  daily: boolean;
+  lastRunAt: ISODate | null;
+  lastAdded: number;
+}
+
+/** Posting or rejecting many drafts at once: what went through, and what didn't (with why). */
+export interface DraftBulkResult {
+  done: { id: Id; title: string; eventId?: Id }[];
+  failed: { id: Id; title: string; message: string }[];
+}
 
 export interface ImportResult {
   found: number;

@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { CommunityService } from "@/app/services/CommunityService";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useApi } from "@/lib/hooks/useApi";
+import { useDataSaver } from "@/lib/hooks/useDataSaver";
 import { prefetchInBackground } from "./prefetchCommunity";
 
 /**
@@ -18,14 +19,16 @@ export function CommunityPreloader() {
   const { data } = useApi(authed ? () => CommunityService.mine() : null, [authed, user?.id], { key: "my-communities" });
   const pathname = usePathname();
   const activeSlug = /^\/communities\/([^/]+)/.exec(pathname)?.[1] ?? null;
+  // data saver: nothing is fetched for communities you haven't opened
+  const saver = useDataSaver().on;
 
   useEffect(() => {
-    if (!data?.length) return;
+    if (!data?.length || saver) return;
     const signal = { cancelled: false };
     prefetchInBackground(data, activeSlug, signal);
     return () => {
       signal.cancelled = true;
     };
-  }, [data, activeSlug]);
+  }, [data, activeSlug, saver]);
   return null;
 }

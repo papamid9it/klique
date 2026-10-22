@@ -87,7 +87,7 @@ async function describeTarget(r: IReport, briefs: Map<string, UserBrief>): Promi
       if (!m) return none;
       const [ch, c] = await Promise.all([Channel.findById(m.channelId).select("slug name").lean<Pick<IChannel, "slug" | "name">>(), Community.findById(m.communityId).select("slug name").lean<Pick<ICommunity, "slug" | "name">>()]);
       const author = (await loadBriefs([m.authorId])).get(sid(m.authorId)) ?? null;
-      return { title: `Message in ${c?.name ?? "a community"} #${ch?.name ?? "channel"}`, body: m.deletedAt ? "" : m.body, images: m.deletedAt ? [] : (m.images ?? []), author, href: c && ch ? `/communities/${c.slug}?c=${ch.slug}` : null, gone: !!m.deletedAt, removable: !m.deletedAt };
+      return { title: `Message in ${c?.name ?? "a community"} #${ch?.name ?? "channel"}`, body: m.deletedAt ? "" : m.body, images: m.deletedAt ? [] : [...(m.images ?? []), ...(m.stickerUrl ? [m.stickerUrl] : [])], author, href: c && ch ? `/communities/${c.slug}?c=${ch.slug}` : null, gone: !!m.deletedAt, removable: !m.deletedAt };
     }
     case "ad": {
       const a = await Ad.findById(r.targetId).lean<IAd>();
@@ -99,7 +99,7 @@ async function describeTarget(r: IReport, briefs: Map<string, UserBrief>): Promi
       if (!m) return none;
       const author = (await loadBriefs([m.senderId])).get(sid(m.senderId)) ?? null;
       // A direct message: only the reported message itself is shown, never the rest of the conversation.
-      return { title: "Direct message", body: m.deletedAt ? "" : m.body, images: m.deletedAt ? [] : (m.images ?? []), author, href: null, gone: !!m.deletedAt, removable: !m.deletedAt };
+      return { title: "Direct message", body: m.deletedAt ? "" : m.body, images: m.deletedAt ? [] : [...(m.images ?? []), ...(m.stickerUrl ? [m.stickerUrl] : [])], author, href: null, gone: !!m.deletedAt, removable: !m.deletedAt };
     }
   }
 }
@@ -165,15 +165,15 @@ async function removeTarget(r: IReport, admin: IUser) {
     case "channelMessage": {
       const m = await ChannelMessage.findById(r.targetId).lean<IChannelMessage>();
       if (!m || m.deletedAt) return;
-      await ChannelMessage.updateOne({ _id: m._id }, { body: "", mentions: [], images: [], pinnedAt: null, pinnedById: null, deletedAt: new Date(), deletedById: admin._id });
-      deleteUploads(m.images ?? []);
+      await ChannelMessage.updateOne({ _id: m._id }, { body: "", mentions: [], images: [], sticker: null, stickerUrl: null, pinnedAt: null, pinnedById: null, deletedAt: new Date(), deletedById: admin._id });
+      deleteUploads([...(m.images ?? []), m.stickerUrl], { force: true }); // removed by a moderator: saved copies go too
       return;
     }
     case "message": {
       const m = await Message.findById(r.targetId).lean<IMessage>();
       if (!m || m.deletedAt) return;
-      await Message.updateOne({ _id: m._id }, { $set: { body: "", sticker: null, images: [], deletedAt: new Date() } });
-      deleteUploads(m.images ?? []);
+      await Message.updateOne({ _id: m._id }, { $set: { body: "", sticker: null, stickerUrl: null, images: [], deletedAt: new Date() } });
+      deleteUploads([...(m.images ?? []), m.stickerUrl], { force: true }); // removed by a moderator: saved copies go too
       return;
     }
     case "ad":
@@ -348,7 +348,7 @@ export async function setSuspended(admin: IUser, userId: string, on: boolean, re
   const u = await User.findByIdAndUpdate(
     userId,
     on ? { suspendedAt: new Date(), suspendedReason: reason.slice(0, 300), $inc: { tokenVersion: 1 } } : { suspendedAt: null, suspendedReason: "" },
-    { new: true },
+    { returnDocument: "after" },
   ).lean<IUser>();
   await logAction(admin, on ? "user.suspend" : "user.restore", "user", u!._id, `@${u!.handle}`, on ? reason : "", `/people/${u!.handle}`);
   return toAdminUser(u!);
@@ -357,7 +357,7 @@ export async function setSuspended(admin: IUser, userId: string, on: boolean, re
 /** Sign someone out on every device (e.g. a stolen phone). */
 export async function revokeSessions(admin: IUser, userId: string): Promise<AdminUserDTO> {
   await findUser(userId);
-  const u = await User.findByIdAndUpdate(userId, { $inc: { tokenVersion: 1 } }, { new: true }).lean<IUser>();
+  const u = await User.findByIdAndUpdate(userId, { $inc: { tokenVersion: 1 } }, { returnDocument: "after" }).lean<IUser>();
   await logAction(admin, "user.signout", "user", u!._id, `@${u!.handle}`, "", `/people/${u!.handle}`);
   return toAdminUser(u!);
 }
@@ -407,7 +407,7 @@ export async function listAdminEvents(q: { filter: AdminEventFilter; q: string; 
 }
 
 export async function setEventCancelled(admin: IUser, id: string, cancelled: boolean, note = "") {
-  const e = await Event.findByIdAndUpdate(id, { cancelled }, { new: true }).lean<IEvent>();
+  const e = await Event.findByIdAndUpdate(id, { cancelled }, { returnDocument: "after" }).lean<IEvent>();
   if (!e) throw notFound("That event is gone.");
   await logAction(admin, cancelled ? "event.cancel" : "event.restore", "event", e._id, e.title, note, `/events/${sid(e._id)}`);
   return { cancelled: e.cancelled };

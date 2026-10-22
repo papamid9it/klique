@@ -1,4 +1,5 @@
 import { Schema, model, models, type Model, type Types } from "mongoose";
+import { defineModel } from "./define";
 
 /**
  * Topics are a community's Reddit-style board: a titled post members discuss in threaded comments.
@@ -14,6 +15,8 @@ export interface IBoard {
   slug: string;
   name: string;
   description: string;
+  /** house rules shown beside the board (owners and admins write them) */
+  rules?: string;
   postPolicy: "members" | "admins";
   position: number;
   createdById: Types.ObjectId;
@@ -26,6 +29,7 @@ const BoardSchema = new Schema<IBoard>(
     slug: { type: String, required: true, maxlength: 40 },
     name: { type: String, required: true, trim: true, maxlength: 30 },
     description: { type: String, default: "", trim: true, maxlength: 120 },
+    rules: { type: String, default: "", trim: true, maxlength: 1000 },
     postPolicy: { type: String, enum: ["members", "admins"], default: "members" },
     position: { type: Number, default: 0 },
     createdById: { type: Schema.Types.ObjectId, ref: "User", required: true },
@@ -35,7 +39,7 @@ const BoardSchema = new Schema<IBoard>(
 BoardSchema.index({ communityId: 1, slug: 1 }, { unique: true });
 BoardSchema.index({ communityId: 1, position: 1 });
 
-export const Board: Model<IBoard> = (models.Board as Model<IBoard>) || model<IBoard>("Board", BoardSchema);
+export const Board: Model<IBoard> = defineModel<IBoard>("Board", BoardSchema);
 
 export interface ITopic {
   _id: Types.ObjectId;

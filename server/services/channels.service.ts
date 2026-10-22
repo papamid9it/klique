@@ -1,7 +1,8 @@
-import { VOICE_ENABLED } from "@/lib/constants";
+import { VOICE_ENABLED, slowModeLabel } from "@/lib/constants";
 import { isSiteAdmin } from "../policies/hosting";
 import { SignJWT } from "jose";
 import { deleteUploads } from "./media.service";
+import { assertStickerUrl, noteStickerUse } from "./stickers.service";
 import { livekitConfig } from "../env";
 import { previewOf, toReplyRef } from "./replies";
 import { type ReactionKind } from "@/lib/reactions";
@@ -91,7 +92,7 @@ export async function ensureDefaultChannels(communityId: Types.ObjectId, ownerId
   if (!won.modifiedCount) return;
   let position = 0;
   for (const group of DEFAULTS) {
-    const cat = await ChannelCategory.findOneAndUpdate({ communityId, name: group.category }, { $setOnInsert: { position: position++ } }, { upsert: true, new: true });
+    const cat = await ChannelCategory.findOneAndUpdate({ communityId, name: group.category }, { $setOnInsert: { position: position++ } }, { upsert: true, returnDocument: "after" });
     let i = 0;
     for (const ch of group.channels) {
       await Channel.updateOne(
@@ -135,7 +136,12 @@ interface DtoCtx {
   /** unread messages per channel (not counting your own), capped at 99 */
   unreadCounts?: Map<string, number>;
   memberCounts?: Map<string, number>;
+  /** a site admin: never held back by slow mode */
+  siteAdmin?: boolean;
 }
+
+/** Owners, admins and site admins post without waiting. */
+const slowModeExempt = (access: SpaceAccess, siteAdmin: boolean) => access.canManage || siteAdmin;
 
 function toChannel(c: IChannel, ctx: DtoCtx): ChannelDTO {
   const last = c.lastMessageId ? sid(c.lastMessageId) : null;
@@ -157,6 +163,8 @@ function toChannel(c: IChannel, ctx: DtoCtx): ChannelDTO {
     canPost: canPostInChannel(c, ctx.access, invited),
     mentions: ctx.mentionCounts.get(sid(c._id)) ?? 0,
     ...(ctx.memberCounts?.has(sid(c._id)) ? { memberCount: ctx.memberCounts.get(sid(c._id)) } : {}),
+    slowModeSec: c.slowModeSec ?? 0,
+    slowModeExempt: slowModeExempt(ctx.access, !!ctx.siteAdmin),
   };
 }
 
@@ -215,7 +223,8 @@ export async function listChannels(viewer: IUser | null, space: Space, access: S
   const unreadCounts = new Map<string, number>();
   const mentionCounts = viewer && access.isMember ? await countMentions(viewer._id, visible, readBy, unreadCounts) : new Map<string, number>();
   const memberCounts = access.canManage ? await guestCounts(visible) : undefined;
-  const ctx: DtoCtx = { access, readBy, invited, mentionCounts, unreadCounts, memberCounts };
+  const siteAdmin = !!viewer && isSiteAdmin(viewer);
+  const ctx: DtoCtx = { access, readBy, invited, mentionCounts, unreadCounts, memberCounts, siteAdmin };
 
   // The groups you're in (community list only), each with the channels you can see.
   const groups: ChannelGroupDTO[] = [];
@@ -239,7 +248,7 @@ export async function listChannels(viewer: IUser | null, space: Space, access: S
           name: sub.name,
           visibility: sub.visibility,
           role: gAccess.role,
-          channels: rows.map((c) => toChannel(c, { access: gAccess, readBy, invited, mentionCounts: gMentions, unreadCounts: gUnread, memberCounts: gCounts })),
+          channels: rows.map((c) => toChannel(c, { access: gAccess, readBy, invited, mentionCounts: gMentions, unreadCounts: gUnread, memberCounts: gCounts, siteAdmin })),
         });
       }
     }
@@ -333,7 +342,10 @@ export async function updateChannel(viewer: IUser, space: Space, access: SpaceAc
   if (patch.type !== undefined) set.type = patch.type;
   if (patch.visibility !== undefined) set.visibility = patch.visibility;
   if (patch.categoryId !== undefined) set.categoryId = await assertCategory(space, patch.categoryId);
+  if (patch.slowModeSec !== undefined) set.slowModeSec = patch.slowModeSec;
   await Channel.updateOne({ _id: channel._id }, set);
+  // open chats and channel lists pick the change up (slow mode, name, who can post) without a reload
+  emitChannel(channel.communityId, channel._id);
   const next = await Channel.findById(channel._id).lean<IChannel>();
   const counts = await guestCounts([next!]);
   return toChannel(next!, { access, readBy: new Map(), invited: new Set(), mentionCounts: new Map(), memberCounts: counts });
@@ -365,7 +377,7 @@ export async function createCategory(space: Space, access: SpaceAccess, input: z
 
 export async function renameCategory(space: Space, access: SpaceAccess, categoryId: string, input: z.infer<typeof categorySchema>) {
   assertCanManage(access);
-  const cat = await ChannelCategory.findOneAndUpdate({ _id: categoryId, communityId: space.community._id }, { name: input.name }, { new: true }).lean<IChannelCategory>();
+  const cat = await ChannelCategory.findOneAndUpdate({ _id: categoryId, communityId: space.community._id }, { name: input.name }, { returnDocument: "after" }).lean<IChannelCategory>();
   if (!cat) throw notFound("We couldn't find that category.");
   return toCategory(cat);
 }
@@ -488,7 +500,7 @@ async function toMessages(rows: IChannelMessage[], viewer: IUser | null, access:
     const author = authors.get(sid(r.authorId));
     if (!author) return [];
     const authorRole = roleByUser.get(sid(r.authorId));
-    const canEdit = !!viewer && !r.deletedAt && !r.sticker && sid(r.authorId) === me && access.isMember;
+    const canEdit = !!viewer && !r.deletedAt && !r.sticker && !r.stickerUrl && sid(r.authorId) === me && access.isMember;
     const canDelete = !!viewer && !r.deletedAt && (sid(r.authorId) === me ? access.isMember : access.canManage && (authorRole === undefined || outranks(access.role, authorRole)));
     const mentions = r.deletedAt ? [] : (r.mentions ?? []).flatMap((id) => mentionMap.get(sid(id)) ?? []);
     return [
@@ -497,6 +509,7 @@ async function toMessages(rows: IChannelMessage[], viewer: IUser | null, access:
         channelId: sid(r.channelId),
         body: r.deletedAt ? "" : r.body,
         sticker: r.deletedAt ? null : (r.sticker ?? null),
+        stickerUrl: r.deletedAt ? null : (r.stickerUrl ?? null),
         images: r.deletedAt ? [] : (r.images ?? []),
         replyTo: r.deletedAt || !r.replyToId ? null : (replyMap.get(sid(r.replyToId)) ?? null),
         pinned: !r.deletedAt && !!r.pinnedAt,
@@ -542,8 +555,10 @@ export async function listMessages(viewer: IUser | null, space: Space, access: S
   return { items: await toMessages(page, viewer, access, space), hasMore: rows.length > PAGE };
 }
 
-export async function postMessage(viewer: IUser, space: Space, access: SpaceAccess, channelSlug: string, input: { body: string; sticker?: string; images?: string[]; replyToId?: string }): Promise<ChannelMessageDTO> {
+export async function postMessage(viewer: IUser, space: Space, access: SpaceAccess, channelSlug: string, input: { body: string; sticker?: string; stickerUrl?: string; images?: string[]; replyToId?: string }): Promise<ChannelMessageDTO> {
   const { body, sticker, images = [], replyToId } = input;
+  const stickerUrl = input.stickerUrl && !sticker ? assertStickerUrl(input.stickerUrl) : null;
+  const isSticker = !!sticker || !!stickerUrl;
   const { channel, invited } = await loadChannel(viewer, space, access, channelSlug);
   if (!canPostInChannel(channel, access, invited)) {
     if (access.banned) throw forbidden("You can't post here.");
@@ -551,10 +566,12 @@ export async function postMessage(viewer: IUser, space: Space, access: SpaceAcce
     throw forbidden("Only owners and admins can post in this channel.");
   }
   rateLimit(`chat:${sid(viewer._id)}`, 20, 15_000);
+  await assertSlowMode(viewer, access, channel);
 
-  const mentions = sticker ? [] : await resolveMentions(viewer, channel, body);
+  const mentions = isSticker ? [] : await resolveMentions(viewer, channel, body);
   const replyTarget = replyToId ? await ChannelMessage.findOne({ _id: replyToId, channelId: channel._id }).select("_id authorId").lean<{ _id: Types.ObjectId; authorId: Types.ObjectId }>() : null;
-  const doc = await ChannelMessage.create({ channelId: channel._id, communityId: channel.communityId, authorId: viewer._id, body: sticker ? "" : body, sticker: sticker ?? null, images: sticker ? [] : images, replyToId: replyTarget?._id ?? null, mentions });
+  const doc = await ChannelMessage.create({ channelId: channel._id, communityId: channel.communityId, authorId: viewer._id, body: isSticker ? "" : body, sticker: sticker ?? null, stickerUrl, images: isSticker ? [] : images, replyToId: replyTarget?._id ?? null, mentions });
+  noteStickerUse(viewer._id, stickerUrl);
   await Promise.all([
     Channel.updateOne({ _id: channel._id }, { lastMessageId: doc._id, lastMessageAt: doc.createdAt }),
     ChannelRead.updateOne({ userId: viewer._id, channelId: channel._id }, { $set: { lastReadMessageId: doc._id, communityId: channel.communityId } }, { upsert: true }),
@@ -564,10 +581,23 @@ export async function postMessage(viewer: IUser, space: Space, access: SpaceAcce
   const targets = [...(mentions ?? []), ...(replyTarget ? [replyTarget.authorId] : [])].filter((id) => sid(id) !== sid(viewer._id));
   notify(targets, {
     title: `${viewer.displayName} in #${channel.name}`,
-    body: previewOf({ body: sticker ? "" : body, sticker, images }),
+    body: previewOf({ body: isSticker ? "" : body, sticker, stickerUrl, images }),
     data: { type: "channel", communitySlug: space.community.slug, channelSlug: channel.slug, ...(space.sub ? { subSlug: space.sub.slug } : {}) },
   }, { category: "mentions", groupKey: `chat:${sid(channel._id)}`, many: (n) => `${n} mentions and replies in #${channel.name}`, ref: `channel:${sid(channel._id)}` });
   return (await toMessages([doc.toObject()], viewer, access, space))[0];
+}
+
+/**
+ * Slow mode: each person waits `slowModeSec` between messages in this channel (counted from their last one, even
+ * if they deleted it). Owners, admins and site admins don't wait. A refusal says how long is left (`retryAfter`).
+ */
+async function assertSlowMode(viewer: IUser, access: SpaceAccess, channel: IChannel) {
+  const wait = channel.slowModeSec ?? 0;
+  if (!wait || slowModeExempt(access, isSiteAdmin(viewer))) return;
+  const last = await ChannelMessage.findOne({ channelId: channel._id, authorId: viewer._id }).sort({ _id: -1 }).select("createdAt").lean<{ createdAt: Date }>();
+  if (!last) return;
+  const left = Math.ceil((last.createdAt.getTime() + wait * 1000 - Date.now()) / 1000);
+  if (left > 0) throw new ApiError(429, `Slow mode is on (${slowModeLabel(wait)}). You can send again in ${left < 60 ? `${left}s` : `${Math.ceil(left / 60)}m`}.`, { code: "slow_mode", errors: { retryAfter: String(left) } });
 }
 
 /** Authors can change the text of their own messages while they can still post in the channel. */
@@ -576,7 +606,7 @@ export async function editMessage(viewer: IUser, space: Space, access: SpaceAcce
   const msg = await ChannelMessage.findOne({ _id: messageId, channelId: channel._id }).lean<IChannelMessage>();
   if (!msg || msg.deletedAt) throw notFound("We couldn't find that message.");
   if (sid(msg.authorId) !== sid(viewer._id)) throw forbidden("You can only edit your own messages.");
-  if (msg.sticker) throw forbidden("Stickers can't be edited. Delete it and send another.");
+  if (msg.sticker || msg.stickerUrl) throw forbidden("Stickers can't be edited. Delete it and send another.");
   if (!canPostInChannel(channel, access, invited)) throw forbidden("You can't post here any more, so you can't edit this.");
   rateLimit(`chat-edit:${sid(viewer._id)}`, 30, 60_000);
   const next = body.trim();
@@ -601,7 +631,7 @@ export async function deleteMessage(viewer: IUser, space: Space, access: SpaceAc
     const authorM = await Membership.findOne({ ...scopeOf(space), userId: msg.authorId, status: "active" }).select("role").lean<Pick<IMembership, "role">>();
     if (authorM && !outranks(access.role, authorM.role)) throw forbidden("You can't remove a message from someone of equal or higher rank.");
   }
-  await ChannelMessage.updateOne({ _id: msg._id }, { body: "", mentions: [], images: [], pinnedAt: null, pinnedById: null, deletedAt: new Date(), deletedById: viewer._id });
+  await ChannelMessage.updateOne({ _id: msg._id }, { body: "", mentions: [], images: [], sticker: null, stickerUrl: null, pinnedAt: null, pinnedById: null, deletedAt: new Date(), deletedById: viewer._id });
   deleteUploads(msg.images ?? []); // its photos and videos go with it
   emitChannel(channel.communityId, channel._id);
   return { deleted: true };

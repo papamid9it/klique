@@ -64,6 +64,7 @@ export const Message = memo(function Message({
   onPin,
   onJump,
   canReact,
+  onSaveSticker,
 }: {
   m: ChannelMessageDTO;
   /** first message of a run by the same person: show avatar, name and time */
@@ -81,9 +82,13 @@ export const Message = memo(function Message({
   /** scroll to the message a reply answers */
   onJump?: (id: string) => void;
   canReact?: boolean;
+  /** save a picture from this message to your stickers */
+  onSaveSticker?: (url: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
+  const saveable = !m.deleted && !m.pending ? (m.stickerUrl ?? (m.images.length === 1 ? m.images[0] : null)) : null;
   const items: OverflowItem[] = [
+    ...(saveable && onSaveSticker ? [{ label: m.stickerUrl ? "Save sticker" : "Save as sticker", icon: "sticker" as const, onSelect: () => onSaveSticker(saveable) }] : []),
     ...(onReply && !m.deleted && !m.pending ? [{ label: "Reply", icon: "reply" as const, onSelect: () => onReply(m) }] : []),
     ...(m.canPin && onPin ? [{ label: m.pinned ? "Unpin message" : "Pin message", icon: "pushpin" as const, onSelect: () => onPin(m, !m.pinned) }] : []),
     ...(m.canEdit && onEdit ? [{ label: "Edit message", icon: "edit" as const, onSelect: () => setEditing(true) }] : []),
@@ -127,9 +132,9 @@ export const Message = memo(function Message({
           <p className="text-sm text-ink-muted italic">Message deleted</p>
         ) : (
           <>
-            {m.sticker ? (
+            {m.sticker || m.stickerUrl ? (
               <div className="py-1">
-                <StickerView id={m.sticker} />
+                <StickerView id={m.sticker} url={m.stickerUrl} />
               </div>
             ) : editing && onEdit ? (
               <MessageEditor
@@ -143,8 +148,11 @@ export const Message = memo(function Message({
               />
             ) : (
               <>
-                {(m.body || !m.images.length) && (
-                  <p className="text-[15px] leading-relaxed break-words whitespace-pre-wrap text-ink">
+                {!m.body && !m.images.length ? (
+                  // nothing to show: a sticker whose picture didn't save (sent while the app was updating)
+                  <p className="text-sm text-ink-muted italic">Sticker unavailable</p>
+                ) : (
+                  m.body && <p className="text-[15px] leading-relaxed break-words whitespace-pre-wrap text-ink">
                     <Body text={m.body} mentions={m.mentions} meId={meId} />
                     <EditedTag at={m.editedAt} />
                   </p>

@@ -2,17 +2,11 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { CrewService } from "@/app/services/CrewService";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
-import { Skeleton } from "@/components/ui/Skeleton";
-import { ErrorState } from "@/components/ui/States";
-import { useApi } from "@/lib/hooks/useApi";
-import { useAppEvent } from "@/lib/appEvents";
-import { useRealtimeEvent } from "@/components/providers/RealtimeProvider";
 import type { EventDTO } from "@/lib/types";
-import { CrewRow } from "./parts";
+import { CrewResults, useEventCrews } from "./CrewSearch";
 import { StartCrewModal } from "./StartCrewModal";
 
 /**
@@ -22,14 +16,12 @@ import { StartCrewModal } from "./StartCrewModal";
 export function EventCrews({ event }: { event: EventDTO }) {
   const router = useRouter();
   const { requireAuth } = useAuth();
-  const { data, loading, error, reload } = useApi(() => CrewService.forEvent(event.id), [event.id], { key: `crews:${event.id}` });
-  // joined or left the community (Join buttons appear), or a crew of yours changed: the list follows
-  useAppEvent("membership", () => void reload());
-  useRealtimeEvent(() => void reload(), { filter: (e) => e.type === "crew" && !e.chat, debounceMs: 400 });
+  const crewsApi = useEventCrews(event.id);
+  const { data, reload } = crewsApi;
   const [starting, setStarting] = useState(false);
   if (event.online) return null;
 
-  const crews = data?.crews ?? [];
+  const total = data && !crewsApi.query ? data.total : null;
   const startButton = data?.canStart ? (
     <Button variant="primary" size="sm" onClick={() => requireAuth() && setStarting(true)}>
       <Icon name="plus" size={14} /> Start a crew
@@ -41,18 +33,16 @@ export function EventCrews({ event }: { event: EventDTO }) {
       <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
         <div>
           <h2 className="text-base font-semibold">Going together</h2>
-          <p className="text-sm text-ink-muted">{crews.length ? `${crews.length} ${crews.length === 1 ? "crew" : "crews"} heading there. Join one near you.` : "Crews meet up first and go together."}</p>
+          <p className="text-sm text-ink-muted">{total ? `${total} ${total === 1 ? "crew" : "crews"} heading there. Join one near you.` : "Crews meet up first and go together."}</p>
         </div>
         {startButton}
       </div>
 
-      {loading ? (
-        <div className="space-y-2">
-          <Skeleton className="h-28" />
-        </div>
-      ) : error ? (
-        <ErrorState message={error} onRetry={reload} />
-      ) : crews.length === 0 ? (
+      {data && !data.canJoin && !data.mine && data.startBlockedReason && data.total > 0 && <p className="mb-2 text-sm text-ink-muted">{data.startBlockedReason}</p>}
+      <CrewResults
+        crews={crewsApi}
+        onStart={data?.canStart ? () => requireAuth() && setStarting(true) : undefined}
+        empty={
         <div className="rounded-card border border-dashed border-line p-5 text-center">
           <p className="text-sm font-medium">Going alone?</p>
           <p className="mx-auto mt-1 max-w-sm text-sm text-ink-muted">
@@ -64,18 +54,8 @@ export function EventCrews({ event }: { event: EventDTO }) {
             </Button>
           )}
         </div>
-      ) : (
-        <>
-          {data && !data.canJoin && !data.mine && data.startBlockedReason && <p className="mb-2 text-sm text-ink-muted">{data.startBlockedReason}</p>}
-          <ul className="space-y-2.5">
-            {crews.map((c) => (
-              <li key={c.id}>
-                <CrewRow crew={c} joinable={data?.canJoin ?? true} />
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
+        }
+      />
 
       {starting && (
         <StartCrewModal

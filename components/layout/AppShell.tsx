@@ -10,8 +10,8 @@ import { VerifyBanner } from "./VerifyBanner";
 import { CommunityPreloader } from "./CommunityPreloader";
 import { Sidebar } from "./Sidebar";
 
-/** /communities/<slug> (not /communities/new) is the chat workspace and owns its own panes. */
-const isWorkspace = (p: string) => /^\/communities\/(?!new$)[^/]+\/?$/.test(p) || p === "/messages" || p.startsWith("/messages/");
+/** /communities/<slug> (not /communities/new) is the chat workspace and owns its own panes; so does a crew (its chat). */
+const isWorkspace = (p: string) => /^\/communities\/(?!new$)[^/]+\/?$/.test(p) || /^\/crews\/[^/]+\/?$/.test(p) || p === "/messages" || p.startsWith("/messages/");
 
 const SKIP =
   "sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[200] focus:rounded-control focus:bg-ink focus:px-4 focus:py-2 focus:text-canvas";

@@ -17,7 +17,8 @@ import { SponsoredBox, useAds } from "@/components/domain/ads/Sponsored";
 import { useToast } from "@/components/providers/ToastProvider";
 import { Avatar } from "@/components/ui/Avatar";
 import { ImageField } from "@/components/ui/ImageField";
-import { Button } from "@/components/ui/Button";
+import { useMediaViewer } from "@/components/providers/MediaViewerProvider";
+import { Button, buttonClass } from "@/components/ui/Button";
 import { eventPhoto } from "@/lib/fake";
 import { Cover } from "@/components/ui/Cover";
 import { SelectField, TextArea, TextField } from "@/components/ui/Field";
@@ -204,6 +205,7 @@ function HostMenu({ event, onEdit, onCancel, onDelete }: { event: EventDTO; onEd
 }
 
 function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDTO) => void }) {
+  const view = useMediaViewer();
   const router = useRouter();
   const toast = useToast();
   const { busy, rsvp, toggleSave } = useEventActions(event, onChange);
@@ -258,6 +260,7 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
         <Icon name="arrow-left" size={15} /> All events
       </Link>
       <Cover src={eventPhoto(event.id, event.coverImage)} seed={event.id} interest={event.interest} className="aspect-[16/8] w-full rounded-card border border-line">
+        {event.coverImage && <button type="button" onClick={() => view([event.coverImage!])} aria-label="View the cover picture full screen" className="absolute inset-0 cursor-zoom-in" />}
         <div className="absolute top-4 left-4">
           <DateChip iso={event.startsAt} />
         </div>
@@ -445,6 +448,15 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
             </div>
           )}
           {!event.isPast && !event.viewer.isHost && partnerAd && <SponsoredBox ad={partnerAd} image={false} />}
+          {/* found on another site: its own page has the full details and the tickets */}
+          {event.organizer?.url && (
+            <div className="space-y-2 rounded-card border border-line bg-surface p-4">
+              {event.organizer.name && <p className="text-xs text-ink-muted">Organised by <span className="font-semibold text-ink">{event.organizer.name}</span></p>}
+              <a href={event.organizer.url} target="_blank" rel="noopener noreferrer" className={buttonClass("secondary", "md", "w-full")}>
+                <Icon name="arrow-up-right" size={15} /> More info / tickets
+              </a>
+            </div>
+          )}
           <div className="flex flex-wrap gap-2">
             <ShareButton path={`/events/${event.id}`} text={`${event.title} — ${formatDateShort(event.startsAt)}`} />
             {event.viewer.canEdit || isHost ? (

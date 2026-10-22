@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { parseScope, scopeFromPlace, scopeLabel, scopeToString, WORLD, type Scope } from "@/lib/places";
+import { useHydrated } from "@/lib/hooks/useHydrated";
 import { useAuth } from "./AuthProvider";
 
 const KEY = "klique.where";
@@ -53,8 +54,17 @@ export function PlaceProvider({ children }: { children: ReactNode }) {
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
-export function usePlace() {
+/** What the server renders: it can't know the remembered place or who's signed in, so it shows everywhere. */
+const SERVER_SCOPE = { scope: WORLD, label: scopeLabel(WORLD), home: WORLD };
+
+/**
+ * The shared place. While a component hydrates it reports what the server rendered (everywhere), so the
+ * page's HTML and the browser's first render match; the real place follows straight after. `where` is
+ * always the real one (it only drives requests, which start after hydration).
+ */
+export function usePlace(): PlaceCtx & { ready: boolean } {
   const c = useContext(Ctx);
+  const hydrated = useHydrated();
   if (!c) throw new Error("usePlace must be used inside <Providers>");
-  return c;
+  return hydrated ? { ...c, ready: true } : { ...c, ...SERVER_SCOPE, ready: false };
 }

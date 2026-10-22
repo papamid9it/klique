@@ -57,7 +57,7 @@ export async function awardHype(userId: Types.ObjectId, action: HypeAction, ref:
     if (isDup(e)) return 0;
     throw e;
   }
-  const u = await User.findOneAndUpdate({ _id: userId }, { $inc: { hype: amount } }, { new: true }).select("hype rank").lean<Pick<IUser, "_id" | "hype" | "rank">>();
+  const u = await User.findOneAndUpdate({ _id: userId }, { $inc: { hype: amount } }, { returnDocument: "after" }).select("hype rank").lean<Pick<IUser, "_id" | "hype" | "rank">>();
   if (u) await checkRankUp(u, c);
   return amount;
 }

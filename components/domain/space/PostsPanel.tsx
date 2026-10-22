@@ -18,9 +18,11 @@ import { usePaged } from "@/lib/hooks/useApi";
 import type { PostDTO } from "@/lib/types";
 import { ConfirmModal } from "./parts";
 import { UserName } from "@/components/ui/UserName";
+import { useMediaViewer } from "@/components/providers/MediaViewerProvider";
 
 /** Updates feed for a community or group, with a composer for people who can post. */
 export function PostsPanel({ slug, subSlug, canPost }: { slug: string; subSlug?: string; canPost: boolean }) {
+  const view = useMediaViewer();
   const { user } = useAuth();
   const toast = useToast();
   const { items, loading, loadingMore, error, hasMore, loadMore, reload, setItems } = usePaged<PostDTO>((p) => SpaceService.posts(slug, subSlug, p), [slug, subSlug], { key: `posts:${slug}:${subSlug ?? ""}` });
@@ -95,8 +97,10 @@ export function PostsPanel({ slug, subSlug, canPost }: { slug: string; subSlug?:
                   </header>
                   <p className="mt-3 text-[15px] leading-relaxed break-words whitespace-pre-wrap">{p.body}</p>
                   {p.imageUrl && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={p.imageUrl} alt="" loading="lazy" className="mt-3 max-h-96 w-full rounded-control object-cover" />
+                    <button type="button" onClick={() => view([p.imageUrl!])} aria-label="View picture full screen" className="mt-3 block w-full cursor-zoom-in">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={p.imageUrl} alt="" loading="lazy" className="max-h-96 w-full rounded-control object-cover" />
+                    </button>
                   )}
                   <footer className="mt-3 flex justify-end gap-1">
                     {user && p.author.id !== user.id && (
