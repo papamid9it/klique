@@ -283,7 +283,8 @@ export async function addComment(viewer: IUser, space: Space, access: SpaceAcces
   noteStickerUse(viewer._id, stickerUrl);
   const said = previewOf({ body: input.body, sticker, stickerUrl }).slice(0, 140);
   // the post's author and the person answered hear about it (never yourself), bundled per post
-  const href = `/communities/${space.community.slug}?view=posts&p=${sid(p._id)}`;
+  // &c: the post opens at this comment, its thread open
+  const href = `/communities/${space.community.slug}?view=posts&p=${sid(p._id)}&c=${sid(doc._id)}`;
   const me = sid(viewer._id);
   const told = new Set<string>([me]);
   if (parent && !parent.deletedAt && !told.has(sid(parent.authorId))) {

@@ -23,7 +23,7 @@ export function PointsCard() {
   if (!p) return <Skeleton className="h-56 w-full rounded-card" />;
 
   return (
-    <section className="space-y-5 rounded-card border border-line bg-surface p-5" aria-label="Your points">
+    <section className="@container space-y-5 rounded-card border border-line bg-surface p-5" aria-label="Your points">
       <div>
         <p className="eyebrow">Your points</p>
         <p className="mt-1 flex items-center gap-2 text-4xl font-bold tracking-[-0.03em]">
@@ -32,7 +32,8 @@ export function PointsCard() {
         <p className="mt-1.5 max-w-md text-sm text-ink-muted">Earned from other people, like karma. They can&apos;t be bought or spent, and some communities ask for a minimum to join or to post.</p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      {/* side by side only where the card itself is wide enough (Settings is narrow on tablets) */}
+      <div className="grid gap-4 @lg:grid-cols-2">
         <div>
           <p className="mb-2 text-[13px] font-semibold">How you earn points</p>
           <ul className="space-y-1.5 text-[13px]">

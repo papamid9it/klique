@@ -19,7 +19,7 @@ import type { EventDTO } from "@/lib/types";
 
 type Tab = "all" | "communities" | "events" | "people";
 /** Same columns as the Communities page: up to 4 across on wide screens. */
-const GRID = "grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
+const GRID = "grid gap-5 min-[540px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
 
 function SearchView() {
   const router = useRouter();

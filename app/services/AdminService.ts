@@ -34,7 +34,7 @@ export const AdminService = {
   reports: (status: ReportStatus, page = 1) => api.get<Envelope<Paginated<ReportDTO>>>("/api/admin/reports", { status, page }),
   actOnReport: (id: string, action: ReportAction, note?: string) => api.post<Envelope<{ status: ReportStatus }>>(`/api/admin/reports/${id}`, { action, note }),
 
-  overview: () => api.get<Envelope<AdminOverviewDTO>>("/api/admin/overview"),
+  overview: (days = 30) => api.get<Envelope<AdminOverviewDTO>>("/api/admin/overview", { days }),
   system: () => api.get<Envelope<SystemStatusDTO>>("/api/admin/system"),
   audit: (params: { page?: number; q?: string; action?: string }) => api.get<Envelope<Paginated<AuditEntryDTO>>>("/api/admin/audit", params),
 

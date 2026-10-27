@@ -146,7 +146,7 @@ function Console({ children }: { children: ReactNode }) {
               <Icon name="menu" size={20} />
             </button>
           </header>
-          <main id="main" className="mx-auto w-full max-w-[1200px] px-4 pt-6 pb-24 sm:px-8 lg:px-10 lg:pt-10">
+          <main id="main" className="mx-auto w-full max-w-[1440px] px-4 pt-6 pb-24 sm:px-8 lg:px-10 lg:pt-10">
             {children}
           </main>
         </div>

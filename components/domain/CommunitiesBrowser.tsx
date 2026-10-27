@@ -90,7 +90,7 @@ export function CommunitiesBrowser({ initialInterest, scope = "discover" }: { in
         </EmptyState>
       ) : (
         <>
-          <div aria-busy={loading} className={`grid gap-5 transition-opacity duration-200 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 ${loading ? "opacity-60" : "opacity-100"}`}>
+          <div aria-busy={loading} className={`grid gap-5 transition-opacity duration-200 min-[540px]:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 ${loading ? "opacity-60" : "opacity-100"}`}>
             {items.map((c) => (
               <CommunityCard key={c.id} community={c} tag={c.interest ? undefined : undefined} />
             ))}

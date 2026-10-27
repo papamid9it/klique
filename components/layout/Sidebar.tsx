@@ -7,6 +7,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { CommunityRail } from "./CommunityRail";
 import { LogoMark } from "./Logo";
 import { UserMenu } from "./UserMenu";
+import { PresenceDot } from "@/components/domain/profile/ProfileParts";
 
 /** The icon rail inside a community, a crew chat and Messages; other pages have the home panel (HomePanel). */
 export function Sidebar() {
@@ -37,8 +38,9 @@ function SlimNav({ pathname }: { pathname: string }) {
           <>
             <UserMenu
               trigger={({ props }) => (
-                <button {...props} title={`${user.displayName}: profile, settings, ads`} aria-label="Account menu" className="rounded-full">
+                <button {...props} title={`${user.displayName}: profile, settings, ads`} aria-label="Account menu" className="relative rounded-full">
                   <Avatar name={user.displayName} src={user.avatarUrl} frame={user.avatarFrame} size={38} />
+                  <PresenceDot presence={user.presence} self className="right-0 bottom-0 size-3 ring-2" />
                 </button>
               )}
             />

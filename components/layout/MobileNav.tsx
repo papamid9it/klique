@@ -7,6 +7,9 @@ import { useProfileCard } from "@/components/providers/ProfileCardProvider";
 import { Icon } from "@/components/ui/Icon";
 import { cx } from "@/components/ui/cx";
 
+/** icons only (their names are the labels for screen readers): a big tap target each */
+const TAB = "flex h-12 min-w-14 items-center justify-center rounded-control px-3 transition active:bg-raised";
+
 export function MobileNav() {
   const pathname = usePathname();
   const { user, status } = useAuth();
@@ -20,23 +23,20 @@ export function MobileNav() {
   ];
 
   const link = (i: (typeof items)[number]) => (
-    <Link key={i.label} href={i.href} aria-current={i.active ? "page" : undefined} className={cx("flex min-w-14 flex-col items-center gap-1 rounded-control px-2 py-1.5 text-[11px] font-medium transition", i.active ? "text-ink" : "text-ink-muted")}>
-      <Icon name={i.icon} size={21} className={i.active ? "text-accent-text" : ""} />
-      {i.label}
+    <Link key={i.label} href={i.href} aria-label={i.label} title={i.label} aria-current={i.active ? "page" : undefined} className={cx(TAB, i.active ? "text-ink" : "text-ink-muted")}>
+      <Icon name={i.icon} size={26} className={i.active ? "text-accent-text" : ""} />
     </Link>
   );
 
   // "Me" is your profile card (there's no profile page); signed out, it's Sign in
   const me =
     status === "authed" && user ? (
-      <button type="button" onClick={() => card.openFull(user.handle)} className={cx("flex min-w-14 flex-col items-center gap-1 rounded-control px-2 py-1.5 text-[11px] font-medium transition", pathname.startsWith("/settings") ? "text-ink" : "text-ink-muted")}>
-        <Icon name="user" size={21} className={pathname.startsWith("/settings") ? "text-accent-text" : ""} />
-        Me
+      <button type="button" onClick={() => card.openFull(user.handle)} aria-label="Me" title="Me" className={cx(TAB, pathname.startsWith("/settings") ? "text-ink" : "text-ink-muted")}>
+        <Icon name="user" size={26} className={pathname.startsWith("/settings") ? "text-accent-text" : ""} />
       </button>
     ) : (
-      <Link href="/login" className="flex min-w-14 flex-col items-center gap-1 rounded-control px-2 py-1.5 text-[11px] font-medium text-ink-muted transition">
-        <Icon name="user" size={21} />
-        Sign in
+      <Link href="/login" aria-label="Sign in" title="Sign in" className={cx(TAB, "text-ink-muted")}>
+        <Icon name="user" size={26} />
       </Link>
     );
 

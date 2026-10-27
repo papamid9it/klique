@@ -80,23 +80,26 @@ export function SignupChart({ data, unit = "sign-ups" }: { data: { day: string; 
         <span>{fmtDay(data[Math.floor(data.length / 2)].day, { day: "numeric", month: "short" })}</span>
         <span>Today</span>
       </div>
-      <table className="sr-only">
-        <caption>Sign-ups per day, last 30 days</caption>
-        <thead>
-          <tr>
-            <th>Day</th>
-            <th>Sign-ups</th>
-          </tr>
-        </thead>
-        <tbody>
-          {data.map((d) => (
-            <tr key={d.day}>
-              <td>{d.day}</td>
-              <td>{d.count}</td>
+      {/* a table ignores the 1px box sr-only gives it, so the wrapper hides it (else it stretches the page) */}
+      <div className="sr-only">
+        <table>
+          <caption>Sign-ups per day, last 30 days</caption>
+          <thead>
+            <tr>
+              <th>Day</th>
+              <th>Sign-ups</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {data.map((d) => (
+              <tr key={d.day}>
+                <td>{d.day}</td>
+                <td>{d.count}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

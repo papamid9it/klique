@@ -19,6 +19,7 @@ import { HOME_NAV } from "./nav";
 import { PanelSlot, hasPagePanel } from "./PagePanel";
 import { prefetchCommunity } from "./prefetchCommunity";
 import { UserMenu } from "./UserMenu";
+import { PresenceDot } from "@/components/domain/profile/ProfileParts";
 
 const row = "flex h-11 items-center gap-3 rounded-control px-3.5 text-[15px] font-medium transition";
 /** The panel's middle: scrolls on its own, fading out at its top and bottom edges. */
@@ -89,7 +90,7 @@ export function HomePanel() {
             <button type="button" onClick={() => card.openFull(user.handle)} aria-label="Your profile" className="flex min-w-0 flex-1 items-center gap-3 rounded-control p-1.5 text-left transition hover:bg-raised">
               <span className="relative shrink-0">
                 <Avatar name={user.displayName} src={user.avatarUrl} frame={user.avatarFrame} size={38} />
-                <span aria-hidden="true" title="Online" className="absolute right-0 bottom-0 size-3 rounded-full bg-success ring-2 ring-surface" />
+                <PresenceDot presence={user.presence} self className="right-0 bottom-0 size-3 ring-2" />
               </span>
               <span className="min-w-0">
                 <span className="block truncate text-sm font-semibold text-ink">

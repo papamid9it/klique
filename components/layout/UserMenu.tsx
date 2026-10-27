@@ -5,6 +5,7 @@ import { useAuth } from "@/components/providers/AuthProvider";
 import { useProfileCard } from "@/components/providers/ProfileCardProvider";
 import { Dropdown, type MenuEntry } from "@/components/ui/Dropdown";
 import { useSetStatus } from "@/components/domain/profile/StatusPicker";
+import { StatusIcon } from "@/components/domain/profile/ProfileParts";
 import { PRESENCES } from "@/lib/constants";
 
 /**
@@ -19,9 +20,14 @@ export function UserMenu({ trigger, align = "left" }: { trigger: Parameters<type
   const setStatus = useSetStatus();
   if (!user) return null;
   const items: MenuEntry[] = [
-    // your status, right here
-    { type: "label", label: "Your status" },
-    ...PRESENCES.map((s): MenuEntry => ({ label: s.label, hint: s.id === user.presence ? "Current" : undefined, onSelect: () => void setStatus(s.id) })),
+    // your status: one row, the four choices beside it
+    {
+      type: "submenu",
+      label: `Status: ${PRESENCES.find((s) => s.id === user.presence)?.label}`,
+      leading: <StatusIcon presence={user.presence} />,
+      width: 210,
+      items: PRESENCES.map((s): MenuEntry => ({ label: s.label, leading: <StatusIcon presence={s.id} />, checked: s.id === user.presence, onSelect: () => void setStatus(s.id) })),
+    },
     { type: "sep" },
     { label: "Your profile", icon: "user", onSelect: () => card.openFull(user.handle) },
     { label: "Advertise", icon: "megaphone", onSelect: () => router.push("/ads") },
@@ -33,3 +39,4 @@ export function UserMenu({ trigger, align = "left" }: { trigger: Parameters<type
   ];
   return <Dropdown items={items} trigger={trigger} align={align} width={232} label="Account menu" />;
 }
+

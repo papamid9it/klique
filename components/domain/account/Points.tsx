@@ -257,12 +257,12 @@ export function HypeTab({ me, onStyle }: { me: UserMe; onStyle: () => void }) {
         </Button>
       </section>
 
-      <section>
+      <section className="@container">
         <h3 className="eyebrow mb-3">Get Hype</h3>
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 @sm:grid-cols-3">
           {w.config.packs.map((p) => (
             <div key={p.id} className="relative flex flex-col items-start gap-1 rounded-card border border-line bg-surface p-4">
-              {w.config.packs.length > 1 && p.hype / p.price === best && <span className="absolute top-3 right-3 rounded-full bg-accent px-2 py-0.5 text-[11px] font-bold text-accent-ink">Best value</span>}
+              {w.config.packs.length > 1 && p.hype / p.price === best && <span className="absolute -top-2.5 right-3 rounded-full bg-accent px-2 py-0.5 text-[11px] font-bold whitespace-nowrap text-accent-ink">Best value</span>}
               <HypePill value={p.hype} className="text-xl" />
               <span className="text-sm text-ink-muted">{formatPrice(p.price, "NGN")}</span>
               <Button size="sm" variant="primary" className="mt-2 w-full" loading={buying === p.id} disabled={!w.canBuy || (!!buying && buying !== p.id)} onClick={() => void buy(p.id)}>

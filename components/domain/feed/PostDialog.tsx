@@ -23,7 +23,8 @@ import { PostComments } from "./PostComments";
  * left, and on the right who posted, the caption, the votes and the comments. A long text post opens as one column
  * instead, Reddit style: the post on top, the comments under it. Full screen on phones. Esc or a click outside closes it.
  */
-export function PostDialog({ post, onChange, onClose }: { post: FeedPostDTO | null; onChange: (p: FeedPostDTO) => void; onClose: () => void }) {
+/** `focusComment`: a comment to open its thread at and point out (the post was opened from a notification about it) */
+export function PostDialog({ post, onChange, onClose, focusComment }: { post: FeedPostDTO | null; onChange: (p: FeedPostDTO) => void; onClose: () => void; focusComment?: string | null }) {
   const ref = useRef<HTMLDialogElement>(null);
   const now = useNow();
   const open = !!post;
@@ -44,18 +45,18 @@ export function PostDialog({ post, onChange, onClose }: { post: FeedPostDTO | nu
       onClick={(e) => {
         if (e.target === ref.current) onClose();
       }}
-      className={cx("m-0 h-dvh max-h-none w-full max-w-none overflow-hidden border-line bg-surface p-0 text-ink shadow-2xl backdrop:bg-black/70 backdrop:backdrop-blur-sm sm:m-auto sm:h-[min(88dvh,46rem)] sm:w-[calc(100%-2rem)] sm:rounded-card sm:border", style === "long" ? "sm:max-w-[680px]" : "sm:max-w-[1040px]")}
+      className={cx("m-0 h-dvh max-h-none w-full max-w-none overflow-hidden border-line bg-surface p-0 text-ink shadow-2xl backdrop:bg-black/70 backdrop:backdrop-blur-sm sm:m-auto sm:h-[88dvh] sm:w-[calc(100%-2rem)] sm:rounded-card sm:border lg:h-[min(88dvh,46rem)]", style === "long" ? "sm:max-w-[680px]" : "sm:max-w-[680px] lg:max-w-[1040px]")}
     >
       {post && (
-        <div className="relative flex h-full flex-col md:flex-row">
+        <div className="relative flex h-full flex-col lg:flex-row">
           <button type="button" onClick={onClose} aria-label="Close" className="absolute top-2.5 right-2.5 z-10 inline-flex size-9 items-center justify-center rounded-full bg-surface/80 text-ink-muted backdrop-blur hover:bg-raised hover:text-ink">
             <Icon name="x" size={18} />
           </button>
           {style !== "long" && (
-            <div className="flex shrink-0 items-center justify-center bg-black md:min-w-0 md:flex-[1.4]">
+            <div className="flex shrink-0 items-center justify-center bg-black lg:min-w-0 lg:flex-[1.4]">
               <ExplicitCover key={post.id} explicit={post.explicit}>
                 {style === "card" ? (
-                  <div className="w-full max-w-[26rem] p-4 md:p-6">
+                  <div className="w-full max-w-[26rem] p-4 lg:p-6">
                     <TextCard post={post} onDoubleTap={() => post.myVote !== 1 && void vote(1)} />
                   </div>
                 ) : (
@@ -64,7 +65,7 @@ export function PostDialog({ post, onChange, onClose }: { post: FeedPostDTO | nu
               </ExplicitCover>
             </div>
           )}
-          <div className={cx("flex min-h-0 min-w-0 flex-1 flex-col border-line", style !== "long" && "md:max-w-[26rem] md:border-l")}>
+          <div className={cx("flex min-h-0 min-w-0 flex-1 flex-col border-line", style !== "long" && "lg:max-w-[26rem] lg:border-l")}>
             <header className="flex items-center gap-3 border-b border-line px-4 py-3 pr-14">
               <ProfileTrigger handle={post.author.handle} className="shrink-0 rounded-full">
                 <Avatar name={post.author.displayName} src={post.author.avatarUrl} frame={post.author.avatarFrame} size={34} />
@@ -81,6 +82,7 @@ export function PostDialog({ post, onChange, onClose }: { post: FeedPostDTO | nu
             <PostComments
               pinned
               post={post}
+              focus={focusComment}
               onCount={(n) => onChange({ ...post, commentCount: n })}
               top={
                 <div className="space-y-3 border-b border-line pb-4">

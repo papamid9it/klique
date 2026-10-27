@@ -7,7 +7,7 @@ import { useToast } from "@/components/providers/ToastProvider";
 import { Dropdown } from "@/components/ui/Dropdown";
 import { Icon } from "@/components/ui/Icon";
 import { PRESENCES, type Presence } from "@/lib/constants";
-import { PresenceDot } from "./ProfileParts";
+import { StatusIcon } from "./ProfileParts";
 
 /** Your status (the dot on your picture): Online, Idle, Do not disturb, Invisible. Changes at once; saved behind. */
 export function useSetStatus() {
@@ -38,13 +38,10 @@ export function StatusPicker({ className, onChange }: { className?: string; onCh
       align="right"
       width={200}
       className={className}
-      items={[{ type: "label", label: "Set your status" }, ...PRESENCES.map((s) => ({ label: s.label, hint: s.id === current ? "Current" : undefined, onSelect: () => (onChange?.(s.id), void set(s.id)) }))]}
+      items={[{ type: "label", label: "Set your status" }, ...PRESENCES.map((s) => ({ label: s.label, leading: <StatusIcon presence={s.id} />, checked: s.id === current, onSelect: () => (onChange?.(s.id), void set(s.id)) }))]}
       trigger={({ props }) => (
         <button {...props} className="inline-flex h-9 items-center gap-2 rounded-full border border-line bg-surface px-3 text-[12.5px] font-semibold hover:bg-raised">
-          <span className="relative size-2.5">
-            <PresenceDot presence={current} className="inset-0 size-2.5 ring-0" />
-            {current === "invisible" && <span className="absolute inset-0 rounded-full border-2 border-ink-muted" />}
-          </span>
+          <StatusIcon presence={current} size={10} />
           {PRESENCES.find((s) => s.id === current)?.label}
           <Icon name="chevron-down" size={12} />
         </button>

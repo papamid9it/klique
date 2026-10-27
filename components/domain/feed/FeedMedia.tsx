@@ -305,7 +305,7 @@ export function FeedMedia({ media, className, onOpen, onDoubleTap, fill, withSou
   return (
     <div
       ref={box}
-      className={cx("relative w-full overflow-hidden bg-black", fill ? "aspect-(--ratio) max-h-[60dvh] md:aspect-auto md:h-full md:max-h-none" : "aspect-(--ratio) max-h-[540px] rounded-2xl", className)}
+      className={cx("relative w-full overflow-hidden bg-black", fill ? "aspect-(--ratio) max-h-[60dvh] sm:max-h-[42dvh] lg:aspect-auto lg:h-full lg:max-h-none" : "aspect-(--ratio) max-h-[540px] rounded-2xl", className)}
       style={{ "--ratio": String(ratio ?? 4 / 3) } as React.CSSProperties}
       onTouchStart={(e) => (touch.current = e.touches[0].clientX)}
       onTouchEnd={(e) => {

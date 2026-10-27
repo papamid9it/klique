@@ -25,7 +25,7 @@ export function AdminHeader({ title, children, actions }: { title: string; child
 }
 
 /** A headline number with an optional comparison line and link. */
-export function StatCard({ label, value, hint, icon, href, tone }: { label: string; value: number | string; hint?: ReactNode; icon: IconName; href?: string; tone?: "attention" }) {
+export function StatCard({ label, value, hint, icon, href, tone, className }: { label: string; value: number | string; hint?: ReactNode; icon: IconName; href?: string; tone?: "attention"; className?: string }) {
   const body = (
     <>
       <div className="flex items-center justify-between gap-2">
@@ -38,7 +38,7 @@ export function StatCard({ label, value, hint, icon, href, tone }: { label: stri
       {hint && <p className="mt-2 text-xs text-ink-muted">{hint}</p>}
     </>
   );
-  const cls = "block rounded-card border border-line bg-surface p-4 transition";
+  const cls = cx("block rounded-card border border-line bg-surface p-4 transition", className);
   return href ? (
     <Link href={href} className={cx(cls, "hover:border-ink-muted/40 hover:bg-raised/40")}>
       {body}
@@ -210,62 +210,111 @@ export function ConfirmDialog({
   );
 }
 
-const ACTION_LABEL: Record<string, { label: string; icon: IconName }> = {
-  "report.dismiss": { label: "Dismissed a report about", icon: "x" },
-  "content.delete": { label: "Deleted reported content", icon: "trash" },
-  "user.suspend": { label: "Suspended", icon: "ban" },
-  "user.restore": { label: "Restored", icon: "check" },
-  "user.signout": { label: "Signed out everywhere", icon: "logout" },
-  "host.grant": { label: "Made a verified host", icon: "megaphone" },
-  "host.revoke": { label: "Removed verified host", icon: "megaphone" },
-  "event.cancel": { label: "Cancelled event", icon: "calendar" },
-  "event.restore": { label: "Un-cancelled event", icon: "calendar" },
-  "event.delete": { label: "Deleted event", icon: "trash" },
-  "community.delete": { label: "Deleted community", icon: "trash" },
-  "draft.approve": { label: "Approved imported event", icon: "check" },
-  "draft.reject": { label: "Rejected imported event", icon: "x" },
-  "source.add": { label: "Added event source", icon: "link" },
-  "source.remove": { label: "Removed event source", icon: "link" },
-  "ad.create": { label: "Created ad", icon: "megaphone" },
-  "ad.update": { label: "Edited ad", icon: "edit" },
-  "ad.pause": { label: "Paused ad", icon: "megaphone" },
-  "ad.resume": { label: "Resumed ad", icon: "megaphone" },
-  "ad.delete": { label: "Deleted ad", icon: "trash" },
+/** Each logged action as a sentence after the admin's name: `{t}` is the thing it was done to (linked while it exists). */
+const ACTION_TEXT: Record<string, { text: string; icon: IconName }> = {
+  "report.dismiss": { text: "dismissed a report about {t}", icon: "flag" },
+  "content.delete": { text: "removed reported content: {t}", icon: "trash" },
+  "user.suspend": { text: "suspended {t}", icon: "ban" },
+  "user.restore": { text: "lifted the suspension on {t}", icon: "check" },
+  "user.signout": { text: "signed {t} out everywhere", icon: "logout" },
+  "host.grant": { text: "made {t} a verified host", icon: "megaphone" },
+  "host.revoke": { text: "removed {t} as a verified host", icon: "megaphone" },
+  "event.cancel": { text: "cancelled the event {t}", icon: "calendar" },
+  "event.restore": { text: "brought back the event {t}", icon: "calendar" },
+  "event.delete": { text: "deleted the event {t}", icon: "trash" },
+  "community.delete": { text: "deleted the community {t}", icon: "trash" },
+  "community.unadult": { text: "removed the 18+ label from {t}", icon: "hash" },
+  "community.unexplicit": { text: "turned off explicit content in {t}", icon: "hash" },
+  "draft.approve": { text: "approved the imported event {t}", icon: "check" },
+  "draft.reject": { text: "rejected the imported event {t}", icon: "x" },
+  "source.add": { text: "added the event source {t}", icon: "link" },
+  "source.remove": { text: "removed the event source {t}", icon: "link" },
+  "finder.search": { text: "ran the event finder for {t}", icon: "search" },
+  "ad.create": { text: "created the ad {t}", icon: "megaphone" },
+  "ad.update": { text: "edited the ad {t}", icon: "edit" },
+  "ad.pause": { text: "paused the ad {t}", icon: "pause" },
+  "ad.resume": { text: "resumed the ad {t}", icon: "play" },
+  "ad.delete": { text: "deleted the ad {t}", icon: "trash" },
+  "ad.approve": { text: "approved the ad request {t}", icon: "check" },
+  "ad.changes": { text: "asked for changes to the ad request {t}", icon: "edit" },
+  "ad.reject": { text: "turned down the ad request {t}", icon: "x" },
+  "ad.mark-paid": { text: "marked the ad request {t} as paid", icon: "coin" },
+  "ad.pricing": { text: "changed ad prices", icon: "coin" },
+  "points.config": { text: "changed how points are earned", icon: "sliders" },
+  "points.grant": { text: "gave points to {t}", icon: "coin" },
+  "points.revoke": { text: "took points from {t}", icon: "coin" },
+  "hype.grant": { text: "gave Hype to {t}", icon: "coin" },
+  "hype.revoke": { text: "took Hype from {t}", icon: "coin" },
+  "hype.config": { text: "changed Hype prices", icon: "coin" },
+  "money.config": { text: "changed the fees", icon: "coin" },
+  "payout.paid": { text: "paid out to {t}", icon: "coin" },
+  "payout.rejected": { text: "turned down a payout for {t}", icon: "x" },
+  "categories.save": { text: "updated the categories", icon: "folder" },
+  "effect.add": { text: "added the profile effect {t}", icon: "asterisk" },
+  "effect.edit": { text: "edited the profile effect {t}", icon: "asterisk" },
+  "effect.remove": { text: "removed the profile effect {t}", icon: "trash" },
 };
 
 export const AUDIT_FILTERS: { id: string; label: string }[] = [
   { id: "", label: "Everything" },
   { id: "user.", label: "Accounts" },
-  { id: "host.", label: "Hosting" },
   { id: "report.", label: "Reports" },
   { id: "content.", label: "Content" },
   { id: "event.", label: "Events" },
   { id: "community.", label: "Communities" },
   { id: "draft.", label: "Event inbox" },
   { id: "ad.", label: "Ads" },
+  { id: "effect.", label: "Effects" },
+  { id: "payout.", label: "Payouts" },
 ];
 
-export function AuditRow({ e, compact }: { e: AuditEntryDTO; compact?: boolean }) {
-  const a = ACTION_LABEL[e.action] ?? { label: e.action, icon: "info" as IconName };
-  const target = e.href ? (
+/** "fall-smoke" → "Fall smoke" (a removed effect is only logged by its slug) */
+const unslug = (s: string) => (/^[a-z0-9]+(-[a-z0-9]+)+$/.test(s) ? (s[0].toUpperCase() + s.slice(1)).replace(/-/g, " ") : s);
+
+/** Runs of the same admin doing the same thing to the same target, one after another, as one row ("×3"). */
+export function groupAudit(entries: AuditEntryDTO[]): { e: AuditEntryDTO; count: number }[] {
+  const out: { e: AuditEntryDTO; count: number }[] = [];
+  for (const e of entries) {
+    const last = out[out.length - 1];
+    if (last && last.e.action === e.action && last.e.targetLabel === e.targetLabel && last.e.admin?.id === e.admin?.id) last.count++;
+    else out.push({ e, count: 1 });
+  }
+  return out;
+}
+
+export function AuditRow({ e, compact, count = 1 }: { e: AuditEntryDTO; compact?: boolean; count?: number }) {
+  const a = ACTION_TEXT[e.action] ?? { text: `${e.action.split(".").reverse().join(" ")} {t}`, icon: "info" as IconName };
+  const label = unslug(e.targetLabel);
+  const target = !label ? null : e.href ? (
     <Link href={e.href} className="font-medium text-ink hover:underline">
-      {e.targetLabel}
+      {label}
     </Link>
   ) : (
-    <span className="font-medium text-ink">{e.targetLabel}</span>
+    <span className="font-medium text-ink">{label}</span>
   );
+  const [before, after = ""] = a.text.split("{t}");
   return (
     <li className={cx("flex gap-3", compact ? "px-4 py-3" : "px-4 py-3.5")}>
       <span className="mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-raised text-ink-muted">
         <Icon name={a.icon} size={13} />
       </span>
       <div className="min-w-0 flex-1 text-sm">
-        <p className="text-ink-muted">
-          <span className="font-medium text-ink">{e.admin ? `@${e.admin.handle}` : "An admin"}</span> · {a.label} {target}
+        <p className="text-ink-muted [overflow-wrap:anywhere]">
+          {e.admin ? (
+            <Link href={`/?profile=${e.admin.handle}`} className="font-medium text-ink hover:underline">
+              {e.admin.displayName}
+            </Link>
+          ) : (
+            <span className="font-medium text-ink">An admin</span>
+          )}{" "}
+          {before}
+          {a.text.includes("{t}") && target}
+          {after}
+          {count > 1 && <span className="ml-1.5 rounded-full bg-raised px-1.5 py-px font-mono text-[11px] text-ink-muted">×{count}</span>}
         </p>
-        {e.note && !compact && <p className="mt-0.5 text-xs text-ink-muted">&ldquo;{e.note}&rdquo;</p>}
+        {e.note && !compact && <p className="mt-0.5 text-xs text-ink-muted [overflow-wrap:anywhere]">&ldquo;{e.note}&rdquo;</p>}
       </div>
-      <time dateTime={e.createdAt} title={new Date(e.createdAt).toLocaleString()} className="shrink-0 font-mono text-[11px] text-ink-muted">
+      <time dateTime={e.createdAt} title={new Date(e.createdAt).toLocaleString()} className="mt-0.5 shrink-0 font-mono text-[11px] text-ink-muted">
         {relativeStamp(e.createdAt)}
       </time>
     </li>

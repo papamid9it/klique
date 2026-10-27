@@ -80,7 +80,7 @@ export function RightRail() {
       </section>
 
       <p className="eyebrow mt-auto leading-relaxed normal-case">
-        klique. is built for Lagos and Abuja.{" "}
+        klique. is built for your city{" "}
         <Link href="/settings#appearance" className="underline underline-offset-2 hover:text-ink">
           Change the mood
         </Link>

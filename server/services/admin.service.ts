@@ -1,11 +1,13 @@
 import "server-only";
 import { forgetAdultCommunities } from "../policies/adult";
 import { unhideAfterReview } from "./safety.service";
-import { Payout } from "../models/Money";
+import { Payment, Payout } from "../models/Money";
+import { Promotion } from "../models/Promotion";
+import { HypePurchase } from "../models/Wallet";
 import { FeedComment, FeedPost, FeedVote, type IFeedPost } from "../models/FeedPost";
 import { Reaction } from "../models/Reaction";
 import { VOICE_ENABLED } from "@/lib/constants";
-import type { Types } from "mongoose";
+import { Types } from "mongoose";
 import type {
   AdminCommunityRow,
   AdminEventFilter,
@@ -511,23 +513,64 @@ export async function adminSummary(): Promise<AdminSummaryDTO> {
   return { reports, pendingDrafts, pendingAds, pendingPayouts };
 }
 
-export async function adminOverview(): Promise<AdminOverviewDTO> {
+/** an ObjectId for a moment: windows a collection by its _id index (an _id starts with its creation time) */
+const idAt = (d: Date) => Types.ObjectId.createFromTime(Math.floor(+d / 1000));
+const dayKey = (date: unknown) => ({ $dateToString: { format: "%Y-%m-%d", date } });
+const perDay = (match: object, date: unknown = "$createdAt") => [{ $match: match }, { $group: { _id: dayKey(date), n: { $sum: 1 } } }];
+const sumOf = (match: object, field: string) => [{ $match: match }, { $group: { _id: null, n: { $sum: field } } }];
+const first = (rows: { n: number }[]) => rows[0]?.n ?? 0;
+
+/** People who posted, commented or sent a message (community chat or DM) between these moments. */
+async function activePeople(from: Date, to: Date): Promise<number> {
+  const _id = { $gte: idAt(from), $lt: idAt(to) };
+  const lists = await Promise.all([FeedPost.distinct("authorId", { _id }), FeedComment.distinct("authorId", { _id }), ChannelMessage.distinct("authorId", { _id }), Message.distinct("senderId", { _id })]);
+  return new Set(lists.flat().map(String)).size;
+}
+
+/** What Klique earned between these moments, in naira: Hype packs, ads and promotions, and its fee on donations and contributions. */
+async function revenueBetween(from: Date, to: Date) {
+  const paid = { $gte: from, $lt: to };
+  const [hype, ads, promos, fees] = await Promise.all([
+    HypePurchase.aggregate<{ n: number }>(sumOf({ status: "paid", paidAt: paid }, "$amount")),
+    AdCampaign.aggregate<{ n: number }>(sumOf({ paidAt: paid }, "$amount")),
+    Promotion.aggregate<{ n: number }>(sumOf({ status: "paid", paidAt: paid }, "$amount")),
+    Payment.aggregate<{ n: number }>(sumOf({ status: "paid", paidAt: paid }, "$fee")),
+  ]);
+  // promotions are kept in kobo
+  const out = { hype: first(hype), ads: first(ads) + Math.round(first(promos) / 100), fees: first(fees) };
+  return { ...out, total: out.hype + out.ads + out.fees };
+}
+
+export const OVERVIEW_RANGES = [7, 30, 90] as const;
+
+/** `days`: how far back the chart goes (7, 30 or 90). */
+export async function adminOverview(days: (typeof OVERVIEW_RANGES)[number] = 30): Promise<AdminOverviewDTO> {
   const now = Date.now();
   const d7 = new Date(now - 7 * DAY);
   const d14 = new Date(now - 14 * DAY);
-  const start = new Date(new Date(now - 29 * DAY).toISOString().slice(0, 10));
+  const start = new Date(new Date(now - (days - 1) * DAY).toISOString().slice(0, 10));
+  const fromId = { _id: { $gte: idAt(start) } };
+  const today = new Date(now);
+  const monthStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
+  const prevStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 1, 1));
+  // last month up to the same point, so the comparison is fair early in the month
+  const prevEnd = new Date(Math.min(+monthStart, +prevStart + (now - +monthStart)));
   const min = LARGE_COMMUNITY;
   const [
-    total, new7d, newPrev7d, suspended, unverified,
+    total, new7d, newPrev7d, suspended, unverified, active7d, activePrev7d,
     upcoming, thisWeek, created7d, imported,
     communities, communitiesNew7d, large,
-    openReports, pendingDrafts, perDay, recent,
+    openReports, urgentReports, pendingDrafts, pendingAds, pendingPayouts,
+    signupDays, postDays, chatDays, dmDays,
+    revenue, revenuePrev, recent,
   ] = await Promise.all([
     User.countDocuments({}),
     User.countDocuments({ createdAt: { $gte: d7 } }),
     User.countDocuments({ createdAt: { $gte: d14, $lt: d7 } }),
     User.countDocuments({ suspendedAt: { $ne: null } }),
     User.countDocuments({ emailVerifiedAt: null }),
+    activePeople(d7, today),
+    activePeople(d14, d7),
     Event.countDocuments({ cancelled: false, startsAt: { $gte: new Date(now) } }),
     Event.countDocuments({ cancelled: false, startsAt: { $gte: new Date(now), $lt: new Date(now + 7 * DAY) } }),
     Event.countDocuments({ createdAt: { $gte: d7 } }),
@@ -536,24 +579,32 @@ export async function adminOverview(): Promise<AdminOverviewDTO> {
     Community.countDocuments({ createdAt: { $gte: d7 } }),
     Community.countDocuments({ memberCount: { $gte: min } }),
     Report.countDocuments({ status: "open" }),
+    Report.countDocuments({ status: "open", priority: { $gte: 2 } }),
     EventDraft.countDocuments({ status: "pending" }),
-    User.aggregate<{ _id: string; n: number }>([
-      { $match: { createdAt: { $gte: start } } },
-      { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }, n: { $sum: 1 } } },
-    ]),
-    AdminAction.find().sort({ createdAt: -1 }).limit(8).lean<IAdminAction[]>(),
+    AdCampaign.countDocuments({ status: "pending" }),
+    Payout.countDocuments({ status: "requested" }),
+    User.aggregate<{ _id: string; n: number }>(perDay({ createdAt: { $gte: start } })),
+    FeedPost.aggregate<{ _id: string; n: number }>(perDay(fromId, { $toDate: "$_id" })),
+    ChannelMessage.aggregate<{ _id: string; n: number }>(perDay(fromId, { $toDate: "$_id" })),
+    Message.aggregate<{ _id: string; n: number }>(perDay(fromId, { $toDate: "$_id" })),
+    revenueBetween(monthStart, new Date(now + 1)),
+    revenueBetween(prevStart, prevEnd),
+    AdminAction.find().sort({ createdAt: -1 }).limit(14).lean<IAdminAction[]>(),
   ]);
-  const byDay = new Map(perDay.map((d) => [d._id, d.n]));
-  const signups = Array.from({ length: 30 }, (_, i) => {
+  const map = (rows: { _id: string; n: number }[]) => new Map(rows.map((d) => [d._id, d.n]));
+  const [su, po, ch, dm] = [map(signupDays), map(postDays), map(chatDays), map(dmDays)];
+  const series = Array.from({ length: days }, (_, i) => {
     const day = new Date(+start + i * DAY).toISOString().slice(0, 10);
-    return { day, count: byDay.get(day) ?? 0 };
+    return { day, signups: su.get(day) ?? 0, posts: po.get(day) ?? 0, messages: (ch.get(day) ?? 0) + (dm.get(day) ?? 0) };
   });
   return {
-    people: { total, new7d, newPrev7d, suspended, unverified },
+    people: { total, new7d, newPrev7d, suspended, unverified, active7d, activePrev7d },
     events: { upcoming, thisWeek, created7d, imported },
     communities: { total: communities, new7d: communitiesNew7d, large },
-    queue: { openReports, pendingDrafts },
-    signups,
+    queue: { openReports, urgentReports, pendingDrafts, pendingAds, pendingPayouts },
+    revenue: { ...revenue, prevTotal: revenuePrev.total },
+    days,
+    series,
     recent: await toAudit(recent),
     hostMinMembers: min,
   };

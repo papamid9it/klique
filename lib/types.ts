@@ -1251,12 +1251,18 @@ export interface AuditEntryDTO {
 }
 
 export interface AdminOverviewDTO {
-  people: { total: number; new7d: number; newPrev7d: number; suspended: number; unverified: number };
+  /** active: posted, commented or sent a message in the 7 days (and the 7 before) */
+  people: { total: number; new7d: number; newPrev7d: number; suspended: number; unverified: number; active7d: number; activePrev7d: number };
   events: { upcoming: number; thisWeek: number; created7d: number; imported: number };
   communities: { total: number; new7d: number; large: number };
-  queue: { openReports: number; pendingDrafts: number };
-  /** sign-ups per day, oldest first, the last 30 days (YYYY-MM-DD, UTC) */
-  signups: { day: string; count: number }[];
+  /** what's waiting on an admin (urgent: reports about a minor or other priority-2 reasons) */
+  queue: { openReports: number; urgentReports: number; pendingDrafts: number; pendingAds: number; pendingPayouts: number };
+  /** this month so far, in naira, and last month up to the same point */
+  revenue: { hype: number; ads: number; fees: number; total: number; prevTotal: number };
+  /** how many days the series covers (7, 30 or 90) */
+  days: number;
+  /** per day, oldest first (YYYY-MM-DD, UTC): sign-ups, feed posts, and messages (community chat and DMs) */
+  series: { day: string; signups: number; posts: number; messages: number }[];
   recent: AuditEntryDTO[];
   /** the size from which a community counts as large */
   hostMinMembers: number;

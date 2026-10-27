@@ -135,7 +135,7 @@ function ProfileBody({ handle, onClose, onOpenPerson, tryOn }: { handle: string;
             <ZoomAvatar url={p.avatarUrl} name={p.displayName}>
               <Avatar name={p.displayName} src={p.avatarUrl} frame={p.avatarFrame} size={104} />
             </ZoomAvatar>
-            <PresenceDot presence={p.presence} className="right-2 bottom-2 size-[22px]" />
+            <PresenceDot presence={p.presence} self={view.isSelf} className="right-2 bottom-2 size-[22px]" />
           </span>
           <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] break-words"><UserName name={p.displayName} effect={p.nameEffect} /></h2>
           <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[13px] text-ink-muted">

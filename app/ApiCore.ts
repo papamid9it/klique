@@ -7,7 +7,7 @@
  *
  * Web (same origin): no config needed — cookies carry the session.
  * Native / desktop / separately-hosted web:
- *   ApiClient.configure({ baseUrl: "https://api.scene.ng", native: true, getToken: () => storedToken });
+ *   ApiClient.configure({ baseUrl: "https://api.klique.app", native: true, getToken: () => storedToken });
  */
 
 type Primitive = string | number | boolean | null | undefined;

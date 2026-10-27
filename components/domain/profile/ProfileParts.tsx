@@ -14,6 +14,7 @@ import { SafetyService } from "@/app/services/SafetyService";
 import { FriendButton } from "@/components/domain/friends/FriendButton";
 import { OverflowMenu } from "@/components/domain/OverflowMenu";
 import { ReportDialog } from "@/components/domain/ReportDialog";
+import { useAuth } from "@/components/providers/AuthProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
@@ -82,16 +83,37 @@ export function ProfileBanner({ handle, className, bannerUrl, bannerColor, zooma
 
 const PRESENCE_TONE: Record<Presence, string | null> = { online: "var(--success)", idle: "#f0b232", dnd: "var(--danger)", invisible: null };
 
-/** The status dot on a profile picture: the status the person set (none when they're invisible). */
-export function PresenceDot({ presence, className }: { presence: Presence; className?: string }) {
-  const tone = PRESENCE_TONE[presence];
+/**
+ * The status dot on a profile picture: the status the person set (none when they're invisible).
+ * `self`: it's your own picture, so it follows the status you just picked, and Invisible shows as a hollow grey dot.
+ */
+export function PresenceDot({ presence, className, self }: { presence: Presence; className?: string; self?: boolean }) {
+  const { user } = useAuth();
+  if (self && user) presence = user.presence;
+  const tone = PRESENCE_TONE[presence] ?? (self ? "var(--ink-muted)" : null);
   if (!tone) return null;
   const label = PRESENCES.find((p) => p.id === presence)?.label;
   return (
-    <span role="img" aria-label={label} title={label} className={cx("absolute rounded-full ring-[3px] ring-surface", className)} style={{ background: tone }}>
+    <span role="img" aria-label={label} title={label} className={cx("absolute overflow-hidden rounded-full ring-[3px] ring-surface", className)} style={{ background: tone }}>
+      {presence === "idle" && <span aria-hidden="true" className="absolute -top-[12%] -left-[12%] size-[62%] rounded-full bg-surface" />}
       {presence === "dnd" && <span aria-hidden="true" className="absolute inset-x-[22%] top-1/2 h-[18%] -translate-y-1/2 rounded-full bg-surface" />}
+      {presence === "invisible" && <span aria-hidden="true" className="absolute inset-[28%] rounded-full bg-surface" />}
     </span>
   );
+}
+
+/** cut-outs that let the row behind show through (menus, buttons): Idle's moon, Do not disturb's bar, Invisible's hole */
+const STATUS_MASK: Record<Presence, string | undefined> = {
+  online: undefined,
+  idle: "radial-gradient(circle at 18% 18%, transparent 35%, #000 36%)",
+  dnd: "linear-gradient(to bottom, #000 40%, transparent 40% 60%, #000 60%), linear-gradient(to right, #000 22%, transparent 22% 78%, #000 78%)",
+  invisible: "radial-gradient(circle closest-side, transparent 48%, #000 52%)",
+};
+
+/** A status's icon on its own, for menus and buttons (the dot on a picture is PresenceDot). */
+export function StatusIcon({ presence, size = 12 }: { presence: Presence; size?: number }) {
+  const mask = STATUS_MASK[presence];
+  return <span aria-hidden="true" className="inline-block shrink-0 rounded-full" style={{ width: size, height: size, background: PRESENCE_TONE[presence] ?? "var(--ink-muted)", maskImage: mask, WebkitMaskImage: mask }} />;
 }
 
 export const monthYear = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "Africa/Lagos" });

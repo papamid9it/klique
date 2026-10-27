@@ -51,7 +51,7 @@ function List({ scope }: { scope: Scope }) {
       <p className="mb-4 font-mono text-xs text-ink-muted">
         {items.length}{hasMore ? "+" : ""} {items.length === 1 ? "event" : "events"}
       </p>
-      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+      <div className="grid gap-5 min-[540px]:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
         {items.map((e) => (
           <EventCard
             key={e.id}

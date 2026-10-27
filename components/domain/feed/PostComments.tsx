@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
 import { FeedService } from "@/app/services/FeedService";
 import { AttachedSticker, ReactButton, ReactionBar, StickerPicker, StickerView, type StickerChoice } from "@/components/domain/chat/Reactions";
@@ -22,28 +22,69 @@ import { applyReaction, type ReactionKind } from "@/lib/reactions";
 import type { FeedCommentDTO, FeedPostDTO, ReactionDTO } from "@/lib/types";
 import { sendReaction } from "@/lib/reactQueue";
 
-/** Deepest level drawn indented; replies below it line up under the last level. */
-const MAX_DEPTH = 5;
+/** Replies shown each time you open a thread a bit further. */
+const BATCH = 3;
 
-type Tree = { c: FeedCommentDTO; kids: Tree[] };
+type Reply = { c: FeedCommentDTO; to: FeedCommentDTO["author"] | null };
+type Thread = { c: FeedCommentDTO; replies: Reply[] };
 
-function nest(list: FeedCommentDTO[]): Tree[] {
-  const nodes = new Map(list.map((c) => [c.id, { c, kids: [] as Tree[] }]));
-  const roots: Tree[] = [];
-  for (const n of nodes.values()) {
-    const parent = n.c.parentId ? nodes.get(n.c.parentId) : undefined;
-    (parent ?? { kids: roots }).kids.push(n); // a reply whose parent is hidden becomes a top-level comment
+/**
+ * Instagram style: top-level comments, each with every reply under it in one flat list (oldest first), however deep
+ * the reply was made. A reply to a reply carries who it answers (`to`), shown as an @mention. A reply whose comment
+ * is hidden becomes a top-level comment.
+ */
+function threads(list: FeedCommentDTO[]): Thread[] {
+  const byId = new Map(list.map((c) => [c.id, c]));
+  const rootOf = (c: FeedCommentDTO) => {
+    let x = c;
+    for (let i = 0; x.parentId && byId.has(x.parentId) && i < 100; i++) x = byId.get(x.parentId)!;
+    return x;
+  };
+  const out = new Map<string, Thread>();
+  for (const c of list) if (rootOf(c) === c) out.set(c.id, { c, replies: [] });
+  for (const c of list) {
+    const root = rootOf(c);
+    if (root === c) continue;
+    const parent = byId.get(c.parentId!)!;
+    out.get(root.id)!.replies.push({ c, to: parent === root ? null : parent.author });
   }
-  return roots;
+  return [...out.values()];
 }
 
-const count = (n: Tree): number => n.kids.reduce((s, k) => s + 1 + count(k), 0);
+const MENTION = /^@([a-z0-9_]+)/i;
+
+/** A comment's text, its leading @mention (typed, or the person a reply answers) as a link to them. */
+function CommentText({ text, to }: { text: string; to: FeedCommentDTO["author"] | null }) {
+  const m = MENTION.exec(text);
+  const at = (handle: string) => (
+    <ProfileTrigger handle={handle} className="font-semibold text-accent-text hover:underline">
+      @{handle}
+    </ProfileTrigger>
+  );
+  return (
+    <p className="mt-0.5 text-[14px] leading-relaxed break-words whitespace-pre-wrap">
+      {m ? (
+        <>
+          {at(m[1])}
+          <Linkified text={text.slice(m[0].length)} />
+        </>
+      ) : (
+        <>
+          {to && <>{at(to.handle)} </>}
+          <Linkified text={text} />
+        </>
+      )}
+    </p>
+  );
+}
 
 type Draft = { body: string } & StickerChoice;
 
-/** A box to write a comment or a reply, with a sticker tray like chat (the picked sticker waits above the box until Post). */
-function Composer({ onSend, placeholder, autoFocus, onCancel }: { onSend: (draft: Draft) => Promise<boolean>; placeholder: string; autoFocus?: boolean; onCancel?: () => void }) {
-  const [body, setBody] = useState("");
+/**
+ * The comment bar, with a sticker tray like chat (the picked sticker waits above the box until Post). Its text is
+ * held outside so Reply can fill it with "@name "; `above` is the "Replying to" strip.
+ */
+function Composer({ body, setBody, onSend, placeholder, inputRef, above }: { body: string; setBody: (v: string) => void; onSend: (draft: Draft) => Promise<boolean>; placeholder: string; inputRef?: React.Ref<HTMLTextAreaElement>; above?: React.ReactNode }) {
   const [sticker, setSticker] = useState<StickerChoice | null>(null);
   const [tray, setTray] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -64,21 +105,22 @@ function Composer({ onSend, placeholder, autoFocus, onCancel }: { onSend: (draft
         void send();
       }}
     >
+      {above}
       <AttachedSticker choice={sticker} onRemove={() => setSticker(null)} />
       {/* in the flow, as wide as the box: a popover would be cut off by the scrolling comment list */}
       {tray && <StickerPicker onPick={setSticker} onClose={() => setTray(false)} className="mb-2 w-full! max-w-md!" />}
       <div className="flex items-end gap-2">
         <textarea
+          ref={inputRef}
           value={body}
           onChange={(e) => setBody(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();
               void send();
-            } else if (e.key === "Escape" && onCancel) onCancel();
+            }
           }}
           rows={1}
-          autoFocus={autoFocus}
           maxLength={LIMITS.feedComment}
           placeholder={placeholder}
           aria-label={placeholder}
@@ -88,13 +130,8 @@ function Composer({ onSend, placeholder, autoFocus, onCancel }: { onSend: (draft
         <button type="button" onClick={() => setTray((o) => !o)} aria-label="Stickers" aria-expanded={tray} title="Stickers" className="inline-flex size-10 shrink-0 items-center justify-center rounded-full text-ink-muted transition hover:bg-raised hover:text-ink">
           <Icon name="sticker" size={19} />
         </button>
-        {onCancel && (
-          <Button size="sm" variant="ghost" onClick={onCancel}>
-            Cancel
-          </Button>
-        )}
         <Button type="submit" size="sm" variant="primary" loading={busy} disabled={!body.trim() && !sticker}>
-          {onCancel ? "Reply" : "Post"}
+          Post
         </Button>
       </div>
     </form>
@@ -102,33 +139,77 @@ function Composer({ onSend, placeholder, autoFocus, onCancel }: { onSend: (draft
 }
 
 /**
- * A post's comments, Reddit style: replies nest under what they answer with a thread line down each level
- * (click it to fold the branch), a reply box opens right under the comment, and comments take emoji reactions.
+ * A post's comments, Instagram style: top-level comments, their replies folded behind "View replies (N)" (a few at a
+ * time), and one comment bar: Reply fills it with "@name " and a "Replying to" strip, and the reply lands in that
+ * thread, opened. Comments take emoji reactions and stickers.
+ * `pinned` (the post viewer): `top` and the comments scroll together and the comment bar stays at the bottom.
+ * `focus`: a comment to open its thread at and point out (from a notification).
  */
-/**
- * `pinned` (the post viewer): `top` and the comments scroll together and the comment box stays at the bottom,
- * like Instagram.
- */
-export function PostComments({ post, onCount, pinned, top }: { post: FeedPostDTO; onCount: (n: number) => void; pinned?: boolean; top?: React.ReactNode }) {
+export function PostComments({ post, onCount, pinned, top, focus }: { post: FeedPostDTO; onCount: (n: number) => void; pinned?: boolean; top?: React.ReactNode; focus?: string | null }) {
   const { user, requireAuth } = useAuth();
   const toast = useToast();
   const now = useNow();
   const slug = post.community.slug;
   const { data, loading, setData } = useApi(() => FeedService.comments(slug, post.id), [slug, post.id]);
   const list = useMemo(() => data ?? [], [data]);
-  const tree = useMemo(() => nest(list), [list]);
-  const [replying, setReplying] = useState<string | null>(null);
+  const all = useMemo(() => threads(list), [list]);
   const [editing, setEditing] = useState<string | null>(null);
-  const [folded, setFolded] = useState<Set<string>>(new Set());
+  // how many replies each thread shows (none until opened)
+  const [shown, setShown] = useState<Map<string, number>>(new Map());
+  const show = (root: string, n: number) => setShown((m) => new Map(m).set(root, n));
+  const [body, setBody] = useState("");
+  const [replyTo, setReplyTo] = useState<{ id: string; root: string; handle: string } | null>(null);
+  const input = useRef<HTMLTextAreaElement>(null);
+  // a comment pointed out for a moment (yours just posted, or the one a notification is about)
+  const [flash, setFlash] = useState<string | null>(null);
   const canWrite = post.isMember;
 
-  async function add(draft: Draft, parentId?: string): Promise<boolean> {
+  useEffect(() => {
+    if (!flash) return;
+    document.getElementById(`comment-${flash}`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    const t = setTimeout(() => setFlash(null), 2500);
+    return () => clearTimeout(t);
+  }, [flash]);
+
+  // opened from a notification: open the thread that comment is in, and point it out
+  const focused = useRef<string | null>(null);
+  useEffect(() => {
+    if (!focus || focused.current === focus || !data) return;
+    focused.current = focus;
+    const t = all.find((x) => x.c.id === focus || x.replies.some((r) => r.c.id === focus));
+    if (!t) return;
+    if (t.c.id !== focus) show(t.c.id, t.replies.length);
+    setFlash(focus);
+  }, [focus, data, all]);
+
+  function startReply(c: FeedCommentDTO, root: string) {
+    if (!requireAuth()) return;
+    setReplyTo({ id: c.id, root, handle: c.author.handle });
+    setBody(`@${c.author.handle} `);
+    requestAnimationFrame(() => {
+      const el = input.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);
+    });
+  }
+  // clearing the @mention turns it back into a plain comment
+  const typed = (v: string) => {
+    setBody(v);
+    if (replyTo && !v.startsWith(`@${replyTo.handle}`)) setReplyTo(null);
+  };
+
+  async function add(draft: Draft): Promise<boolean> {
     if (!requireAuth()) return false;
+    const to = replyTo && draft.body.startsWith(`@${replyTo.handle}`) ? replyTo : null;
     try {
-      const res = await FeedService.comment(slug, post.id, { ...draft, parentId });
+      const res = await FeedService.comment(slug, post.id, { ...draft, parentId: to?.id });
       setData((d) => [...(d ?? []), res.data]);
       onCount(post.commentCount + 1);
-      setReplying(null);
+      setReplyTo(null);
+      // your reply shows in its thread, opened all the way
+      if (to) show(to.root, Number.MAX_SAFE_INTEGER);
+      setFlash(res.data.id);
       return true;
     } catch (e) {
       toast(errorMessage(e), "error");
@@ -174,86 +255,100 @@ export function PostComments({ post, onCount, pinned, top }: { post: FeedPostDTO
     if (err) toast(errorMessage(err), "error");
   }
 
-  const node = (n: Tree, depth: number) => {
-    const c = n.c;
-    const shut = folded.has(c.id);
-    const replies = count(n);
-    return (
-      <li key={c.id} className="relative">
-        <div className="flex gap-2.5">
-          <ProfileTrigger handle={c.author.handle} className="shrink-0 self-start rounded-full">
-            <Avatar name={c.author.displayName} src={c.author.avatarUrl} frame={c.author.avatarFrame} size={depth ? 26 : 32} />
+  const row = (c: FeedCommentDTO, root: string, to: Reply["to"], reply: boolean) => (
+    <li key={c.id} id={`comment-${c.id}`} className={cx("-mx-2 flex gap-2.5 rounded-control px-2 py-1 transition-colors duration-700", flash === c.id && "bg-accent/10")}>
+      <ProfileTrigger handle={c.author.handle} className="shrink-0 self-start rounded-full">
+        <Avatar name={c.author.displayName} src={c.author.avatarUrl} frame={c.author.avatarFrame} size={reply ? 26 : 32} />
+      </ProfileTrigger>
+      <div className="group min-w-0 flex-1">
+        <p className="flex flex-wrap items-baseline gap-x-2 text-[12.5px] text-ink-muted">
+          <ProfileTrigger handle={c.author.handle} className="font-semibold text-ink hover:underline">
+            <UserName name={c.author.displayName} effect={c.author.nameEffect} />
           </ProfileTrigger>
-          <div className="group min-w-0 flex-1">
-            <p className="flex flex-wrap items-baseline gap-x-2 text-[12.5px] text-ink-muted">
-              <ProfileTrigger handle={c.author.handle} className="font-semibold text-ink hover:underline">
-                <UserName name={c.author.displayName} effect={c.author.nameEffect} />
-              </ProfileTrigger>
-              <time dateTime={c.createdAt}>{now ? relativeStamp(c.createdAt, now) : ""}</time>
-              <EditedTag at={c.editedAt} />
-            </p>
-            {c.deleted ? (
-              <p className="mt-0.5 text-[14px] text-ink-muted italic">Comment deleted</p>
-            ) : editing === c.id ? (
-              <MessageEditor className="mt-1" initial={c.body} max={LIMITS.feedComment} onCancel={() => setEditing(null)} onSave={(body) => saveEdit(c, body)} />
-            ) : (
-              <>
-                {c.body && (
-                  <p className="mt-0.5 text-[14px] leading-relaxed break-words whitespace-pre-wrap">
-                    <Linkified text={c.body} />
-                  </p>
-                )}
-                {(c.sticker || c.stickerUrl) && (
-                  <div className="mt-1">
-                    <StickerView id={c.sticker} url={c.stickerUrl} size={52} />
-                  </div>
-                )}
-              </>
-            )}
-            {!c.deleted && <ReactionBar reactions={c.reactions} canReact={canWrite && !!user} onToggle={(k) => void react(c, k)} className="mt-1" />}
-            <div className="mt-1 flex items-center gap-1 text-[12.5px] font-semibold text-ink-muted">
-              {canWrite && !c.deleted && (
-                <button type="button" onClick={() => setReplying(replying === c.id ? null : c.id)} className="inline-flex h-7 items-center gap-1 rounded-full px-2 hover:bg-raised hover:text-ink">
-                  <Icon name="reply" size={13} /> Reply
-                </button>
-              )}
-              {canWrite && !c.deleted && <ReactButton onPick={(k) => void react(c, k)} align="left" className="[&>button]:size-7" />}
-              {c.canEdit && editing !== c.id && (
-                <button type="button" onClick={() => setEditing(c.id)} className="inline-flex h-7 items-center gap-1 rounded-full px-2 opacity-0 transition group-hover:opacity-100 hover:bg-raised hover:text-ink focus:opacity-100 [@media(pointer:coarse)]:opacity-100">
-                  <Icon name="edit" size={13} /> Edit
-                </button>
-              )}
-              {c.canDelete && (
-                <button type="button" onClick={() => void remove(c)} className="inline-flex h-7 items-center gap-1 rounded-full px-2 opacity-0 transition group-hover:opacity-100 hover:bg-raised hover:text-danger focus:opacity-100 [@media(pointer:coarse)]:opacity-100">
-                  <Icon name="trash" size={13} /> Delete
-                </button>
-              )}
-              {replies > 0 && shut && (
-                <button type="button" onClick={() => setFolded((f) => (f.delete(c.id), new Set(f)))} className="inline-flex h-7 items-center gap-1 rounded-full px-2 text-accent-text hover:bg-raised">
-                  <Icon name="chevron-down" size={13} /> {replies} {replies === 1 ? "reply" : "replies"}
-                </button>
-              )}
-            </div>
-            {replying === c.id && (
-              <div className="mt-2">
-                <Composer autoFocus placeholder={`Reply to ${c.author.displayName}`} onSend={(d) => add(d, c.id)} onCancel={() => setReplying(null)} />
+          <EditedTag at={c.editedAt} />
+        </p>
+        {c.deleted ? (
+          <p className="mt-0.5 text-[14px] text-ink-muted italic">Comment deleted</p>
+        ) : editing === c.id ? (
+          <MessageEditor className="mt-1" initial={c.body} max={LIMITS.feedComment} onCancel={() => setEditing(null)} onSave={(body) => saveEdit(c, body)} />
+        ) : (
+          <>
+            {c.body && <CommentText text={c.body} to={to} />}
+            {(c.sticker || c.stickerUrl) && (
+              <div className="mt-1">
+                <StickerView id={c.sticker} url={c.stickerUrl} size={52} />
               </div>
             )}
-          </div>
+          </>
+        )}
+        {!c.deleted && <ReactionBar reactions={c.reactions} canReact={canWrite && !!user} onToggle={(k) => void react(c, k)} className="mt-1" />}
+        {/* Instagram's line under the comment: when · Reply · react */}
+        <div className="mt-1 flex items-center gap-1 text-[12.5px] font-semibold text-ink-muted">
+          <time dateTime={c.createdAt} className="pr-1 font-normal">
+            {now ? relativeStamp(c.createdAt, now) : ""}
+          </time>
+          {canWrite && !c.deleted && (
+            <button type="button" onClick={() => startReply(c, root)} className="inline-flex h-7 items-center gap-1 rounded-full px-2 hover:bg-raised hover:text-ink">
+              Reply
+            </button>
+          )}
+          {canWrite && !c.deleted && <ReactButton onPick={(k) => void react(c, k)} align="left" className="[&>button]:size-7" />}
+          {c.canEdit && editing !== c.id && (
+            <button type="button" onClick={() => setEditing(c.id)} className="inline-flex h-7 items-center gap-1 rounded-full px-2 opacity-0 transition group-hover:opacity-100 hover:bg-raised hover:text-ink focus:opacity-100 [@media(pointer:coarse)]:opacity-100">
+              <Icon name="edit" size={13} /> Edit
+            </button>
+          )}
+          {c.canDelete && (
+            <button type="button" onClick={() => void remove(c)} className="inline-flex h-7 items-center gap-1 rounded-full px-2 opacity-0 transition group-hover:opacity-100 hover:bg-raised hover:text-danger focus:opacity-100 [@media(pointer:coarse)]:opacity-100">
+              <Icon name="trash" size={13} /> Delete
+            </button>
+          )}
         </div>
-        {n.kids.length > 0 && !shut && (
-          <div className="relative mt-3">
-            {/* the thread line: click it to fold this branch */}
-            <button type="button" onClick={() => setFolded((f) => new Set(f).add(c.id))} aria-label={`Hide ${replies} ${replies === 1 ? "reply" : "replies"}`} title="Hide replies" className={cx("absolute top-0 bottom-0 w-4 -translate-x-1/2 cursor-pointer before:absolute before:inset-y-0 before:left-1/2 before:w-px before:bg-line hover:before:bg-ink-muted", depth ? "left-[13px]" : "left-[16px]")} />
-            <ul className={cx("space-y-3", depth < MAX_DEPTH ? (depth ? "pl-[30px]" : "pl-[38px]") : "")}>{n.kids.map((k) => node(k, Math.min(depth + 1, MAX_DEPTH)))}</ul>
+      </div>
+    </li>
+  );
+
+  const threadOf = (t: Thread) => {
+    const n = t.replies.length;
+    const open = Math.min(shown.get(t.c.id) ?? 0, n);
+    const left = n - open;
+    return (
+      <li key={t.c.id}>
+        <ul>{row(t.c, t.c.id, null, false)}</ul>
+        {n > 0 && (
+          <div className="pl-[42px]">
+            {open > 0 && <ul className="mt-2 space-y-2">{t.replies.slice(0, open).map((r) => row(r.c, t.c.id, r.to, true))}</ul>}
+            {/* Instagram's "—— View replies (N)" */}
+            <button type="button" onClick={() => show(t.c.id, left ? open + BATCH : 0)} aria-expanded={open > 0} className="mt-1.5 inline-flex h-7 items-center gap-3 text-[12.5px] font-semibold text-ink-muted hover:text-ink">
+              <span aria-hidden="true" className="h-px w-6 bg-ink-muted/50" />
+              {left ? (open ? `View more replies (${left})` : `View replies (${left})`) : "Hide replies"}
+            </button>
           </div>
         )}
       </li>
     );
   };
 
-  const box = canWrite ? <Composer placeholder="Add a comment…" onSend={(d) => add(d)} /> : <p className="rounded-control border border-line bg-raised/50 px-3 py-2.5 text-[13px] text-ink-muted">Join {post.community.name} to comment.</p>;
-  const thread = loading ? <RowSkeleton rows={3} /> : tree.length ? <ul className="space-y-4">{tree.map((n) => node(n, 0))}</ul> : <p className="py-6 text-center text-sm text-ink-muted">No comments yet.</p>;
+  const strip = replyTo && (
+    <div className="mb-2 flex items-center justify-between gap-2 rounded-control bg-raised px-3 py-1.5 text-[12.5px] text-ink-muted">
+      <span>
+        Replying to <span className="font-semibold text-ink">@{replyTo.handle}</span>
+      </span>
+      <button
+        type="button"
+        onClick={() => {
+          setReplyTo(null);
+          setBody((b) => b.replace(MENTION, "").trimStart());
+        }}
+        aria-label="Cancel the reply"
+        className="inline-flex size-6 items-center justify-center rounded-full hover:bg-surface hover:text-ink"
+      >
+        <Icon name="x" size={13} />
+      </button>
+    </div>
+  );
+  const box = canWrite ? <Composer body={body} setBody={typed} inputRef={input} above={strip} placeholder={replyTo ? `Reply to @${replyTo.handle}…` : "Add a comment…"} onSend={add} /> : <p className="rounded-control border border-line bg-raised/50 px-3 py-2.5 text-[13px] text-ink-muted">Join {post.community.name} to comment.</p>;
+  const thread = loading ? <RowSkeleton rows={3} /> : all.length ? <ul className="space-y-4">{all.map(threadOf)}</ul> : <p className="py-6 text-center text-sm text-ink-muted">No comments yet.</p>;
 
   if (pinned) {
     return (

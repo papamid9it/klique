@@ -66,7 +66,7 @@ export function ProfileCard({ handle, onClose, onExpand }: { handle: string; onC
       <div className="relative px-4 pb-4">
         <button type="button" onClick={onExpand} aria-label={`Open ${p.displayName}'s full profile`} className="relative -mt-10 block rounded-full bg-surface p-1.5">
           <Avatar name={p.displayName} src={p.avatarUrl} frame={p.avatarFrame} size={80} />
-          <PresenceDot presence={p.presence} className="right-1.5 bottom-1.5 size-[18px]" />
+          <PresenceDot presence={p.presence} self={view.isSelf} className="right-1.5 bottom-1.5 size-[18px]" />
         </button>
         <h2 className="mt-2 text-lg leading-tight font-semibold tracking-[-0.02em] break-words">
           <UserName name={p.displayName} effect={p.nameEffect} />

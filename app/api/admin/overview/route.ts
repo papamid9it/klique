@@ -1,7 +1,8 @@
 import { withApi } from "@/server/http/api";
-import { adminOverview, assertAdmin } from "@/server/services/admin.service";
+import { adminOverview, assertAdmin, OVERVIEW_RANGES } from "@/server/services/admin.service";
 
-export const GET = withApi({ auth: "required" }, async ({ viewer }) => {
+export const GET = withApi({ auth: "required" }, async ({ req, viewer }) => {
   assertAdmin(viewer);
-  return adminOverview();
+  const days = Number(new URL(req.url).searchParams.get("days"));
+  return adminOverview(OVERVIEW_RANGES.find((d) => d === days) ?? 30);
 });

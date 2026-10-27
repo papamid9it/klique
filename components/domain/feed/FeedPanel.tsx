@@ -99,7 +99,7 @@ export function FeedPanel({ c }: { c: CommunityDTO }) {
           }}
         />
       )}
-      <PostDialog post={opened} onChange={patch} onClose={close} />
+      <PostDialog post={opened} onChange={patch} onClose={close} focusComment={sp.get("c")} />
     </div>
   );
 }

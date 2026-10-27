@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { AdminService } from "@/app/services/AdminService";
-import { AdminHeader, AUDIT_FILTERS, AuditRow, LoadMore, Panel, SearchBox, Segmented, Toolbar } from "@/components/domain/admin/AdminParts";
+import { AdminHeader, AUDIT_FILTERS, AuditRow, groupAudit, LoadMore, Panel, SearchBox, Segmented, Toolbar } from "@/components/domain/admin/AdminParts";
 import { AdminGate } from "@/components/domain/admin/AdminShell";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { ErrorState } from "@/components/ui/States";
@@ -37,8 +37,8 @@ function AdminAuditPageContent() {
           <p className="px-4 py-12 text-center text-sm text-ink-muted">Nothing logged{action || query ? " that matches" : " yet"}.</p>
         ) : (
           <ul className="divide-y divide-line">
-            {items.map((e) => (
-              <AuditRow key={e.id} e={e} />
+            {groupAudit(items).map(({ e, count }) => (
+              <AuditRow key={e.id} e={e} count={count} />
             ))}
           </ul>
         )}
