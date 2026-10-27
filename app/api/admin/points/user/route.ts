@@ -1,10 +1,10 @@
 import { readQuery, withApi } from "@/server/http/api";
 import { assertAdmin } from "@/server/services/admin.service";
-import { adminPointsUser } from "@/server/services/points.service";
-import { adminPointsUserQuery } from "@/server/validators/schemas";
+import { adminWalletUser } from "@/server/services/wallet.service";
+import { adminWalletUserQuery } from "@/server/validators/schemas";
 
-/** One person's balance, unlocks and history (by @handle). */
+/** One person's Hype (balance, unlocks, history) and points (by @handle). */
 export const GET = withApi({ auth: "required" }, async ({ req, viewer }) => {
   assertAdmin(viewer);
-  return adminPointsUser(readQuery(req, adminPointsUserQuery).who);
+  return adminWalletUser(readQuery(req, adminWalletUserQuery).who);
 });

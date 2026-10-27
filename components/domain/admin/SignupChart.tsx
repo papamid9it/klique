@@ -8,7 +8,8 @@ import { useState } from "react";
  */
 const fmtDay = (day: string, opts: Intl.DateTimeFormatOptions) => new Date(`${day}T00:00:00Z`).toLocaleDateString(undefined, { timeZone: "UTC", ...opts });
 
-export function SignupChart({ data }: { data: { day: string; count: number }[] }) {
+/** `unit`: what the bars count ("sign-ups"; a community's dashboard says "joined") */
+export function SignupChart({ data, unit = "sign-ups" }: { data: { day: string; count: number }[]; unit?: string }) {
   const [hover, setHover] = useState<number | null>(null);
   const W = 600;
   const H = 160;
@@ -32,7 +33,7 @@ export function SignupChart({ data }: { data: { day: string; count: number }[] }
   return (
     <div>
       <div className="relative">
-        <svg viewBox={`0 0 ${W} ${H + 1}`} preserveAspectRatio="none" className="block h-40 w-full overflow-visible" role="img" aria-label={`${total} sign-ups in the last 30 days`}>
+        <svg viewBox={`0 0 ${W} ${H + 1}`} preserveAspectRatio="none" className="block h-40 w-full overflow-visible" role="img" aria-label={`${total} ${unit} in the last 30 days`}>
           {[0.5, 1].map((f) => (
             <line key={f} x1={0} x2={W} y1={y(niceMax * f)} y2={y(niceMax * f)} stroke="var(--line)" strokeWidth={1} vectorEffect="non-scaling-stroke" strokeDasharray="3 4" />
           ))}
@@ -51,7 +52,7 @@ export function SignupChart({ data }: { data: { day: string; count: number }[] }
                   height={H}
                   fill="transparent"
                   tabIndex={0}
-                  aria-label={`${fmtDay(d.day, { day: "numeric", month: "short" })}: ${d.count} sign-ups`}
+                  aria-label={`${fmtDay(d.day, { day: "numeric", month: "short" })}: ${d.count} ${unit}`}
                   onMouseEnter={() => setHover(i)}
                   onMouseLeave={() => setHover(null)}
                   onFocus={() => setHover(i)}

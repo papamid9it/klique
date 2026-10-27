@@ -29,7 +29,7 @@ export async function myCommunities(viewer: IUser): Promise<MyCommunityDTO[]> {
   const ids = [...parentRole.keys()];
   const [communities, channels, reads, guest] = await Promise.all([
     Community.find({ _id: { $in: ids } }).lean<ICommunity[]>(),
-    Channel.find({ communityId: { $in: ids } }).select("communityId subcommunityId visibility lastMessageId lastMessageAt").lean<IChannel[]>(),
+    Channel.find({ communityId: { $in: ids }, topicId: null }).select("communityId subcommunityId visibility lastMessageId lastMessageAt").lean<IChannel[]>(),
     ChannelRead.find({ userId: viewer._id, communityId: { $in: ids } }).lean<IChannelRead[]>(),
     ChannelMember.find({ userId: viewer._id, communityId: { $in: ids } }).select("channelId").lean<{ channelId: Types.ObjectId }[]>(),
   ]);

@@ -12,11 +12,13 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "check:contrast": "tsx scripts/check-contrast.ts",
-    "check:policies": "tsx scripts/check-policies.ts",
+    "check:policies": "tsx --conditions=react-server scripts/check-policies.ts",
     "seed": "tsx --conditions=react-server scripts/seed.ts",
     "seed:reset": "tsx --conditions=react-server scripts/seed.ts --reset",
+    "seed:feed": "tsx --conditions=react-server scripts/seed-feed.ts",
     "migrate:groups": "tsx scripts/migrate-private-groups.ts",
     "migrate:klique": "tsx --conditions=react-server scripts/migrate-klique.ts",
+    "migrate:currency": "tsx scripts/migrate-currency.ts",
     "check:unfurl": "tsx scripts/check-unfurl.ts"
   },
   "dependencies": {

@@ -1,13 +1,6 @@
 export const APP_NAME = "klique";
 
 /**
- * Selling the big Discover banner as an ad spot ("Discover banner" placement). Built but switched off: while
- * false it isn't offered in Create ad or the admin ad editor, isn't priced, and is never served, so the banner
- * always shows the featured event. Flip to true to start selling it.
- */
-export const DISCOVER_BANNER_ADS = false;
-
-/**
  * The one default community, "Klique": everyone is in it from signup and can't leave. Only site admins post its
  * events, and those are the only events everyone sees; every other event is for its own community's (or group's)
  * members. Announcements are made there.
@@ -100,6 +93,7 @@ export const LIMITS = {
   handleMax: 20,
   displayName: 50,
   bio: 280,
+  pronouns: 40,
   communityName: 60,
   communityDescription: 1200,
   eventTitle: 100,
@@ -109,6 +103,13 @@ export const LIMITS = {
   topicTitle: 160,
   topicBody: 6000,
   topicMedia: 6,
+  /** community posts (the Posts section): caption length, pictures per post, comment length */
+  feedCaption: 2200,
+  feedMedia: 10,
+  feedComment: 2000,
+  /** tags on a board post, and how long each may be */
+  topicTags: 3,
+  topicTag: 20,
   boardName: 30,
   boardDescription: 120,
   boardRules: 1000,
@@ -171,3 +172,12 @@ export function slowModeLabel(sec: number): string {
   if (sec < 3600) return `${Math.round(sec / 60)}m`;
   return `${Math.round(sec / 3600)}h`;
 }
+
+/** The status you set on your profile card (shown as the dot on your picture). "invisible" shows no dot. */
+export const PRESENCES = [
+  { id: "online", label: "Online" },
+  { id: "idle", label: "Idle" },
+  { id: "dnd", label: "Do not disturb" },
+  { id: "invisible", label: "Invisible" },
+] as const;
+export type Presence = (typeof PRESENCES)[number]["id"];

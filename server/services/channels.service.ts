@@ -6,6 +6,7 @@ import { assertStickerUrl, noteStickerUse } from "./stickers.service";
 import { livekitConfig } from "../env";
 import { previewOf, toReplyRef } from "./replies";
 import { type ReactionKind } from "@/lib/reactions";
+import { GOOD_REACTIONS } from "@/lib/points";
 import { summarizeReactions, toggleReaction } from "./reactions";
 import { Types } from "mongoose";
 import type { z } from "zod";
@@ -54,9 +55,13 @@ import { loadBriefs, toBrief } from "../serializers";
 import type { categorySchema, channelCreateSchema, channelUpdateSchema, chatListQuery } from "../validators/schemas";
 import { hiddenUserIds } from "./blocks";
 import { escapeRegex, sid, slugify } from "./helpers";
+import { awardPointsLater } from "./points.service";
 import { notify } from "./push.service";
-import { emitChannel } from "./realtime";
+import { emitChannel, emitTopic } from "./realtime";
+import { Board, Topic, TopicComment, TopicFollow, type ITopic, type ITopicComment } from "../models/Topic";
 import { mentionBriefs, resolveMentions } from "./mentions";
+import { createPoll, deletePoll, pollPreview } from "./polls.service";
+import type { pollInput } from "../validators/schemas";
 
 const MAX_CHANNELS = 50;
 const MAX_CATEGORIES = 15;
@@ -214,7 +219,7 @@ export async function listChannels(viewer: IUser | null, space: Space, access: S
   const scope = scopeOf(space);
   const [categories, channels, reads, invited] = await Promise.all([
     space.sub ? Promise.resolve<IChannelCategory[]>([]) : ChannelCategory.find({ communityId }).sort({ position: 1, createdAt: 1 }).lean<IChannelCategory[]>(),
-    Channel.find(scope).sort({ position: 1, createdAt: 1 }).lean<IChannel[]>(),
+    Channel.find({ ...scope, topicId: null }).sort({ position: 1, createdAt: 1 }).lean<IChannel[]>(),
     viewer && access.isMember ? ChannelRead.find({ userId: viewer._id, communityId }).lean<IChannelRead[]>() : Promise.resolve<IChannelRead[]>([]),
     invitedSet(viewer, communityId),
   ]);
@@ -234,10 +239,10 @@ export async function listChannels(viewer: IUser | null, space: Space, access: S
       const subs = await Subcommunity.find({ _id: { $in: subMs.map((m) => m.subcommunityId) } }).sort({ createdAt: 1 }).lean<ISubcommunity[]>();
       const parentM = await Membership.findOne({ userId: viewer._id, communityId, subcommunityId: null }).lean<IMembership>();
       for (const sub of subs) await ensureDefaultGroupChannels(sub._id, communityId, sub.ownerId);
-      const subChannels = await Channel.find({ communityId, subcommunityId: { $in: subs.map((s) => s._id) } }).sort({ position: 1, createdAt: 1 }).lean<IChannel[]>();
+      const subChannels = await Channel.find({ communityId, subcommunityId: { $in: subs.map((s) => s._id) }, topicId: null }).sort({ position: 1, createdAt: 1 }).lean<IChannel[]>();
       for (const sub of subs) {
         const m = subMs.find((x) => sid(x.subcommunityId!) === sid(sub._id)) ?? null;
-        const gAccess = subAccessFrom(sub, parentM, m, isSiteAdmin(viewer));
+        const gAccess = subAccessFrom(sub, parentM, m, isSiteAdmin(viewer), viewer.points ?? 0);
         const rows = subChannels.filter((c) => sid(c.subcommunityId!) === sid(sub._id) && canSeeChannel(c, gAccess, invited.has(sid(c._id))) && (VOICE_ENABLED || c.type !== "voice"));
         const gUnread = new Map<string, number>();
         const gMentions = await countMentions(viewer._id, rows, readBy, gUnread);
@@ -440,7 +445,7 @@ export async function searchSpaceMembers(viewer: IUser, space: Space, access: Sp
     ...(rx ? { $or: [{ handle: rx }, { displayName: rx }] } : {}),
     _id: { $nin: [...hidden, viewer._id] },
   })
-    .select("handle displayName avatarUrl avatarFrame nameEffect rank country city")
+    .select("handle displayName avatarUrl avatarFrame nameEffect country city")
     .limit(400)
     .lean<IUser[]>();
   const memberRows = await Membership.find({ ...scopeOf(space), status: "active", userId: { $in: users.map((u) => u._id) } }).select("userId").lean<Pick<IMembership, "userId">[]>();
@@ -500,7 +505,7 @@ async function toMessages(rows: IChannelMessage[], viewer: IUser | null, access:
     const author = authors.get(sid(r.authorId));
     if (!author) return [];
     const authorRole = roleByUser.get(sid(r.authorId));
-    const canEdit = !!viewer && !r.deletedAt && !r.sticker && !r.stickerUrl && sid(r.authorId) === me && access.isMember;
+    const canEdit = !!viewer && !r.deletedAt && !r.sticker && !r.stickerUrl && !r.pollId && sid(r.authorId) === me && access.isMember;
     const canDelete = !!viewer && !r.deletedAt && (sid(r.authorId) === me ? access.isMember : access.canManage && (authorRole === undefined || outranks(access.role, authorRole)));
     const mentions = r.deletedAt ? [] : (r.mentions ?? []).flatMap((id) => mentionMap.get(sid(id)) ?? []);
     return [
@@ -523,6 +528,7 @@ async function toMessages(rows: IChannelMessage[], viewer: IUser | null, access:
         canDelete,
         mentions,
         mentionsMe: !!me && mentions.some((m) => m.id === me),
+        pollId: r.deletedAt || !r.pollId ? null : sid(r.pollId),
       },
     ];
   });
@@ -555,10 +561,9 @@ export async function listMessages(viewer: IUser | null, space: Space, access: S
   return { items: await toMessages(page, viewer, access, space), hasMore: rows.length > PAGE };
 }
 
-export async function postMessage(viewer: IUser, space: Space, access: SpaceAccess, channelSlug: string, input: { body: string; sticker?: string; stickerUrl?: string; images?: string[]; replyToId?: string }): Promise<ChannelMessageDTO> {
+export async function postMessage(viewer: IUser, space: Space, access: SpaceAccess, channelSlug: string, input: { body: string; sticker?: string; stickerUrl?: string; images?: string[]; replyToId?: string; poll?: z.infer<typeof pollInput> }): Promise<ChannelMessageDTO> {
   const { body, sticker, images = [], replyToId } = input;
   const stickerUrl = input.stickerUrl && !sticker ? assertStickerUrl(input.stickerUrl) : null;
-  const isSticker = !!sticker || !!stickerUrl;
   const { channel, invited } = await loadChannel(viewer, space, access, channelSlug);
   if (!canPostInChannel(channel, access, invited)) {
     if (access.banned) throw forbidden("You can't post here.");
@@ -568,22 +573,31 @@ export async function postMessage(viewer: IUser, space: Space, access: SpaceAcce
   rateLimit(`chat:${sid(viewer._id)}`, 20, 15_000);
   await assertSlowMode(viewer, access, channel);
 
-  const mentions = isSticker ? [] : await resolveMentions(viewer, channel, body);
+  const mentions = await resolveMentions(viewer, channel, body);
   const replyTarget = replyToId ? await ChannelMessage.findOne({ _id: replyToId, channelId: channel._id }).select("_id authorId").lean<{ _id: Types.ObjectId; authorId: Types.ObjectId }>() : null;
-  const doc = await ChannelMessage.create({ channelId: channel._id, communityId: channel.communityId, authorId: viewer._id, body: isSticker ? "" : body, sticker: sticker ?? null, stickerUrl, images: isSticker ? [] : images, replyToId: replyTarget?._id ?? null, mentions });
+  // a poll rides on its own message (anything else sent with it is dropped)
+  const poll = input.poll ? await createPoll(viewer, { scope: "channel", targetId: channel._id, communityId: channel.communityId }, input.poll) : null;
+  const doc = poll
+    ? await ChannelMessage.create({ channelId: channel._id, communityId: channel.communityId, authorId: viewer._id, body: "", images: [], pollId: poll._id, replyToId: replyTarget?._id ?? null, mentions: [] })
+    : await ChannelMessage.create({ channelId: channel._id, communityId: channel.communityId, authorId: viewer._id, body, sticker: sticker ?? null, stickerUrl, images, replyToId: replyTarget?._id ?? null, mentions });
   noteStickerUse(viewer._id, stickerUrl);
   await Promise.all([
     Channel.updateOne({ _id: channel._id }, { lastMessageId: doc._id, lastMessageAt: doc.createdAt }),
     ChannelRead.updateOne({ userId: viewer._id, channelId: channel._id }, { $set: { lastReadMessageId: doc._id, communityId: channel.communityId } }, { upsert: true }),
   ]);
   emitChannel(channel.communityId, channel._id);
+  const post = channel.topicId ? await Topic.findById(channel.topicId).select("_id title boardId communityId").lean<Pick<ITopic, "_id" | "title" | "boardId" | "communityId">>() : null;
+  const href = post ? await postHref(space, post) : null;
+  const where = post ? `"${post.title}"` : `#${channel.name}`;
   // Phones hear about it only when it is for them: an @mention or an answer to their message.
   const targets = [...(mentions ?? []), ...(replyTarget ? [replyTarget.authorId] : [])].filter((id) => sid(id) !== sid(viewer._id));
+  const said = poll ? pollPreview(poll.question) : previewOf({ body, sticker, stickerUrl, images });
   notify(targets, {
-    title: `${viewer.displayName} in #${channel.name}`,
-    body: previewOf({ body: isSticker ? "" : body, sticker, stickerUrl, images }),
-    data: { type: "channel", communitySlug: space.community.slug, channelSlug: channel.slug, ...(space.sub ? { subSlug: space.sub.slug } : {}) },
-  }, { category: "mentions", groupKey: `chat:${sid(channel._id)}`, many: (n) => `${n} mentions and replies in #${channel.name}`, ref: `channel:${sid(channel._id)}` });
+    title: `${viewer.displayName} in ${where}`,
+    body: said,
+    data: href ? { href } : { type: "channel", communitySlug: space.community.slug, channelSlug: channel.slug, ...(space.sub ? { subSlug: space.sub.slug } : {}) },
+  }, { actorId: viewer._id, category: "mentions", groupKey: `chat:${sid(channel._id)}`, many: (n) => `${n} mentions and replies in ${where}`, ref: `channel:${sid(channel._id)}` });
+  if (post && href) await onPostReply(viewer, post, href, said, targets);
   return (await toMessages([doc.toObject()], viewer, access, space))[0];
 }
 
@@ -607,6 +621,7 @@ export async function editMessage(viewer: IUser, space: Space, access: SpaceAcce
   if (!msg || msg.deletedAt) throw notFound("We couldn't find that message.");
   if (sid(msg.authorId) !== sid(viewer._id)) throw forbidden("You can only edit your own messages.");
   if (msg.sticker || msg.stickerUrl) throw forbidden("Stickers can't be edited. Delete it and send another.");
+  if (msg.pollId) throw forbidden("Polls can't be edited. Delete it and start another.");
   if (!canPostInChannel(channel, access, invited)) throw forbidden("You can't post here any more, so you can't edit this.");
   rateLimit(`chat-edit:${sid(viewer._id)}`, 30, 60_000);
   const next = body.trim();
@@ -633,7 +648,12 @@ export async function deleteMessage(viewer: IUser, space: Space, access: SpaceAc
   }
   await ChannelMessage.updateOne({ _id: msg._id }, { body: "", mentions: [], images: [], sticker: null, stickerUrl: null, pinnedAt: null, pinnedById: null, deletedAt: new Date(), deletedById: viewer._id });
   deleteUploads(msg.images ?? []); // its photos and videos go with it
+  await deletePoll(msg.pollId);
   emitChannel(channel.communityId, channel._id);
+  if (channel.topicId) {
+    await Topic.updateOne({ _id: channel.topicId, commentCount: { $gt: 0 } }, { $inc: { commentCount: -1 } });
+    emitTopic(channel.communityId, channel.topicId);
+  }
   return { deleted: true };
 }
 
@@ -700,9 +720,11 @@ export async function reactToMessage(viewer: IUser, space: Space, access: SpaceA
   const { channel } = await loadChannel(viewer, space, access, channelSlug);
   if (access.banned || !access.isMember) throw forbidden("Join to react.");
   rateLimit(`react:${sid(viewer._id)}`, 60, 30_000);
-  const msg = await ChannelMessage.findOne({ _id: messageId, channelId: channel._id, deletedAt: null }).select("_id").lean();
+  const msg = await ChannelMessage.findOne({ _id: messageId, channelId: channel._id, deletedAt: null }).select("_id authorId").lean<Pick<IChannelMessage, "_id" | "authorId">>();
   if (!msg) throw notFound("We couldn't find that message.");
   const reactions = await toggleReaction("channel", msg._id, viewer._id, kind);
+  // a good reaction earns the author points (once per person per message; bad ones earn nothing and take nothing)
+  if (GOOD_REACTIONS.has(kind) && reactions.some((r) => r.mine && r.kind === kind)) awardPointsLater(msg.authorId, "reaction", `channel:${sid(msg._id)}:${sid(viewer._id)}`, viewer._id);
   emitChannel(channel.communityId, channel._id);
   return reactions;
 }
@@ -737,4 +759,82 @@ export async function listStaff(space: Space, access: SpaceAccess): Promise<Staf
       const user = briefs.get(sid(r.userId));
       return user ? [{ user, role: r.role }] : [];
     });
+}
+
+/* ------------------------------------------------------------------ */
+/* A board post's chat                                                 */
+/* ------------------------------------------------------------------ */
+
+/** Where a post opens (its board, with the post in the side panel). */
+async function postHref(space: Space, post: Pick<ITopic, "_id" | "boardId">) {
+  const board = post.boardId ? await Board.findById(post.boardId).select("slug").lean<{ slug: string }>() : null;
+  return `/communities/${space.community.slug}?view=topics${board ? `&b=${board.slug}` : ""}&t=${sid(post._id)}`;
+}
+
+/** A reply in a post's chat: the post's count and "last activity" move, you follow it, and its followers hear. */
+async function onPostReply(viewer: IUser, post: Pick<ITopic, "_id" | "title" | "communityId">, href: string, said: string, alreadyTold: Types.ObjectId[]) {
+  await Promise.all([
+    Topic.updateOne({ _id: post._id }, { $inc: { commentCount: 1 }, $set: { lastActivityAt: new Date() } }),
+    TopicFollow.updateOne({ topicId: post._id, userId: viewer._id }, { $setOnInsert: { topicId: post._id, userId: viewer._id } }, { upsert: true }).catch(() => undefined),
+  ]);
+  emitTopic(post.communityId, post._id);
+  const told = new Set([sid(viewer._id), ...alreadyTold.map(sid)]);
+  const followers = (await TopicFollow.find({ topicId: post._id }).select("userId").limit(2000).lean<{ userId: Types.ObjectId }[]>()).map((f) => f.userId).filter((u) => !told.has(sid(u)));
+  if (!followers.length) return;
+  notify(followers, { title: `${viewer.displayName} replied in "${post.title}"`, body: said, data: { href } }, { actorId: viewer._id, category: "replies", groupKey: `topic:${sid(post._id)}`, many: (n) => `${n} new replies in "${post.title}"`, ref: `topic:${sid(post._id)}` });
+}
+
+/**
+ * A post's chat, made the first time someone opens the post. It's an ordinary channel (so replies get pictures,
+ * stickers, reactions, @mentions, pins and live updates like any chat) that never shows in the channel list.
+ * Comments written before posts had chats move into it, oldest first, keeping who answered whom.
+ */
+export async function ensureTopicThread(viewer: IUser | null, access: SpaceAccess, topic: Pick<ITopic, "_id" | "title" | "authorId" | "locked" | "communityId">): Promise<ChannelDTO> {
+  let channel = await Channel.findOne({ topicId: topic._id }).lean<IChannel>();
+  if (!channel) {
+    try {
+      const doc = await Channel.create({ communityId: topic.communityId, subcommunityId: null, categoryId: null, slug: `post-${sid(topic._id)}`, name: topic.title.slice(0, 40), type: topic.locked ? "announcement" : "text", visibility: "all", position: 0, createdById: topic.authorId, topicId: topic._id });
+      channel = doc.toObject() as IChannel;
+      await moveOldComments(topic, channel);
+      channel = (await Channel.findById(channel._id).lean<IChannel>())!;
+    } catch (err) {
+      if ((err as { code?: number }).code !== 11000) throw err;
+      channel = (await Channel.findOne({ topicId: topic._id }).lean<IChannel>())!; // opened twice at once: the other request made it
+    }
+  }
+  const read = viewer && access.isMember ? await ChannelRead.findOne({ userId: viewer._id, channelId: channel._id }).lean<IChannelRead>() : null;
+  return toChannel(channel, { access, readBy: new Map(read ? [[sid(channel._id), read]] : []), invited: new Set(), mentionCounts: new Map(), siteAdmin: !!viewer && isSiteAdmin(viewer) });
+}
+
+async function moveOldComments(topic: Pick<ITopic, "_id" | "communityId">, channel: IChannel) {
+  const comments = await TopicComment.find({ topicId: topic._id, deletedAt: null }).sort({ _id: 1 }).limit(2000).lean<ITopicComment[]>();
+  if (!comments.length) return;
+  const idOf = new Map<string, Types.ObjectId>();
+  // ids made in order, so the chat pages through them oldest to newest; the old timestamps are kept
+  const rows = comments.map((c) => {
+    const _id = new Types.ObjectId();
+    idOf.set(sid(c._id), _id);
+    return { _id, channelId: channel._id, communityId: topic.communityId, authorId: c.authorId, body: c.body.slice(0, 2000), sticker: null, stickerUrl: null, images: [], replyToId: c.parentId ? (idOf.get(sid(c.parentId)) ?? null) : null, pinnedAt: null, pinnedById: null, mentions: [], editedAt: c.editedAt ?? null, deletedAt: null, deletedById: null, createdAt: c.createdAt };
+  });
+  // straight into the collection: going through the model would stamp them all with today's date
+  await ChannelMessage.collection.insertMany(rows);
+  const last = rows[rows.length - 1];
+  await Promise.all([
+    Channel.updateOne({ _id: channel._id }, { $set: { lastMessageId: last._id, lastMessageAt: last.createdAt } }),
+    Topic.updateOne({ _id: topic._id }, { $set: { commentCount: rows.length } }),
+  ]);
+}
+
+/** A post was locked or unlocked (only owners and admins reply in a locked post's chat), or renamed. */
+export async function syncTopicThread(topic: Pick<ITopic, "_id" | "title" | "locked">) {
+  await Channel.updateOne({ topicId: topic._id }, { $set: { type: topic.locked ? "announcement" : "text", name: topic.title.slice(0, 40) } });
+}
+
+/** A post was deleted: its chat goes too (messages, their files, read markers). */
+export async function deleteTopicThread(topicId: Types.ObjectId) {
+  const channel = await Channel.findOne({ topicId }).select("_id").lean<{ _id: Types.ObjectId }>();
+  if (!channel) return;
+  const withFiles = await ChannelMessage.find({ channelId: channel._id, "images.0": { $exists: true } }).select("images").lean<{ images: string[] }[]>();
+  deleteUploads(withFiles.flatMap((m) => m.images));
+  await Promise.all([ChannelMessage.deleteMany({ channelId: channel._id }), ChannelRead.deleteMany({ channelId: channel._id }), Channel.deleteOne({ _id: channel._id })]);
 }

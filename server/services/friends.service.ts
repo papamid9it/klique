@@ -92,12 +92,12 @@ export async function sendRequest(viewer: IUser, handle: string): Promise<Friend
     if (sid(existing.requesterId) === sid(viewer._id)) return { state: "outgoing", requestId: sid(existing._id) };
     // They already asked you: asking back is a yes.
     await Friendship.updateOne({ _id: existing._id }, { status: "accepted", acceptedAt: new Date() });
-    notify([existing.requesterId], { title: `${viewer.displayName} accepted your friend request`, body: "You can message each other now.", data: { href: `/people/${viewer.handle}` } }, { category: "friends", ref: "friends" });
+    notify([existing.requesterId], { title: `${viewer.displayName} accepted your friend request`, body: "You can message each other now.", data: { href: `/?profile=${viewer.handle}` } }, { actorId: viewer._id, category: "friends", ref: "friends" });
     return { state: "friends", requestId: sid(existing._id) };
   }
   try {
     const f = await Friendship.create({ pairKey: key, requesterId: viewer._id, recipientId: target._id });
-    notify([target._id], { title: `${viewer.displayName} sent you a friend request`, body: `@${viewer.handle}`, data: { href: "/messages/friends" } }, { category: "friends", groupKey: "friend-req", many: (n) => `${n} new friend requests`, ref: "friends" });
+    notify([target._id], { title: `${viewer.displayName} sent you a friend request`, body: `@${viewer.handle}`, data: { href: "/messages/friends" } }, { actorId: viewer._id, category: "friends", groupKey: "friend-req", many: (n) => `${n} new friend requests`, ref: "friends" });
     return { state: "outgoing", requestId: sid(f._id) };
   } catch (e) {
     if ((e as { code?: number }).code === 11000) return friendStatus(viewer._id, target._id); // both asked at once
@@ -119,7 +119,7 @@ export async function respondToRequest(viewer: IUser, id: string, action: "accep
   if (action === "accept") {
     if (await blockedEitherWay(f.requesterId, f.recipientId)) throw notFound("We couldn't find that request.");
     await Friendship.updateOne({ _id: f._id }, { status: "accepted", acceptedAt: new Date() });
-    notify([f.requesterId], { title: `${viewer.displayName} accepted your friend request`, body: "You can message each other now.", data: { href: `/people/${viewer.handle}` } }, { category: "friends", ref: "friends" });
+    notify([f.requesterId], { title: `${viewer.displayName} accepted your friend request`, body: "You can message each other now.", data: { href: `/?profile=${viewer.handle}` } }, { actorId: viewer._id, category: "friends", ref: "friends" });
   } else {
     await Friendship.deleteOne({ _id: f._id });
   }
@@ -166,7 +166,7 @@ export async function suggestions(viewer: IUser, limit = 5): Promise<FriendSugge
     { $limit: limit * 3 },
   ]);
   const users = await User.find({ _id: { $in: shared.map((s) => s._id) }, profileVisibility: { $ne: "private" } })
-    .select("handle displayName avatarUrl avatarFrame nameEffect rank country city")
+    .select("handle displayName avatarUrl avatarFrame nameEffect country city")
     .lean<IUser[]>();
   const byId = new Map(users.map((u) => [sid(u._id), u]));
   return shared

@@ -48,6 +48,7 @@ export function CommunityRow({ community, compact, onChange }: { community: Comm
           </span>
           <span className="eyebrow mt-0.5 block truncate">
             {getInterest(c.interest).short} · <MemberCount community={c} />
+            {!c.viewer.isMember && c.minPointsJoin > 0 && <> · Needs {c.minPointsJoin.toLocaleString("en-NG")} points</>}
           </span>
         </span>
       </Link>

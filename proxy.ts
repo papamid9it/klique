@@ -1,4 +1,4 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse, userAgent, type NextRequest } from "next/server";
 
 /**
  * CORS for the API, so a separately hosted web / desktop client can call it.
@@ -22,7 +22,22 @@ const CORS_HEADERS = {
   Vary: "Origin",
 };
 
+/** Link-preview fetchers (WhatsApp, X, Slack, Discord…) that read a page's title and picture without being a browser. */
+const PREVIEW_BOT = /bot|crawler|spider|facebookexternalhit|whatsapp|slack|discord|telegram|embedly|preview|skype|vkshare|pinterest|linkedin/i;
+
 export function proxy(req: NextRequest) {
+  // There's no profile page: a profile is the pop-up card. Old and shared /people/<handle> links open that card on
+  // Home. Preview bots still get the old address, whose metadata describes the person (app/(app)/people).
+  const person = /^\/people\/([^/]+)\/?$/.exec(req.nextUrl.pathname);
+  if (person) {
+    const ua = req.headers.get("user-agent") ?? "";
+    if (userAgent(req).isBot || PREVIEW_BOT.test(ua)) return NextResponse.next();
+    const to = req.nextUrl.clone();
+    to.pathname = "/";
+    to.search = `?profile=${person[1]}`;
+    return NextResponse.redirect(to);
+  }
+
   const origin = req.headers.get("origin")?.replace(/\/$/, "") ?? "";
   const ok = !!origin && allowed().includes(origin);
 
@@ -38,4 +53,4 @@ export function proxy(req: NextRequest) {
   return res;
 }
 
-export const config = { matcher: "/api/:path*" };
+export const config = { matcher: ["/api/:path*", "/people/:path*"] };

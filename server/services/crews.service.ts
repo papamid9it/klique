@@ -2,6 +2,7 @@ import "server-only";
 import { Types } from "mongoose";
 import type { z } from "zod";
 import { extractMentionHandles } from "@/lib/mentions";
+import { GOOD_REACTIONS } from "@/lib/points";
 import type { ReactionKind } from "@/lib/reactions";
 import type { ChannelMessageDTO, CrewCardDTO, CrewDTO, CrewStanding, EventCrewsDTO, MyCrewDTO, ReactionDTO, UserBrief } from "@/lib/types";
 import { badRequest, conflict, forbidden, notFound } from "../http/errors";
@@ -24,11 +25,14 @@ import { escapeRegex, sid } from "./helpers";
 import { purgeCrewChat } from "./crew-chat-purge";
 import { deleteUploads } from "./media.service";
 import { mentionBriefs } from "./mentions";
+import { awardPointsLater } from "./points.service";
 import { notify, notifyNow } from "./push.service";
 import { publish, rtChannel } from "./realtime";
 import { purgeReactions, summarizeReactions, toggleReaction } from "./reactions";
 import { previewOf, toReplyRef } from "./replies";
 import { assertStickerUrl, noteStickerUse } from "./stickers.service";
+import { createPoll, deletePoll, pollPreview } from "./polls.service";
+import type { pollInput } from "../validators/schemas";
 
 /**
  * Crews: people going to the same event together. The rules, all checked here:
@@ -63,7 +67,8 @@ const oid = (id: string, what = "crew") => {
 /** The event, if this viewer may see it (hidden looks exactly like missing). */
 async function visibleEvent(viewer: IUser | null, eventId: Types.ObjectId | string): Promise<IEvent> {
   const event = await Event.findById(eventId).lean<IEvent>();
-  if (!event || !(await canViewEvent(event, viewer))) throw notFound("We couldn't find that event.");
+  // no crews for an event that isn't approved yet
+  if (!event || event.review || !(await canViewEvent(event, viewer))) throw notFound("We couldn't find that event.");
   return event;
 }
 
@@ -466,10 +471,10 @@ export async function joinCrew(viewer: IUser, crewId: string, message: string): 
       throw conflict("This crew just filled up.");
     }
     void pingCrew(crew._id);
-    notify([crew.hostId], { title: `${viewer.displayName} joined your crew`, body: `Going to ${event.title} from ${crew.area}.`, data: { type: "crew", id: sid(crew._id) } }, { category: "crews", groupKey: `crew-join:${sid(crew._id)}`, many: (n) => `${n} people joined your crew from ${crew.area}`, ref: `crew:${sid(crew._id)}` });
+    notify([crew.hostId], { title: `${viewer.displayName} joined your crew`, body: `Going to ${event.title} from ${crew.area}.`, data: { type: "crew", id: sid(crew._id) } }, { actorId: viewer._id, category: "crews", groupKey: `crew-join:${sid(crew._id)}`, many: (n) => `${n} people joined your crew from ${crew.area}`, ref: `crew:${sid(crew._id)}` });
   } else {
     void pingCrew(crew._id);
-    notify([crew.hostId], { title: `${viewer.displayName} wants to join your crew`, body: message ? `"${message}"` : `For ${event.title}. Tap to accept or decline.`, data: { href: `/crews/${sid(crew._id)}?tab=requests` } }, { category: "crews", groupKey: `crew-req:${sid(crew._id)}`, many: (n) => `${n} people want to join your crew from ${crew.area}`, ref: `crew:${sid(crew._id)}` });
+    notify([crew.hostId], { title: `${viewer.displayName} wants to join your crew`, body: message ? `"${message}"` : `For ${event.title}. Tap to accept or decline.`, data: { href: `/crews/${sid(crew._id)}?tab=requests` } }, { actorId: viewer._id, action: { kind: "crewRequest", crewId: sid(crew._id), userId: sid(viewer._id) }, image: event.coverImage ?? null, category: "crews", groupKey: `crew-req:${sid(crew._id)}`, many: (n) => `${n} people want to join your crew from ${crew.area}`, ref: `crew:${sid(crew._id)}` });
   }
   return getCrew(viewer, crewId);
 }
@@ -483,7 +488,7 @@ export async function leaveCrew(viewer: IUser, crewId: string): Promise<CrewDTO>
   await CrewMember.deleteOne({ _id: me._id });
   if (me.status === "active") {
     await Crew.updateOne({ _id: crew._id, memberCount: { $gt: 1 } }, { $inc: { memberCount: -1 } });
-    notify([crew.hostId], { title: `${viewer.displayName} left your crew`, body: `From ${crew.area}. A spot is open again.`, data: { type: "crew", id: sid(crew._id) } }, { category: "crews", groupKey: `crew-left:${sid(crew._id)}`, many: (n) => `${n} people left your crew from ${crew.area}`, ref: `crew:${sid(crew._id)}` });
+    notify([crew.hostId], { title: `${viewer.displayName} left your crew`, body: `From ${crew.area}. A spot is open again.`, data: { type: "crew", id: sid(crew._id) } }, { actorId: viewer._id, category: "crews", groupKey: `crew-left:${sid(crew._id)}`, many: (n) => `${n} people left your crew from ${crew.area}`, ref: `crew:${sid(crew._id)}` });
   }
   void pingCrew(crew._id);
   return getCrew(viewer, crewId);
@@ -603,7 +608,8 @@ async function toMessages(rows: ICrewMessage[], viewer: IUser, crew: Pick<ICrew,
       createdAt: r.createdAt.toISOString(),
       author: briefs.get(sid(r.userId)) ?? GHOST,
       canDelete: !gone && (mine || isHost),
-      canEdit: !gone && mine && !r.sticker && !r.stickerUrl,
+      canEdit: !gone && mine && !r.sticker && !r.stickerUrl && !r.pollId,
+      pollId: gone || !r.pollId ? null : sid(r.pollId),
       editedAt: gone || !r.editedAt ? null : r.editedAt.toISOString(),
       mentions,
       mentionsMe: mentions.some((m) => m.id === me),
@@ -665,19 +671,20 @@ export async function crewMentionable(viewer: IUser, crewId: string, q?: string)
 /** People whose open chat checked in within the last 3 minutes are reading along: no notification for them. */
 const READING_MS = 3 * 60_000;
 
-export async function postCrewMessage(viewer: IUser, crewId: string, input: { body: string; sticker?: string; stickerUrl?: string; images?: string[] }, replyToId: string | null = null): Promise<ChannelMessageDTO> {
+export async function postCrewMessage(viewer: IUser, crewId: string, input: { body: string; sticker?: string; stickerUrl?: string; images?: string[]; poll?: z.infer<typeof pollInput> }, replyToId: string | null = null): Promise<ChannelMessageDTO> {
   const { crew, event } = await assertInCrew(viewer, crewId);
   const sticker = input.sticker ?? null;
   const stickerUrl = input.stickerUrl && !sticker ? assertStickerUrl(input.stickerUrl) : null;
-  const isSticker = !!sticker || !!stickerUrl;
-  const body = isSticker ? "" : input.body;
-  const images = isSticker ? [] : (input.images ?? []);
-  const said = previewOf({ body, sticker, stickerUrl, images });
+  const body = input.body;
+  const images = input.images ?? [];
   rateLimit(`crew-msg:${sid(viewer._id)}`, 30, 60_000);
+  // a poll rides on its own message (anything else sent with it is dropped)
+  const poll = input.poll ? await createPoll(viewer, { scope: "crew", targetId: crew._id }, input.poll) : null;
+  const said = poll ? pollPreview(poll.question) : previewOf({ body, sticker, stickerUrl, images });
   const parent = replyToId ? await CrewMessage.findOne({ _id: oid(replyToId, "message"), crewId: crew._id }).select("userId").lean<Pick<ICrewMessage, "_id" | "userId">>() : null;
   if (replyToId && !parent) throw notFound("That message is gone.");
-  const mentions = isSticker ? [] : await crewMentions(viewer, crew._id, body);
-  const row = (await CrewMessage.create({ crewId: crew._id, userId: viewer._id, body, sticker, stickerUrl, images, mentions, replyToId: parent?._id ?? null, expiresAt: crew.expiresAt })).toObject() as ICrewMessage;
+  const mentions = await crewMentions(viewer, crew._id, body);
+  const row = (await CrewMessage.create(poll ? { crewId: crew._id, userId: viewer._id, body: "", pollId: poll._id, mentions: [], replyToId: parent?._id ?? null, expiresAt: crew.expiresAt } : { crewId: crew._id, userId: viewer._id, body, sticker, stickerUrl, images, mentions, replyToId: parent?._id ?? null, expiresAt: crew.expiresAt })).toObject() as ICrewMessage;
   noteStickerUse(viewer._id, stickerUrl);
   await markCrewRead(viewer._id, crew, row._id, false);
   void pingCrew(crew._id, { chat: true });
@@ -695,11 +702,11 @@ export async function postCrewMessage(viewer: IUser, crewId: string, input: { bo
   if (parent && sid(parent.userId) !== sid(viewer._id) && away.some((u) => sid(u) === sid(parent.userId))) forYou.set(sid(parent.userId), parent.userId);
   for (const m of mentions) if (away.some((u) => sid(u) === sid(m))) forYou.set(sid(m), m);
   if (forYou.size) {
-    notify([...forYou.values()], { title: `${viewer.displayName} ${parent && forYou.has(sid(parent.userId)) ? "replied to you" : "tagged you"}`, body: `${snippet(said, 100)} · ${where}`, data }, { category: "mentions", groupKey: `crew-reply:${sid(crew._id)}`, many: (n) => `${n} replies and tags for you in your ${where}`, ref: `crew:${sid(crew._id)}`, pushOnce: true });
+    notify([...forYou.values()], { title: `${viewer.displayName} ${parent && forYou.has(sid(parent.userId)) ? "replied to you" : "tagged you"}`, body: `${snippet(said, 100)} · ${where}`, data }, { actorId: viewer._id, category: "mentions", groupKey: `crew-reply:${sid(crew._id)}`, many: (n) => `${n} replies and tags for you in your ${where}`, ref: `crew:${sid(crew._id)}`, pushOnce: true });
   }
   const rest = away.filter((u) => !forYou.has(sid(u)));
   if (rest.length) {
-    notify(rest, { title: `${viewer.displayName} in your ${where}`, body: `${snippet(said, 100)} · ${event.title}`, data }, { category: "crews", groupKey: `crew-chat:${sid(crew._id)}`, many: (n) => `${n} new messages in your ${where}`, ref: `crew:${sid(crew._id)}`, pushOnce: true });
+    notify(rest, { title: `${viewer.displayName} in your ${where}`, body: `${snippet(said, 100)} · ${event.title}`, data }, { actorId: viewer._id, category: "crews", groupKey: `crew-chat:${sid(crew._id)}`, many: (n) => `${n} new messages in your ${where}`, ref: `crew:${sid(crew._id)}`, pushOnce: true });
   }
   return (await toMessages([row], viewer, crew))[0];
 }
@@ -717,6 +724,7 @@ export async function editCrewMessage(viewer: IUser, crewId: string, messageId: 
   const msg = await loadCrewMessage(crew._id, messageId);
   if (sid(msg.userId) !== sid(viewer._id)) throw forbidden("You can only edit your own messages.");
   if (msg.sticker || msg.stickerUrl) throw forbidden("Stickers can't be edited. Delete it and send another.");
+  if (msg.pollId) throw forbidden("Polls can't be edited. Delete it and start another.");
   const next = body.trim();
   const mentions = await crewMentions(viewer, crew._id, next);
   const editedAt = next === msg.body ? (msg.editedAt ?? null) : new Date();
@@ -731,6 +739,7 @@ export async function deleteCrewMessage(viewer: IUser, crewId: string, messageId
   const msg = await loadCrewMessage(crew._id, messageId);
   if (sid(msg.userId) !== sid(viewer._id) && sid(crew.hostId) !== sid(viewer._id)) throw forbidden("Only the host can remove other people's messages.");
   await CrewMessage.updateOne({ _id: msg._id }, { $set: { body: "", sticker: null, stickerUrl: null, images: [], mentions: [], deletedAt: new Date() } });
+  await deletePoll(msg.pollId);
   await purgeReactions("crew", [msg._id]);
   deleteUploads(msg.images ?? []);
   void pingCrew(crew._id, { chat: true });
@@ -742,6 +751,8 @@ export async function reactToCrewMessage(viewer: IUser, crewId: string, messageI
   rateLimit(`react:${sid(viewer._id)}`, 60, 30_000);
   const msg = await loadCrewMessage(crew._id, messageId);
   const out = await toggleReaction("crew", msg._id, viewer._id, kind);
+  // a good reaction earns the author points (once per person per message)
+  if (GOOD_REACTIONS.has(kind) && out.some((r) => r.mine && r.kind === kind)) awardPointsLater(msg.userId, "reaction", `crew:${sid(msg._id)}:${sid(viewer._id)}`, viewer._id);
   void pingCrew(crew._id, { chat: true });
   return out;
 }

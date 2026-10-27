@@ -10,7 +10,8 @@ import { usePaged } from "@/lib/hooks/useApi";
 import type { EventDTO } from "@/lib/types";
 import { useRealtimeEvent } from "@/components/providers/RealtimeProvider";
 
-export function SpaceEvents({ slug, subSlug, canHost }: { slug: string; subSlug?: string; canHost: boolean }) {
+/** `canSubmit`: a member who can send an event in for the owner or an admin to approve */
+export function SpaceEvents({ slug, subSlug, canHost, canSubmit }: { slug: string; subSlug?: string; canHost: boolean; canSubmit?: boolean }) {
   const { items, loading, loadingMore, error, hasMore, loadMore, reload, setItems } = usePaged<EventDTO>(
     (page) => EventService.list({ community: slug, sub: subSlug, page }),
     [slug, subSlug],
@@ -22,10 +23,10 @@ export function SpaceEvents({ slug, subSlug, canHost }: { slug: string; subSlug?
 
   return (
     <div className="space-y-4">
-      {canHost && (
+      {(canHost || canSubmit) && (
         <div className="flex justify-end">
-          <Button href={hostHref} variant="primary">
-            <Icon name="plus" size={15} /> Post an event
+          <Button href={hostHref} variant={canHost ? "primary" : "secondary"}>
+            <Icon name="plus" size={15} /> {canHost ? "Post an event" : "Suggest an event"}
           </Button>
         </div>
       )}

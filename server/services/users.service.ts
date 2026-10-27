@@ -17,7 +17,8 @@ import { hostedEventsOf, upcomingRsvpEventsOf } from "./events.service";
 import { friendStatus, mutualFriends } from "./friends.service";
 import { messagingEligibility, unreadTotal } from "./messaging.service";
 import { unreadNotificationCount } from "./notifications.service";
-import { assertCanWear } from "./points.service";
+import { assertEffectAvailable } from "./effects.service";
+import { assertCanWear } from "./wallet.service";
 
 export async function getMe(viewer: IUser): Promise<UserMe> {
   const [dms, bell] = await Promise.all([unreadTotal(viewer._id), unreadNotificationCount(viewer._id)]);
@@ -28,6 +29,8 @@ export async function updateMe(viewer: IUser, patch: z.infer<typeof profileUpdat
   const set: Partial<IUser> = {};
   if (patch.displayName !== undefined) set.displayName = patch.displayName;
   if (patch.bio !== undefined) set.bio = patch.bio;
+  if (patch.pronouns !== undefined) set.pronouns = patch.pronouns;
+  if (patch.presence !== undefined) set.presence = patch.presence as IUser["presence"];
   assertPlace(patch, false);
   if (patch.country !== undefined) set.country = patch.country;
   if (patch.region !== undefined) set.region = patch.region;
@@ -37,10 +40,14 @@ export async function updateMe(viewer: IUser, patch: z.infer<typeof profileUpdat
   if (patch.avatarUrl !== undefined) set.avatarUrl = patch.avatarUrl || null;
   if (patch.bannerUrl !== undefined) set.bannerUrl = patch.bannerUrl || null;
   if (patch.bannerColor !== undefined) set.bannerColor = patch.bannerColor || null;
-  // frames and name styles cost points: putting on one you haven't unlocked is refused
-  if (patch.avatarFrame || patch.nameEffect) await assertCanWear(viewer, patch);
+  // a profile effect has to be one people can pick; then designs cost Hype: putting on one you haven't unlocked
+  // (an animated picture included) is refused
+  if (patch.profileEffect && patch.profileEffect !== viewer.profileEffect) await assertEffectAvailable(patch.profileEffect);
+  await assertCanWear(viewer, patch);
   if (patch.avatarFrame !== undefined) set.avatarFrame = patch.avatarFrame || null;
   if (patch.nameEffect !== undefined) set.nameEffect = patch.nameEffect || null;
+  if (patch.profileTheme !== undefined) set.profileTheme = patch.profileTheme ? { primary: patch.profileTheme.primary.toLowerCase(), accent: patch.profileTheme.accent.toLowerCase() } : null;
+  if (patch.profileEffect !== undefined) set.profileEffect = patch.profileEffect || null;
   if (patch.mood !== undefined) set.mood = patch.mood as IUser["mood"];
   if (patch.profileVisibility !== undefined) set.profileVisibility = patch.profileVisibility as IUser["profileVisibility"];
   if (patch.attendancePublic !== undefined) set.attendancePublic = patch.attendancePublic;
@@ -97,7 +104,7 @@ export async function getProfile(viewer: IUser | null, handle: string): Promise<
   if (!visible) {
     return {
       // a hidden profile still wears its banner and name style; only the details stay private
-      profile: { ...toBrief(user), bannerUrl: user.bannerUrl ?? null, bannerColor: user.bannerColor ?? null, bio: "", region: "", neighborhood: "", interests: [], joinedAt: user.createdAt.toISOString() },
+      profile: { ...toBrief(user), bannerUrl: user.bannerUrl ?? null, bannerColor: user.bannerColor ?? null, bio: "", region: "", neighborhood: "", interests: [], joinedAt: user.createdAt.toISOString(), points: user.points ?? 0, pronouns: user.pronouns ?? "", presence: user.presence ?? "online", profileTheme: null, profileEffect: null },
       isSelf,
       visible: false,
       hiddenReason,
@@ -164,7 +171,7 @@ export async function listPeople(viewer: IUser | null, q: z.infer<typeof peopleQ
     .sort({ createdAt: -1 })
     .skip((q.page - 1) * size)
     .limit(size + 1)
-    .select("handle displayName avatarUrl avatarFrame nameEffect rank country city")
+    .select("handle displayName avatarUrl avatarFrame nameEffect country city")
     .lean<IUser[]>();
   return { items: rows.slice(0, size).map(toBrief), page: q.page, hasMore: rows.length > size };
 }

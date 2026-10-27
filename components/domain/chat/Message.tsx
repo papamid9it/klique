@@ -14,8 +14,8 @@ import { Embeds } from "./Embeds";
 import { ReplyQuote } from "./ReplyQuote";
 import { EditedTag, MessageEditor } from "./MessageEditor";
 import { ReactButton, ReactionBar, StickerView } from "./Reactions";
+import { PollCard } from "./Polls";
 import { UserName } from "@/components/ui/UserName";
-import { RankBadge } from "@/components/ui/RankBadge";
 
 const TOKEN_RX = /(https?:\/\/[^\s<]+)|(?<![\w@])@([a-zA-Z0-9_]{3,20})(?![\w])/g;
 
@@ -116,7 +116,6 @@ export const Message = memo(function Message({
             <ProfileTrigger handle={m.author.handle} className="truncate text-[15px] font-semibold text-ink hover:underline">
               <UserName name={m.author.displayName} effect={m.author.nameEffect} />
             </ProfileTrigger>
-            <RankBadge rank={m.author.rank} className="self-center" />
             <time dateTime={m.createdAt} className="font-mono text-[11px] text-ink-muted">
               {formatTime(m.createdAt)}
             </time>
@@ -132,11 +131,12 @@ export const Message = memo(function Message({
           <p className="text-sm text-ink-muted italic">Message deleted</p>
         ) : (
           <>
-            {m.sticker || m.stickerUrl ? (
+            {(m.sticker || m.stickerUrl) && (
               <div className="py-1">
                 <StickerView id={m.sticker} url={m.stickerUrl} />
               </div>
-            ) : editing && onEdit ? (
+            )}
+            {editing && onEdit ? (
               <MessageEditor
                 initial={m.body}
                 onCancel={() => setEditing(false)}
@@ -148,7 +148,8 @@ export const Message = memo(function Message({
               />
             ) : (
               <>
-                {!m.body && !m.images.length ? (
+                {m.pollId && <PollCard id={m.pollId} />}
+                {!m.body && !m.images.length && !m.sticker && !m.stickerUrl && !m.pollId ? (
                   // nothing to show: a sticker whose picture didn't save (sent while the app was updating)
                   <p className="text-sm text-ink-muted italic">Sticker unavailable</p>
                 ) : (

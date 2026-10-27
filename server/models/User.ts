@@ -1,5 +1,6 @@
-import { Schema, model, models, type Model, type Types } from "mongoose";
-import { type DmPolicy, type InterestId, type ProfileVisibility } from "@/lib/constants";
+import { Schema, type Model, type Types } from "mongoose";
+import { PRESENCES, type DmPolicy, type InterestId, type Presence, type ProfileVisibility } from "@/lib/constants";
+import { defineModel } from "./define";
 import { FRAME_IDS, NAME_EFFECT_IDS } from "@/lib/cosmetics";
 import { DEFAULT_MOOD, MOOD_IDS, type MoodId } from "@/lib/moods";
 
@@ -19,11 +20,19 @@ export interface IUser {
   bannerColor?: string | null;
   avatarFrame?: string | null;
   nameEffect?: string | null;
+  /** two colours tinting their profile card (Nitro-style theme) */
+  profileTheme?: { primary: string; accent: string } | null;
+  /** an animated layer over their profile card */
+  profileEffect?: string | null;
   country: string;
   region: string;
   city: string;
   neighborhood: string;
   bio: string;
+  /** shown after the name on the profile card, e.g. "she/her" */
+  pronouns?: string;
+  /** the status the person set (the dot on their picture) */
+  presence?: Presence;
   interests: InterestId[];
   mood: MoodId;
   profileVisibility: ProfileVisibility;
@@ -34,11 +43,10 @@ export interface IUser {
   isDemo?: boolean;
   /** which notifications they want, in the app and as push (lib/notifications: missing = on) */
   notifyPrefs?: Record<string, { inApp?: boolean; push?: boolean }>;
-  /** points balance (lib/points); changed only with atomic $inc next to a PointTxn */
-  points?: number;
-  /** Hype earned (lib/ranks) and the rank it reached (never goes down) */
+  /** Hype balance, the currency you buy (lib/wallet); changed only with atomic $inc next to a HypeTxn */
   hype?: number;
-  rank?: number;
+  /** points earned from other people (lib/points); never bought, never spent, never go down by themselves */
+  points?: number;
   /** set by a site admin: the account can't sign in or use the API */
   suspendedAt?: Date | null;
   /** finished joining: picked 3+ categories and joined 2+ communities (null: they're sent to /welcome) */
@@ -62,11 +70,15 @@ const UserSchema = new Schema<IUser>(
     bannerColor: { type: String, default: null, match: /^#[0-9a-fA-F]{6}$/ },
     avatarFrame: { type: String, enum: [...FRAME_IDS, null], default: null },
     nameEffect: { type: String, enum: [...NAME_EFFECT_IDS, null], default: null },
+    profileTheme: { type: new Schema({ primary: { type: String, match: /^#[0-9a-f]{6}$/i, required: true }, accent: { type: String, match: /^#[0-9a-f]{6}$/i, required: true } }, { _id: false }), default: null },
+    profileEffect: { type: String, default: null, maxlength: 40 },
     country: { type: String, default: "NG" },
     region: { type: String, default: "" },
     city: { type: String, default: "lagos" },
     neighborhood: { type: String, default: "", maxlength: 60 },
     bio: { type: String, default: "", maxlength: 280 },
+    pronouns: { type: String, default: "", maxlength: 40 },
+    presence: { type: String, enum: PRESENCES.map((p) => p.id), default: "online" },
     interests: { type: [{ type: String }], default: [] },
     mood: { type: String, enum: MOOD_IDS, default: DEFAULT_MOOD },
     profileVisibility: { type: String, enum: ["public", "members", "private"], default: "public" },
@@ -75,9 +87,8 @@ const UserSchema = new Schema<IUser>(
     tokenVersion: { type: Number, default: 0 },
     isDemo: { type: Boolean, default: false },
     notifyPrefs: { type: Schema.Types.Mixed, default: {} },
-    points: { type: Number, default: 0, min: 0 },
     hype: { type: Number, default: 0, min: 0 },
-    rank: { type: Number, default: 1, min: 1 },
+    points: { type: Number, default: 0, min: 0 },
     suspendedAt: { type: Date, default: null },
     onboardedAt: { type: Date, default: null },
     suspendedReason: { type: String, default: "", maxlength: 300 },
@@ -88,4 +99,4 @@ const UserSchema = new Schema<IUser>(
 UserSchema.index({ country: 1, city: 1, interests: 1 });
 UserSchema.index({ displayName: "text", handle: "text" });
 
-export const User: Model<IUser> = (models.User as Model<IUser>) || model<IUser>("User", UserSchema);
+export const User: Model<IUser> = defineModel<IUser>("User", UserSchema);

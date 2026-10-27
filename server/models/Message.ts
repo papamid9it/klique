@@ -11,6 +11,8 @@ export interface IMessage {
   stickerUrl?: string | null;
   images: string[];
   replyToId: Types.ObjectId | null;
+  /** a poll posted with this message (models/Poll) */
+  pollId?: Types.ObjectId | null;
   /** set when the sender changed the text after sending */
   editedAt: Date | null;
   /** soft delete ("unsend"): the row stays so the timeline and reports keep their place */
@@ -27,6 +29,7 @@ const MessageSchema = new Schema<IMessage>(
     stickerUrl: { type: String, default: null, maxlength: 600 },
     images: { type: [String], default: [] },
     replyToId: { type: Schema.Types.ObjectId, default: null },
+    pollId: { type: Schema.Types.ObjectId, ref: "Poll", default: null },
     editedAt: { type: Date, default: null },
     deletedAt: { type: Date, default: null },
   },

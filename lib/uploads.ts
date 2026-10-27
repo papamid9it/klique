@@ -2,14 +2,14 @@
  * What each kind of upload accepts. Shared by the server (signing) and every client (checking and compressing
  * before upload). Files are resized and compressed on the device, then go straight to Cloudflare R2.
  */
-export type UploadKind = "avatar" | "photo" | "video";
+export type UploadKind = "avatar" | "photo" | "video" | "effect";
 
 /** The files one upload is made of: the picture or video itself, plus a small copy (photos) or a still frame (videos). */
 export type UploadVariant = "main" | "sm" | "poster";
 
 export interface UploadSpec {
   label: string;
-  resource: "image" | "video";
+  resource: "image" | "video" | "file";
   folder: string;
   /** what people may pick (checked before compressing) */
   formats: readonly string[];
@@ -46,6 +46,15 @@ export const UPLOAD_SPECS: Record<UploadKind, UploadSpec> = {
     formats: ["mp4", "mov", "webm", "m4v"],
     maxPickBytes: 500 * MB,
     variants: { main: { types: ["video/mp4", "video/webm"], maxBytes: 100 * MB }, poster: { types: STILL, maxBytes: 1 * MB } },
+  },
+  /** profile effects (site admins only): an animated WebP or APNG with transparency, or a Lottie JSON. Uploaded as they are, never recompressed (that would lose the animation). */
+  effect: {
+    label: "Profile effect",
+    resource: "file",
+    folder: "effects",
+    formats: ["webp", "png", "apng", "json"],
+    maxPickBytes: 8 * MB,
+    variants: { main: { types: ["image/webp", "image/png", "application/json"], maxBytes: 8 * MB } },
   },
 };
 

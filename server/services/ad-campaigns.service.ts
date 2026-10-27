@@ -195,7 +195,7 @@ async function siteAdminIds(): Promise<Types.ObjectId[]> {
 
 function tellAdmins(viewer: IUser, c: Pick<IAdCampaign, "title" | "amount">) {
   void siteAdminIds().then((ids) =>
-    notify(ids, { title: `${viewer.displayName} sent an ad for review`, body: `${c.title} · ₦${c.amount.toLocaleString("en-NG")}`, data: { href: "/admin/ads?view=requests" } }, { category: "admin", groupKey: "ad-review", many: (n) => `${n} ads waiting for review`, ref: "ad-review" }),
+    notify(ids, { title: `${viewer.displayName} sent an ad for review`, body: `${c.title} · ₦${c.amount.toLocaleString("en-NG")}`, data: { href: "/admin/ads?view=requests" } }, { actorId: viewer._id, category: "admin", groupKey: "ad-review", many: (n) => `${n} ads waiting for review`, ref: "ad-review" }),
   );
 }
 

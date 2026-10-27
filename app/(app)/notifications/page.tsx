@@ -1,25 +1,25 @@
 "use client";
 
-import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { InboxService } from "@/app/services/InboxService";
-import { PanelLayout } from "@/components/layout/PanelLayout";
+import { PagePanel, PanelItem, PanelSection } from "@/components/layout/PagePanel";
+import { NotificationRow } from "@/components/domain/notifications/NotificationRow";
+import { InboxEmptyArt, InboxSide } from "@/components/domain/notifications/InboxSide";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useRealtimeEvent } from "@/components/providers/RealtimeProvider";
 import { Button } from "@/components/ui/Button";
 import { Icon, type IconName } from "@/components/ui/Icon";
 import { RowSkeleton } from "@/components/ui/Skeleton";
-import { EmptyState, ErrorState } from "@/components/ui/States";
+import { ErrorState } from "@/components/ui/States";
 import { cx } from "@/components/ui/cx";
-import { relativeStamp } from "@/lib/format";
 import { useApi, useNow } from "@/lib/hooks/useApi";
 import { isSamePage, softNavigate } from "@/lib/nav";
 import { NOTIFY_CATEGORIES } from "@/lib/notifications";
 import type { NotificationDTO } from "@/lib/types";
 
 const ICON: Record<string, IconName> = { mentions: "message", replies: "topics", crews: "pin", admin: "shield", community: "users", events: "calendar", ads: "megaphone", points: "coin", friends: "userplus", messages: "message" };
-const SHORT: Record<string, string> = { mentions: "Mentions & replies", replies: "Topic comments", crews: "Crews", admin: "Communities you run", community: "Your communities", events: "Events", ads: "Your ads", points: "Rank & points", friends: "Friends" };
+const SHORT: Record<string, string> = { mentions: "Mentions & replies", replies: "Topic comments", crews: "Crews", admin: "Communities you run", community: "Your communities", events: "Events", ads: "Your ads", points: "Hype & styles", friends: "Friends" };
 const FILTERS = [{ id: "all", label: "All", icon: "bell" as IconName }, { id: "unread", label: "Unread", icon: "asterisk" as IconName }, ...NOTIFY_CATEGORIES.filter((c) => !("pushOnly" in c)).map((c) => ({ id: c.id as string, label: SHORT[c.id] ?? c.label, icon: ICON[c.id] ?? "bell" }))];
 
 /** Today / Yesterday / This week / Earlier, in Lagos time. */
@@ -32,7 +32,7 @@ function bucketOf(iso: string, now: Date): string {
 }
 
 /**
- * Notifications, with their own left panel: filter by kind (with unread counts), unread only, settings.
+ * Notifications, with their own left panel (Home, then filter by kind with unread counts, unread only, settings).
  * New ones arrive by themselves; opening one marks it read.
  */
 function NotificationsContent() {
@@ -73,6 +73,20 @@ function NotificationsContent() {
     else router.push(n.href);
   }
 
+  /** a line changed here (read / unread): keep the list and the badges in step */
+  function patchOne(next: NotificationDTO) {
+    const was = [...(data?.items ?? []), ...more].find((x) => x.id === next.id);
+    const delta = was && was.read !== next.read ? (next.read ? -1 : 1) : 0;
+    setData((d) => (d ? { ...d, items: d.items.map((x) => (x.id === next.id ? next : x)), unread: Math.max(0, d.unread + delta), unreadBy: { ...d.unreadBy, [next.category]: Math.max(0, (d.unreadBy[next.category] ?? 0) + delta) } } : d));
+    setMore((m) => m.map((x) => (x.id === next.id ? next : x)));
+    if (delta) setBadge(Math.max(0, unread + delta));
+  }
+  function dropOne(n: NotificationDTO) {
+    setData((d) => (d ? { ...d, items: d.items.filter((x) => x.id !== n.id), unread: Math.max(0, d.unread - (n.read ? 0 : 1)) } : d));
+    setMore((m) => m.filter((x) => x.id !== n.id));
+    if (!n.read) setBadge(Math.max(0, unread - 1));
+  }
+
   async function readAll() {
     setData((d) => (d ? { ...d, items: d.items.map((x) => ({ ...x, read: true })), unread: 0, unreadBy: {} } : d));
     setMore((m) => m.map((x) => ({ ...x, read: true })));
@@ -95,41 +109,31 @@ function NotificationsContent() {
 
   const countOf = (id: string) => (id === "all" || id === "unread" ? unread : (unreadBy[id] ?? 0));
 
+  // the filters: in the left panel on big screens (with Home on top), a row of pills on phones and tablets
   const panel = (
-    <div className="flex h-full flex-col gap-4 p-4">
-      <div className="flex items-center justify-between px-1 pt-1">
-        <p className="text-[15px] font-semibold tracking-[-0.01em]">Notifications</p>
-        <Link href="/settings#notifications" aria-label="Notification settings" title="Notification settings" className="inline-flex size-8 items-center justify-center rounded-full text-ink-muted hover:bg-raised hover:text-ink">
-          <Icon name="sliders" size={16} />
-        </Link>
-      </div>
-      <nav aria-label="Filter notifications">
-        <ul className="space-y-0.5">
-          {FILTERS.map((f) => {
-            const on = filter === f.id;
-            const n = countOf(f.id);
-            return (
-              <li key={f.id}>
-                <button type="button" onClick={() => go(f.id)} aria-current={on ? "page" : undefined} className={cx("flex h-10 w-full items-center gap-3 rounded-control px-3 text-left text-[14px] font-medium transition", on ? "bg-raised text-ink" : "text-ink-muted hover:bg-raised/60 hover:text-ink")}>
-                  <Icon name={f.icon} size={16} />
-                  <span className="flex-1 truncate">{f.label}</span>
-                  {n > 0 && <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-accent px-1.5 text-[11px] font-bold text-accent-ink">{n > 99 ? "99+" : n}</span>}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      </nav>
-      <p className="mt-auto px-1 text-xs text-ink-muted">Only things addressed to you or waiting on you. Similar ones bundle into one line. Channel chat shows as unread counts instead.</p>
-    </div>
+    <PagePanel label="Notifications">
+      <PanelSection title="Notifications">
+        {FILTERS.map((f) => {
+          const n = countOf(f.id);
+          return (
+            <li key={f.id}>
+              {/* All: no count · Unread: the total, dim · a kind with something new: a dot and a bold label (the number only past 1) */}
+              <PanelItem onClick={() => go(f.id)} on={filter === f.id} icon={f.icon} count={f.id === "unread" ? n : f.id !== "all" && n > 1 ? (n > 9 ? "9+" : n) : null} dot={f.id !== "all" && f.id !== "unread" && n > 0}>
+                {f.label}
+              </PanelItem>
+            </li>
+          );
+        })}
+      </PanelSection>
+      <p className="px-3 text-xs text-ink-muted">Only things addressed to you or waiting on you. Similar ones bundle into one line. Channel chat shows as unread counts instead.</p>
+    </PagePanel>
   );
-
-  const mobile = (
-    <div className="no-bar flex gap-1.5 overflow-x-auto">
+  const filters = (
+    <div role="toolbar" aria-label="Filter notifications" className="no-bar mb-5 flex gap-1.5 overflow-x-auto lg:hidden">
       {FILTERS.map((f) => {
         const n = countOf(f.id);
         return (
-          <button key={f.id} type="button" onClick={() => go(f.id)} className={cx("inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-[13px] font-semibold", filter === f.id ? "border-transparent bg-accent text-accent-ink" : "border-line bg-surface text-ink-muted")}>
+          <button key={f.id} type="button" onClick={() => go(f.id)} aria-pressed={filter === f.id} className={cx("inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-[13px] font-semibold", filter === f.id ? "border-transparent bg-accent text-accent-ink" : "border-line bg-surface text-ink-muted")}>
             {f.label}
             {n > 0 && <span className="font-mono text-[11px]">{n}</span>}
           </button>
@@ -149,26 +153,34 @@ function NotificationsContent() {
   const title = FILTERS.find((f) => f.id === filter)?.label ?? "All";
 
   return (
-    <PanelLayout panel={panel} mobile={mobile}>
-      <div className="mx-auto max-w-3xl">
+    <div className="mx-auto grid max-w-[1240px] gap-8 xl:grid-cols-[minmax(0,880px)_19rem]">
+      {panel}
+      <div className="min-w-0">
         <header className="mb-5 flex flex-wrap items-end justify-between gap-3">
           <div>
             <p className="eyebrow mb-1.5">Notifications</p>
             <h1 className="text-[clamp(1.6rem,3vw,2.1rem)] font-bold tracking-[-0.03em]">{filter === "all" ? "Everything" : title}</h1>
           </div>
+          <span className="flex items-center gap-1.5">
           <Button size="sm" onClick={() => void readAll()} disabled={!unread}>
             <Icon name="check" size={14} /> Mark all read
           </Button>
+          </span>
         </header>
+        {filters}
 
         {loading || status === "loading" ? (
           <RowSkeleton rows={6} />
         ) : error ? (
           <ErrorState message={error} onRetry={reload} />
         ) : items.length === 0 ? (
-          <EmptyState icon="bell" title={filter === "unread" ? "You're all caught up" : "Nothing here yet"}>
-            {filter === "all" ? "Requests to join your crews and communities, replies, mentions, event news and your ads show up here." : filter === "unread" ? "No unread notifications." : `No ${title.toLowerCase()} notifications yet.`}
-          </EmptyState>
+          <div className="rounded-card border border-dashed border-line px-6 py-12 text-center">
+            <InboxEmptyArt />
+            <h2 className="mt-4 text-lg font-semibold">{filter === "unread" ? "You're all caught up" : "Nothing here yet"}</h2>
+            <p className="mx-auto mt-1 max-w-sm text-sm text-ink-muted">
+              {filter === "all" ? "Requests to join your crews and communities, replies, mentions, event news and your ads show up here." : filter === "unread" ? "No unread notifications." : `No ${title.toLowerCase()} notifications yet.`}
+            </p>
+          </div>
         ) : (
           <div className={cx("space-y-6 transition-opacity", refreshing && "opacity-60")} aria-busy={refreshing || undefined}>
             {groups.map((g) => (
@@ -176,22 +188,7 @@ function NotificationsContent() {
                 <h2 className="eyebrow mb-2">{g.label}</h2>
                 <ul className="overflow-hidden rounded-card border border-line bg-surface">
                   {g.items.map((n) => (
-                    <li key={n.id} className="border-b border-line last:border-b-0">
-                      <button type="button" onClick={() => void open(n)} className={cx("flex w-full items-start gap-3 px-4 py-3.5 text-left transition hover:bg-raised/50", !n.read && "bg-accent/[0.04]")}>
-                        <span className={cx("relative inline-flex size-10 shrink-0 items-center justify-center rounded-full", n.read ? "bg-raised text-ink-muted" : "bg-accent text-accent-ink")}>
-                          <Icon name={ICON[n.category] ?? "bell"} size={17} />
-                          {n.count > 1 && <span className="absolute -right-1 -bottom-1 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-ink px-1 font-mono text-[10px] font-bold text-canvas ring-2 ring-surface">{n.count > 99 ? "99+" : n.count}</span>}
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className={cx("block text-[14px] leading-snug", n.read ? "text-ink-muted" : "font-semibold text-ink")}>{n.title}</span>
-                          {n.body && <span className="mt-0.5 block line-clamp-2 text-[13px] text-ink-muted">{n.body}</span>}
-                          <span className="mt-1 block font-mono text-[11px] text-ink-muted">
-                            {SHORT[n.category] ?? n.category} · {now ? relativeStamp(n.updatedAt, now) : ""}
-                          </span>
-                        </span>
-                        {!n.read && <span className="mt-2 size-2.5 shrink-0 rounded-full bg-accent" aria-label="New" />}
-                      </button>
-                    </li>
+                    <NotificationRow key={n.id} n={n} now={now} icon={ICON[n.category] ?? "bell"} kind={SHORT[n.category] ?? n.category} onOpen={() => void open(n)} onPatch={patchOne} onRemove={() => dropOne(n)} />
                   ))}
                 </ul>
               </section>
@@ -206,7 +203,8 @@ function NotificationsContent() {
           </div>
         )}
       </div>
-    </PanelLayout>
+      <InboxSide />
+    </div>
   );
 }
 

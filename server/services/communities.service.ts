@@ -70,6 +70,7 @@ export async function getCommunity(viewer: IUser | null, slug: string): Promise<
         communityId: space.community._id,
         subcommunityId: null,
         cancelled: false,
+        review: null,
         startsAt: { $gte: new Date() },
       }),
     ]);
@@ -93,6 +94,7 @@ export async function createCommunity(viewer: IUser, input: z.infer<typeof commu
     neighborhood: input.neighborhood,
     privacy: input.privacy,
     groupPolicy: input.groupPolicy,
+    feedPolicy: input.feedPolicy,
     coverImage: input.coverImage || null,
     ownerId: viewer._id,
   });
@@ -122,6 +124,13 @@ export async function updateCommunity(viewer: IUser, slug: string, patch: z.infe
   if (patch.coverImage !== undefined) set.coverImage = patch.coverImage || null;
   if (patch.privacy !== undefined) set.privacy = patch.privacy;
   if (patch.groupPolicy !== undefined) set.groupPolicy = patch.groupPolicy;
+  if (patch.feedPolicy !== undefined) set.feedPolicy = patch.feedPolicy;
+  if (patch.memberEvents !== undefined) set.memberEvents = patch.memberEvents;
+  // the Klique community never asks for points
+  if (!space.community.official) {
+    if (patch.minPointsJoin !== undefined) set.minPointsJoin = patch.minPointsJoin;
+    if (patch.minPointsPost !== undefined) set.minPointsPost = patch.minPointsPost;
+  }
 
   await Community.updateOne({ _id: space.community._id }, set);
   if (set.coverImage !== undefined && space.community.coverImage && !sameFile(space.community.coverImage, set.coverImage)) deleteUploads([space.community.coverImage]);

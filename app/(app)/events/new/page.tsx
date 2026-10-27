@@ -1,5 +1,6 @@
 "use client";
 
+import { ContributionFields, contributionDraftOf, contributionInput, type ContributionDraft } from "@/components/domain/money/Contribute";
 import { useCategories } from "@/lib/hooks/useCategories";
 import { KLIQUE_SLUG } from "@/lib/constants";
 import Link from "next/link";
@@ -23,6 +24,7 @@ import { Icon } from "@/components/ui/Icon";
 import { LIMITS, isInterestId, type InterestId } from "@/lib/constants";
 import { CURRENCIES, formatPrice } from "@/lib/format";
 import { useApi, useDebounced } from "@/lib/hooks/useApi";
+import { isHttpLink, normalizeLink } from "@/lib/links";
 
 function toIso(date: string, time: string): string | null {
   if (!date || !time) return null;
@@ -50,12 +52,15 @@ function NewEventForm() {
   const [currency, setCurrency] = useState<string | null>(null);
   const [neighborhood, setNeighborhood] = useState("");
   const [venue, setVenue] = useState("");
+  const [ticketUrl, setTicketUrl] = useState("");
+  const [onlineUrl, setOnlineUrl] = useState("");
   const [date, setDate] = useState("");
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   const [price, setPrice] = useState("0");
   const [capacity, setCapacity] = useState("");
   const [cover, setCover] = useState("");
+  const [chipIn, setChipIn] = useState<ContributionDraft>(() => contributionDraftOf(null));
   const [communitySlug, setCommunitySlug] = useState(params.get("community") ?? "");
   const [subSlug, setSubSlug] = useState(params.get("sub") ?? "");
   const [busy, setBusy] = useState(false);
@@ -80,6 +85,8 @@ function NewEventForm() {
   const own = communities.find((c) => c.slug === communitySlug);
   const pickedCommunity = own ?? (adminPick.data ? { slug: adminPick.data.slug, name: adminPick.data.name, privacy: adminPick.data.privacy, groupsOnly: false } : undefined);
   const groupsOnly = !!pickedCommunity?.groupsOnly && !siteAdmin;
+  // a member's community: the event waits for its owner or an admin to approve it
+  const submitting = !!own?.submit && !siteAdmin;
   const pickedSub = subs.find((s) => s.slug === subSlug);
   const privateSpace = pickedCommunity?.privacy === "private" || !!pickedSub;
 
@@ -101,6 +108,10 @@ function NewEventForm() {
       endsAt = toIso(date, end);
       if (endsAt && startsAt && endsAt <= startsAt) next.endsAt = "End time must be after the start.";
     }
+    const tickets = normalizeLink(ticketUrl);
+    const joinLink = online ? normalizeLink(onlineUrl) : "";
+    if (tickets && !isHttpLink(tickets)) next.ticketUrl = "Enter a valid link, like https://tix.africa/your-event";
+    if (joinLink && !isHttpLink(joinLink)) next.onlineUrl = "Enter a valid link, like https://meet.google.com/abc-defg-hij";
     const cap = capacity.trim() ? Math.round(Number(capacity)) : null;
     if (cap !== null && (!Number.isFinite(cap) || cap < 1)) next.capacity = "Capacity must be 1 or more.";
     if (Object.keys(next).length || !startsAt) {
@@ -115,6 +126,8 @@ function NewEventForm() {
       ...place,
       neighborhood,
       online,
+      ticketUrl: tickets || null,
+      onlineUrl: joinLink || null,
       currency: cur,
       venue: venue.trim(),
       startsAt,
@@ -124,7 +137,14 @@ function NewEventForm() {
       coverImage: cover.trim() || null,
       communitySlug: communitySlug || undefined,
       subSlug: communitySlug && subSlug ? subSlug : undefined,
+      contribution: null as ReturnType<typeof contributionInput>,
     };
+    try {
+      input.contribution = communitySlug && communitySlug !== KLIQUE_SLUG ? contributionInput(chipIn) : null;
+    } catch (err) {
+      setErrors({ contribution: (err as Error).message });
+      return;
+    }
     setBusy(true);
     setErrors({});
     setFormError(null);
@@ -155,7 +175,7 @@ function NewEventForm() {
         </span>
         <h2 className="text-xl font-semibold tracking-[-0.02em]">Events are posted from inside a community</h2>
         <p className="text-sm text-ink-muted">
-          A community&apos;s owner and admins post its events from the community&apos;s Events page, and a group&apos;s owner and admins can post in their group. {communities.length ? "Pick one you run:" : "Start a community, or ask the admins of one you're in to post your event."}
+          A community&apos;s owner and admins post its events from the community&apos;s Events page, and a group&apos;s owner and admins can post in their group. Members can send one in for approval. {communities.length ? "Pick a community:" : "Start a community, or join one to send your event in."}
         </p>
         {communities.length > 0 ? (
           <ul className="space-y-1.5">
@@ -165,6 +185,7 @@ function NewEventForm() {
                   <Icon name="calendar" size={15} className="text-ink-muted" />
                   <span className="min-w-0 flex-1 truncate">{c.name}</span>
                   {c.groupsOnly && <span className="text-xs font-normal text-ink-muted">your groups</span>}
+                  {c.submit && <span className="text-xs font-normal text-ink-muted">needs approval</span>}
                   <Icon name="chevron-right" size={14} className="text-ink-muted" />
                 </Link>
               </li>
@@ -201,7 +222,8 @@ function NewEventForm() {
         </span>
       </label>
       <PlaceFields value={place} onChange={setPlace} neighborhood={neighborhood} onNeighborhood={setNeighborhood} errors={errors} />
-      <TextField label={online ? "Where to join" : "Venue"} value={venue} onChange={(e) => setVenue(e.target.value)} maxLength={LIMITS.venue} error={errors.venue} placeholder={online ? "Zoom, Google Meet, a Discord link…" : "Name of the spot"} />
+      <TextField label={online ? "Where to join" : "Venue"} value={venue} onChange={(e) => setVenue(e.target.value)} maxLength={LIMITS.venue} error={errors.venue} placeholder={online ? "Zoom, Google Meet, a Discord server…" : "Name of the spot"} />
+      {online && <TextField label="Join link (optional)" type="url" inputMode="url" value={onlineUrl} onChange={(e) => setOnlineUrl(e.target.value)} onBlur={() => setOnlineUrl((v) => normalizeLink(v))} error={errors.onlineUrl} placeholder="https://meet.google.com/…" hint="Shows as a Join online button on the event." />}
       <div className="grid gap-4 sm:grid-cols-3">
         <TextField label="Date" type="date" value={date} onChange={(e) => setDate(e.target.value)} error={errors.date} />
         <TextField label="Starts" type="time" value={start} onChange={(e) => setStart(e.target.value)} error={errors.startsAt} />
@@ -219,7 +241,9 @@ function NewEventForm() {
         </div>
         <TextField label="Capacity (optional)" type="number" inputMode="numeric" min={1} value={capacity} onChange={(e) => setCapacity(e.target.value)} error={errors.capacity} hint="Leave empty for unlimited spots." />
       </div>
+      <TextField label="Ticket link (optional)" type="url" inputMode="url" value={ticketUrl} onChange={(e) => setTicketUrl(e.target.value)} onBlur={() => setTicketUrl((v) => normalizeLink(v))} error={errors.ticketUrl} placeholder="https://tix.africa/…" hint="Shows as a Get tickets button on the event." />
       <ImageField kind="photo" label="Cover image (optional)" value={cover} onChange={setCover} error={errors.coverImage} hint="A wide picture works best. We'll use artwork if you skip it." />
+      {communitySlug && communitySlug !== KLIQUE_SLUG && <ContributionFields value={chipIn} onChange={setChipIn} error={errors.contribution} />}
 
       <fieldset className="space-y-4 rounded-card border border-line bg-surface p-4">
         <legend className="px-1 text-[13px] font-medium">Where it&apos;s posted</legend>
@@ -238,6 +262,14 @@ function NewEventForm() {
           <p className="flex items-center gap-2 text-sm">
             <Icon name="users" size={15} className="text-ink-muted" />
             <span className="font-semibold">{pickedCommunity?.name}</span>
+          </p>
+        )}
+        {submitting && (
+          <p className="flex items-start gap-2 rounded-control bg-raised px-3 py-2.5 text-[13px] text-ink-muted">
+            <Icon name="clock" size={15} className="mt-0.5 shrink-0 text-accent-text" />
+            <span>
+              It goes to {pickedCommunity?.name}&apos;s owner and admins first. Once one of them approves it, it&apos;s posted and members hear about it. You&apos;ll get a notification either way.
+            </span>
           </p>
         )}
         {communitySlug && subs.length > 0 && (
@@ -276,7 +308,7 @@ function NewEventForm() {
       )}
       <div className="flex gap-2">
         <Button type="submit" variant="primary" size="lg" loading={busy} disabled={status !== "authed"}>
-          Publish event
+          {submitting ? "Send for approval" : "Publish event"}
         </Button>
         <Button size="lg" href="/events">
           Cancel

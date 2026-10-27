@@ -23,8 +23,9 @@ const SORTS: { id: TopicSort; label: string }[] = [
 ];
 
 /**
- * A community's Reddit-style board. Opening a topic (`openId`) shows it in the right-hand panel; the list stays
- * here, scrolled where it was, so you can keep reading and open another.
+ * A community's board, like a Discord forum channel: post cards (tags, title, a taste of the text, a thumbnail,
+ * upvotes, replies, last activity). Opening one (`openId`) shows the post and its chat in the right-hand panel;
+ * the list stays here, scrolled where it was. Tags filter the board.
  */
 export function TopicsPanel({ slug, communityName, isMember, openId, board }: { slug: string; communityName: string; isMember: boolean; openId: string | null; board: BoardDTO | null }) {
   if (!board) return <EmptyState icon="topics" title="No boards yet">Admins can add boards from the sidebar, like Updates or Projects.</EmptyState>;
@@ -35,11 +36,12 @@ function Board({ slug, communityName, isMember, board, openId }: { slug: string;
   const { requireAuth } = useAuth();
   const [sort, setSort] = useState<TopicSort>("hot");
   const [q, setQ] = useState("");
+  const [tag, setTag] = useState<string | null>(null);
   const dq = useDebounced(q.trim(), 350);
   const [creating, setCreating] = useState(false);
-  const { items, loading, loadingMore, error, hasMore, loadMore, reload, setItems } = usePaged<TopicDTO>((page) => TopicService.list(slug, { board: board.slug, sort, q: dq || undefined, page }), [slug, board.slug, sort, dq], {
+  const { items, loading, loadingMore, error, hasMore, loadMore, reload, setItems } = usePaged<TopicDTO>((page) => TopicService.list(slug, { board: board.slug, sort, q: dq || undefined, tag: tag ?? undefined, page }), [slug, board.slug, sort, dq, tag], {
     keepPrevious: true,
-    key: `topics:${slug}:${board.slug}:${sort}:${dq}`,
+    key: `topics:${slug}:${board.slug}:${sort}:${dq}:${tag ?? ""}`,
   });
   // likes, comments and edits made in the open topic show here too
   useTopicEvents((e) => {
@@ -55,7 +57,7 @@ function Board({ slug, communityName, isMember, board, openId }: { slug: string;
         {board.postPolicy === "admins" && <p className="eyebrow mt-1">Only owners and admins post here</p>}
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <div role="tablist" aria-label="Sort topics" className="inline-flex rounded-full border border-line bg-surface p-0.5">
+        <div role="tablist" aria-label="Sort posts" className="inline-flex rounded-full border border-line bg-surface p-0.5">
           {SORTS.map((s) => (
             <button key={s.id} type="button" role="tab" aria-selected={sort === s.id} onClick={() => setSort(s.id)} className={cx("h-8 rounded-full px-3.5 text-[13px] font-semibold transition", sort === s.id ? "bg-accent text-accent-ink" : "text-ink-muted hover:text-ink")}>
               {s.label}
@@ -63,13 +65,13 @@ function Board({ slug, communityName, isMember, board, openId }: { slug: string;
           ))}
         </div>
         <label className="relative min-w-40 flex-1">
-          <span className="sr-only">Search topics</span>
+          <span className="sr-only">Search posts</span>
           <Icon name="search" size={15} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-ink-muted" />
-          <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search topics" className="h-9 w-full rounded-full border border-line bg-surface pr-3 pl-9 text-sm text-ink placeholder:text-ink-muted/70 focus:border-accent-text focus:outline-none" />
+          <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search posts" className="h-9 w-full rounded-full border border-line bg-surface pr-3 pl-9 text-sm text-ink placeholder:text-ink-muted/70 focus:border-accent-text focus:outline-none" />
         </label>
         {board.canPost ? (
           <Button variant="primary" size="sm" onClick={() => setCreating(true)}>
-            <Icon name="plus" size={15} /> New topic
+            <Icon name="plus" size={15} /> New post
           </Button>
         ) : isMember ? null : (
           <Button variant="secondary" size="sm" onClick={() => requireAuth()}>
@@ -78,19 +80,27 @@ function Board({ slug, communityName, isMember, board, openId }: { slug: string;
         )}
       </div>
 
+      {tag && (
+        <p className="flex items-center gap-2 text-sm text-ink-muted">
+          Tagged
+          <button type="button" onClick={() => setTag(null)} className="inline-flex items-center gap-1.5 rounded-full bg-accent px-2.5 py-0.5 text-[12.5px] font-semibold text-accent-ink" aria-label={`Clear the tag filter ${tag}`}>
+            {tag} <Icon name="x" size={11} />
+          </button>
+        </p>
+      )}
       {loading && items.length === 0 ? (
         <RowSkeleton rows={4} />
       ) : error ? (
         <ErrorState message={error} onRetry={() => void reload()} />
       ) : items.length === 0 ? (
-        <EmptyState icon="topics" title={dq ? "No topics match" : `Nothing in ${board.name} yet`} action={board.canPost && !dq ? <Button variant="primary" onClick={() => setCreating(true)}>Start the first topic</Button> : undefined}>
-          {dq ? "Try different words." : `Topics are for longer conversations in ${communityName} that people can comment on, like a forum.`}
+        <EmptyState icon="topics" title={dq || tag ? "No posts match" : `Nothing in ${board.name} yet`} action={board.canPost && !dq && !tag ? <Button variant="primary" onClick={() => setCreating(true)}>Write the first post</Button> : undefined}>
+          {dq || tag ? "Try different words, or another tag." : `Posts are for longer conversations in ${communityName}: each one gets its own chat for replies.`}
         </EmptyState>
       ) : (
         <ul className={cx("space-y-3 transition-opacity", loading && "opacity-60")} aria-busy={loading || undefined}>
           {items.map((t) => (
             <li key={t.id}>
-              <TopicRow topic={t} active={t.id === openId} onChange={(n) => emitTopic({ type: "changed", topic: n })} onRemoved={() => emitTopic({ type: "removed", id: t.id })} />
+              <TopicRow topic={t} active={t.id === openId} onTag={setTag} onChange={(n) => emitTopic({ type: "changed", topic: n })} onRemoved={() => emitTopic({ type: "removed", id: t.id })} />
             </li>
           ))}
         </ul>

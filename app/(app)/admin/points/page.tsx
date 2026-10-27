@@ -4,23 +4,23 @@ import { Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AdminHeader, Segmented } from "@/components/domain/admin/AdminParts";
 import { AdminGate } from "@/components/domain/admin/AdminShell";
-import { PointsOverview, PointsPeople, PointsPricing, RanksSettings } from "@/components/domain/admin/PointsAdmin";
+import { EarningSettings, HypeOverview, HypePricing, PointsPeople } from "@/components/domain/admin/PointsAdmin";
 
-type View = "overview" | "prices" | "ranks" | "people";
+type View = "overview" | "prices" | "earning" | "people";
 
 const INTRO: Record<View, string> = {
-  overview: "Points people bought, and what they're doing with them. Points pay for picture frames and name styles; pictures and banners stay free.",
-  prices: "What packs cost and what each design costs. The server always works prices out from here.",
-  ranks: "Rank names, how much Hype each needs, the points each pays, and what earns Hype. People earn Hype for showing up: hosts tick off who came, hosts earn for each person who showed up, and crews earn for meeting up. Likes don't count.",
-  people: "Look someone up to see their points, or give and take points (prizes, refunds, mistakes). Every change is in the audit log.",
+  overview: "Hype people bought, and what they're doing with it. Hype is the currency you buy: it pays for picture frames and name styles; pictures and banners stay free.",
+  prices: "What Hype packs cost and what each design costs in Hype. The server always works prices out from here.",
+  earning: "Points are earned reputation, never bought. People earn them when others come to their events, upvote their posts and board posts, and react well to their messages in community and group chats. Each action has its own daily cap.",
+  people: "Look someone up to see their Hype and points, or give and take either (prizes, refunds, mistakes). Every change is in the audit log.",
 };
 
-/** Admin → Points: sales, prices, and one person's points. */
+/** Admin → Points: Hype sales and prices, what earns points, and one person's Hype and points. */
 function PointsAdminPage() {
   const sp = useSearchParams();
   const router = useRouter();
   const v = sp.get("view");
-  const view: View = v === "prices" || v === "ranks" || v === "people" ? v : "overview";
+  const view: View = v === "prices" || v === "earning" || v === "people" ? v : "overview";
   return (
     <>
       <div className="mb-5">
@@ -29,15 +29,15 @@ function PointsAdminPage() {
           value={view}
           onChange={(next) => router.replace(`/admin/points?view=${next}`, { scroll: false })}
           options={[
-            { id: "overview", label: "Overview" },
-            { id: "prices", label: "Prices" },
-            { id: "ranks", label: "Ranks" },
+            { id: "overview", label: "Hype sales" },
+            { id: "prices", label: "Hype prices" },
+            { id: "earning", label: "Earning points" },
             { id: "people", label: "People" },
           ]}
         />
       </div>
-      <AdminHeader title={view === "overview" ? "Points" : view === "prices" ? "Points prices" : view === "ranks" ? "Ranks & Hype" : "Someone's points"}>{INTRO[view]}</AdminHeader>
-      {view === "overview" ? <PointsOverview /> : view === "prices" ? <PointsPricing /> : view === "ranks" ? <RanksSettings /> : <PointsPeople key={sp.get("who") ?? ""} initial={sp.get("who") ?? ""} />}
+      <AdminHeader title={view === "overview" ? "Hype sales" : view === "prices" ? "Hype prices" : view === "earning" ? "Earning points" : "Someone's Hype & points"}>{INTRO[view]}</AdminHeader>
+      {view === "overview" ? <HypeOverview /> : view === "prices" ? <HypePricing /> : view === "earning" ? <EarningSettings /> : <PointsPeople key={sp.get("who") ?? ""} initial={sp.get("who") ?? ""} />}
     </>
   );
 }

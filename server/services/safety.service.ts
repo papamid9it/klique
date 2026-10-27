@@ -1,4 +1,5 @@
 import { dropFriendship } from "./friends.service";
+import { FeedPost } from "../models/FeedPost";
 import type { Types } from "mongoose";
 import type { z } from "zod";
 import type { BlockedUserDTO } from "@/lib/types";
@@ -40,7 +41,7 @@ export async function unblockUser(viewer: IUser, handle: string) {
 export async function listBlocked(viewer: IUser): Promise<BlockedUserDTO[]> {
   const rows = await Block.find({ blockerId: viewer._id }).sort({ createdAt: -1 }).limit(200).lean<{ blockedId: Types.ObjectId; createdAt: Date }[]>();
   const users = await User.find({ _id: { $in: rows.map((r) => r.blockedId) } })
-    .select("handle displayName avatarUrl avatarFrame nameEffect rank country city")
+    .select("handle displayName avatarUrl avatarFrame nameEffect country city")
     .lean<IUser[]>();
   const map = new Map(users.map((u) => [sid(u._id), u]));
   return rows.flatMap((r) => {
@@ -76,6 +77,15 @@ export async function createReport(viewer: IUser, input: z.infer<typeof reportSc
     }
     case "ad": {
       if (!(await Ad.exists({ _id: input.targetId }))) throw notFound();
+      break;
+    }
+    case "feedPost": {
+      const post = await FeedPost.findById(input.targetId).select("communityId authorId").lean<{ communityId: Types.ObjectId; authorId: Types.ObjectId }>();
+      if (!post) throw notFound();
+      const space = await loadSpace(post.communityId, null);
+      if (!(await spaceAccess(space, viewer)).canView) throw notFound();
+      if (sid(post.authorId) === sid(viewer._id)) throw badRequest("You can't report yourself.");
+      communityId = post.communityId;
       break;
     }
     case "event": {

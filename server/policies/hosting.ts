@@ -32,20 +32,29 @@ export function assertCanHostPublic(u: IUser) {
 }
 
 /**
- * Where this person may host, for the new-event form: the communities they own or run (top level), and those
- * where they only run a group (`groupsOnly`). Site admins may host anywhere and pick from every community.
+ * Where this person may host, for the new-event form: the communities they own or run (top level), those where
+ * they only run a group (`groupsOnly`), and those where they're a member who can send one in for approval
+ * (`submit`). Site admins may host anywhere and pick from every community.
  */
 export async function hostingOptions(u: IUser): Promise<HostingOptionsDTO> {
-  const memberships = await Membership.find({ userId: u._id, status: "active", role: { $in: ["owner", "admin"] } })
+  const memberships = await Membership.find({ userId: u._id, status: "active" })
     .select("communityId subcommunityId role")
     .lean<Pick<IMembership, "communityId" | "subcommunityId" | "role">[]>();
-  const runsTop = new Set(memberships.filter((m) => !m.subcommunityId).map((m) => String(m.communityId)));
-  const runsGroupIn = new Set(memberships.filter((m) => m.subcommunityId).map((m) => String(m.communityId)));
-  const ids = [...new Set([...runsTop, ...runsGroupIn])];
+  const runs = memberships.filter((m) => m.role === "owner" || m.role === "admin");
+  const runsTop = new Set(runs.filter((m) => !m.subcommunityId).map((m) => String(m.communityId)));
+  const runsGroupIn = new Set(runs.filter((m) => m.subcommunityId).map((m) => String(m.communityId)));
+  const memberOf = new Set(memberships.filter((m) => !m.subcommunityId && m.role === "member").map((m) => String(m.communityId)));
+  const ids = [...new Set([...runsTop, ...runsGroupIn, ...memberOf])];
   const siteAdmin = isSiteAdmin(u);
-  const communities = ids.length ? await Community.find({ _id: { $in: ids } }).select("slug name privacy official").lean<Pick<ICommunity, "_id" | "slug" | "name" | "privacy" | "official">[]>() : [];
+  const communities = ids.length ? await Community.find({ _id: { $in: ids } }).select("slug name privacy official memberEvents").lean<Pick<ICommunity, "_id" | "slug" | "name" | "privacy" | "official" | "memberEvents">[]>() : [];
   // Klique's events go to everyone: only site admins post there, whatever their role in it
-  const list = communities.filter((c) => siteAdmin || !isKlique(c)).map((c) => ({ slug: c.slug, name: c.name, privacy: c.privacy, groupsOnly: !runsTop.has(String(c._id)) }));
+  const list = communities
+    .filter((c) => siteAdmin || !isKlique(c))
+    .flatMap((c) => {
+      const id = String(c._id);
+      if (runsTop.has(id) || runsGroupIn.has(id) || siteAdmin) return [{ slug: c.slug, name: c.name, privacy: c.privacy, groupsOnly: !runsTop.has(id) && !siteAdmin }];
+      return c.memberEvents !== false ? [{ slug: c.slug, name: c.name, privacy: c.privacy, groupsOnly: false, submit: true }] : [];
+    });
   list.sort((a, b) => a.name.localeCompare(b.name));
   return { siteAdmin, communities: list };
 }

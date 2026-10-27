@@ -1,8 +1,11 @@
 import type { Types } from "mongoose";
 import { deleteUploads } from "./media.service";
 import { assertStickerUrl, noteStickerUse } from "./stickers.service";
+import { createPoll, deletePoll, pollPreview } from "./polls.service";
+import type { pollInput } from "../validators/schemas";
+import type { z } from "zod";
 import type { ConversationDetailDTO, ConversationDTO, MessageDTO, MessagingEligibility } from "@/lib/types";
-import { ApiError, forbidden, notFound } from "../http/errors";
+import { ApiError, badRequest, forbidden, notFound } from "../http/errors";
 import { rateLimit } from "../http/rate-limit";
 import { Conversation, participantKey, type IConversation } from "../models/Conversation";
 import { Message, type IMessage } from "../models/Message";
@@ -74,6 +77,7 @@ const toMessage = (m: IMessage, viewerId: Types.ObjectId, reactions: ReactionDTO
   mine: sid(m.senderId) === sid(viewerId),
   editedAt: m.deletedAt || !m.editedAt ? null : m.editedAt.toISOString(),
   deleted: !!m.deletedAt,
+  pollId: m.deletedAt || !m.pollId ? null : sid(m.pollId),
 });
 
 const otherParticipant = (c: IConversation, viewerId: Types.ObjectId) =>
@@ -226,10 +230,9 @@ export async function startConversation(viewer: IUser, handle: string, firstMess
   return getConversation(viewer, sid(convo._id));
 }
 
-export async function sendMessage(viewer: IUser, id: string, input: string | { body: string; sticker?: string; stickerUrl?: string; images?: string[]; replyToId?: string }): Promise<MessageDTO> {
+export async function sendMessage(viewer: IUser, id: string, input: string | { body: string; sticker?: string; stickerUrl?: string; images?: string[]; replyToId?: string; poll?: z.infer<typeof pollInput> }): Promise<MessageDTO> {
   const { body, sticker, images = [], replyToId } = typeof input === "string" ? { body: input, sticker: undefined, images: [], replyToId: undefined } : input;
   const stickerUrl = typeof input !== "string" && input.stickerUrl && !sticker ? assertStickerUrl(input.stickerUrl) : null;
-  const isSticker = !!sticker || !!stickerUrl;
   rateLimit(`dm:${sid(viewer._id)}`, 40, 60_000);
   const convo = await loadMyConversation(viewer, id);
   const otherId = otherParticipant(convo, viewer._id);
@@ -240,9 +243,15 @@ export async function sendMessage(viewer: IUser, id: string, input: string | { b
 
   // you can only answer a message that is in this same conversation
   const replyTarget = replyToId ? await Message.findOne({ _id: replyToId, conversationId: convo._id }).select("_id").lean() : null;
-  const msg = await Message.create({ conversationId: convo._id, senderId: viewer._id, body: isSticker ? "" : body, sticker: sticker ?? null, stickerUrl, images: isSticker ? [] : images, replyToId: replyTarget?._id ?? null });
+  // polls are for groups (channels, group chats, crews); a conversation here is always just the two of you
+  if (typeof input !== "string" && input.poll && convo.participants.length < 3) throw badRequest("Polls are for group chats, not one-to-one messages.");
+  // a poll rides on its own message (anything else sent with it is dropped)
+  const poll = typeof input !== "string" && input.poll ? await createPoll(viewer, { scope: "dm", targetId: convo._id }, input.poll) : null;
+  const msg = poll
+    ? await Message.create({ conversationId: convo._id, senderId: viewer._id, body: "", images: [], pollId: poll._id, replyToId: replyTarget?._id ?? null })
+    : await Message.create({ conversationId: convo._id, senderId: viewer._id, body, sticker: sticker ?? null, stickerUrl, images, replyToId: replyTarget?._id ?? null });
   noteStickerUse(viewer._id, stickerUrl);
-  const preview = previewOf({ body: isSticker ? "" : body, sticker, stickerUrl, images });
+  const preview = poll ? pollPreview(poll.question) : previewOf({ body, sticker, stickerUrl, images });
   await Conversation.updateOne(
     { _id: convo._id },
     {
@@ -255,7 +264,7 @@ export async function sendMessage(viewer: IUser, id: string, input: string | { b
     },
   );
   emitDm([viewer._id, otherId], convo._id);
-  notify([otherId], { title: viewer.displayName, body: preview, data: { type: "dm", conversationId: sid(convo._id) } }, { category: "messages", ref: `dm:${sid(convo._id)}` });
+  notify([otherId], { title: viewer.displayName, body: preview, data: { type: "dm", conversationId: sid(convo._id) } }, { actorId: viewer._id, category: "messages", ref: `dm:${sid(convo._id)}` });
   const row = msg.toObject() as IMessage;
   const replies = await replyRefs([row]);
   return toMessage(row, viewer._id, [], row.replyToId ? (replies.get(sid(row.replyToId)) ?? null) : null);
@@ -308,6 +317,7 @@ export async function editMessage(viewer: IUser, id: string, messageId: string, 
   rateLimit(`dm-edit:${sid(viewer._id)}`, 30, 60_000);
   const { convo, msg } = await loadOwnMessage(viewer, id, messageId);
   if (msg.sticker || msg.stickerUrl) throw forbidden("Stickers can't be edited. Delete it and send another.");
+  if (msg.pollId) throw forbidden("Polls can't be edited. Delete it and start another.");
   if (await blockedEitherWay(viewer._id, otherParticipant(convo, viewer._id))) throw forbidden("You can't change messages in this conversation.");
   const next = body.trim();
   const replies = await replyRefs([msg]);
@@ -325,6 +335,7 @@ export async function deleteMessage(viewer: IUser, id: string, messageId: string
   const { convo, msg } = await loadOwnMessage(viewer, id, messageId);
   await Message.updateOne({ _id: msg._id }, { $set: { body: "", sticker: null, stickerUrl: null, images: [], deletedAt: new Date() } });
   deleteUploads(msg.images ?? []); // its photos and videos go with it
+  await deletePoll(msg.pollId);
   await refreshPreview(convo, msg, "Message deleted");
   emitDm(convo.participants, convo._id);
   return { deleted: true };

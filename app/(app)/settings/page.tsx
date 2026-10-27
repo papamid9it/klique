@@ -1,6 +1,10 @@
 "use client";
 
+import { ProfileEffect } from "@/components/ui/ProfileEffect";
+import { themeStyle } from "@/components/ui/profileTheme";
+import { setAutoplay } from "@/lib/autoplay";
 import { setDataSaver, type DataSaverPref } from "@/lib/data-saver";
+import { useAutoplay } from "@/lib/hooks/useAutoplay";
 import { useDataSaver } from "@/lib/hooks/useDataSaver";
 import { useCategories } from "@/lib/hooks/useCategories";
 import Link from "next/link";
@@ -12,6 +16,7 @@ import { ProfileService, type ProfileUpdate } from "@/app/services/ProfileServic
 import { SafetyService } from "@/app/services/SafetyService";
 import { PersonRow } from "@/components/domain/PersonRow";
 import { useAuth } from "@/components/providers/AuthProvider";
+import { useProfileCard } from "@/components/providers/ProfileCardProvider";
 import { useMood } from "@/components/providers/ThemeProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import { ImageField } from "@/components/ui/ImageField";
@@ -27,9 +32,9 @@ import { DeleteAccount } from "@/components/domain/account/DeleteAccount";
 import { DeviceSettings } from "@/components/domain/account/DeviceSettings";
 import { NotificationSettings } from "@/components/domain/account/NotificationSettings";
 import { ResendButton } from "@/components/domain/account/EmailStatus";
-import { StylePicker, type StyleDraft } from "@/components/domain/account/StylePicker";
-import { PointsTab, UnlockDialog, styleAccess, usePointsWallet } from "@/components/domain/account/Points";
-import type { StyleKey } from "@/lib/points";
+import { StylePicker, themeOf, type StyleDraft } from "@/components/domain/account/StylePicker";
+import { HypeTab, UnlockDialog, styleAccess, useHypeWallet } from "@/components/domain/account/Points";
+import type { StyleKey } from "@/lib/wallet";
 import { UserName } from "@/components/ui/UserName";
 import { ProfileBanner, monthYear } from "@/components/domain/profile/ProfileParts";
 import { Avatar } from "@/components/ui/Avatar";
@@ -39,7 +44,7 @@ import { useApi } from "@/lib/hooks/useApi";
 import { MOODS, type MoodId } from "@/lib/moods";
 import type { UserMe } from "@/lib/types";
 
-type Tab = "account" | "profile" | "style" | "points" | "privacy" | "blocked" | "notifications" | "appearance";
+type Tab = "account" | "profile" | "style" | "hype" | "privacy" | "blocked" | "notifications" | "appearance";
 const GROUPS: { title: string; items: { id: Tab; label: string; icon: "user" | "edit" | "asterisk" | "coin" | "shield" | "ban" | "sliders" | "bell" }[] }[] = [
   {
     title: "User settings",
@@ -47,16 +52,16 @@ const GROUPS: { title: string; items: { id: Tab; label: string; icon: "user" | "
       { id: "account", label: "My Account", icon: "user" },
       { id: "profile", label: "Profile", icon: "edit" },
       { id: "style", label: "Profile style", icon: "asterisk" },
-      { id: "points", label: "Rank & points", icon: "coin" },
+      { id: "hype", label: "Hype & points", icon: "coin" },
       { id: "privacy", label: "Privacy & Safety", icon: "shield" },
       { id: "blocked", label: "Blocked people", icon: "ban" },
     ],
   },
   { title: "App settings", items: [{ id: "notifications", label: "Notifications", icon: "bell" }, { id: "appearance", label: "Appearance", icon: "sliders" }] },
 ];
-const TITLES: Record<Tab, string> = { account: "My Account", profile: "Profile", style: "Profile style", points: "Rank & points", privacy: "Privacy & Safety", blocked: "Blocked people", notifications: "Notifications", appearance: "Appearance" };
+const TITLES: Record<Tab, string> = { account: "My Account", profile: "Profile", style: "Profile style", hype: "Hype & points", privacy: "Privacy & Safety", blocked: "Blocked people", notifications: "Notifications", appearance: "Appearance" };
 /** old anchors (#messages, #safety, #mood…) still land somewhere sensible */
-const HASH: Record<string, Tab> = { account: "account", profile: "profile", style: "style", design: "style", points: "points", wallet: "points", rank: "points", privacy: "privacy", messages: "privacy", safety: "privacy", blocked: "blocked", blocks: "blocked", appearance: "appearance", mood: "appearance", notifications: "notifications" };
+const HASH: Record<string, Tab> = { account: "account", profile: "profile", style: "style", design: "style", hype: "hype", points: "hype", wallet: "hype", rank: "hype", privacy: "privacy", messages: "privacy", safety: "privacy", blocked: "blocked", blocks: "blocked", appearance: "appearance", mood: "appearance", notifications: "notifications" };
 
 /** A titled block inside a tab: small caps heading, optional intro, then the content. */
 function Block({ title, intro, children }: { title: string; intro?: string; children: React.ReactNode }) {
@@ -89,10 +94,12 @@ type ProfileDraft = { displayName: string; bio: string; avatarUrl: string; place
 
 function ProfileForm({ me, onDraft }: { me: UserMe; onDraft?: (d: ProfileDraft) => void }) {
   const categories = useCategories();
+  const card = useProfileCard();
   const { setUser } = useAuth();
   const toast = useToast();
   const [displayName, setDisplayName] = useState(me.displayName);
   const [bio, setBio] = useState(me.bio);
+  const [pronouns, setPronouns] = useState(me.pronouns ?? "");
   const [place, setPlace] = useState<Place>({ country: me.country, region: me.region, city: me.city });
   const [neighborhood, setNeighborhood] = useState(me.neighborhood);
   const [avatarUrl, setAvatarUrl] = useState(me.avatarUrl ?? "");
@@ -118,6 +125,7 @@ function ProfileForm({ me, onDraft }: { me: UserMe; onDraft?: (d: ProfileDraft) 
       const res = await ProfileService.updateMe({
         displayName: displayName.trim(),
         bio: bio.trim(),
+        pronouns: pronouns.trim(),
         ...place,
         neighborhood,
         avatarUrl: avatarUrl.trim() || null,
@@ -139,6 +147,7 @@ function ProfileForm({ me, onDraft }: { me: UserMe; onDraft?: (d: ProfileDraft) 
       <TextField label="Display name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} maxLength={LIMITS.displayName} required error={fieldErrors.displayName} />
       <TextField label="Handle" value={`@${me.handle}`} readOnly hint="Your handle can't be changed." />
       <TextArea label="Bio" value={bio} onChange={(e) => setBio(e.target.value)} maxLength={LIMITS.bio} counter={LIMITS.bio} error={fieldErrors.bio} hint="A line or two about what you're into." />
+      <TextField label="Pronouns (optional)" value={pronouns} onChange={(e) => setPronouns(e.target.value)} maxLength={LIMITS.pronouns} error={fieldErrors.pronouns} placeholder="e.g. she/her" hint="Shown after your name on your profile." />
       <PlaceFields value={place} onChange={(p) => { setPlace(p); }} neighborhood={neighborhood} onNeighborhood={setNeighborhood} errors={fieldErrors} />
       <ImageField kind="avatar" shape="round" label="Profile picture" value={avatarUrl} onChange={setAvatarUrl} error={fieldErrors.avatarUrl} fallback={<Avatar name={displayName || me.displayName} size={80} />} reposition={{ aspect: 1, round: true }} hint="After uploading, drag it to choose what shows in the circle. Leave empty to use your initials." />
 
@@ -176,9 +185,9 @@ function ProfileForm({ me, onDraft }: { me: UserMe; onDraft?: (d: ProfileDraft) 
         <Button type="submit" variant="primary" loading={busy}>
           Save profile
         </Button>
-        <Link href={`/people/${me.handle}`} className="text-sm font-medium text-accent-text underline underline-offset-2">
-          View my profile page
-        </Link>
+        <button type="button" onClick={() => card.openFull(me.handle)} className="text-sm font-medium text-accent-text underline underline-offset-2">
+          View my profile card
+        </button>
       </div>
     </form>
   );
@@ -382,7 +391,7 @@ function AccountTab({ me, go, onSignOut, onEverywhere, busy }: { me: UserMe; go:
 
 type PreviewDraft = ProfileDraft & StyleDraft;
 
-const styleOf = (me: UserMe): StyleDraft => ({ bannerUrl: me.bannerUrl ?? "", bannerColor: me.bannerColor ?? "", avatarFrame: me.avatarFrame ?? "", nameEffect: me.nameEffect ?? "" });
+const styleOf = (me: UserMe): StyleDraft => ({ bannerUrl: me.bannerUrl ?? "", bannerColor: me.bannerColor ?? "", avatarFrame: me.avatarFrame ?? "", nameEffect: me.nameEffect ?? "", profileTheme: me.profileTheme ? `${me.profileTheme.primary},${me.profileTheme.accent}` : "", profileEffect: me.profileEffect ?? "" });
 const aboutOf = (me: UserMe): ProfileDraft => ({ displayName: me.displayName, bio: me.bio, avatarUrl: me.avatarUrl ?? "", place: { country: me.country, region: me.region, city: me.city } as Place, neighborhood: me.neighborhood });
 
 /** The little profile card beside the Profile and Profile style forms, updating as you edit. */
@@ -390,9 +399,10 @@ function ProfilePreview({ me, draft }: { me: UserMe; draft: PreviewDraft }) {
   return (
     <aside aria-label="Preview" className="lg:sticky lg:top-14 lg:self-start">
       <p className="eyebrow mb-2">Preview</p>
-      <div className="overflow-hidden rounded-card border border-line bg-surface shadow-lg">
-        <ProfileBanner handle={me.handle} bannerUrl={draft.bannerUrl} bannerColor={draft.bannerColor} className="h-16" />
-        <div className="px-4 pb-4">
+      <div className="relative overflow-hidden rounded-card border border-line bg-surface shadow-lg" style={themeStyle(themeOf(draft.profileTheme))}>
+        <ProfileEffect id={draft.profileEffect} />
+        <ProfileBanner handle={me.handle} bannerUrl={draft.bannerUrl} bannerColor={draft.bannerColor} className="relative h-16" />
+        <div className="relative px-4 pb-4">
           <span className="-mt-9 inline-block rounded-full bg-surface p-1">
             <Avatar name={draft.displayName || me.displayName} src={draft.avatarUrl || null} frame={draft.avatarFrame} size={72} />
           </span>
@@ -426,7 +436,7 @@ function ProfileTab({ me }: { me: UserMe }) {
 /** Banner, picture frame and name style, saved on their own. */
 function StyleTab({ me, go }: { me: UserMe; go: (t: Tab) => void }) {
   const { setUser } = useAuth();
-  const { data: wallet, setData: setWallet } = usePointsWallet();
+  const { data: wallet, setData: setWallet } = useHypeWallet();
   const [unlocking, setUnlocking] = useState<StyleKey | null>(null);
   const toast = useToast();
   const [style, setStyle] = useState<StyleDraft>(() => styleOf(me));
@@ -434,6 +444,18 @@ function StyleTab({ me, go }: { me: UserMe; go: (t: Tab) => void }) {
   const [error, setError] = useState<string | null>(null);
   const saved = styleOf(me);
   const dirty = (Object.keys(style) as (keyof StyleDraft)[]).some((k) => style[k] !== saved[k]);
+
+  /** Saving in one of the pickers: just that design, straight away (the server checks it's theirs). */
+  async function saveDesign(patch: Partial<StyleDraft>) {
+    const res = await ProfileService.updateMe({
+      ...(patch.avatarFrame !== undefined ? { avatarFrame: patch.avatarFrame || null } : {}),
+      ...(patch.nameEffect !== undefined ? { nameEffect: patch.nameEffect || null } : {}),
+      ...(patch.profileTheme !== undefined ? { profileTheme: themeOf(patch.profileTheme) } : {}),
+      ...(patch.profileEffect !== undefined ? { profileEffect: patch.profileEffect || null } : {}),
+    });
+    setUser(res.data);
+    toast("Saved", "success");
+  }
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -445,9 +467,11 @@ function StyleTab({ me, go }: { me: UserMe; go: (t: Tab) => void }) {
         bannerColor: style.bannerColor || null,
         avatarFrame: style.avatarFrame || null,
         nameEffect: style.nameEffect || null,
+        profileTheme: themeOf(style.profileTheme),
+        profileEffect: style.profileEffect || null,
       });
       setUser(res.data);
-      toast("Style saved", "success");
+      toast("Banner saved", "success");
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -459,19 +483,20 @@ function StyleTab({ me, go }: { me: UserMe; go: (t: Tab) => void }) {
     <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_17rem]">
       <form onSubmit={save} className="space-y-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="max-w-md text-sm text-ink-muted">How you show up around klique. Your banner is free. {wallet?.allFree ? "As a site admin, every frame and name style is free for you." : <>Frames and name styles cost points{wallet ? ` and last ${wallet.config.unlockDays} days` : ""}.</>}</p>
-          <button type="button" onClick={() => go("points")} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-line bg-surface px-3.5 text-[13px] font-semibold hover:bg-raised">
-            <Icon name="coin" size={15} /> <span className="font-mono">{(wallet?.balance ?? me.points ?? 0).toLocaleString("en-NG")}</span> points
+          <p className="max-w-md text-sm text-ink-muted">How you show up around klique. Your banner is free. {wallet?.allFree ? "As a site admin, every design is free for you." : <>Name effects, frames, themes, effects and animated pictures cost Hype{wallet ? ` and last ${wallet.config.unlockDays} days` : ""}.</>}</p>
+          <button type="button" onClick={() => go("hype")} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-line bg-surface px-3.5 text-[13px] font-semibold hover:bg-raised">
+            <Icon name="coin" size={15} /> <span className="font-mono">{(wallet?.balance ?? me.hype ?? 0).toLocaleString("en-NG")}</span> Hype
           </button>
         </div>
         <StylePicker
           value={style}
           onChange={setStyle}
           name={me.displayName}
+          handle={me.handle}
           avatarUrl={me.avatarUrl ?? null}
           access={wallet ? (k) => styleAccess(wallet, k) : undefined}
           onLocked={setUnlocking}
-          worn={{ avatarFrame: saved.avatarFrame, nameEffect: saved.nameEffect }}
+          onSave={saveDesign}
         />
         {unlocking && (
           <UnlockDialog
@@ -480,12 +505,10 @@ function StyleTab({ me, go }: { me: UserMe; go: (t: Tab) => void }) {
             wallet={wallet}
             me={me}
             onClose={() => setUnlocking(null)}
-            onGetPoints={() => go("points")}
+            onGetHype={() => go("hype")}
             onDone={(w) => {
               setWallet(w);
-              // put it on straight away; they still press Save
-              const [kind, id] = unlocking.split(":");
-              setStyle((st) => ({ ...st, ...(kind === "frame" ? { avatarFrame: id } : { nameEffect: id }) }));
+              // back in the picker they came from, which saves it
               setUnlocking(null);
             }}
           />
@@ -497,7 +520,7 @@ function StyleTab({ me, go }: { me: UserMe; go: (t: Tab) => void }) {
         )}
         <div className="flex items-center gap-3 pt-1">
           <Button type="submit" variant="primary" loading={busy} disabled={!dirty}>
-            Save style
+            Save banner
           </Button>
           {dirty && (
             <Button type="button" variant="ghost" onClick={() => setStyle(saved)}>
@@ -533,13 +556,13 @@ export default function SettingsPage() {
 
   // Deep links (/settings#profile, #privacy, the old #safety…) open that category.
   useEffect(() => {
-    // ?tab=points (where Paystack and notifications send people) or #points
+    // ?tab=hype (where Paystack and notifications send people) or #hype; the old #points and #rank too
     const t = HASH[window.location.hash.slice(1)] ?? HASH[new URLSearchParams(window.location.search).get("tab") ?? ""];
     if (t) {
       setTab(t);
       setMenu(false);
     }
-    // a link to another category while already here (/settings#points from the account menu)
+    // a link to another category while already here (/settings#hype from the account menu)
     const onHash = () => {
       const h = HASH[window.location.hash.slice(1)];
       if (h) {
@@ -656,7 +679,7 @@ export default function SettingsPage() {
             {tab === "account" && <AccountTab me={user} go={select} onSignOut={out} onEverywhere={everywhere} busy={busy} />}
             {tab === "profile" && <ProfileTab me={user} />}
             {tab === "style" && <StyleTab me={user} go={select} />}
-            {tab === "points" && <PointsTab me={user} onStyle={() => select("style")} />}
+            {tab === "hype" && <HypeTab me={user} onStyle={() => select("style")} />}
             {tab === "privacy" && (
               <div className="space-y-6">
                 <PrefsSections me={user} />
@@ -685,6 +708,9 @@ export default function SettingsPage() {
                 <Block title="Data saver" intro="Use less mobile data: lighter pictures, GIFs and videos wait for a tap, and nothing loads in the background. Saved on this device.">
                   <DataSaverPicker />
                 </Block>
+                <Block title="Videos" intro="How videos in the feed behave. Saved on this device.">
+                  <AutoplaySwitch />
+                </Block>
               </div>
             )}
           </main>
@@ -700,6 +726,13 @@ export default function SettingsPage() {
       </div>
     </div>
   );
+}
+
+/** Feed videos playing by themselves (muted) as they come into view. Data saver on overrides it. */
+function AutoplaySwitch() {
+  const auto = useAutoplay();
+  const { on: saver } = useDataSaver();
+  return <Switch label="Autoplay videos" hint={saver ? "Data saver is on, so videos wait for a tap anyway." : "Videos in the feed play muted as you scroll to them. Off: tap one to play it."} checked={auto} onChange={setAutoplay} />;
 }
 
 /** Data saver for this device: Auto (follows the browser's Save-Data setting and slow connections), On or Off. */

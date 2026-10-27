@@ -11,7 +11,6 @@ import { useToast } from "@/components/providers/ToastProvider";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
-import { RankBadge } from "@/components/ui/RankBadge";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { UserName } from "@/components/ui/UserName";
 import { LIMITS } from "@/lib/constants";
@@ -107,11 +106,8 @@ export function BoardSidebar({ slug, communityId, board, onBoardChanged }: { slu
                 <ProfileTrigger handle={c.user.handle} className="flex w-full items-center gap-2.5 rounded-control px-2 py-1.5 text-left transition hover:bg-raised">
                   <Avatar name={c.user.displayName} src={c.user.avatarUrl} frame={c.user.avatarFrame} size={30} />
                   <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-1.5">
-                      <span className="truncate text-[13.5px] font-semibold">
-                        <UserName name={c.user.displayName} effect={c.user.nameEffect} />
-                      </span>
-                      <RankBadge rank={c.user.rank} />
+                    <span className="block truncate text-[13.5px] font-semibold">
+                      <UserName name={c.user.displayName} effect={c.user.nameEffect} />
                     </span>
                     <span className="block font-mono text-[11px] text-ink-muted">
                       {[c.topics ? `${c.topics} ${c.topics === 1 ? "topic" : "topics"}` : "", c.comments ? `${c.comments} ${c.comments === 1 ? "comment" : "comments"}` : ""].filter(Boolean).join(" · ")}

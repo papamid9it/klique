@@ -17,7 +17,7 @@ export function useUploadStatus(): UploadStatusDTO | null {
         cached = r.data;
         if (live) setS(r.data);
       },
-      () => live && setS({ avatar: false, photo: false, video: false }),
+      () => live && setS({ avatar: false, photo: false, video: false, effect: false }),
     );
     return () => {
       live = false;

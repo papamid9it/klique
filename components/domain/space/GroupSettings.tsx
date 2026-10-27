@@ -12,10 +12,11 @@ import { SaveBar, SettingsBlock, SettingsShell, type SettingsGroup } from "@/com
 import { LIMITS } from "@/lib/constants";
 import type { SubcommunityDTO } from "@/lib/types";
 import { MembersPanel } from "./MembersPanel";
+import { MinPointsForm } from "./MinPoints";
 import { ConfirmModal } from "./parts";
 
-export type GroupTab = "overview" | "members" | "delete";
-const TITLES: Record<GroupTab, string> = { overview: "Overview", members: "Members", delete: "Delete group" };
+export type GroupTab = "overview" | "points" | "members" | "delete";
+const TITLES: Record<GroupTab, string> = { overview: "Overview", points: "Points needed", members: "Members", delete: "Delete group" };
 
 /** Discord-style full-screen group settings. */
 export function GroupSettings({ g, tab, onTab, onClose, onChanged }: { g: SubcommunityDTO; tab: string; onTab: (t: GroupTab) => void; onClose: () => void; onChanged: () => Promise<void> | void }) {
@@ -49,6 +50,7 @@ export function GroupSettings({ g, tab, onTab, onClose, onChanged }: { g: Subcom
       title: g.name,
       items: [
         { id: "overview", label: "Overview", icon: "sliders" },
+        { id: "points", label: "Points needed", icon: "asterisk", hidden: !g.viewer.canManage },
         { id: "members", label: "Members", icon: "users" },
       ],
     },
@@ -77,6 +79,17 @@ export function GroupSettings({ g, tab, onTab, onClose, onChanged }: { g: Subcom
             onSave={() => void save()}
           />
         </>
+      )}
+      {active === "points" && g.viewer.canManage && (
+        <MinPointsForm
+          what="group"
+          join={g.minPointsJoin}
+          post={g.minPointsPost}
+          onSave={async (v) => {
+            await SubcommunityService.update(parent, g.slug, v);
+            await onChanged();
+          }}
+        />
       )}
       {active === "members" && <MembersPanel slug={parent} subSlug={g.slug} group={{ name: g.name, communityName: g.parent.name, memberCount: g.memberCount ?? 0, canAdd: g.viewer.canManage, onChanged: () => void onChanged() }} />}
       {active === "delete" && (

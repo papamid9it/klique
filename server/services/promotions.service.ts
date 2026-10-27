@@ -56,6 +56,7 @@ async function hostEvent(viewer: IUser, id: string): Promise<IEvent> {
 function whyNot(e: IEvent, kliqueIdNow: string): string | null {
   if (!paystackConfig()) return "Promotions aren't available yet.";
   if (e.cancelled) return "This event was cancelled.";
+  if (e.review) return "This event isn't approved yet.";
   if (e.startsAt <= new Date()) return "This event has already started.";
   if (e.subcommunityId || !e.communityId || String(e.communityId) !== kliqueIdNow) return "Only Klique's own events can be promoted. A community's events are for its members.";
   return null;
@@ -226,8 +227,10 @@ export async function handlePaystackWebhook(rawBody: string, signature: string |
     const data = await paystack<{ status: string; amount: number; currency: string; channel?: string; paid_at?: string }>(`/transaction/verify/${encodeURIComponent(evt.data.reference)}`);
     // ad requests (kad_…) start their run; event promotions (klq_…) as before
     if (evt.data.reference.startsWith("kad_")) await (await import("./ad-campaigns.service")).fulfilCampaign(evt.data.reference, data);
-    // points packs (kpt_…)
-    else if (evt.data.reference.startsWith("kpt_")) await (await import("./points.service")).fulfilPointPurchase(evt.data.reference, data);
+    // Hype packs (kpt_…)
+    else if (evt.data.reference.startsWith("kpt_")) await (await import("./wallet.service")).fulfilHypePurchase(evt.data.reference, data);
+    // donations (kdn_…) and event contributions (kct_…)
+    else if (evt.data.reference.startsWith("kdn_") || evt.data.reference.startsWith("kct_")) await (await import("./money.service")).fulfilPayment(evt.data.reference, data);
     else await fulfil(evt.data.reference, data);
   }
   return true;

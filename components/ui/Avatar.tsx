@@ -4,7 +4,10 @@ import { useState } from "react";
 import { cdn } from "@/lib/cdn";
 import { focalStyle, splitFocal } from "@/lib/focal";
 import { initials } from "@/lib/format";
+import { isAnimatedPicture } from "@/lib/cosmetics";
+import { useCalm } from "@/lib/hooks/useCalm";
 import { AvatarFrame } from "./AvatarFrame";
+import { StillImage } from "./StillImage";
 import { cx } from "./cx";
 
 function hash(s: string) {
@@ -28,11 +31,20 @@ export function Avatar({ name, src, size = 40, className, frame }: { name: strin
 
 function AvatarPic({ name, src, size, className }: { name: string; src?: string | null; size: number; className?: string }) {
   const [failed, setFailed] = useState(false);
+  // an animated (GIF) picture holds still for people who turn motion down or use data saver
+  const calm = useCalm();
   const style = { width: size, height: size, fontSize: Math.max(11, size * 0.36) };
   if (src && !failed) {
     // the person may have moved or zoomed their picture in its circle (lib/focal)
     const { src: file, focal } = splitFocal(src);
-    const img = (
+    const img = calm && isAnimatedPicture(file) ? (
+      <StillImage
+        src={cdn(file, { w: size * 2, h: size * 2, fit: "face" })}
+        onError={() => setFailed(true)}
+        style={focal.z > 1 ? { ...focalStyle(focal), width: "100%", height: "100%" } : { ...style, ...focalStyle(focal) }}
+        className={cx("shrink-0 rounded-full object-cover", focal.z <= 1 && className)}
+      />
+    ) : (
       // eslint-disable-next-line @next/next/no-img-element
       <img
         src={cdn(file, { w: size * 2, h: size * 2, fit: "face" })}

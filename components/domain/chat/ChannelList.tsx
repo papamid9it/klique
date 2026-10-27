@@ -1,5 +1,6 @@
 "use client";
 
+import { SupportButtons } from "@/components/domain/money/Donate";
 import { KLIQUE_SLUG } from "@/lib/constants";
 import { SoftLink } from "@/components/ui/SoftLink";
 import { isSamePage, softNavigate } from "@/lib/nav";
@@ -22,7 +23,7 @@ import { compactCount } from "@/lib/format";
 import type { BoardDTO, ChannelCategoryDTO, ChannelDTO, ChannelGroupDTO, ChannelsDTO, CommunityDTO, MyCrewDTO } from "@/lib/types";
 import { CategoryModal, ChannelSettings, CreateChannelModal } from "./ChannelFormModal";
 
-export type WorkspaceView = "topics" | "events" | "crews" | "groups" | "members";
+export type WorkspaceView = "dashboard" | "topics" | "posts" | "events" | "crews" | "groups" | "members";
 export type GroupView = "updates" | "events" | "crews" | "members";
 
 import { orderChannels } from "./order";
@@ -113,6 +114,8 @@ export function ChannelList({
   const inviteCommunity = () => (c.privacy === "private" && manage ? go(`${base}?settings=invites`) : void copy(absoluteUrl(base), toast, "Community link copied"));
 
   const headerMenu: MenuEntry[] = [
+    // owners and admins: members and growth, events to approve, money
+    ...(c.viewer.canManage ? ([{ label: "Dashboard", icon: "sliders", onSelect: () => go(`${base}?view=dashboard`) }] as MenuEntry[]) : []),
     { label: "About this community", icon: "info", onSelect: onAbout },
     { label: "Invite people", icon: "userplus", onSelect: inviteCommunity },
     ...(manage ? ([{ label: "Community settings", icon: "sliders", onSelect: () => go(`${base}?settings=overview`) }] as MenuEntry[]) : []),
@@ -126,7 +129,11 @@ export function ChannelList({
     { label: "Report community", icon: "flag", danger: true, onSelect: onReport },
   ];
 
+  // new messages in the groups you're in, for the Groups item
+  const groupsUnread = data.groups.reduce((t, g) => ({ n: t.n + g.channels.reduce((a, ch) => a + (ch.unreadCount ?? 0), 0), mentions: t.mentions + g.channels.reduce((a, ch) => a + ch.mentions, 0) }), { n: 0, mentions: 0 });
   const nav: { id: WorkspaceView; label: string; icon: IconName; count?: number | null; show: boolean }[] = [
+    // the Posts section (pictures and videos), when the community has it turned on
+    { id: "posts", label: "Posts", icon: "image", show: c.feedPolicy !== "off" },
     { id: "events", label: "Events", icon: "calendar", count: c.upcomingEventCount, show: true },
     { id: "crews", label: "Crews", icon: "pin", show: true },
     // groups are private: the folder only appears once you're in one (the owner and site admins see them all)
@@ -281,21 +288,29 @@ export function ChannelList({
     ...(sub ? [] : ([{ label: "Create category", icon: "folder", onSelect: () => setCategoryModal({}) }] as MenuEntry[])),
   ];
 
-  const navLink = (href: string, on: boolean, label: string, icon: IconName, count?: number | null) => (
-    <li key={label}>
-      <SoftLink
-        href={href}
-        scroll={false}
-        onClick={onNavigate}
-        aria-current={on ? "page" : undefined}
-        className={cx("flex h-9 items-center gap-2.5 rounded-control px-2.5 text-[14px] font-medium transition", on ? "bg-raised text-ink" : "text-ink-muted hover:bg-raised/60 hover:text-ink")}
-      >
-        <Icon name={icon} size={16} />
-        {label}
-        {typeof count === "number" && count > 0 && <span className="ml-auto font-mono text-[11px] text-ink-muted">{compactCount(count)}</span>}
-      </SoftLink>
-    </li>
-  );
+  /** `unread`: new messages behind it (Groups), shown like a channel's: bold, with a badge instead of the count */
+  const navLink = (href: string, on: boolean, label: string, icon: IconName, count?: number | null, unread?: { n: number; mentions: number }) => {
+    const fresh = !on && !!unread && (unread.n > 0 || unread.mentions > 0);
+    return (
+      <li key={label}>
+        <SoftLink
+          href={href}
+          scroll={false}
+          onClick={onNavigate}
+          aria-current={on ? "page" : undefined}
+          className={cx("flex h-9 items-center gap-2.5 rounded-control px-2.5 text-[14px] transition", on ? "bg-raised font-medium text-ink" : fresh ? "font-semibold text-ink hover:bg-raised/60" : "font-medium text-ink-muted hover:bg-raised/60 hover:text-ink")}
+        >
+          <Icon name={icon} size={16} />
+          {label}
+          {fresh ? (
+            <CountBadge n={Math.max(unread.n, unread.mentions)} mention={unread.mentions > 0} className="ml-auto" label={`${unread.n} unread in your groups`} />
+          ) : (
+            typeof count === "number" && count > 0 && <span className="ml-auto font-mono text-[11px] text-ink-muted">{compactCount(count)}</span>
+          )}
+        </SoftLink>
+      </li>
+    );
+  };
 
   /** "Your crews": the crews you're going with, one tap from their chat. */
   const crewSection = (list: MyCrewDTO[]) =>
@@ -418,10 +433,16 @@ export function ChannelList({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-2 py-3">
+        {/* the community's donation buttons, when it has any */}
+        {!c.locked && (
+          <div className="mb-3 px-1 empty:hidden">
+            <SupportButtons slug={c.slug} communityName={c.name} compact />
+          </div>
+        )}
         <ul className="space-y-0.5">
           {nav
             .filter((n) => n.show)
-            .map((n) => navLink(`${base}?view=${n.id}`, view === n.id, n.label, n.icon, n.count))}
+            .map((n) => navLink(`${base}?view=${n.id}`, view === n.id, n.label, n.icon, n.count, n.id === "groups" ? groupsUnread : undefined))}
         </ul>
         {crewSection(crews)}
 

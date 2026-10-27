@@ -1,4 +1,5 @@
 import ApiClient from "@/app/ApiCore";
+import type { PollInput } from "./PollService";
 import type { ReactionKind } from "@/lib/reactions";
 import type {
   ReactionDTO,
@@ -33,6 +34,8 @@ export interface SendInput {
   stickerUrl?: string;
   images?: string[];
   replyToId?: string;
+  /** start a poll (the message carries only the poll) */
+  poll?: PollInput;
 }
 
 export interface ChannelInput {

@@ -21,7 +21,7 @@ export function Modal({
   title: string;
   description?: string;
   children: ReactNode;
-  size?: "sm" | "md" | "lg";
+  size?: "sm" | "md" | "lg" | "xl";
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -43,7 +43,7 @@ export function Modal({
       }}
       className={cx(
         "m-auto w-[calc(100%-2rem)] rounded-card border border-line bg-surface p-0 text-ink shadow-2xl backdrop:bg-black/60 backdrop:backdrop-blur-sm",
-        size === "sm" ? "max-w-sm" : size === "lg" ? "max-w-2xl" : "max-w-md",
+        size === "sm" ? "max-w-sm" : size === "lg" ? "max-w-2xl" : size === "xl" ? "max-w-4xl" : "max-w-md",
       )}
     >
       {open && (

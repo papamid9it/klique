@@ -7,7 +7,7 @@ import type { ICommunity } from "../models/Community";
 import { Membership, type IMembership } from "../models/Membership";
 import { Subcommunity, type ISubcommunity } from "../models/Subcommunity";
 import { User, type IUser } from "../models/User";
-import { canCreateGroup, spaceAccess, subAccessFrom } from "../policies/access";
+import { canCreateGroup, gateOf, pointsShort, spaceAccess, subAccessFrom } from "../policies/access";
 import { isSiteAdmin } from "../policies/hosting";
 import { ensureDefaultGroupChannels } from "./channels.service";
 import { toBrief, toSubcommunity } from "../serializers";
@@ -32,7 +32,7 @@ async function visibleSubs(viewer: IUser | null, community: ICommunity) {
   const bySub = new Map(memberships.filter((m) => m.subcommunityId).map((m) => [sid(m.subcommunityId!), m]));
 
   return subs
-    .map((s) => ({ sub: s, access: subAccessFrom(s, parentM, bySub.get(sid(s._id)) ?? null, isSiteAdmin(viewer)) }))
+    .map((s) => ({ sub: s, access: subAccessFrom(s, parentM, bySub.get(sid(s._id)) ?? null, isSiteAdmin(viewer), viewer.points ?? 0) }))
     .filter(({ access }) => access.canView);
 }
 
@@ -95,6 +95,8 @@ export async function updateSubcommunity(
   const set: Partial<ISubcommunity> = {};
   if (patch.name !== undefined) set.name = patch.name;
   if (patch.description !== undefined) set.description = patch.description;
+  if (patch.minPointsJoin !== undefined) set.minPointsJoin = patch.minPointsJoin;
+  if (patch.minPointsPost !== undefined) set.minPointsPost = patch.minPointsPost;
   await Subcommunity.updateOne({ _id: space.sub!._id }, set);
   return getSubcommunity(viewer, slug, subSlug);
 }
@@ -132,7 +134,7 @@ export async function addableMembers(viewer: IUser, slug: string, subSlug: strin
   const text = q.trim().replace(/^@/, "");
   const rx = text ? new RegExp(escapeRegex(text), "i") : null;
   const users = await User.find({ _id: { $in: parentIds }, ...(rx ? { $or: [{ handle: rx }, { displayName: rx }] } : {}) })
-    .select("handle displayName avatarUrl avatarFrame nameEffect rank country city")
+    .select("handle displayName avatarUrl avatarFrame nameEffect country city")
     .sort({ displayName: 1 })
     .limit(20)
     .lean<IUser[]>();
@@ -149,6 +151,13 @@ export async function addGroupMembers(viewer: IUser, slug: string, subSlug: stri
   if (parents.length !== ids.length) throw badRequest(`Only members of ${space.community.name} can be added to its groups.`);
   const already = await Membership.find({ communityId: space.community._id, subcommunityId: space.sub!._id, status: "active", userId: { $in: ids } }).select("userId").lean<Pick<IMembership, "userId">[]>();
   const fresh = ids.filter((id) => !already.some((m) => sid(m.userId) === id));
+  // the points the group asks for (site admins never need any)
+  const min = space.sub!.minPointsJoin ?? 0;
+  if (min && fresh.length) {
+    const people = await User.find({ _id: { $in: fresh } }).select("handle email points").lean<Pick<IUser, "_id" | "handle" | "email" | "points">[]>();
+    const short = people.filter((u) => pointsShort(min, null, gateOf(u)));
+    if (short.length) throw forbidden(`This group needs ${min.toLocaleString("en-NG")} points to be added. ${short.map((u) => `@${u.handle}`).join(", ")} ${short.length === 1 ? "doesn't" : "don't"} have enough yet.`);
+  }
   const count = await Membership.countDocuments({ communityId: space.community._id, subcommunityId: space.sub!._id, status: "active" });
   const room = LIMITS.groupMembers - count;
   if (fresh.length > room) {
@@ -162,6 +171,6 @@ export async function addGroupMembers(viewer: IUser, slug: string, subSlug: stri
     );
   }
   await recountMembers(space.community._id, space.sub!._id);
-  if (fresh.length) notify(fresh, { title: space.sub!.name, body: `${viewer.displayName} added you to this group in ${space.community.name}.`, data: { type: "group", communitySlug: space.community.slug, subSlug: space.sub!.slug } }, { category: "community", ref: `community:${String(space.community._id)}` });
+  if (fresh.length) notify(fresh, { title: space.sub!.name, body: `${viewer.displayName} added you to this group in ${space.community.name}.`, data: { type: "group", communitySlug: space.community.slug, subSlug: space.sub!.slug } }, { actorId: viewer._id, category: "community", ref: `community:${String(space.community._id)}` });
   return { added: fresh.length, memberCount: count + fresh.length };
 }

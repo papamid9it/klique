@@ -67,7 +67,7 @@ export async function saveCategories(input: Category[]): Promise<Category[]> {
 export async function categoryUsage(): Promise<Record<string, { communities: number; events: number; people: number }>> {
   const [c, e, u] = await Promise.all([
     Community.aggregate<{ _id: string; n: number }>([{ $group: { _id: "$interest", n: { $sum: 1 } } }]),
-    Event.aggregate<{ _id: string; n: number }>([{ $match: { cancelled: false, startsAt: { $gte: new Date() } } }, { $group: { _id: "$interest", n: { $sum: 1 } } }]),
+    Event.aggregate<{ _id: string; n: number }>([{ $match: { cancelled: false, review: null, startsAt: { $gte: new Date() } } }, { $group: { _id: "$interest", n: { $sum: 1 } } }]),
     User.aggregate<{ _id: string; n: number }>([{ $unwind: "$interests" }, { $group: { _id: "$interests", n: { $sum: 1 } } }]),
   ]);
   const out: Record<string, { communities: number; events: number; people: number }> = {};

@@ -21,6 +21,8 @@ import type { EventDTO } from "@/lib/types";
 import { EventRow } from "./EventRow";
 import { SponsoredRow, useAds } from "@/components/domain/ads/Sponsored";
 import { MiniCalendar } from "./MiniCalendar";
+import { PagePanel, PanelItem, PanelSection } from "@/components/layout/PagePanel";
+import { useAuth } from "@/components/providers/AuthProvider";
 
 const WHEN: { id: DateFilter; label: string }[] = [
   { id: "any", label: "Any time" },
@@ -30,6 +32,54 @@ const WHEN: { id: DateFilter; label: string }[] = [
   { id: "week", label: "Next 7 days" },
   { id: "month", label: "Next 30 days" },
 ];
+
+type Mine = "going" | "saved" | "hosted";
+const MINE: { id: Mine; label: string; icon: "check" | "bookmark" | "calendar" }[] = [
+  { id: "going", label: "Going", icon: "check" },
+  { id: "saved", label: "Saved", icon: "bookmark" },
+  { id: "hosted", label: "Hosting", icon: "calendar" },
+];
+
+/** Your own events (going, saved, hosting), shown in place of the results when picked in the panel. */
+function MyEvents({ scope, onBack }: { scope: Mine; onBack: () => void }) {
+  const { items, loading, loadingMore, error, hasMore, loadMore, reload, setItems } = usePaged<EventDTO>((page) => EventService.list({ scope, page }), [scope], { key: `my-events:${scope}` });
+  const label = MINE.find((m) => m.id === scope)!.label;
+  return (
+    <div>
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="eyebrow mb-3">Your events</p>
+          <h1 className="display text-[clamp(2rem,4.6vw,3rem)]">{label}</h1>
+        </div>
+        <Button onClick={onBack}>
+          <Icon name="arrow-left" size={15} /> All events
+        </Button>
+      </header>
+      <div className="mt-7">
+        {loading ? (
+          <RowSkeleton rows={4} />
+        ) : error ? (
+          <ErrorState message={error} onRetry={reload} />
+        ) : !items.length ? (
+          <EmptyState icon={scope === "saved" ? "bookmark" : "calendar"} title={scope === "saved" ? "Nothing saved yet" : scope === "going" ? "You're not going to anything yet" : "You aren't hosting anything"}>
+            {scope === "saved" ? "Tap the bookmark on any event to keep it here." : scope === "going" ? "RSVP to an event and it'll show up here." : "Events live in communities: post one from your community's Events page."}
+          </EmptyState>
+        ) : (
+          <div className="space-y-2.5">
+            {items.map((e) => (
+              <EventRow key={e.id} event={e} onChange={(next) => setItems((list) => list.map((x) => (x.id === next.id ? next : x)))} />
+            ))}
+            {hasMore && (
+              <div className="flex justify-center pt-3">
+                <Button onClick={loadMore} loading={loadingMore}>Load more</Button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 const lagosKey = (d: Date | string) => new Date(d).toLocaleDateString("en-CA", { timeZone: "Africa/Lagos" });
 
@@ -64,6 +114,8 @@ export function EventsExplorer() {
   const [format, setFormat] = useState<"any" | "in-person" | "online">(() => (sp.get("format") === "online" || sp.get("format") === "in-person" ? (sp.get("format") as "online" | "in-person") : "any"));
   const [q, setQ] = useState("");
   const dq = useDebounced(q);
+  const { status } = useAuth();
+  const [mine, setMine] = useState<Mine | null>(() => (MINE.some((m) => m.id === sp.get("mine")) ? (sp.get("mine") as Mine) : null));
 
   const { where, scope } = place;
   const overview = useApi(() => EventService.overview({ where, interest: interest || undefined }), [where, interest], { key: `events-overview:${where}:${interest}` });
@@ -122,8 +174,67 @@ export function EventsExplorer() {
   const places = (o?.places ?? []).map((p) => ({ ...p, s: parseScope(p.scope) })).filter((p): p is { scope: string; count: number; s: Scope } => !!p.s);
   const parent = scopeParent(scope);
 
+  // the left panel (big screens): Home, your events, where, when, kind. Phones and tablets keep the pills.
+  const panel = (
+    <PagePanel label="Events">
+      {status === "authed" && (
+        <PanelSection title="Your events" collapse={{ id: "events-mine", summary: MINE.find((m) => m.id === mine)?.label ?? "None", defaultOpen: true }}>
+          {MINE.map((m) => (
+            <li key={m.id}>
+              <PanelItem onClick={() => setMine(mine === m.id ? null : m.id)} on={mine === m.id} icon={m.icon}>
+                {m.label}
+              </PanelItem>
+            </li>
+          ))}
+        </PanelSection>
+      )}
+      <PanelSection title="Where" collapse={{ id: "events-where", summary: scopeLabel(scope), defaultOpen: false }}>
+        {unique.map((sc) => (
+          <li key={scopeToString(sc)}>
+            <PanelItem onClick={() => (setMine(null), place.setScope(sc))} on={!mine && scopeToString(sc) === place.where} glyph={scopeFlag(sc)}>
+              {sc === home && home.level !== "world" ? `Near me · ${scopeLabel(sc)}` : scopeLabel(sc)}
+            </PanelItem>
+          </li>
+        ))}
+      </PanelSection>
+      <PanelSection title="When" collapse={{ id: "events-when", summary: day ? formatDateLong(`${day}T12:00:00+01:00`) : WHEN.find((w) => w.id === date)?.label, defaultOpen: false }}>
+        {WHEN.map((w) => (
+          <li key={w.id}>
+            <PanelItem onClick={() => (setMine(null), setDay(""), setDate(w.id))} on={!mine && !day && date === w.id} icon="clock">
+              {w.label}
+            </PanelItem>
+          </li>
+        ))}
+      </PanelSection>
+      <PanelSection title="Kind" collapse={{ id: "events-kind", summary: interest ? categories.find((i) => i.id === interest)?.name : "All kinds", defaultOpen: true }}>
+        <li>
+          <PanelItem onClick={() => (setMine(null), setInterest(""))} on={!mine && !interest} icon="asterisk">
+            All kinds
+          </PanelItem>
+        </li>
+        {categories.map((i) => (
+          <li key={i.id}>
+            <PanelItem onClick={() => (setMine(null), setInterest(interest === i.id ? "" : i.id))} on={!mine && interest === i.id} glyph={i.glyph}>
+              {i.name}
+            </PanelItem>
+          </li>
+        ))}
+      </PanelSection>
+    </PagePanel>
+  );
+
+  if (mine) {
+    return (
+      <>
+        {panel}
+        <MyEvents scope={mine} onBack={() => setMine(null)} />
+      </>
+    );
+  }
+
   return (
     <div className="grid gap-x-10 gap-y-6 xl:grid-cols-[minmax(0,1fr)_21rem]">
+      {panel}
       <div className="min-w-0">
         {/* ------------------------------ hero ------------------------------ */}
         <header className="flex flex-wrap items-end justify-between gap-4">
@@ -206,7 +317,7 @@ export function EventsExplorer() {
           </div>
         </Modal>
 
-        <div className="mt-5 hidden flex-wrap gap-2 sm:flex" role="group" aria-label="Quick places">
+        <div className="mt-5 hidden flex-wrap gap-2 sm:flex lg:hidden" role="group" aria-label="Quick places">
           {unique.map((s) => (
             <Pill key={scopeToString(s)} on={scopeToString(s) === place.where} onClick={() => place.setScope(s)}>
               <span aria-hidden="true">{scopeFlag(s)}</span> {s === home && home.level !== "world" ? `Near me · ${scopeLabel(s)}` : scopeLabel(s)}
@@ -230,13 +341,13 @@ export function EventsExplorer() {
             </div>
             <Pill on={free} onClick={() => setFree((f) => !f)} className="h-10">Free</Pill>
           </div>
-          <div className="no-bar -mx-3.5 flex gap-2 overflow-x-auto px-3.5 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0" role="group" aria-label="When">
+          <div className="no-bar -mx-3.5 flex gap-2 overflow-x-auto px-3.5 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 lg:hidden" role="group" aria-label="When">
             {WHEN.map((w) => (
               <Pill key={w.id} on={!day && date === w.id} onClick={() => { setDay(""); setDate(w.id); }}>{w.label}</Pill>
             ))}
             {day && <Pill on onClick={() => setDay("")}>{formatDateLong(`${day}T12:00:00+01:00`)} <Icon name="x" size={12} /></Pill>}
           </div>
-          <div className="no-bar -mx-3.5 flex gap-2 overflow-x-auto px-3.5 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0" role="group" aria-label="Interest">
+          <div className="no-bar -mx-3.5 flex gap-2 overflow-x-auto px-3.5 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 lg:hidden" role="group" aria-label="Interest">
             <Pill on={!interest} onClick={() => setInterest("")}>All kinds</Pill>
             {categories.map((i) => (
               <Pill key={i.id} on={interest === i.id} onClick={() => setInterest(interest === i.id ? "" : i.id)}>

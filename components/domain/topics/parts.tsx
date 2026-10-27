@@ -41,6 +41,7 @@ export function LikeButton({
   onChange,
   size = "md",
   label = "Like",
+  upvote,
 }: {
   liked: boolean;
   count: number;
@@ -49,6 +50,8 @@ export function LikeButton({
   onChange: (next: { liked: boolean; likeCount: number }) => void;
   size?: "sm" | "md";
   label?: string;
+  /** an up arrow ("Upvote") instead of a heart: board posts */
+  upvote?: boolean;
 }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
@@ -74,17 +77,17 @@ export function LikeButton({
       onClick={() => void click()}
       disabled={!canLike}
       aria-pressed={liked}
-      aria-label={`${label}${count ? `, ${count} likes` : ""}`}
-      title={canLike ? (liked ? "Unlike" : label) : "Join to like"}
+      aria-label={`${upvote ? "Upvote" : label}${count ? `, ${count} ${upvote ? "upvotes" : "likes"}` : ""}`}
+      title={canLike ? (liked ? (upvote ? "Remove your upvote" : "Unlike") : upvote ? "Upvote" : label) : upvote ? "Join to upvote" : "Join to like"}
       className={cx(
         "inline-flex items-center gap-1.5 rounded-full font-semibold transition disabled:cursor-default",
         size === "sm" ? "h-7 px-2 text-[12px]" : "h-8 px-2.5 text-[13px]",
         liked ? "bg-accent/15 text-accent-text" : "text-ink-muted hover:bg-raised hover:text-ink disabled:hover:bg-transparent disabled:hover:text-ink-muted",
       )}
     >
-      <Icon name="heart" size={size === "sm" ? 14 : 16} className={cx(liked && "fill-current")} />
+      {upvote ? <Icon name="arrowdown" size={size === "sm" ? 14 : 16} className="rotate-180" /> : <Icon name="heart" size={size === "sm" ? 14 : 16} className={cx(liked && "fill-current")} />}
       <span className="font-mono tabular-nums">{count > 0 ? compactCount(count) : liked ? 1 : ""}</span>
-      {count === 0 && !liked && <span className="sr-only">Like</span>}
+      {count === 0 && !liked && <span className="sr-only">{upvote ? "Upvote" : "Like"}</span>}
     </button>
   );
 }

@@ -6,20 +6,21 @@ import { ApiError, forbidden, notFound } from "../http/errors";
 import { rateLimit } from "../http/rate-limit";
 import { Community, type ICommunity } from "../models/Community";
 import { Membership, type IMembership } from "../models/Membership";
-import { Board, Topic, TopicComment, TopicLike, type ITopic, type ITopicComment } from "../models/Topic";
+import { Board, Topic, TopicComment, TopicFollow, TopicLike, type ITopic, type ITopicComment } from "../models/Topic";
+import { deleteTopicThread, ensureTopicThread, listMessages, syncTopicThread } from "./channels.service";
 import { assertCanPost, assertCanView, outranks, type Space, type SpaceAccess } from "../policies/access";
 import { loadBriefs } from "../serializers";
 import type { commentCreateSchema, commentUpdateSchema, topicCreateSchema, topicListQuery, topicUpdateSchema } from "../validators/schemas";
 import { ensureBoards, resolveBoard, canPostIn } from "./boards.service";
-import { TRENDING_MIN_COMMENTS } from "@/lib/constants";
+import { LIMITS, TRENDING_MIN_COMMENTS } from "@/lib/constants";
 import { emitTopic } from "./realtime";
 import { hiddenUserIds } from "./blocks";
 import { escapeRegex, sid, topicFileUrls } from "./helpers";
 import type { IUser } from "../models/User";
+import { awardPointsLater } from "./points.service";
 import { notify } from "./push.service";
 
 const PAGE = 10;
-const COMMENT_CAP = 500;
 type Role = IMembership["role"];
 const isManager = (r?: Role) => r === "owner" || r === "admin";
 /** a manager outranks everyone below them; a plain member (no row) is outranked by any manager */
@@ -42,14 +43,16 @@ async function toTopics(rows: ITopic[], viewer: IUser | null): Promise<TopicDTO[
   if (!rows.length) return [];
   const communityIds = [...new Set(rows.map((r) => sid(r.communityId)))];
   const boardIds = [...new Set(rows.flatMap((r) => (r.boardId ? [sid(r.boardId)] : [])))];
-  const [authors, communities, liked, roles, authorRoles, boards] = await Promise.all([
+  const [authors, communities, liked, roles, authorRoles, boards, follows] = await Promise.all([
     loadBriefs(rows.map((r) => r.authorId)),
     Community.find({ _id: { $in: communityIds } }).select("slug name interest coverImage").lean<Pick<ICommunity, "_id" | "slug" | "name" | "interest" | "coverImage">[]>(),
     viewer ? TopicLike.find({ userId: viewer._id, targetType: "topic", targetId: { $in: rows.map((r) => r._id) } }).select("targetId").lean<{ targetId: Types.ObjectId }[]>() : [],
     viewer ? Membership.find({ userId: viewer._id, communityId: { $in: communityIds }, subcommunityId: null, status: "active" }).select("communityId role").lean<Pick<IMembership, "communityId" | "role">[]>() : [],
     Membership.find({ communityId: { $in: communityIds }, subcommunityId: null, status: "active", userId: { $in: rows.map((r) => r.authorId) } }).select("communityId userId role").lean<Pick<IMembership, "communityId" | "userId" | "role">[]>(),
     boardIds.length ? Board.find({ _id: { $in: boardIds } }).select("slug name").lean<{ _id: Types.ObjectId; slug: string; name: string }[]>() : [],
+    viewer ? TopicFollow.find({ userId: viewer._id, topicId: { $in: rows.map((r) => r._id) } }).select("topicId").lean<{ topicId: Types.ObjectId }[]>() : [],
   ]);
+  const followed = new Set(follows.map((f) => sid(f.topicId)));
   const boardById = new Map(boards.map((b) => [sid(b._id), b]));
   const likedSet = new Set(liked.map((l) => sid(l.targetId)));
   const roleIn = new Map(roles.map((m) => [sid(m.communityId), m.role]));
@@ -80,7 +83,9 @@ async function toTopics(rows: ITopic[], viewer: IUser | null): Promise<TopicDTO[
         locked: t.locked,
         likeCount: t.likeCount,
         commentCount: t.commentCount,
+        tags: t.tags ?? [],
         liked: likedSet.has(sid(t._id)),
+        following: followed.has(sid(t._id)),
         createdAt: t.createdAt.toISOString(),
         editedAt: t.editedAt ? t.editedAt.toISOString() : null,
         lastActivityAt: t.lastActivityAt.toISOString(),
@@ -156,8 +161,9 @@ export async function listTopics(viewer: IUser | null, space: Space, access: Spa
   if (hidden.length) match.authorId = { $nin: hidden };
   if (q.q) {
     const rx = new RegExp(escapeRegex(q.q), "i");
-    match.$or = [{ title: rx }, { body: rx }];
+    match.$or = [{ title: rx }, { body: rx }, { tags: q.q.toLowerCase() }];
   }
+  if (q.tag) match.tags = q.tag;
   const skip = (q.page - 1) * PAGE;
   let rows: ITopic[];
   if (q.sort === "hot") {
@@ -227,18 +233,28 @@ async function loadTopic(space: Space, topicId: string): Promise<ITopic> {
   return t;
 }
 
+/** One post, its chat (made on first open; see ensureTopicThread) and the chat's newest page, so it opens in one go. */
 export async function getTopic(viewer: IUser | null, space: Space, access: SpaceAccess, topicId: string): Promise<TopicDetailDTO> {
   assertCommunity(space);
   assertCanView(access, "this topic");
   const row = await loadTopic(space, topicId);
   const [topic] = await toTopics([row], viewer);
   if (!topic) throw notFound("That topic is gone.");
-  const hidden = await hiddenUserIds(viewer?._id ?? null);
-  const comments = await TopicComment.find({ topicId: row._id, ...(hidden.length ? { authorId: { $nin: hidden } } : {}) })
-    .sort({ _id: 1 })
-    .limit(COMMENT_CAP)
-    .lean<ITopicComment[]>();
-  return { topic, comments: await toComments(comments, viewer, topic) };
+  const thread = await ensureTopicThread(viewer, access, row);
+  return { topic, thread, messages: await listMessages(viewer, space, access, thread.slug, {}) };
+}
+
+/** "Hot sauce", "Lagos " → "hot sauce", "lagos": short, lowercase, at most three, no repeats. */
+const cleanTags = (tags: string[] | undefined) => [...new Set((tags ?? []).map((t) => t.trim().toLowerCase().replace(/\s+/g, " ").slice(0, LIMITS.topicTag)).filter(Boolean))].slice(0, LIMITS.topicTags);
+
+/** Follow a post (hear about new replies) or stop. */
+export async function setFollow(viewer: IUser, space: Space, access: SpaceAccess, topicId: string, on: boolean): Promise<{ following: boolean }> {
+  assertCommunity(space);
+  assertCanView(access, "this topic");
+  const t = await loadTopic(space, topicId);
+  if (on) await TopicFollow.updateOne({ topicId: t._id, userId: viewer._id }, { $setOnInsert: { topicId: t._id, userId: viewer._id } }, { upsert: true });
+  else await TopicFollow.deleteOne({ topicId: t._id, userId: viewer._id });
+  return { following: on };
 }
 
 export async function createTopic(viewer: IUser, space: Space, access: SpaceAccess, input: z.infer<typeof topicCreateSchema>): Promise<TopicDTO> {
@@ -247,7 +263,8 @@ export async function createTopic(viewer: IUser, space: Space, access: SpaceAcce
   const board = await resolveBoard(space, input.board);
   if (!canPostIn(board, access)) throw forbidden(`Only owners and admins can post in ${board.name}.`);
   rateLimit(`topic:${sid(viewer._id)}`, 10, 10 * 60_000);
-  const doc = await Topic.create({ communityId: space.community._id, boardId: board._id, authorId: viewer._id, title: input.title, body: input.body ?? "", media: (input.media ?? []).map((m) => ({ kind: m.kind, url: m.url, poster: m.poster ?? null })) });
+  const doc = await Topic.create({ communityId: space.community._id, boardId: board._id, authorId: viewer._id, title: input.title, body: input.body ?? "", media: (input.media ?? []).map((m) => ({ kind: m.kind, url: m.url, poster: m.poster ?? null })), tags: cleanTags(input.tags) });
+  await TopicFollow.create({ topicId: doc._id, userId: viewer._id }); // you hear about replies to your own post
   return (await toTopics([doc.toObject() as ITopic], viewer))[0];
 }
 
@@ -258,7 +275,7 @@ export async function updateTopic(viewer: IUser, space: Space, access: SpaceAcce
   const mine = sid(t.authorId) === sid(viewer._id);
   const set: Record<string, unknown> = {};
 
-  const touchesContent = patch.title !== undefined || patch.body !== undefined || patch.media !== undefined;
+  const touchesContent = patch.title !== undefined || patch.body !== undefined || patch.media !== undefined || patch.tags !== undefined;
   if (touchesContent) {
     if (!(mine && access.isMember)) {
       const authorM = mine ? null : await Membership.findOne({ communityId: t.communityId, subcommunityId: null, userId: t.authorId, status: "active" }).select("role").lean<Pick<IMembership, "role">>();
@@ -266,6 +283,7 @@ export async function updateTopic(viewer: IUser, space: Space, access: SpaceAcce
     }
     if (patch.title !== undefined) set.title = patch.title;
     if (patch.body !== undefined) set.body = patch.body;
+    if (patch.tags !== undefined) set.tags = cleanTags(patch.tags);
     if (patch.media !== undefined) {
       set.media = patch.media.map((m) => ({ kind: m.kind, url: m.url, poster: m.poster ?? null }));
       set.imageUrl = null;
@@ -292,6 +310,8 @@ export async function updateTopic(viewer: IUser, space: Space, access: SpaceAcce
     }
   }
   const fresh = await Topic.findById(t._id).lean<ITopic>();
+  if (set.locked !== undefined || set.title !== undefined) await syncTopicThread(fresh as ITopic);
+  if (Object.keys(set).length) emitTopic(t.communityId, t._id);
   return (await toTopics([fresh as ITopic], viewer))[0];
 }
 
@@ -304,7 +324,7 @@ export async function deleteTopic(viewer: IUser, space: Space, access: SpaceAcce
     const authorM = await Membership.findOne({ communityId: t.communityId, subcommunityId: null, userId: t.authorId, status: "active" }).select("role").lean<Pick<IMembership, "role">>();
     if (authorM && !outranks(access.role, authorM.role)) throw forbidden("You can't remove a topic from someone of equal or higher rank.");
   }
-  await Promise.all([TopicComment.deleteMany({ topicId: t._id }), TopicLike.deleteMany({ topicId: t._id }), Topic.deleteOne({ _id: t._id })]);
+  await Promise.all([TopicComment.deleteMany({ topicId: t._id }), TopicLike.deleteMany({ topicId: t._id }), TopicFollow.deleteMany({ topicId: t._id }), deleteTopicThread(t._id), Topic.deleteOne({ _id: t._id })]);
   deleteUploads(topicFileUrls(t));
   return { deleted: true };
 }
@@ -340,10 +360,10 @@ export async function createComment(viewer: IUser, space: Space, access: SpaceAc
   const href = `/communities/${space.community.slug}?view=topics${board ? `&b=${board.slug}` : ""}&t=${sid(t._id)}`;
   const me = sid(viewer._id);
   if (parentAuthor && sid(parentAuthor) !== me) {
-    notify([parentAuthor], { title: `${viewer.displayName} replied to your comment`, body: input.body.slice(0, 140), data: { href } }, { category: "replies", groupKey: `topic:${sid(t._id)}`, many: (n) => `${n} new replies and comments on "${t.title}"`, ref: `topic:${sid(t._id)}` });
+    notify([parentAuthor], { title: `${viewer.displayName} replied to your comment`, body: input.body.slice(0, 140), data: { href } }, { actorId: viewer._id, category: "replies", groupKey: `topic:${sid(t._id)}`, many: (n) => `${n} new replies and comments on "${t.title}"`, ref: `topic:${sid(t._id)}` });
   }
   if (sid(t.authorId) !== me && (!parentAuthor || sid(parentAuthor) !== sid(t.authorId))) {
-    notify([t.authorId], { title: `${viewer.displayName} commented on "${t.title}"`, body: input.body.slice(0, 140), data: { href } }, { category: "replies", groupKey: `topic:${sid(t._id)}`, many: (n) => `${n} new comments on "${t.title}"`, ref: `topic:${sid(t._id)}` });
+    notify([t.authorId], { title: `${viewer.displayName} commented on "${t.title}"`, body: input.body.slice(0, 140), data: { href } }, { actorId: viewer._id, category: "replies", groupKey: `topic:${sid(t._id)}`, many: (n) => `${n} new comments on "${t.title}"`, ref: `topic:${sid(t._id)}` });
   }
   const [topic] = await toTopics([{ ...t, commentCount: t.commentCount + 1 }], viewer);
   return (await toComments([doc.toObject() as ITopicComment], viewer, topic))[0];
@@ -419,6 +439,8 @@ export async function toggleLike(viewer: IUser, space: Space, access: SpaceAcces
       await TopicLike.create({ userId: viewer._id, topicId: t._id, targetType, targetId });
       liked = true;
       await bump(1);
+      // an upvote on a board post earns its author points (once per person per post)
+      if (targetType === "topic") awardPointsLater(t.authorId, "boardUpvote", `topic:${sid(t._id)}:${sid(viewer._id)}`, viewer._id);
     } catch (err) {
       if ((err as { code?: number }).code !== 11000) throw err; // two taps at once: the like already exists
       liked = true;

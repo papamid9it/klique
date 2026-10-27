@@ -1,5 +1,8 @@
 "use client";
 
+import { StillImage } from "@/components/ui/StillImage";
+import { isAnimatedPicture } from "@/lib/cosmetics";
+import { useCalm } from "@/lib/hooks/useCalm";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
@@ -19,6 +22,7 @@ import { useMediaViewer } from "@/components/providers/MediaViewerProvider";
 import { cx } from "@/components/ui/cx";
 import { Modal } from "@/components/ui/Modal";
 import { useApi } from "@/lib/hooks/useApi";
+import { PRESENCES, type Presence } from "@/lib/constants";
 import type { CommunityCardDTO, FriendStatusDTO, ProfileView } from "@/lib/types";
 
 function hash(s: string) {
@@ -42,12 +46,17 @@ export function ZoomAvatar({ url, name, children }: { url?: string | null; name:
 export function ProfileBanner({ handle, className, bannerUrl, bannerColor, zoomable }: { handle: string; className?: string; bannerUrl?: string | null; bannerColor?: string | null; zoomable?: boolean }) {
   const angle = 100 + (hash(handle) % 160);
   const view = useMediaViewer();
+  const calm = useCalm();
   if (bannerUrl) {
-    // shown as the person positioned it (lib/focal); tapping opens the whole picture when `zoomable`
-    const pic = (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img src={cdn(bannerUrl, { w: 1200 })} alt="" aria-hidden="true" loading="lazy" style={focalStyle(splitFocal(bannerUrl).focal)} className="size-full object-cover" />
-    );
+    // shown as the person positioned it (lib/focal); tapping opens the whole picture when `zoomable`. An animated
+    // (GIF) banner holds still for people who turn motion down or use data saver.
+    const pic =
+      calm && isAnimatedPicture(bannerUrl) ? (
+        <StillImage src={cdn(bannerUrl, { w: 1200 })} style={focalStyle(splitFocal(bannerUrl).focal)} className="size-full object-cover" />
+      ) : (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={cdn(bannerUrl, { w: 1200 })} alt="" aria-hidden="true" loading="lazy" style={focalStyle(splitFocal(bannerUrl).focal)} className="size-full object-cover" />
+      );
     return zoomable ? (
       <button type="button" onClick={() => view([bannerUrl])} aria-label="View banner full screen" className={cx("block w-full cursor-zoom-in overflow-hidden", className)}>
         {pic}
@@ -70,6 +79,20 @@ export function ProfileBanner({ handle, className, bannerUrl, bannerColor, zooma
   );
 }
 
+const PRESENCE_TONE: Record<Presence, string | null> = { online: "var(--success)", idle: "#f0b232", dnd: "var(--danger)", invisible: null };
+
+/** The status dot on a profile picture: the status the person set (none when they're invisible). */
+export function PresenceDot({ presence, className }: { presence: Presence; className?: string }) {
+  const tone = PRESENCE_TONE[presence];
+  if (!tone) return null;
+  const label = PRESENCES.find((p) => p.id === presence)?.label;
+  return (
+    <span role="img" aria-label={label} title={label} className={cx("absolute rounded-full ring-[3px] ring-surface", className)} style={{ background: tone }}>
+      {presence === "dnd" && <span aria-hidden="true" className="absolute inset-x-[22%] top-1/2 h-[18%] -translate-y-1/2 rounded-full bg-surface" />}
+    </span>
+  );
+}
+
 export const monthYear = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "Africa/Lagos" });
 export const longDate = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Africa/Lagos" });
 
@@ -82,8 +105,8 @@ export function useMutualCommunities(view: ProfileView | null): CommunityCardDTO
 }
 
 /**
- * The action row shared by the popover and the modal: Message · friend button · "⋯" menu (the modal only; the
- * popover stays simple and its "View full profile" leads to the menu). Owns the block and report dialogs.
+ * The profile card's action row: Message · friend button · "⋯" menu (remove friend, block, report). Owns the
+ * block and report dialogs.
  */
 export function ProfileActions({
   view,
@@ -98,8 +121,9 @@ export function ProfileActions({
   onReload: () => void;
   /** called when the action leaves this surface (opens a conversation, another page) */
   onNavigate: () => void;
-  layout?: "row" | "stack";
-  /** show the "⋯" menu (remove friend, view as a page, block, report) */
+  /** "popout": just the small round friend button and the "⋯" menu (the popout has its own Message box) */
+  layout?: "row" | "stack" | "popout";
+  /** show the "⋯" menu (remove friend, block, report) */
   menu?: boolean;
 }) {
   const router = useRouter();
@@ -159,10 +183,27 @@ export function ProfileActions({
           },
         }]
       : []),
-    { label: "View as a page", icon: "arrow-up-right" as const, onSelect: () => { onNavigate(); router.push(`/people/${p.handle}`); } },
     { label: view.blockedByMe ? "Unblock" : "Block", icon: "ban" as const, danger: !view.blockedByMe, onSelect: () => setBlockOpen(true) },
     { label: "Report", icon: "flag" as const, danger: true, onSelect: () => setReportOpen(true) },
   ];
+
+  if (layout === "popout") {
+    return (
+      <>
+        <FriendButton handle={p.handle} status={view.friendship} onChange={onFriendship} iconOnly />
+        <OverflowMenu items={menu} label="Profile options" align="right" />
+        <Modal open={blockOpen} onClose={() => setBlockOpen(false)} size="sm" title={view.blockedByMe ? `Unblock @${p.handle}?` : `Block @${p.handle}?`} description={view.blockedByMe ? "They'll be able to find and interact with you again, subject to your privacy settings." : "You won't be able to message each other. You can unblock them any time in Settings → Blocked people."}>
+          <div className="flex justify-end gap-2">
+            <Button onClick={() => setBlockOpen(false)}>Cancel</Button>
+            <Button variant={view.blockedByMe ? "primary" : "danger"} loading={busy === "block"} onClick={toggleBlock}>
+              {view.blockedByMe ? "Unblock" : "Block"}
+            </Button>
+          </div>
+        </Modal>
+        <ReportDialog open={reportOpen} onClose={() => setReportOpen(false)} targetType="user" targetId={p.id} subject={`@${p.handle}`} />
+      </>
+    );
+  }
 
   return (
     <>

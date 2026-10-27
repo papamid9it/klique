@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/providers/AuthProvider";
+import { useProfileCard } from "@/components/providers/ProfileCardProvider";
 import { Dropdown, type MenuEntry } from "@/components/ui/Dropdown";
 
 /**
@@ -12,11 +13,12 @@ import { Dropdown, type MenuEntry } from "@/components/ui/Dropdown";
 export function UserMenu({ trigger, align = "left" }: { trigger: Parameters<typeof Dropdown>[0]["trigger"]; align?: "left" | "right" }) {
   const router = useRouter();
   const { user, signOut } = useAuth();
+  const card = useProfileCard();
   if (!user) return null;
   const items: MenuEntry[] = [
-    { label: "Your profile", icon: "user", onSelect: () => router.push(`/people/${user.handle}`) },
+    { label: "Your profile", icon: "user", onSelect: () => card.openFull(user.handle) },
     { label: "Advertise", icon: "megaphone", onSelect: () => router.push("/ads") },
-    { label: `Points · ${(user.points ?? 0).toLocaleString("en-NG")}`, icon: "coin", onSelect: () => router.push("/settings?tab=points") },
+    { label: `Hype · ${(user.hype ?? 0).toLocaleString("en-NG")}`, icon: "coin", onSelect: () => router.push("/settings?tab=hype") },
     { label: "Settings", icon: "sliders", onSelect: () => router.push("/settings") },
     ...(user.isAdmin ? ([{ label: "Admin console", icon: "shield", onSelect: () => router.push("/admin") }] as MenuEntry[]) : []),
     { type: "sep" },

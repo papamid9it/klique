@@ -1,5 +1,5 @@
 import type { QueryFilter, Types } from "mongoose";
-import { assertCanHostInSpace, assertCanHostPublic, isSiteAdmin } from "../policies/hosting";
+import { assertCanHostInSpace, assertCanHostPublic, canHostInSpace, isSiteAdmin } from "../policies/hosting";
 import { deleteUploads } from "./media.service";
 import { sameFile } from "@/lib/focal";
 import { assertVerified } from "./account.service";
@@ -7,7 +7,8 @@ import type { z } from "zod";
 import { dateRangeFor, startOfLagosDay, type DateFilter } from "@/lib/dates";
 import { currencyOf, getCountry, getRegion, parseScope, regionsOf, scopeFilter, scopeToString, type Scope } from "@/lib/places";
 import type { AttendeesDTO, EventDTO, Paginated, UserBrief } from "@/lib/types";
-import { ApiError, conflict, forbidden, notFound, unauthorized } from "../http/errors";
+import { ApiError, badRequest, conflict, forbidden, notFound, unauthorized } from "../http/errors";
+import { kliqueId } from "./klique-id";
 import { rateLimit } from "../http/rate-limit";
 import { Community, type ICommunity } from "../models/Community";
 import { Event, type IEvent } from "../models/Event";
@@ -19,6 +20,9 @@ import {
   canSeeEventInFeeds,
   canViewEvent,
   eventVisibilityFilter,
+  publishedEvents,
+  canReviewEvent,
+  assertCanPost,
   spaceAccess,
   type Space,
 } from "../policies/access";
@@ -78,7 +82,7 @@ export async function listEvents(viewer: IUser | null, q: ListQuery): Promise<Pa
   if (q.community) {
     const { space, access } = await resolveSpaceFor(viewer, q.community, q.sub);
     if (!access.canView) throw forbidden("Join to see events here.");
-    and.push({ communityId: space.community._id, subcommunityId: space.sub?._id ?? null });
+    and.push({ communityId: space.community._id, subcommunityId: space.sub?._id ?? null }, publishedEvents(viewer));
   } else {
     and.push(await eventVisibilityFilter(viewer));
   }
@@ -189,7 +193,12 @@ async function loadVisibleEvent(viewer: IUser | null, id: string): Promise<IEven
 
 export async function getEvent(viewer: IUser | null, id: string): Promise<EventDTO> {
   const event = await loadVisibleEvent(viewer, id);
-  return (await toEvents([event], viewer))[0];
+  const dto = (await toEvents([event], viewer))[0];
+  // waiting for approval: may this viewer decide?
+  if (event.review === "pending" && (await canReviewEvent(event, viewer))) dto.viewer.canReview = true;
+  // who chipped in, and refunds: the host and the community's owners and admins
+  if (event.contribution && (dto.viewer.isHost || (await canReviewEvent(event, viewer)))) dto.viewer.canManageMoney = true;
+  return dto;
 }
 
 /* ------------------------------------------------------------------ */
@@ -213,14 +222,21 @@ export async function createEvent(viewer: IUser, input: z.infer<typeof eventCrea
   validateTimes(input.startsAt, input.endsAt, true);
 
   let space: Space | null = null;
+  // a member's event: it waits for the space's owner or an admin to approve it
+  let submitted = false;
   if (input.communitySlug) {
     const resolved = await resolveSpaceFor(viewer, input.communitySlug, input.subSlug);
     // Klique's events go to everyone, so only site admins post there; elsewhere the space's owner and admins
+    // post straight away, and members (when the community allows it) send theirs in for approval
     if (isKlique(resolved.space.community)) {
       if (!isSiteAdmin(viewer)) throw forbidden("Only the Klique team posts events in Klique. Post it in your own community.");
       if (!input.interest) throw new ApiError(422, "Pick an interest for this event.", { errors: { interest: "Pick an interest" } });
+    } else if (!isSiteAdmin(viewer) && !canHostInSpace(resolved.access)) {
+      if (!resolved.access.isMember || resolved.space.community.memberEvents === false) assertCanHostInSpace(viewer, resolved.access);
+      assertCanPost(resolved.access);
+      rateLimit(`event-submit:${sid(viewer._id)}:${sid(resolved.space.community._id)}`, 5, 24 * 60 * 60 * 1000);
+      submitted = true;
     }
-    else assertCanHostInSpace(viewer, resolved.access);
     space = resolved.space;
   } else if (input.subSlug) {
     throw new ApiError(422, "Choose the community this group belongs to.", { errors: { communitySlug: "Required with a group" } });
@@ -233,6 +249,8 @@ export async function createEvent(viewer: IUser, input: z.infer<typeof eventCrea
     space = { community: klique, sub: null };
   }
 
+  // chipping in goes to a community: never to Klique itself
+  if (input.contribution && space && isKlique(space.community)) throw badRequest("Klique's own events don't take contributions.");
   const interest = input.interest ?? space?.community.interest;
   if (!interest) throw new ApiError(422, "Pick an interest for this event.", { errors: { interest: "Pick an interest" } });
 
@@ -248,6 +266,8 @@ export async function createEvent(viewer: IUser, input: z.infer<typeof eventCrea
     region: input.region,
     city: input.city,
     online: input.online,
+    ticketUrl: input.ticketUrl || null,
+    onlineUrl: input.online ? input.onlineUrl || null : null,
     currency: input.currency ?? currencyOf(input.country),
     neighborhood: input.neighborhood,
     venue: input.venue,
@@ -256,27 +276,89 @@ export async function createEvent(viewer: IUser, input: z.infer<typeof eventCrea
     priceNaira: input.priceNaira,
     capacity: input.capacity ?? null,
     coverImage: input.coverImage || null,
+    review: submitted ? "pending" : null,
+    contribution: input.contribution ?? null,
   });
 
   // Hosts are automatically going.
   await Rsvp.create({ eventId: doc._id, userId: viewer._id, status: "going" });
   await recountRsvps(doc._id);
 
-  // Tell the people in the community (or group) it was posted in. Not for Klique: that's everyone, and its
-  // events are on everyone's homepage already.
-  if (space && !isKlique(space.community)) {
-    const members = await Membership.find({ communityId: space.community._id, subcommunityId: space.sub?._id ?? null, status: "active", userId: { $ne: viewer._id } })
-      .select("userId")
-      .limit(1000)
-      .lean<{ userId: Types.ObjectId }[]>();
-    notify(
-      members.map((m) => m.userId),
-      { title: `New event in ${space.sub?.name ?? space.community.name}`, body: `${doc.title} · ${when(doc.startsAt)}`, data: { type: "event", id: sid(doc._id) } },
-      // several new events from one place bundle into one line
-      { category: "events", groupKey: `new-events:${sid(space.sub?._id ?? space.community._id)}`, many: (n) => `${n} new events in ${space!.sub?.name ?? space!.community.name}`, ref: `event:${sid(doc._id)}` },
-    );
-  }
+  if (submitted && space) await askReviewers(doc, space, viewer);
+  else if (space) await announceEvent(doc, space, viewer._id);
   return getEvent(viewer, sid(doc._id));
+}
+
+/**
+ * Tell the people in the community (or group) about a new event. Not for Klique: that's everyone, and its events
+ * are on everyone's homepage already.
+ */
+async function announceEvent(doc: IEvent, space: Space, hostId: Types.ObjectId) {
+  if (isKlique(space.community)) return;
+  const members = await Membership.find({ communityId: space.community._id, subcommunityId: space.sub?._id ?? null, status: "active", userId: { $ne: hostId } })
+    .select("userId")
+    .limit(1000)
+    .lean<{ userId: Types.ObjectId }[]>();
+  notify(
+    members.map((m) => m.userId),
+    { title: `New event in ${space.sub?.name ?? space.community.name}`, body: `${doc.title} · ${when(doc.startsAt)}`, data: { type: "event", id: sid(doc._id) } },
+    // several new events from one place bundle into one line
+    { image: doc.coverImage ?? null, action: { kind: "event", eventId: sid(doc._id) }, category: "events", groupKey: `new-events:${sid(space.sub?._id ?? space.community._id)}`, many: (n) => `${n} new events in ${space.sub?.name ?? space.community.name}`, ref: `event:${sid(doc._id)}` },
+  );
+}
+
+/** The people who can approve a member's event: the space's owners and admins (and a group's community owner). */
+async function reviewersOf(space: Space): Promise<Types.ObjectId[]> {
+  const rows = await Membership.find({
+    communityId: space.community._id,
+    status: "active",
+    $or: [{ subcommunityId: space.sub?._id ?? null, role: { $in: ["owner", "admin"] } }, ...(space.sub ? [{ subcommunityId: null, role: "owner" as const }] : [])],
+  })
+    .select("userId")
+    .lean<{ userId: Types.ObjectId }[]>();
+  return [...new Map(rows.map((r) => [sid(r.userId), r.userId])).values()];
+}
+
+async function askReviewers(doc: IEvent, space: Space, host: IUser) {
+  const place = space.sub?.name ?? space.community.name;
+  notify(
+    (await reviewersOf(space)).filter((id) => sid(id) !== sid(host._id)),
+    { title: `${host.displayName} sent an event for ${place}`, body: `${doc.title} · ${when(doc.startsAt)}. Approve it to post it.`, data: { type: "event", id: sid(doc._id) } },
+    { actorId: host._id, image: doc.coverImage ?? null, action: { kind: "eventReview", eventId: sid(doc._id) }, category: "admin", groupKey: `event-review:${sid(space.sub?._id ?? space.community._id)}`, many: (n) => `${n} events waiting for approval in ${place}`, ref: `event-review:${sid(doc._id)}` },
+  );
+}
+
+/**
+ * The space's owner or an admin approves a member's event (it's posted, and the community hears about it) or turns
+ * it down with a reason the host sees. Deciding twice, or on an event that isn't waiting, is refused.
+ */
+export async function reviewEvent(viewer: IUser, id: string, decision: "approve" | "reject", reason = ""): Promise<EventDTO> {
+  const event = await Event.findById(id).lean<IEvent>();
+  if (!event || !(await canReviewEvent(event, viewer))) throw notFound("We couldn't find that event.");
+  if (event.review !== "pending") throw conflict(event.review === "rejected" ? "This event was already turned down." : "This event is already posted.");
+  const why = reason.trim();
+  if (decision === "reject" && !why) throw new ApiError(422, "Say why, so the host can fix it.", { errors: { reason: "Required" } });
+  const claimed = await Event.updateOne({ _id: event._id, review: "pending" }, { $set: { review: decision === "approve" ? null : "rejected", reviewReason: decision === "approve" ? "" : why, reviewedById: viewer._id, reviewedAt: new Date() } });
+  if (!claimed.modifiedCount) throw conflict("Someone else just decided on this event.");
+
+  const community = await Community.findById(event.communityId).lean<ICommunity>();
+  const sub = event.subcommunityId ? await Subcommunity.findById(event.subcommunityId).lean<ISubcommunity>() : null;
+  const place = sub?.name ?? community?.name ?? "the community";
+  if (decision === "approve") {
+    notify([event.hostId], { title: `Your event is up in ${place}`, body: `${event.title} was approved.`, data: { type: "event", id: sid(event._id) } }, { actorId: viewer._id, image: event.coverImage ?? null, category: "events", ref: `event-review:${sid(event._id)}` });
+    if (community) await announceEvent(event, { community, sub }, event.hostId);
+  } else {
+    notify([event.hostId], { title: `Your event wasn't approved in ${place}`, body: `${event.title}: ${why}`, data: { type: "event", id: sid(event._id) } }, { actorId: viewer._id, image: event.coverImage ?? null, category: "events", ref: `event-review:${sid(event._id)}` });
+  }
+  return getEvent(viewer, id);
+}
+
+/** Members' events waiting in a community (and its groups) for this owner or admin, oldest first. */
+export async function pendingEvents(viewer: IUser, communityId: Types.ObjectId): Promise<EventDTO[]> {
+  const rows = await Event.find({ communityId, review: "pending", cancelled: false }).sort({ createdAt: 1 }).limit(100).lean<IEvent[]>();
+  const mine: IEvent[] = [];
+  for (const e of rows) if (await canReviewEvent(e, viewer)) mine.push(e);
+  return toEvents(mine, viewer);
 }
 
 /** "Sat 18 Oct, 4:00 PM" in Lagos time. */
@@ -305,6 +387,9 @@ export async function updateEvent(viewer: IUser, id: string, patch: z.infer<type
   if (patch.region !== undefined) set.region = patch.region;
   if (patch.city !== undefined) set.city = patch.city;
   if (patch.online !== undefined) set.online = patch.online;
+  if (patch.ticketUrl !== undefined) set.ticketUrl = patch.ticketUrl || null;
+  if (patch.onlineUrl !== undefined) set.onlineUrl = patch.onlineUrl || null;
+  if (patch.online === false) set.onlineUrl = null;
   if (patch.currency !== undefined) set.currency = patch.currency;
   if (patch.neighborhood !== undefined) set.neighborhood = patch.neighborhood;
   if (patch.venue !== undefined) set.venue = patch.venue;
@@ -314,8 +399,20 @@ export async function updateEvent(viewer: IUser, id: string, patch: z.infer<type
   if (patch.capacity !== undefined) set.capacity = patch.capacity;
   if (patch.coverImage !== undefined) set.coverImage = patch.coverImage || null;
   if (patch.cancelled !== undefined) set.cancelled = patch.cancelled;
+  if (patch.contribution !== undefined) {
+    if (patch.contribution && (!event.communityId || String(event.communityId) === String(await kliqueId()))) throw badRequest("Klique's own events don't take contributions.");
+    set.contribution = patch.contribution;
+  }
 
+  // a turned-down event the host has fixed goes back to the owners and admins
+  const resubmit = event.review === "rejected" && patch.cancelled !== true;
+  if (resubmit) Object.assign(set, { review: "pending", reviewReason: "" });
   await Event.updateOne({ _id: event._id }, set);
+  if (resubmit && event.communityId) {
+    const community = await Community.findById(event.communityId).lean<ICommunity>();
+    const sub = event.subcommunityId ? await Subcommunity.findById(event.subcommunityId).lean<ISubcommunity>() : null;
+    if (community) await askReviewers({ ...event, ...set } as IEvent, { community, sub }, viewer);
+  }
   // crews disappear a day after the event: follow a new time
   if (set.startsAt !== undefined || set.endsAt !== undefined) await syncCrewExpiry({ _id: event._id, startsAt: (set.startsAt as Date | undefined) ?? event.startsAt, endsAt: set.endsAt !== undefined ? (set.endsAt as Date | null) : event.endsAt });
   if (set.coverImage !== undefined && event.coverImage && !sameFile(event.coverImage, set.coverImage)) deleteUploads([event.coverImage]);
@@ -384,6 +481,7 @@ export async function setRsvp(viewer: IUser, id: string, status: "going" | "inte
   await assertCanJoinIn(viewer, event, "RSVP");
   const end = (event.endsAt ?? new Date(event.startsAt.getTime() + LINGER_MS)).getTime();
   if (event.cancelled) throw conflict("This event was cancelled.");
+  if (event.review) throw conflict(event.review === "pending" ? "This event is waiting for an admin to approve it." : "This event wasn't approved.");
   if (end < Date.now()) throw conflict("This event has already happened.");
 
   const existing = await Rsvp.findOne({ eventId: event._id, userId: viewer._id }).lean<{ status: string }>();
@@ -429,7 +527,7 @@ export async function getAttendees(viewer: IUser | null, id: string): Promise<At
     _id: { $in: rsvps.map((r) => r.userId) },
     $or: [{ attendancePublic: true }, { _id: viewer._id }],
   })
-    .select("handle displayName avatarUrl avatarFrame nameEffect rank country city")
+    .select("handle displayName avatarUrl avatarFrame nameEffect country city")
     .limit(24)
     .lean<IUser[]>();
 
@@ -440,7 +538,6 @@ export async function getAttendees(viewer: IUser | null, id: string): Promise<At
     avatarUrl: u.avatarUrl,
     avatarFrame: u.avatarFrame ?? null,
     nameEffect: u.nameEffect ?? null,
-    rank: u.rank ?? 1,
     country: u.country ?? "NG",
     city: u.city,
   }));

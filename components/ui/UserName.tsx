@@ -2,7 +2,7 @@ import type { CSSProperties } from "react";
 import { getNameEffect } from "@/lib/cosmetics";
 import { cx } from "./cx";
 
-/** A display name, drawn with the person's chosen effect (if any). Plain text otherwise. */
+/** A display name, drawn with the person's chosen effect (if any). Plain text otherwise. Animations stop with reduced motion or data saver (globals.css). */
 export function UserName({ name, effect, className }: { name: string; effect?: string | null; className?: string }) {
   const spec = getNameEffect(effect);
   if (!spec) return <span className={className}>{name}</span>;

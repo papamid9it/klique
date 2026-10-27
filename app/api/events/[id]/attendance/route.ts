@@ -7,7 +7,7 @@ type P = { id: string };
 /** "Who came?": the host's list of people going, with who they've ticked off. */
 export const GET = withApi<P, "required">({ auth: "required" }, async ({ params, viewer }) => getAttendance(viewer, params.id));
 
-/** Tick people off as came (earns them Hype), or untick them. */
+/** Tick people off as came (earns them points), or untick them. */
 export const POST = withApi<P, "required">({ auth: "required" }, async ({ req, params, viewer }) => {
   const { userIds, attended } = await readJson(req, attendanceSchema);
   return setAttendance(viewer, params.id, userIds, attended);

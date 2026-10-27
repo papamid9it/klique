@@ -1,4 +1,6 @@
-import { Board, Topic, TopicComment, TopicLike, type ITopic } from "../models/Topic";
+import { Board, Topic, TopicComment, TopicFollow, TopicLike, type ITopic } from "../models/Topic";
+import { FeedComment, FeedPost, FeedVote } from "../models/FeedPost";
+import { Reaction } from "../models/Reaction";
 import { deleteUploads } from "./media.service";
 import { ApiError } from "../http/errors";
 import { validatePlace } from "@/lib/places";
@@ -89,15 +91,17 @@ export async function purgeSpaceData(communityId: Types.ObjectId, subcommunityId
   const channelIds = channels.map((c) => c._id);
 
   // Every uploaded file in this space goes from storage too: chat photos/videos, topic media, update photos, event covers.
-  const [msgFiles, postFiles, topicFiles] = await Promise.all([
+  const [msgFiles, postFiles, topicFiles, feedFiles] = await Promise.all([
     channelIds.length ? ChannelMessage.find({ channelId: { $in: channelIds }, "images.0": { $exists: true } }).select("images").lean<{ images: string[] }[]>() : [],
     Post.find({ ...where, imageUrl: { $ne: null } }).select("imageUrl").lean<{ imageUrl: string | null }[]>(),
     subcommunityId === null ? Topic.find({ communityId }).select("imageUrl media").lean<Pick<ITopic, "imageUrl" | "media">[]>() : [],
+    subcommunityId === null ? FeedPost.find({ communityId }).select("media").lean<{ media: { url: string; poster: string | null }[] }[]>() : [],
   ]);
   deleteUploads([
     ...msgFiles.flatMap((m) => m.images),
     ...postFiles.map((p) => p.imageUrl),
     ...topicFiles.flatMap(topicFileUrls),
+    ...feedFiles.flatMap((p) => p.media.flatMap((m) => [m.url, m.poster])),
     ...events.map((e) => e.coverImage),
   ]);
 
@@ -113,7 +117,11 @@ export async function purgeSpaceData(communityId: Types.ObjectId, subcommunityId
     await ChannelCategory.deleteMany({ communityId });
     await Board.deleteMany({ communityId });
     const topicIds = await Topic.find({ communityId }).distinct("_id");
-    await Promise.all([TopicLike.deleteMany({ topicId: { $in: topicIds } }), TopicComment.deleteMany({ communityId }), Topic.deleteMany({ communityId })]);
+    await Promise.all([TopicLike.deleteMany({ topicId: { $in: topicIds } }), TopicFollow.deleteMany({ topicId: { $in: topicIds } }), TopicComment.deleteMany({ communityId }), Topic.deleteMany({ communityId })]);
+    // the Posts section: posts, their votes, comments and the reactions on them
+    const postIds = await FeedPost.find({ communityId }).distinct("_id");
+    const commentIds = await FeedComment.find({ communityId }).distinct("_id");
+    await Promise.all([Reaction.deleteMany({ targetType: "feedComment", targetId: { $in: commentIds } }), FeedComment.deleteMany({ communityId }), FeedVote.deleteMany({ postId: { $in: postIds } }), FeedPost.deleteMany({ communityId })]);
   }
   await Promise.all([
     Membership.deleteMany(where),

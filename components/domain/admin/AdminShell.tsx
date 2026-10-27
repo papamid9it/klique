@@ -41,6 +41,8 @@ const MENU: { title: string | null; items: Item[] }[] = [
     items: [
       { href: "/admin/ads", label: "Ads", icon: "megaphone", count: (s) => s.pendingAds },
       { href: "/admin/points", label: "Points", icon: "coin" },
+      { href: "/admin/effects", label: "Profile effects", icon: "asterisk" },
+      { href: "/admin/payouts", label: "Payouts", icon: "ticket", count: (s) => s.pendingPayouts },
     ],
   },
   {
@@ -113,7 +115,7 @@ function Console({ children }: { children: ReactNode }) {
 
   return (
     <AdminCtx.Provider value={{ summary, refresh }}>
-      <div className="min-h-dvh lg:grid lg:grid-cols-[248px_minmax(0,1fr)]">
+      <div data-leave-ok className="min-h-dvh lg:grid lg:grid-cols-[248px_minmax(0,1fr)]">
         <aside className="sticky top-0 hidden h-dvh flex-col border-r border-line bg-surface/40 px-3 py-5 lg:flex">
           <div className="px-2">
             <Brand />

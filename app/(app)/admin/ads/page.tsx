@@ -114,7 +114,7 @@ function AdsContent() {
                                 <img src={a.imageUrl} alt="" className="size-full object-cover" />
                               ) : (
                                 <span className="flex size-full items-center justify-center text-ink-muted">
-                                  <Icon name={a.kind === "event" ? "calendar" : "megaphone"} size={16} />
+                                  <Icon name={a.kind === "event" ? "calendar" : a.kind === "community" ? "users" : "megaphone"} size={16} />
                                 </span>
                               )}
                             </div>
@@ -122,12 +122,12 @@ function AdsContent() {
                               <p className="truncate text-sm font-semibold">{a.name}</p>
                               <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
                                 <Badge tone={st.tone}>{st.label}</Badge>
-                                <Badge>{a.kind === "event" ? "Promoted event" : "Brand"}</Badge>
+                                <Badge>{a.kind === "event" ? "Promoted event" : a.kind === "community" ? "Sponsored community" : "Brand"}</Badge>
                                 {a.pendingReview && <Badge tone="accent">Needs review</Badge>}
                                 {a.paid && <Badge tone="good">Paid {formatPrice(a.paid.amount, a.paid.currency)}{a.paid.by ? ` · @${a.paid.by.handle}` : ""}</Badge>}
                                 {a.reports > 0 && <Badge tone="bad">{pluralize(a.reports, "report")}</Badge>}
                                 <span className="truncate text-xs text-ink-muted">
-                                  {a.kind === "event" ? (a.event?.title ?? "Event deleted") : a.advertiser}
+                                  {a.kind === "event" ? (a.event?.title ?? "Event deleted") : a.kind === "community" ? (a.community?.name ?? "Community deleted") : a.advertiser}
                                   {a.endsAt ? ` · until ${formatDateShort(a.endsAt)}` : ""}
                                 </span>
                               </div>

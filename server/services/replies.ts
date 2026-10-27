@@ -2,7 +2,7 @@ import type { Types } from "mongoose";
 import { stickerOf } from "@/lib/reactions";
 import type { ReplyRefDTO } from "@/lib/types";
 
-type Row = { _id: Types.ObjectId; body: string; sticker?: string | null; stickerUrl?: string | null; images?: string[]; deletedAt?: Date | null };
+type Row = { _id: Types.ObjectId; body: string; sticker?: string | null; stickerUrl?: string | null; images?: string[]; pollId?: Types.ObjectId | null; deletedAt?: Date | null };
 
 /** The one-line preview shown above a reply. */
 function snippetOf(r: Row): string {
@@ -12,6 +12,7 @@ function snippetOf(r: Row): string {
   if (r.sticker) return `${stickerOf(r.sticker)?.emoji ?? ""} Sticker`.trim();
   if (r.stickerUrl) return "Sticker";
   if (r.images?.length) return r.images.length > 1 ? `${r.images.length} photos` : "Photo";
+  if (r.pollId) return "📊 Poll";
   return "Message";
 }
 

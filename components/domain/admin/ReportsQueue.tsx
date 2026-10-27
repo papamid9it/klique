@@ -5,6 +5,7 @@ import { useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
 import { AdminService } from "@/app/services/AdminService";
 import { useToast } from "@/components/providers/ToastProvider";
+import { profileHref } from "@/components/providers/ProfileCardProvider";
 import { Segmented } from "./AdminParts";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
@@ -27,6 +28,7 @@ const STATUSES: { id: ReportStatus; label: string }[] = [
 const KIND: Record<ReportDTO["targetType"], string> = {
   user: "Person",
   post: "Group update",
+  feedPost: "Post",
   event: "Event",
   community: "Community",
   subcommunity: "Group",
@@ -95,7 +97,7 @@ function ReportCard({ r, onDone }: { r: ReportDTO; onDone: (id: string) => void 
             {author ? (
               <>
                 <Avatar name={author.displayName} src={author.avatarUrl} size={22} />
-                <Link href={`/people/${author.handle}`} className="truncate hover:underline">
+                <Link href={profileHref(author.handle)} className="truncate hover:underline">
                   @{author.handle}
                 </Link>
               </>

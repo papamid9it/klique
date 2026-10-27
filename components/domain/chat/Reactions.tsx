@@ -73,7 +73,7 @@ export function ReactionBar({ reactions, onToggle, canReact, mine, className }: 
           aria-label={`${r.kind}, ${r.count}${r.mine ? ", you reacted" : ""}`}
           className={cx("inline-flex h-7 items-center gap-1 rounded-full border px-2 text-[13px] transition", r.mine ? "border-accent-text bg-accent/15 text-ink" : "border-line bg-surface text-ink-muted hover:border-ink-muted", !canReact && "cursor-default")}
         >
-          <span key={r.count} className="emoji-pop text-[15px] leading-none">
+          <span key={`${r.count}-${r.mine}`} className="emoji-pop text-[15px] leading-none">
             {reactionEmoji(r.kind)}
           </span>
           <span className="font-mono text-[12px]">{r.count}</span>
@@ -106,6 +106,29 @@ export function ReactButton({ onPick, className, align = "right" }: { onPick: (k
 
 /** What the sticker tray hands back: a built-in sticker, or one of your saved pictures. */
 export type StickerChoice = { sticker?: string; stickerUrl?: string };
+
+/** The sticker waiting in the composer, above the text box: sent with the message, or removed with the x. */
+export function AttachedSticker({ choice, onRemove }: { choice: StickerChoice | null; onRemove: () => void }) {
+  if (!choice) return null;
+  const s = choice.sticker ? stickerOf(choice.sticker) : null;
+  return (
+    <div className="mb-2 flex">
+      <span className="relative inline-flex size-16 items-center justify-center rounded-control border border-line bg-raised">
+        {choice.stickerUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={stickerThumb(choice.stickerUrl)} alt="Attached sticker" className="max-h-full max-w-full object-contain p-1" />
+        ) : (
+          <span role="img" aria-label={`${s?.label ?? "Attached"} sticker`} className="text-[34px] leading-none">
+            {s?.emoji}
+          </span>
+        )}
+        <button type="button" onClick={onRemove} aria-label="Remove sticker" className="absolute top-0.5 right-0.5 inline-flex size-5 items-center justify-center rounded-full bg-black/70 text-white hover:bg-black">
+          <Icon name="x" size={11} />
+        </button>
+      </span>
+    </div>
+  );
+}
 
 /**
  * A sticker as it appears in a conversation, without a bubble: a big, gently animated emoji, or a saved picture
@@ -184,7 +207,8 @@ function useQuickSave(url: string) {
 
 /**
  * The sticker tray: your saved stickers (on your account, so the same on every device) and the built-in animated
- * ones. Picking one sends it straight away. Upload your own with +, and use Edit to reorder or remove.
+ * ones. Picking one attaches it to the message being written (Send sends it). Upload your own with +, and use
+ * Edit to reorder or remove.
  */
 export function StickerPicker({ onPick, onClose, className }: { onPick: (s: StickerChoice) => void; onClose: () => void; className?: string }) {
   const ref = useDismiss(onClose);
@@ -216,7 +240,7 @@ export function StickerPicker({ onPick, onClose, className }: { onPick: (s: Stic
   // the tray may be stale on this device (counts change as you send): refresh when it opens
   useEffect(() => void saved.refresh(), []); // eslint-disable-line react-hooks/exhaustive-deps
   const top = editing ? [] : saved.mostUsed;
-  function send(url: string) {
+  function attach(url: string) {
     saved.bump(url);
     onPick({ stickerUrl: url });
     onClose();
@@ -257,7 +281,7 @@ export function StickerPicker({ onPick, onClose, className }: { onPick: (s: Stic
               key={s.id}
               type="button"
               title={s.label}
-              aria-label={`Send ${s.label} sticker`}
+              aria-label={`Add ${s.label} sticker`}
               onClick={() => {
                 onPick({ sticker: s.id });
                 onClose();
@@ -279,7 +303,7 @@ export function StickerPicker({ onPick, onClose, className }: { onPick: (s: Stic
               <ul className="mb-3 grid grid-cols-4 gap-1.5">
                 {top.map((s) => (
                   <li key={s.id}>
-                    <button type="button" onClick={() => send(s.url)} aria-label="Send this sticker (one of your most used)" className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-control p-1 transition hover:bg-raised">
+                    <button type="button" onClick={() => attach(s.url)} aria-label="Add this sticker (one of your most used)" className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-control p-1 transition hover:bg-raised">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={stickerThumb(s.url)} alt="" loading="lazy" decoding="async" className="max-h-full max-w-full object-contain" />
                     </button>
@@ -303,8 +327,8 @@ export function StickerPicker({ onPick, onClose, className }: { onPick: (s: Stic
                 <button
                   type="button"
                   disabled={editing}
-                  aria-label={editing ? `Sticker ${i + 1}` : `Send sticker ${i + 1}`}
-                  onClick={() => send(s.url)}
+                  aria-label={editing ? `Sticker ${i + 1}` : `Add sticker ${i + 1}`}
+                  onClick={() => attach(s.url)}
                   className={cx("flex aspect-square w-full items-center justify-center overflow-hidden rounded-control p-1 transition hover:bg-raised", editing && "bg-raised/60")}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}

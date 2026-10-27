@@ -1,4 +1,5 @@
-import { Schema, model, models, type Model, type Types } from "mongoose";
+import { Schema, type Model, type Types } from "mongoose";
+import { defineModel } from "./define";
 
 /**
  * A smaller group that lives inside exactly ONE parent community.
@@ -16,6 +17,9 @@ export interface ISubcommunity {
   memberCount: number;
   /** starter channels created once */
   channelsReady?: boolean;
+  /** points (lib/points) someone needs to be added, and to post. 0: anyone. */
+  minPointsJoin?: number;
+  minPointsPost?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -30,6 +34,8 @@ const SubcommunitySchema = new Schema<ISubcommunity>(
     ownerId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     memberCount: { type: Number, default: 0 },
     channelsReady: { type: Boolean, default: false },
+    minPointsJoin: { type: Number, default: 0, min: 0, max: 1_000_000 },
+    minPointsPost: { type: Number, default: 0, min: 0, max: 1_000_000 },
   },
   { timestamps: true },
 );
@@ -37,5 +43,4 @@ const SubcommunitySchema = new Schema<ISubcommunity>(
 // A slug is unique within its parent community.
 SubcommunitySchema.index({ communityId: 1, slug: 1 }, { unique: true });
 
-export const Subcommunity: Model<ISubcommunity> =
-  (models.Subcommunity as Model<ISubcommunity>) || model<ISubcommunity>("Subcommunity", SubcommunitySchema);
+export const Subcommunity: Model<ISubcommunity> = defineModel<ISubcommunity>("Subcommunity", SubcommunitySchema);

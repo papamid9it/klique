@@ -1,11 +1,13 @@
 import "server-only";
 import { Types } from "mongoose";
 import type { AdDTO, AdInput, AdminAdDTO, AdSlot } from "@/lib/types";
-import { DISCOVER_BANNER_ADS, isInterestId } from "@/lib/constants";
+import { isInterestId } from "@/lib/constants";
 import { parseScope, scopesOverlap, WORLD } from "@/lib/places";
 import { badRequest, notFound } from "../http/errors";
 import { Ad, AD_SLOTS, type IAd } from "../models/Ad";
 import { Event, type IEvent } from "../models/Event";
+import { Community, type ICommunity } from "../models/Community";
+import { Membership } from "../models/Membership";
 import { Report } from "../models/Safety";
 import type { IUser } from "../models/User";
 import { canSeeEventInFeeds } from "../policies/access";
@@ -54,7 +56,6 @@ export async function serveAds(
   viewer: IUser | null,
   q: { slot: AdSlot; where?: string; interest?: string; search?: string; exclude?: string; count: number },
 ): Promise<AdDTO[]> {
-  if (q.slot === "home-hero" && !DISCOVER_BANNER_ADS) return []; // the banner isn't for sale (lib/constants.ts)
   const now = new Date();
   const rows = await Ad.find({ status: "active", slots: q.slot }).lean<IAd[]>();
   let eligible = rows.filter((a) => isLive(a, now) && matches(a, { where: q.where, interest: q.interest, q: q.slot === "search" ? (q.search ?? "") : undefined, viewer }));
@@ -62,11 +63,21 @@ export async function serveAds(
   // Promoted events must still be on, in this viewer's feeds (Klique's, or a community they're in), and not the
   // page they're already on.
   const eventIds = eligible.filter((a) => a.kind === "event" && a.eventId).map((a) => a.eventId!);
-  const events = eventIds.length ? await Event.find({ _id: { $in: eventIds }, cancelled: false, startsAt: { $gt: now } }).lean<IEvent[]>() : [];
+  const events = eventIds.length ? await Event.find({ _id: { $in: eventIds }, cancelled: false, review: null, startsAt: { $gt: now } }).lean<IEvent[]>() : [];
   const visible = new Map<string, IEvent>();
   for (const e of events) if (await canSeeEventInFeeds(e, viewer)) visible.set(sid(e._id), e);
-  eligible = eligible.filter((a) => a.kind === "brand" || (a.eventId && visible.has(sid(a.eventId)) && sid(a.eventId) !== q.exclude));
+  // Sponsored communities: still public, and not one this viewer is already in.
+  const commIds = eligible.filter((a) => a.kind === "community" && a.communityId).map((a) => a.communityId!);
+  const comms = commIds.length ? await Community.find({ _id: { $in: commIds }, privacy: "public" }).lean<ICommunity[]>() : [];
+  const joined = viewer && comms.length ? new Set((await Membership.find({ userId: viewer._id, communityId: { $in: comms.map((c) => c._id) }, subcommunityId: null, status: "active" }).select("communityId").lean<{ communityId: Types.ObjectId }[]>()).map((m) => sid(m.communityId))) : new Set<string>();
+  const commById = new Map(comms.filter((c) => !joined.has(sid(c._id))).map((c) => [sid(c._id), c]));
+  eligible = eligible.filter((a) =>
+    (q.slot === "communities") !== (a.kind === "community") ? false : a.kind === "brand" ? true : a.kind === "community" ? !!a.communityId && commById.has(sid(a.communityId)) : !!a.eventId && visible.has(sid(a.eventId)) && sid(a.eventId) !== q.exclude,
+  );
 
+  // one ad per community: two ads for the same community never sit side by side
+  const seenCommunity = new Set<string>();
+  eligible = eligible.filter((a) => a.kind !== "community" || (!seenCommunity.has(sid(a.communityId!)) && !!seenCommunity.add(sid(a.communityId!))));
   const chosen = pickWeighted(eligible, q.count);
   if (!chosen.length) return [];
   const dtos = new Map((await toEvents(chosen.filter((a) => a.kind === "event").map((a) => visible.get(sid(a.eventId!))!), viewer)).map((e) => [e.id, e]));
@@ -75,6 +86,21 @@ export async function serveAds(
 
   return chosen.map((a) => {
     const ev = a.kind === "event" ? (dtos.get(sid(a.eventId!)) ?? null) : null;
+    const c = a.kind === "community" ? commById.get(sid(a.communityId!)) : undefined;
+    if (c) {
+      return {
+        id: sid(a._id),
+        kind: a.kind,
+        advertiser: a.advertiser || c.name,
+        title: a.title || c.name,
+        body: a.body || c.description.slice(0, 140),
+        imageUrl: a.imageUrl ?? c.coverImage ?? null,
+        ctaLabel: a.ctaLabel || "View",
+        url: null,
+        event: null,
+        community: { id: sid(c._id), slug: c.slug, name: c.name, interest: c.interest, coverImage: c.coverImage, memberCount: c.memberCount },
+      };
+    }
     return {
       id: sid(a._id),
       kind: a.kind,
@@ -112,7 +138,7 @@ const httpsUrl = (u: string) => {
 };
 
 async function clean(input: AdInput): Promise<Partial<IAd>> {
-  const slots = [...new Set(input.slots)].filter((s): s is AdSlot => (AD_SLOTS as readonly string[]).includes(s) && (DISCOVER_BANNER_ADS || s !== "home-hero"));
+  const slots = [...new Set(input.slots)].filter((s): s is AdSlot => (AD_SLOTS as readonly string[]).includes(s));
   if (!slots.length) throw badRequest("Pick at least one spot on the site for this ad.");
   const places = [...new Set(input.places)].filter((p) => parseScope(p));
   const interests = [...new Set(input.interests)].filter(isInterestId);
@@ -139,17 +165,25 @@ async function clean(input: AdInput): Promise<Partial<IAd>> {
   };
   if (!base.name) throw badRequest("Give the ad a name so you can find it later.");
 
+  if (input.kind === "community") {
+    const c = input.communityId ? await Community.findById(input.communityId).select("_id privacy").lean<Pick<ICommunity, "_id" | "privacy">>() : null;
+    if (!c) throw badRequest("Pick the community to sponsor.");
+    if (c.privacy !== "public") throw badRequest("Only public communities can be sponsored.");
+    // it only fits the "Sponsored communities" list, and that list only takes these
+    return { ...base, slots: ["communities"], eventId: null, communityId: c._id, url: "" };
+  }
+  if (slots.includes("communities")) throw badRequest("“Sponsored communities” is only for sponsored-community ads.");
   if (input.kind === "event") {
     const e = input.eventId ? await Event.findById(input.eventId).lean<IEvent>() : null;
     if (!e) throw badRequest("Pick the event to promote.");
     if (e.subcommunityId || !e.communityId || String(e.communityId) !== String(await kliqueId())) throw badRequest("Only Klique's own events can be promoted: a community's events are for its members.");
-    return { ...base, eventId: e._id, url: "" };
+    return { ...base, eventId: e._id, communityId: null, url: "" };
   }
   const url = httpsUrl((input.url ?? "").trim());
   if (!url) throw badRequest("Add the link the ad's button opens, starting with https://");
   if (!base.title) throw badRequest("Add a headline.");
   if (!base.advertiser) throw badRequest("Add who the ad is from (it's shown next to “Sponsored”).");
-  return { ...base, eventId: null, url };
+  return { ...base, eventId: null, communityId: null, url };
 }
 
 async function toAdmin(rows: IAd[]): Promise<AdminAdDTO[]> {
@@ -158,6 +192,9 @@ async function toAdmin(rows: IAd[]): Promise<AdminAdDTO[]> {
   const promos = promoIds.length ? await Promotion.find({ _id: { $in: promoIds } }).lean<IPromotion[]>() : [];
   const payers = await loadBriefs(promos.map((p) => p.hostId));
   const promoById = new Map(promos.map((p) => [sid(p._id), p]));
+  const commIds = rows.map((a) => a.communityId).filter((x): x is Types.ObjectId => !!x);
+  const comms = commIds.length ? await Community.find({ _id: { $in: commIds } }).select("slug name").lean<Pick<ICommunity, "_id" | "slug" | "name">[]>() : [];
+  const commById = new Map(comms.map((c) => [sid(c._id), c]));
   const [events, reports] = await Promise.all([
     evIds.length ? Event.find({ _id: { $in: evIds } }).select("title startsAt cancelled").lean<Pick<IEvent, "_id" | "title" | "startsAt" | "cancelled">[]>() : [],
     Report.aggregate<{ _id: Types.ObjectId; n: number }>([{ $match: { targetType: "ad", targetId: { $in: rows.map((a) => a._id) } } }, { $group: { _id: "$targetId", n: { $sum: 1 } } }]),
@@ -167,6 +204,7 @@ async function toAdmin(rows: IAd[]): Promise<AdminAdDTO[]> {
   const now = new Date();
   return rows.map((a) => {
     const e = a.eventId ? evById.get(sid(a.eventId)) : undefined;
+    const c = a.communityId ? commById.get(sid(a.communityId)) : undefined;
     return {
       id: sid(a._id),
       name: a.name,
@@ -175,6 +213,8 @@ async function toAdmin(rows: IAd[]): Promise<AdminAdDTO[]> {
       live: isLive(a, now),
       eventId: a.eventId ? sid(a.eventId) : null,
       event: e ? { id: sid(e._id), title: e.title, startsAt: e.startsAt.toISOString(), cancelled: e.cancelled } : null,
+      communityId: a.communityId ? sid(a.communityId) : null,
+      community: c ? { id: sid(c._id), slug: c.slug, name: c.name } : null,
       advertiser: a.advertiser,
       title: a.title,
       body: a.body,

@@ -31,10 +31,11 @@ import { useAttachments } from "@/lib/hooks/useAttachments";
 import { recallApi, rememberApi } from "@/lib/hooks/useApi";
 import { EditedTag, MessageEditor } from "@/components/domain/chat/MessageEditor";
 import { ConfirmModal } from "@/components/domain/space/parts";
-import { StickerPicker, StickerView, ReactButton, ReactionBar, type StickerChoice } from "@/components/domain/chat/Reactions";
+import { AttachedSticker, StickerPicker, StickerView, ReactButton, ReactionBar, type StickerChoice } from "@/components/domain/chat/Reactions";
 import { useStickers } from "@/lib/hooks/useStickers";
 import { applyReaction, type ReactionKind } from "@/lib/reactions";
-import type { ConversationDetailDTO, MessageDTO } from "@/lib/types";
+import type { ConversationDetailDTO, MessageDTO, ReactionDTO } from "@/lib/types";
+import { sendReaction } from "@/lib/reactQueue";
 import { UserName } from "@/components/ui/UserName";
 
 type Local = MessageDTO & { pending?: boolean; failed?: boolean };
@@ -70,6 +71,7 @@ export default function ConversationPage() {
   const [blockOpen, setBlockOpen] = useState(false);
   const [blockBusy, setBlockBusy] = useState(false);
   const [stickerOpen, setStickerOpen] = useState(false);
+  const [sticker, setSticker] = useState<StickerChoice | null>(null);
   const [infoOpen, setInfoOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteMsg, setDeleteMsg] = useState<Local | null>(null);
@@ -202,14 +204,13 @@ export default function ConversationPage() {
     const optimistic = applyReaction(before, kind);
     touched.current.set(m.id, ++clock.current);
     setMessages((prev) => prev.map((x) => (x.id === m.id ? { ...x, reactions: optimistic } : x)));
-    try {
-      const res = await MessageService.react(id, m.id, kind);
+    // one request at a time per message; the server's counts land when the last one answers
+    const set = (reactions: ReactionDTO[]) => {
       touched.current.set(m.id, ++clock.current);
-      setMessages((prev) => prev.map((x) => (x.id === m.id ? { ...x, reactions: res.data } : x)));
-    } catch (e) {
-      setMessages((prev) => prev.map((x) => (x.id === m.id ? { ...x, reactions: before } : x)));
-      toast(errorMessage(e), "error");
-    }
+      setMessages((prev) => prev.map((x) => (x.id === m.id ? { ...x, reactions } : x)));
+    };
+    const err = await sendReaction(`dm:${m.id}`, before, async () => (await MessageService.react(id, m.id, kind)).data, set, set);
+    if (err) toast(errorMessage(err), "error");
   }
 
   /** Returns an error message on failure; the editor stays open with the text intact. */
@@ -224,28 +225,11 @@ export default function ConversationPage() {
     }
   }
 
-  async function sendSticker(choice: StickerChoice) {
-    if (!user) return;
-    const tempId = `tmp-${++tmp.current}`;
-    setSendError(null);
-    setMessages((prev) => merge(prev, [{ id: tempId, conversationId: id, senderId: user.id, body: "", sticker: choice.sticker ?? null, stickerUrl: choice.stickerUrl ?? null, images: [], replyTo: null, reactions: [], createdAt: new Date().toISOString(), mine: true, editedAt: null, deleted: false, pending: true } as Local]));
-    try {
-      const res = await MessageService.send(id, { body: "", ...choice });
-      setMessages((prev) => merge(prev.filter((m) => m.id !== tempId), [res.data]));
-    } catch (e) {
-      setMessages((prev) => prev.filter((m) => m.id !== tempId));
-      setSendError(errorMessage(e));
-    }
-  }
-
   async function send(retry?: Local) {
-    if (retry?.sticker || retry?.stickerUrl) {
-      setMessages((prev) => prev.filter((m) => m.id !== retry.id));
-      return sendSticker({ sticker: retry.sticker ?? undefined, stickerUrl: retry.stickerUrl ?? undefined });
-    }
     const body = (retry?.body ?? draft).trim();
     const images = retry?.images ?? attach.urls;
-    if ((!body && !images.length) || !user || attach.uploading) return;
+    const chosen: StickerChoice | null = retry ? (retry.sticker || retry.stickerUrl ? { sticker: retry.sticker ?? undefined, stickerUrl: retry.stickerUrl ?? undefined } : null) : sticker;
+    if ((!body && !images.length && !chosen) || !user || attach.uploading) return;
     const reply = retry?.replyTo ?? (replyTo ? { id: replyTo.id, authorName: replyTo.mine ? "You" : detail?.conversation.other.displayName ?? "Them", snippet: replyTo.body.slice(0, 120) || (replyTo.sticker || replyTo.stickerUrl ? "Sticker" : replyTo.images.length ? "Photo" : "Message"), deleted: false } : null);
     if (body.length > LIMITS.messageBody) {
       setSendError(`Messages can be up to ${LIMITS.messageBody} characters.`);
@@ -256,11 +240,12 @@ export default function ConversationPage() {
     if (!retry) {
       setDraft("");
       attach.clear();
+      setSticker(null);
       setReplyTo(null);
     }
-    setMessages((prev) => merge(prev.filter((m) => m.id !== tempId), [{ id: tempId, conversationId: id, senderId: user.id, body, sticker: null, stickerUrl: null, images, replyTo: reply, reactions: [], createdAt: new Date().toISOString(), mine: true, editedAt: null, deleted: false, pending: true } as Local]));
+    setMessages((prev) => merge(prev.filter((m) => m.id !== tempId), [{ id: tempId, conversationId: id, senderId: user.id, body, sticker: chosen?.sticker ?? null, stickerUrl: chosen?.stickerUrl ?? null, images, replyTo: reply, reactions: [], createdAt: new Date().toISOString(), mine: true, editedAt: null, deleted: false, pending: true } as Local]));
     try {
-      const res = await MessageService.send(id, { body, images, replyToId: reply?.id });
+      const res = await MessageService.send(id, { body, images, replyToId: reply?.id, ...chosen });
       setMessages((prev) => merge(prev.filter((m) => m.id !== tempId), [res.data]));
     } catch (e) {
       setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...m, pending: false, failed: true } : m)));
@@ -364,12 +349,18 @@ export default function ConversationPage() {
                     <div className="rounded-2xl border border-dashed border-line px-3.5 py-2 text-sm text-ink-muted italic">Message deleted</div>
                   ) : editingId === m.id ? (
                     <MessageEditor className="w-[min(32rem,80vw)]" initial={m.body} onCancel={() => setEditingId(null)} onSave={(body) => saveEdit(m, body)} />
-                  ) : m.sticker || m.stickerUrl ? (
+                  ) : (m.sticker || m.stickerUrl) && !m.body && !m.images?.length ? (
                     <div id={`msg-${m.id}`} className={cx("flex flex-col px-1", m.mine ? "items-end" : "items-start", m.pending && "opacity-60")}>
                       <StickerView id={m.sticker} url={m.stickerUrl} size={84} />
                       <span className="block text-right font-mono text-[10px] text-ink-muted">{m.failed ? "Not sent" : m.pending ? "Sending…" : formatTime(m.createdAt)}</span>
                     </div>
                   ) : (
+                    <>
+                    {(m.sticker || m.stickerUrl) && (
+                      <div className={cx("mb-1 px-1", m.pending && "opacity-60")}>
+                        <StickerView id={m.sticker} url={m.stickerUrl} size={84} />
+                      </div>
+                    )}
                     <div id={`msg-${m.id}`} className={cx("rounded-2xl px-3.5 py-2 text-[15px] break-words whitespace-pre-wrap transition-colors", m.mine ? "rounded-br-md bg-accent text-accent-ink" : "rounded-bl-md border border-line bg-surface text-ink", m.pending && "opacity-60")}>
                       {m.replyTo && <ReplyQuote reply={m.replyTo} onJump={jump} className={cx("whitespace-normal", m.mine ? "!text-accent-ink/80 [&_span]:!text-accent-ink/80" : "")} />}
                       {m.body}
@@ -380,6 +371,7 @@ export default function ConversationPage() {
                         {m.failed ? "Not sent" : m.pending ? "Sending…" : formatTime(m.createdAt)}
                       </span>
                     </div>
+                    </>
                   )}
                   {!m.pending && !m.failed && !m.deleted && editingId !== m.id && <ReactionBar reactions={m.reactions ?? []} canReact={detail.canSend} onToggle={(k) => void react(m, k)} mine={m.mine} />}
                 </div>
@@ -419,6 +411,7 @@ export default function ConversationPage() {
             }}
           >
             {replyTo && <ReplyingTo name={replyTo.mine ? "yourself" : other.displayName} snippet={replyTo.body.slice(0, 80) || (replyTo.sticker || replyTo.stickerUrl ? "Sticker" : "Photo")} onCancel={() => setReplyTo(null)} />}
+            <AttachedSticker choice={sticker} onRemove={() => setSticker(null)} />
             <AttachmentStrip urls={attach.urls} progress={attach.progress} error={attach.error} onRemove={attach.remove} />
             <div className="flex items-end gap-2">
             {attach.enabled && (
@@ -456,9 +449,9 @@ export default function ConversationPage() {
               <button type="button" onClick={() => setStickerOpen((o) => !o)} aria-label="Stickers" aria-expanded={stickerOpen} title="Stickers" className="inline-flex size-11 items-center justify-center rounded-full text-ink-muted transition hover:bg-raised hover:text-ink">
                 <Icon name="sticker" size={21} />
               </button>
-              {stickerOpen && <StickerPicker onPick={(c) => void sendSticker(c)} onClose={() => setStickerOpen(false)} className="absolute right-0 bottom-full mb-2" />}
+              {stickerOpen && <StickerPicker onPick={setSticker} onClose={() => setStickerOpen(false)} className="absolute right-0 bottom-full mb-2" />}
             </span>
-            <Button type="submit" variant="primary" disabled={(!draft.trim() && !attach.urls.length) || attach.uploading} aria-label="Send" className="size-11 px-0">
+            <Button type="submit" variant="primary" disabled={(!draft.trim() && !attach.urls.length && !sticker) || attach.uploading} aria-label="Send" className="size-11 px-0">
               <Icon name="send" size={18} />
             </Button>
             </div>

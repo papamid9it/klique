@@ -7,7 +7,8 @@ import { useRealtime } from "@/components/providers/RealtimeProvider";
 import { useDataSaver } from "@/lib/hooks/useDataSaver";
 import { applyReaction, type ReactionKind } from "@/lib/reactions";
 import { recallApi, rememberApi } from "./useApi";
-import type { ChannelMessageDTO, ReplyRefDTO, UserBrief } from "@/lib/types";
+import type { ChannelMessageDTO, ReactionDTO, ReplyRefDTO, UserBrief } from "@/lib/types";
+import { sendReaction } from "@/lib/reactQueue";
 
 const POLL_MS = 4000;
 /** data saver: without a live connection, look for new messages less often */
@@ -262,21 +263,21 @@ export function useChat(source: ChatSource) {
     [src, commit],
   );
 
-  /** Toggle a reaction. Shown at once, then replaced by the server's counts (rolled back if it fails). */
+  /**
+   * Toggle a reaction. Shown at once; requests go one at a time per message (fast taps never cross) and the
+   * server's counts land when the last one answers (rolled back if it fails).
+   */
   const react = useCallback(
     async (id: string, kind: ReactionKind): Promise<string | null> => {
       const before = itemsRef.current.find((m) => m.id === id)?.reactions ?? [];
       touched.current.set(id, Date.now());
       commit((prev) => prev.map((m) => (m.id === id ? { ...m, reactions: applyReaction(m.reactions, kind) } : m)));
-      try {
-        const res = await src.react(id, kind);
+      const set = (reactions: ReactionDTO[]) => {
         touched.current.set(id, Date.now());
-        commit((prev) => prev.map((m) => (m.id === id ? { ...m, reactions: res.data } : m)));
-        return null;
-      } catch (e) {
-        commit((prev) => prev.map((m) => (m.id === id ? { ...m, reactions: before } : m)));
-        return errorMessage(e);
-      }
+        commit((prev) => prev.map((m) => (m.id === id ? { ...m, reactions } : m)));
+      };
+      const err = await sendReaction(`chat:${id}`, before, async () => (await src.react(id, kind)).data, set, set);
+      return err ? errorMessage(err) : null;
     },
     [src, commit],
   );

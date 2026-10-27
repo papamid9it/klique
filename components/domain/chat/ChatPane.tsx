@@ -1,5 +1,6 @@
 "use client";
 
+import { errorMessage } from "@/app/ApiCore";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type { SpaceRef } from "@/app/services/ChannelService";
 import { channelSource, type ChatSource } from "@/app/services/ChatSource";
@@ -21,9 +22,11 @@ import { useDebounced } from "@/lib/hooks/useApi";
 import { activeMention } from "@/lib/mentions";
 import type { ChannelDTO, ChannelMessageDTO, ReplyRefDTO, UserBrief } from "@/lib/types";
 import { AttachmentStrip } from "./AttachmentStrip";
+import { Dropdown } from "@/components/ui/Dropdown";
 import { Message } from "./Message";
 import { ReplyingTo } from "./ReplyQuote";
-import { StickerPicker, type StickerChoice } from "./Reactions";
+import { AttachedSticker, StickerPicker, type StickerChoice } from "./Reactions";
+import { PollComposer } from "./Polls";
 
 const GROUP_GAP_MS = 5 * 60 * 1000;
 const dayKey = (iso: string) => new Date(iso).toLocaleDateString("en-CA", { timeZone: "Africa/Lagos" });
@@ -53,6 +56,7 @@ export function ChatPane({
   onRead,
   intro,
   placeholder,
+  closedNote,
 }: {
   /** a community or group channel (or pass `source` for any other chat, like a crew's) */
   space?: SpaceRef;
@@ -65,6 +69,8 @@ export function ChatPane({
   intro?: (empty: boolean) => ReactNode;
   /** composer hint (default "Message #channel") */
   placeholder?: string;
+  /** what a member who can't post here is told (default: the announcement / no-posting line) */
+  closedNote?: string;
 }) {
   const { user } = useAuth();
   const toast = useToast();
@@ -78,6 +84,8 @@ export function ChatPane({
   const restore = useRef<{ h: number; t: number } | null>(null);
   const prevLast = useRef<string | null>(null);
   const [unseen, setUnseen] = useState(0);
+  // scrolled well up into the history: offer the way back down ("Jump to present")
+  const [away, setAway] = useState(false);
   const [deleting, setDeleting] = useState<ChannelMessageDTO | null>(null);
   const [reporting, setReporting] = useState<ChannelMessageDTO | null>(null);
   const [replyTo, setReplyTo] = useState<ChannelMessageDTO | null>(null);
@@ -148,7 +156,9 @@ export function ChatPane({
   const onScroll = useCallback(() => {
     const el = scroller.current;
     if (!el) return;
-    atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    const fromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    atBottom.current = fromBottom < 80;
+    setAway(fromBottom > 600);
     if (atBottom.current) setUnseen(0);
     if (el.scrollTop < 200 && hasOlder && !loadingOlder && !loading) {
       restore.current = { h: el.scrollHeight, t: el.scrollTop };
@@ -225,14 +235,23 @@ export function ChatPane({
           )}
         </div>
 
-        {unseen > 0 && (
+        {unseen > 0 ? (
           <button type="button" onClick={jumpToLatest} className="absolute bottom-3 left-1/2 inline-flex -translate-x-1/2 items-center gap-2 rounded-full bg-accent px-4 py-2 text-[13px] font-semibold text-accent-ink shadow-lg">
             <Icon name="arrowdown" size={14} /> {unseen} new {unseen === 1 ? "message" : "messages"}
           </button>
+        ) : (
+          away && (
+            <div className="absolute inset-x-3 bottom-3 flex items-center justify-between gap-3 rounded-control border border-line bg-surface/95 py-1.5 pr-1.5 pl-3.5 text-[13px] shadow-lg backdrop-blur sm:inset-x-6">
+              <span className="truncate text-ink-muted">You&apos;re viewing older messages</span>
+              <button type="button" onClick={jumpToLatest} className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-accent px-3 font-semibold text-accent-ink">
+                Jump to present <Icon name="arrowdown" size={13} />
+              </button>
+            </div>
+          )
         )}
       </div>
 
-      <Composer source={src} placeholder={placeholder} channel={channel} isMember={isMember} gate={gate} send={chat.send} onSent={() => (atBottom.current = true)} replyTo={replyTo} onClearReply={() => setReplyTo(null)} />
+      <Composer source={src} placeholder={placeholder} closedNote={closedNote} channel={channel} isMember={isMember} gate={gate} send={chat.send} onSent={() => (atBottom.current = true)} onPolled={() => void chat.reload()} replyTo={replyTo} onClearReply={() => setReplyTo(null)} />
 
       <ConfirmModal
         open={!!deleting}
@@ -340,9 +359,14 @@ function Composer({
   onSent,
   replyTo,
   onClearReply,
+  closedNote,
+  onPolled,
 }: {
+  /** a poll was posted: fetch the chat so it shows */
+  onPolled: () => void;
   source: ChatSource;
   placeholder?: string;
+  closedNote?: string;
   channel: ChannelDTO;
   isMember: boolean;
   gate: ReactNode;
@@ -358,6 +382,8 @@ function Composer({
   const [text, setText] = useState("");
   const area = useRef<HTMLTextAreaElement>(null);
   const [stickers, setStickers] = useState(false);
+  const [sticker, setSticker] = useState<StickerChoice | null>(null);
+  const [polling, setPolling] = useState(false);
   const [mention, setMention] = useState<{ start: number; query: string } | null>(null);
   const [options, setOptions] = useState<UserBrief[]>([]);
   const [active, setActive] = useState(0);
@@ -387,6 +413,8 @@ function Composer({
     if (!el) return;
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 180)}px`;
+    // only a message taller than the box scrolls; a short one (or the hint) never shows a scrollbar
+    el.style.overflowY = el.scrollHeight > 180 ? "auto" : "hidden";
   };
 
   const trackMention = (value: string, caret: number) => setMention(activeMention(value, caret));
@@ -409,34 +437,31 @@ function Composer({
   async function submit() {
     const body = text.trim();
     const images = attach.urls;
-    if ((!body && !images.length) || !user || attach.uploading || slow.left > 0) return;
+    const chosen = sticker;
+    if ((!body && !images.length && !chosen) || !user || attach.uploading || slow.left > 0) return;
     const reply = replyTo ? { id: replyTo.id, authorName: replyTo.author.displayName, snippet: replyTo.body.slice(0, 120) || (replyTo.sticker || replyTo.stickerUrl ? "Sticker" : replyTo.images.length ? "Photo" : "Message"), deleted: false } : null;
     setText("");
     attach.clear();
+    setSticker(null);
     onClearReply();
     setMention(null);
     requestAnimationFrame(resize);
     onSent();
     slow.sent();
-    const err = await send({ body, images, replyTo: reply }, user);
+    const err = await send({ body, images, replyTo: reply, ...chosen }, user);
     if (err) {
       setText((t) => t || body); // never lose what they typed
       attach.restore(images);
+      setSticker((s) => s ?? chosen);
       slow.failed(err.retryAfter);
       if (!err.retryAfter) toast(err.message, "error");
       requestAnimationFrame(resize);
     }
   }
 
-  async function sendSticker(choice: StickerChoice) {
-    if (!user || slow.left > 0) return;
-    onSent();
-    slow.sent();
-    const err = await send({ body: "", ...choice }, user);
-    if (err) {
-      slow.failed(err.retryAfter);
-      if (!err.retryAfter) toast(err.message, "error");
-    }
+  function pickSticker(choice: StickerChoice) {
+    setSticker(choice);
+    requestAnimationFrame(() => area.current?.focus());
   }
 
   const bar = "border-t border-line bg-canvas px-4 py-3 sm:px-6";
@@ -456,7 +481,7 @@ function Composer({
     return (
       <div className={cx(bar, "flex items-center gap-2 text-sm text-ink-muted")}>
         <Icon name={channel.type === "announcement" ? "megaphone" : "lock"} size={15} />
-        {channel.type === "announcement" ? "Only owners and admins can post in this channel." : "You can't post in this channel."}
+        {closedNote ?? (channel.type === "announcement" ? "Only owners and admins can post in this channel." : "You can't post in this channel.")}
       </div>
     );
   }
@@ -464,6 +489,23 @@ function Composer({
   const open = !!mention && options.length > 0;
   const left = LIMITS.messageBody - text.length;
   return (
+    <>
+    {/* outside the form: the poll's own form must not sit inside this one */}
+    {polling && (
+      <PollComposer
+        onClose={() => setPolling(false)}
+        onCreate={async (poll) => {
+          try {
+            await source.send({ body: "", poll });
+            onSent();
+            onPolled();
+            return null;
+          } catch (e) {
+            return errorMessage(e);
+          }
+        }}
+      />
+    )}
     <form
       className={cx(bar, "relative")}
       onSubmit={(e) => {
@@ -506,16 +548,24 @@ function Composer({
         </p>
       )}
       {replyTo && <ReplyingTo name={replyTo.author.displayName} snippet={replyTo.body.slice(0, 80) || (replyTo.sticker || replyTo.stickerUrl ? "Sticker" : "Photo")} onCancel={onClearReply} />}
+      <AttachedSticker choice={sticker} onRemove={() => setSticker(null)} />
       <AttachmentStrip urls={attach.urls} progress={attach.progress} error={attach.error} onRemove={attach.remove} />
       <div className="flex items-end gap-2 rounded-card border border-line bg-surface p-2 focus-within:border-accent-text">
-        {attach.enabled && (
-          <>
-            <input ref={fileInput} type="file" hidden multiple accept=".jpg,.jpeg,.png,.webp,.gif,.avif,.heic,.heif" onChange={(e) => (void attach.add(e.target.files), (e.target.value = ""))} aria-label="Choose pictures" />
-            <button type="button" onClick={() => fileInput.current?.click()} disabled={attach.full || attach.uploading || slow.left > 0} aria-label="Add pictures" title="Add pictures" className="inline-flex size-10 shrink-0 items-center justify-center rounded-full text-ink-muted transition hover:bg-raised hover:text-ink disabled:opacity-40">
-              <Icon name="image" size={20} />
+        {attach.enabled && <input ref={fileInput} type="file" hidden multiple accept=".jpg,.jpeg,.png,.webp,.gif,.avif,.heic,.heif" onChange={(e) => (void attach.add(e.target.files), (e.target.value = ""))} aria-label="Choose pictures" />}
+        {/* + : add pictures, or start a poll */}
+        <Dropdown
+          label="Add to your message"
+          width={200}
+          items={[
+            ...(attach.enabled ? [{ label: "Upload pictures", icon: "image" as const, disabled: attach.full || attach.uploading, onSelect: () => fileInput.current?.click() }] : []),
+            { label: "Create a poll", icon: "topics" as const, onSelect: () => setPolling(true) },
+          ]}
+          trigger={({ props }) => (
+            <button {...props} disabled={slow.left > 0} aria-label="Add pictures or a poll" title="Add pictures or a poll" className="inline-flex size-10 shrink-0 items-center justify-center rounded-full text-ink-muted transition hover:bg-raised hover:text-ink disabled:opacity-40">
+              <Icon name="plus" size={20} />
             </button>
-          </>
-        )}
+          )}
+        />
         <label htmlFor="chat-composer" className="sr-only">
           Message #{channel.name}. Type @ to tag someone.
         </label>
@@ -574,7 +624,7 @@ function Composer({
           <button type="button" onClick={() => setStickers((o) => !o)} disabled={slow.left > 0} aria-label="Stickers" aria-expanded={stickers} title="Stickers" className="inline-flex size-10 shrink-0 items-center justify-center rounded-full text-ink-muted transition hover:bg-raised hover:text-ink disabled:opacity-40">
             <Icon name="sticker" size={20} />
           </button>
-          {stickers && <StickerPicker onPick={(c) => void sendSticker(c)} onClose={() => setStickers(false)} className="absolute right-0 bottom-full mb-2" />}
+          {stickers && <StickerPicker onPick={pickSticker} onClose={() => setStickers(false)} className="absolute right-0 bottom-full mb-2" />}
         </span>
         {left < 200 && <span className={cx("pb-2.5 font-mono text-[11px]", left < 0 ? "text-danger" : "text-ink-muted")}>{left}</span>}
         {slow.left > 0 ? (
@@ -582,7 +632,7 @@ function Composer({
             {formatWait(slow.left)}
           </span>
         ) : (
-          <button type="submit" disabled={(!text.trim() && !attach.urls.length) || attach.uploading} aria-label="Send message" className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-accent text-accent-ink transition active:scale-95 disabled:opacity-40">
+          <button type="submit" disabled={(!text.trim() && !attach.urls.length && !sticker) || attach.uploading} aria-label="Send message" className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-accent text-accent-ink transition active:scale-95 disabled:opacity-40">
             <Icon name="send" size={17} />
           </button>
         )}
@@ -591,6 +641,7 @@ function Composer({
         <kbd className="font-mono">Enter</kbd> to send · <kbd className="font-mono">Shift + Enter</kbd> for a new line · <kbd className="font-mono">@</kbd> to tag someone · paste a link to preview it
       </p>
     </form>
+    </>
   );
 }
 

@@ -1,21 +1,25 @@
-import { Schema, model, models, type Model, type Types } from "mongoose";
+import { Schema, type Model, type Types } from "mongoose";
 import { type InterestId } from "@/lib/constants";
+import { defineModel } from "./define";
 
-export const AD_SLOTS = ["home-hero", "home-feed", "home-rail", "events-list", "event-page", "search"] as const;
+export const AD_SLOTS = ["home-feed", "home-rail", "events-list", "event-page", "search", "communities"] as const;
 export type AdSlot = (typeof AD_SLOTS)[number];
 
 /**
- * An ad set up by a site admin. Either a promoted event (an existing public event shown as "Promoted")
- * or a brand ad (picture, headline, text, button and link). Always labelled "Sponsored" in the app.
+ * An ad set up by a site admin. A promoted event (an existing public event shown as "Promoted"), a brand ad
+ * (picture, headline, text, button and link), or a sponsored community (shown under "Sponsored communities" on
+ * the Communities page, only in the "communities" slot). Always labelled "Sponsored" in the app.
  * Targeted by place and scene only: nothing about the person is tracked.
  */
 export interface IAd {
   _id: Types.ObjectId;
   /** internal name, for the admin list */
   name: string;
-  kind: "event" | "brand";
+  kind: "event" | "brand" | "community";
   status: "active" | "paused";
   eventId: Types.ObjectId | null;
+  /** sponsored communities: the (public) community */
+  communityId?: Types.ObjectId | null;
   advertiser: string;
   title: string;
   body: string;
@@ -49,9 +53,10 @@ export interface IAd {
 const AdSchema = new Schema<IAd>(
   {
     name: { type: String, required: true, maxlength: 120 },
-    kind: { type: String, enum: ["event", "brand"], required: true },
+    kind: { type: String, enum: ["event", "brand", "community"], required: true },
     status: { type: String, enum: ["active", "paused"], default: "active" },
     eventId: { type: Schema.Types.ObjectId, ref: "Event", default: null },
+    communityId: { type: Schema.Types.ObjectId, ref: "Community", default: null },
     advertiser: { type: String, default: "", maxlength: 80 },
     title: { type: String, default: "", maxlength: 120 },
     body: { type: String, default: "", maxlength: 200 },
@@ -76,4 +81,4 @@ const AdSchema = new Schema<IAd>(
 );
 AdSchema.index({ status: 1, slots: 1 });
 
-export const Ad: Model<IAd> = (models.Ad as Model<IAd>) || model<IAd>("Ad", AdSchema);
+export const Ad: Model<IAd> = defineModel<IAd>("Ad", AdSchema);

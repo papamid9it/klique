@@ -8,7 +8,7 @@ import { Cover } from "@/components/ui/Cover";
 import { Icon } from "@/components/ui/Icon";
 import { getInterest } from "@/lib/constants";
 import type { CommunityCardDTO } from "@/lib/types";
-import { JoinButton } from "./JoinButton";
+import { JoinButton, PointsNeededChip } from "./JoinButton";
 import { MemberCount } from "./CommunityRow";
 
 /** Grid card for browsing communities. Private communities you're not in show a lock and nothing else. */
@@ -59,6 +59,7 @@ export function CommunityCard({ community, onChange, tag }: { community: Communi
         <p className="mt-1 line-clamp-2 min-h-10 text-[13px] text-ink-muted">
           {c.locked ? "A private community. Request to join and an admin will take a look." : c.description || `${getInterest(c.interest).name} in ${c.neighborhood || placeShort(c)}.`}
         </p>
+        {!c.viewer.isMember && <PointsNeededChip need={c.minPointsJoin} className="mt-2" />}
         <div className="mt-4 flex items-center justify-between gap-3 border-t border-line pt-3.5">
           <span className="font-mono text-[11px] text-ink-muted">
             {getInterest(c.interest).short} · <MemberCount community={c} />

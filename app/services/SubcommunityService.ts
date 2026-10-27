@@ -7,6 +7,9 @@ const api = new ApiClient();
 export interface SubcommunityInput {
   name: string;
   description?: string;
+  /** points needed to be added and to post (0: anyone) */
+  minPointsJoin?: number;
+  minPointsPost?: number;
 }
 
 export const SubcommunityService = {

@@ -13,11 +13,13 @@ import type { CommunityDTO, GroupPolicy } from "@/lib/types";
 import { CommunityForm } from "./CommunityForm";
 import { InvitesPanel } from "./InvitesPanel";
 import { MembersPanel } from "./MembersPanel";
+import { MinPointsForm } from "./MinPoints";
+import { DonationsSettings, PayoutsSettings } from "@/components/domain/money/CommunityMoney";
 import { RequestsPanel } from "./RequestsPanel";
 import { ConfirmModal } from "./parts";
 
-export type CommunityTab = "overview" | "groups" | "members" | "requests" | "invites" | "privacy" | "delete";
-const TITLES: Record<CommunityTab, string> = { overview: "Overview", groups: "Groups & events", members: "Members", requests: "Join requests", invites: "Invite links", privacy: "Privacy", delete: "Delete community" };
+export type CommunityTab = "overview" | "groups" | "posts" | "points" | "donations" | "payouts" | "members" | "requests" | "invites" | "privacy" | "delete";
+const TITLES: Record<CommunityTab, string> = { overview: "Overview", groups: "Groups & events", posts: "Posts", points: "Points needed", donations: "Donations", payouts: "Payouts", members: "Members", requests: "Join requests", invites: "Invite links", privacy: "Privacy", delete: "Delete community" };
 
 /** Discord-style full-screen community settings. Owners and admins only; the server re-checks every change. */
 export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: CommunityDTO; tab: string; onTab: (t: CommunityTab) => void; onClose: () => void; onChanged: () => Promise<void> | void }) {
@@ -33,6 +35,24 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
 
   const active = ((Object.keys(TITLES) as CommunityTab[]).includes(tab as CommunityTab) ? tab : "overview") as CommunityTab;
 
+  async function setFeed(next: GroupPolicy) {
+    try {
+      await CommunityService.update(c.slug, { feedPolicy: next });
+      toast(next === "off" ? "Posts turned off" : "Posts settings saved", "success");
+      await onChanged();
+    } catch (e) {
+      toast(errorMessage(e), "error");
+    }
+  }
+  async function setMemberEvents(next: boolean) {
+    try {
+      await CommunityService.update(c.slug, { memberEvents: next });
+      toast(next ? "Members can suggest events" : "Only owners and admins post events now", "success");
+      await onChanged();
+    } catch (e) {
+      toast(errorMessage(e), "error");
+    }
+  }
   async function setPolicy(next: GroupPolicy) {
     try {
       await CommunityService.update(c.slug, { groupPolicy: next });
@@ -61,9 +81,14 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
       items: [
         { id: "overview", label: "Overview", icon: "sliders" },
         { id: "groups", label: "Groups", icon: "folder" },
+        { id: "posts", label: "Posts", icon: "image" },
+        // the Klique community never asks for points
+        { id: "points", label: "Points needed", icon: "asterisk", hidden: c.official },
         { id: "privacy", label: "Privacy", icon: "lock", hidden: !isOwner },
       ],
     },
+    // Klique itself takes no donations
+    ...(c.official ? [] : [{ title: "Money", items: [{ id: "donations", label: "Donations", icon: "heart" as const }, { id: "payouts", label: "Payouts", icon: "coin" as const }] }]),
     {
       title: "People",
       items: [
@@ -115,8 +140,40 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
       )}
 
       {active === "groups" && (
-        <SettingsBlock title="Who can post events" intro="Events are posted by this community's owner and admins, from its Events page. A group's own owner and admins can post events in their group.">{null}</SettingsBlock>
+        <SettingsBlock title="Who can post events" intro="Owners and admins post events straight away, from the Events page. A group's own owner and admins can post in their group.">
+          <Switch
+            checked={c.memberEvents}
+            onChange={(v) => void setMemberEvents(v)}
+            label="Members can suggest events"
+            hint="A member's event waits for you or another admin to approve it (from the event, your notifications or the Dashboard). Nobody else sees it until then."
+          />
+        </SettingsBlock>
       )}
+
+      {active === "posts" && (
+        <SettingsBlock title="Posts" intro="An Instagram-style section of pictures and videos, with up and down votes and comments. Posts also reach members' home feeds.">
+          <SelectField label="Who can post" value={c.feedPolicy} onChange={(e) => void setFeed(e.target.value as GroupPolicy)}>
+            <option value="off">Nobody (Posts off)</option>
+            <option value="admins">Only owners and admins</option>
+            <option value="members">Any member</option>
+          </SelectField>
+        </SettingsBlock>
+      )}
+
+      {active === "points" && !c.official && (
+        <MinPointsForm
+          what="community"
+          join={c.minPointsJoin}
+          post={c.minPointsPost}
+          onSave={async (v) => {
+            await CommunityService.update(c.slug, v);
+            await onChanged();
+          }}
+        />
+      )}
+
+      {active === "donations" && !c.official && <DonationsSettings slug={c.slug} />}
+      {active === "payouts" && !c.official && <PayoutsSettings slug={c.slug} />}
 
       {active === "members" && <MembersPanel slug={c.slug} />}
       {active === "requests" && <RequestsPanel slug={c.slug} onDecided={onChanged} />}

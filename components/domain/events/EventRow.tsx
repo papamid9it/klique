@@ -33,8 +33,9 @@ export function EventRow({ event, onChange }: { event: EventDTO; onChange: (e: E
       </Link>
       <div className="min-w-0 flex-1">
         <p className="eyebrow truncate">{getInterest(event.interest).short}{event.subcommunity?.name ?? event.community?.name ? ` · ${event.subcommunity?.name ?? event.community?.name}` : ""}</p>
-        <h3 className="mt-0.5 truncate text-[16px] font-semibold tracking-[-0.02em]">
-          <Link href={`/events/${event.id}`} className="hover:underline">{event.title}</Link>
+        <h3 className="mt-0.5 flex min-w-0 items-center gap-2 text-[16px] font-semibold tracking-[-0.02em]">
+          <Link href={`/events/${event.id}`} className="truncate hover:underline">{event.title}</Link>
+          {event.review && <ReviewBadge status={event.review.status} />}
         </h3>
         <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[12.5px] text-ink-muted">
           <span className="inline-flex items-center gap-1"><Icon name="clock" size={12} /> {formatTime(event.startsAt)}</span>
@@ -54,12 +55,21 @@ export function EventRow({ event, onChange }: { event: EventDTO; onChange: (e: E
         <span className="inline-flex items-center gap-1 font-mono text-[11px] text-ink-muted"><Icon name="users" size={12} /> {event.goingCount}</span>
       </div>
       {event.viewer.isHost || event.isPast || (event.isFull && !going) ? (
-        <Button size="sm" href={`/events/${event.id}`}>{event.viewer.isHost ? "Hosting" : event.isPast ? "View" : "Full"}</Button>
+        <Button size="sm" href={`/events/${event.id}`}>{event.review ? "View" : event.viewer.isHost ? "Hosting" : event.isPast ? "View" : "Full"}</Button>
       ) : (
         <Button size="sm" variant={going ? "primary" : "secondary"} onClick={() => rsvp("going")} loading={busy === "rsvp"} aria-pressed={going} className={cx("shrink-0")}>
           {going ? <><Icon name="check" size={14} /> In</> : <>I&apos;m in</>}
         </Button>
       )}
     </article>
+  );
+}
+
+/** A member's event that isn't posted yet: waiting for an admin, or turned down. */
+export function ReviewBadge({ status }: { status: "pending" | "rejected" }) {
+  return (
+    <span className={cx("inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold tracking-normal", status === "pending" ? "bg-raised text-ink-muted" : "bg-danger/15 text-danger")}>
+      <Icon name={status === "pending" ? "clock" : "x"} size={11} /> {status === "pending" ? "Waiting for approval" : "Not approved"}
+    </span>
   );
 }

@@ -7,6 +7,7 @@ import { ChannelMessage } from "../models/Channel";
 import { Event } from "../models/Event";
 import { Message } from "../models/Message";
 import { Post } from "../models/Post";
+import { FeedPost } from "../models/FeedPost";
 import { Topic } from "../models/Topic";
 import { User } from "../models/User";
 import { parseUpload, uploadBase } from "./media.service";
@@ -56,6 +57,13 @@ async function referencedKeys(): Promise<Set<string>> {
   for await (const t of Topic.find({ $or: [{ imageUrl: has }, { "media.0": { $exists: true } }] }).select("imageUrl media").lean().cursor()) {
     add(t.imageUrl);
     for (const m of t.media ?? []) {
+      add(m.url);
+      add(m.poster);
+    }
+  }
+  // community posts (the Posts section): their pictures and videos, with the videos' still frames
+  for await (const p of FeedPost.find({ "media.0": { $exists: true } }).select("media").lean().cursor()) {
+    for (const m of p.media) {
       add(m.url);
       add(m.poster);
     }

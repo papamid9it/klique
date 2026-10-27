@@ -36,11 +36,11 @@ export function TopicMenu({ topic, onChange, onRemoved, className }: { topic: To
   }
 
   const items: MenuEntry[] = [
-    ...(topic.canEdit ? ([{ label: "Edit topic", icon: "edit", onSelect: () => setEditing(true) }] as MenuEntry[]) : []),
+    ...(topic.canEdit ? ([{ label: "Edit post", icon: "edit", onSelect: () => setEditing(true) }] as MenuEntry[]) : []),
     ...(topic.canModerate
       ? ([
           { label: topic.pinned ? "Unpin from top" : "Pin to top", icon: "pushpin", onSelect: () => void patch({ pinned: !topic.pinned }, topic.pinned ? "Unpinned" : "Pinned to the top") },
-          { label: topic.locked ? "Unlock comments" : "Lock comments", icon: "lock", onSelect: () => void patch({ locked: !topic.locked }, topic.locked ? "Comments unlocked" : "Comments locked") },
+          { label: topic.locked ? "Unlock replies" : "Lock replies", icon: "lock", onSelect: () => void patch({ locked: !topic.locked }, topic.locked ? "Replies unlocked" : "Replies locked") },
         ] as MenuEntry[])
       : []),
     {
@@ -59,17 +59,17 @@ export function TopicMenu({ topic, onChange, onRemoved, className }: { topic: To
         );
       },
     },
-    ...(topic.canDelete ? ([{ type: "sep" }, { label: "Delete topic", icon: "trash", danger: true, onSelect: () => setDeleting(true) }] as MenuEntry[]) : []),
+    ...(topic.canDelete ? ([{ type: "sep" }, { label: "Delete post", icon: "trash", danger: true, onSelect: () => setDeleting(true) }] as MenuEntry[]) : []),
   ];
 
   return (
     <>
       <Dropdown
         items={items}
-        label="Topic options"
+        label="Post options"
         align="right"
         trigger={({ open, props }) => (
-          <button {...props} aria-label="Topic options" title="Topic options" className={cx("inline-flex size-8 items-center justify-center rounded-full text-ink-muted transition hover:bg-raised hover:text-ink", open && "bg-raised text-ink", className)}>
+          <button {...props} aria-label="Post options" title="Topic options" className={cx("inline-flex size-8 items-center justify-center rounded-full text-ink-muted transition hover:bg-raised hover:text-ink", open && "bg-raised text-ink", className)}>
             <Icon name="more" size={17} />
           </button>
         )}
@@ -89,12 +89,12 @@ export function TopicMenu({ topic, onChange, onRemoved, className }: { topic: To
       <ConfirmModal
         open={deleting}
         onClose={() => setDeleting(false)}
-        title="Delete this topic?"
-        description="The topic and all its comments are removed for everyone. This can't be undone."
-        confirmLabel="Delete topic"
+        title="Delete this post?"
+        description="The post and all its replies are removed for everyone. This can't be undone."
+        confirmLabel="Delete post"
         onConfirm={async () => {
           await TopicService.remove(slug, topic.id);
-          toast("Topic deleted", "success");
+          toast("Post deleted", "success");
           onRemoved();
         }}
       />

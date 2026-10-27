@@ -2,13 +2,13 @@
 
 import { useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
-import { RankService } from "@/app/services/RankService";
+import { AttendanceService } from "@/app/services/AttendanceService";
+import { PointsService } from "@/app/services/PointsService";
 import { useToast } from "@/components/providers/ToastProvider";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { Modal } from "@/components/ui/Modal";
-import { useRanks } from "@/components/ui/RankBadge";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { ErrorState } from "@/components/ui/States";
 import { TextField } from "@/components/ui/Field";
@@ -18,13 +18,14 @@ import { useApi, useNow } from "@/lib/hooks/useApi";
 import type { AttendanceDTO } from "@/lib/types";
 
 /**
- * The host's "Who came?": tick off the people who showed up. Each tick earns them Hype (and the host a bit per
- * person), which is how ranks move. Opens from the event's start until a week after it ends.
+ * The host's "Who came?": tick off the people who showed up. Each tick earns them points (and the host a bit per
+ * person). Opens from the event's start until a week after it ends.
  */
 export function WhoCame({ eventId, onClose }: { eventId: string; onClose: () => void }) {
   const toast = useToast();
-  const ranks = useRanks();
-  const { data, loading, error, reload, setData } = useApi(() => RankService.attendance(eventId), [eventId], { key: `attendance:${eventId}` });
+  const { data: mine } = useApi(() => PointsService.points(), [], { key: "my-points" });
+  const worth = (id: string) => mine?.actions.find((a) => a.id === id)?.worth ?? 0;
+  const { data, loading, error, reload, setData } = useApi(() => AttendanceService.attendance(eventId), [eventId], { key: `attendance:${eventId}` });
   const [busy, setBusy] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const now = useNow();
@@ -34,7 +35,7 @@ export function WhoCame({ eventId, onClose }: { eventId: string; onClose: () => 
     // tick at once; the server answers with the real list
     setData((d: AttendanceDTO | null) => (d ? { ...d, people: d.people.map((p) => (ids.includes(p.user.id) ? { ...p, attended } : p)) } : d));
     try {
-      setData((await RankService.setAttendance(eventId, ids, attended)).data);
+      setData((await AttendanceService.setAttendance(eventId, ids, attended)).data);
     } catch (e) {
       toast(errorMessage(e), "error");
       void reload();
@@ -50,7 +51,7 @@ export function WhoCame({ eventId, onClose }: { eventId: string; onClose: () => 
   const left = people.filter((p) => !p.attended).map((p) => p.user.id);
 
   return (
-    <Modal open onClose={onClose} title="Who came?" description={`Tick off everyone who showed up. Each person gets ${ranks.actions.attend} Hype toward their rank (more if they came with a crew), and you get ${ranks.actions.hostAttendee} for each.`}>
+    <Modal open onClose={onClose} title="Who came?" description={mine ? `Tick off everyone who showed up. Each person gets ${worth("attend")} points (more if they came with a crew), and you get ${worth("hostAttendee")} for each.` : "Tick off everyone who showed up. They earn points for coming, and you earn some for each."}>
       {loading ? (
         <Skeleton className="h-48 w-full rounded-card" />
       ) : error || !data ? (

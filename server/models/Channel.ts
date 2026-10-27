@@ -48,6 +48,8 @@ export interface IChannel {
   position: number;
   /** slow mode: seconds each person waits between messages (0 = off); owners/admins don't wait */
   slowModeSec: number;
+  /** set on a board post's own chat (its replies): hidden from the channel list, opened from the post */
+  topicId?: Types.ObjectId | null;
   /** denormalised for the unread dot and "last active" */
   lastMessageId: Types.ObjectId | null;
   lastMessageAt: Date | null;
@@ -69,12 +71,14 @@ const ChannelSchema = new Schema<IChannel>(
     slowModeSec: { type: Number, default: 0, min: 0, max: 3600 },
     lastMessageId: { type: Schema.Types.ObjectId, default: null },
     lastMessageAt: { type: Date, default: null },
+    topicId: { type: Schema.Types.ObjectId, ref: "Topic", default: null },
     createdById: { type: Schema.Types.ObjectId, ref: "User", required: true },
   },
   { timestamps: { createdAt: true, updatedAt: false } },
 );
 ChannelSchema.index({ communityId: 1, subcommunityId: 1, slug: 1 }, { unique: true });
 ChannelSchema.index({ communityId: 1, subcommunityId: 1, categoryId: 1, position: 1 });
+ChannelSchema.index({ topicId: 1 }, { sparse: true });
 
 export const Channel: Model<IChannel> = defineModel<IChannel>("Channel", ChannelSchema);
 
@@ -104,6 +108,8 @@ export interface IChannelMessage {
   stickerUrl?: string | null;
   images: string[];
   replyToId: Types.ObjectId | null;
+  /** a poll posted with this message (models/Poll) */
+  pollId?: Types.ObjectId | null;
   /** set when an owner or admin pins it to the channel */
   pinnedAt: Date | null;
   pinnedById: Types.ObjectId | null;
@@ -127,6 +133,7 @@ const MessageSchema = new Schema<IChannelMessage>(
     stickerUrl: { type: String, default: null, maxlength: 600 },
     images: { type: [String], default: [] },
     replyToId: { type: Schema.Types.ObjectId, default: null },
+    pollId: { type: Schema.Types.ObjectId, ref: "Poll", default: null },
     pinnedAt: { type: Date, default: null },
     pinnedById: { type: Schema.Types.ObjectId, default: null },
     mentions: { type: [Schema.Types.ObjectId], default: [] },

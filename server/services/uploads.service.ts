@@ -4,16 +4,17 @@ import { r2Config, type UploadKind } from "../env";
 import { ApiError } from "../http/errors";
 import { rateLimit } from "../http/rate-limit";
 import type { IUser } from "../models/User";
+import { isSiteAdmin } from "../policies/hosting";
 import type { UploadSignatureDTO, UploadStatusDTO } from "@/lib/types";
 import { UPLOAD_SPECS, VARIANT_SUFFIX, type UploadVariant } from "@/lib/uploads";
 import { presignPut, publicUrlFor } from "./r2";
 
 const sid = (v: unknown) => String(v);
-const EXT: Record<string, string> = { "image/webp": "webp", "image/jpeg": "jpg", "image/gif": "gif", "video/mp4": "mp4", "video/webm": "webm" };
+const EXT: Record<string, string> = { "image/webp": "webp", "image/jpeg": "jpg", "image/gif": "gif", "image/png": "png", "application/json": "json", "video/mp4": "mp4", "video/webm": "webm" };
 
 export function uploadStatus(): UploadStatusDTO {
   const on = !!r2Config();
-  return { avatar: on, photo: on, video: on };
+  return { avatar: on, photo: on, video: on, effect: on };
 }
 
 /**
@@ -25,6 +26,7 @@ export function uploadStatus(): UploadStatusDTO {
 export async function signUpload(viewer: IUser, kind: UploadKind, files: { variant: UploadVariant; type: string; size: number }[]): Promise<UploadSignatureDTO> {
   const cfg = r2Config();
   if (!cfg) throw new ApiError(503, `${UPLOAD_SPECS[kind].label} uploads aren't set up yet.`, { code: "uploads_not_configured" });
+  if (kind === "effect" && !isSiteAdmin(viewer)) throw new ApiError(403, "Only the Klique team uploads profile effects.");
   rateLimit(`upload:${sid(viewer._id)}`, 40, 10 * 60_000);
 
   const spec = UPLOAD_SPECS[kind];

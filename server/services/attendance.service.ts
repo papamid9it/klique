@@ -12,13 +12,13 @@ import { canViewEvent, spaceAccess } from "../policies/access";
 import { isSiteAdmin } from "../policies/hosting";
 import { GHOST, loadBriefs } from "../serializers";
 import { sid } from "./helpers";
-import { awardHype } from "./hype.service";
+import { awardPoints } from "./points.service";
 
 /**
  * "Who came?": once an event has started, its host (or an admin of its community) ticks off the people who
- * actually showed up. That's what Hype for events is built on: the attendee gets Hype for coming (plus a bit
+ * actually showed up. That's what points for events are built on: the attendee gets points for coming (plus a bit
  * more if they came with a crew), and the host gets some for each person who came. Open from the start until
- * a week after the end. Unticking someone takes the tick away but not Hype already given.
+ * a week after the end. Unticking someone takes the tick away but not points already given.
  */
 
 const WINDOW_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
@@ -83,9 +83,9 @@ export async function setAttendance(viewer: IUser, id: string, userIds: string[]
   let hostRoom = Math.max(0, HOST_MAX - (counted - fresh.length));
 
   for (const r of fresh) {
-    await awardHype(r.userId, "attend", ref);
-    if (inCrew.has(sid(r.userId))) await awardHype(r.userId, "crew", ref);
-    if (hostRoom-- > 0) await awardHype(event.hostId, "hostAttendee", `${ref}:${sid(r.userId)}`);
+    await awardPoints(r.userId, "attend", ref, event.hostId);
+    if (inCrew.has(sid(r.userId))) await awardPoints(r.userId, "crew", ref, event.hostId);
+    if (hostRoom-- > 0) await awardPoints(event.hostId, "hostAttendee", `${ref}:${sid(r.userId)}`, r.userId);
   }
   return getAttendance(viewer, id);
 }

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { DATE_FILTERS } from "@/lib/dates";
-import { DM_POLICIES, LIMITS, PROFILE_VISIBILITY, REPORT_REASONS, SLOW_MODE_STEPS } from "@/lib/constants";
+import { DM_POLICIES, LIMITS, PRESENCES, PROFILE_VISIBILITY, REPORT_REASONS, SLOW_MODE_STEPS } from "@/lib/constants";
 import { FRAME_IDS, NAME_EFFECT_IDS } from "@/lib/cosmetics";
 import { MOOD_IDS } from "@/lib/moods";
 import { REACTION_IDS, STICKER_IDS } from "@/lib/reactions";
@@ -52,6 +52,8 @@ export const changePasswordSchema = z.object({
 export const profileUpdateSchema = z.object({
   displayName: text(LIMITS.displayName, 1).optional(),
   bio: optText(LIMITS.bio),
+  pronouns: optText(LIMITS.pronouns),
+  presence: z.enum(PRESENCES.map((p) => p.id) as [string, ...string[]]).optional(),
   ...placeOptional,
   neighborhood: optText(60),
   interests: z
@@ -64,6 +66,8 @@ export const profileUpdateSchema = z.object({
   bannerColor: z.union([z.string().regex(/^#[0-9a-fA-F]{6}$/), z.literal(""), z.null()]).optional(),
   avatarFrame: z.union([z.enum(FRAME_IDS as [string, ...string[]]), z.literal(""), z.null()]).optional(),
   nameEffect: z.union([z.enum(NAME_EFFECT_IDS as [string, ...string[]]), z.literal(""), z.null()]).optional(),
+  profileTheme: z.object({ primary: z.string().regex(/^#[0-9a-fA-F]{6}$/), accent: z.string().regex(/^#[0-9a-fA-F]{6}$/) }).nullable().optional(),
+  profileEffect: z.union([z.string().regex(/^[a-z0-9-]{1,40}$/), z.literal(""), z.null()]).optional(),
   mood: z.enum(MOOD_IDS as [string, ...string[]]).optional(),
   profileVisibility: z.enum(PROFILE_VISIBILITY.map((p) => p.id) as [string, ...string[]]).optional(),
   attendancePublic: z.boolean().optional(),
@@ -86,8 +90,12 @@ export const communityCreateSchema = z.object({
   neighborhood: optText(60).default(""),
   privacy: z.enum(["public", "private"]).default("public"),
   groupPolicy: z.enum(["admins", "members", "off"]).default("admins"),
+  feedPolicy: z.enum(["admins", "members", "off"]).default("off"),
   coverImage: clearableUrl,
 });
+
+/** a points minimum to join or post (lib/points); 0 turns it off */
+const minPoints = z.number().int().min(0).max(1_000_000).optional();
 
 export const communityUpdateSchema = z.object({
   name: text(LIMITS.communityName, 3).optional(),
@@ -97,6 +105,10 @@ export const communityUpdateSchema = z.object({
   neighborhood: optText(60),
   privacy: z.enum(["public", "private"]).optional(),
   groupPolicy: z.enum(["admins", "members", "off"]).optional(),
+  feedPolicy: z.enum(["admins", "members", "off"]).optional(),
+  minPointsJoin: minPoints,
+  minPointsPost: minPoints,
+  memberEvents: z.boolean().optional(),
   coverImage: clearableUrl,
 });
 
@@ -115,6 +127,8 @@ export const subCreateSchema = z.object({
 export const subUpdateSchema = z.object({
   name: text(LIMITS.communityName, 3).optional(),
   description: optText(LIMITS.communityDescription),
+  minPointsJoin: minPoints,
+  minPointsPost: minPoints,
 });
 
 export const groupAddSchema = z.object({ userIds: z.array(objectId).min(1, "Pick at least one person").max(50) });
@@ -149,15 +163,28 @@ export const topicListQuery = pageQuery.extend({
   sort: z.enum(["hot", "new", "top"]).default("hot"),
   board: z.preprocess(blankToUndef, z.string().trim().max(40).optional()),
   q: z.preprocess(blankToUndef, z.string().trim().max(60).optional()),
+  tag: z.preprocess(blankToUndef, z.string().trim().toLowerCase().max(LIMITS.topicTag).optional()),
 });
 /** http(s) links, or the bundled sample files under /mock/ */
 const mediaUrl = z.string().trim().max(2000).refine((v) => /^https?:\/\//i.test(v) || /^\/mock\/[\w.-]+$/.test(v), "Use a full link (https://…)");
 const mediaItem = z.object({ kind: z.enum(["image", "video"]), url: mediaUrl, poster: z.union([mediaUrl, z.null()]).optional() });
+/** a community post's media: pictures, or one video on its own */
 const mediaList = z
   .array(mediaItem)
-  .max(LIMITS.topicMedia, `Up to ${LIMITS.topicMedia} pictures or videos`)
-  .refine((m) => m.filter((x) => x.kind === "video").length <= 1, "One video per topic")
+  .max(LIMITS.feedMedia, `Up to ${LIMITS.feedMedia} pictures`)
+  .refine((m) => m.filter((x) => x.kind === "video").length <= 1, "One video per post")
   .refine((m) => !m.some((x) => x.kind === "video") || m.length === 1, "A video can't be mixed with pictures");
+
+export const feedPostSchema = z
+  .object({ caption: text(LIMITS.feedCaption).default(""), media: mediaList.default([]) })
+  .refine((v) => v.media.length > 0, { path: ["media"], message: "Add a picture or a video" });
+export const feedCaptionSchema = z.object({ caption: text(LIMITS.feedCaption) });
+export const feedVoteSchema = z.object({ value: z.union([z.literal(1), z.literal(-1), z.literal(0)]) });
+export const feedCommentSchema = z.object({ body: text(LIMITS.feedComment, 1), parentId: z.preprocess(blankToUndef, objectId.optional()) });
+export const feedReactSchema = z.object({ kind: z.enum(REACTION_IDS) });
+/** a page of the home feed, or of a community's posts */
+/** `at`: when page 1 was made, so later pages rank the same posts the same way (no repeats, no gaps). */
+export const homeFeedQuery = pageQuery.extend({ at: z.coerce.number().int().positive().optional() });
 
 export const boardCreateSchema = z.object({
   name: text(LIMITS.boardName, 1).pipe(z.string().min(1, "Give the board a name")),
@@ -171,17 +198,22 @@ export const boardUpdateSchema = z.object({
   postPolicy: z.enum(["members", "admins"]).optional(),
 });
 
+/** a board post carries at most one picture (no video) */
+const postImage = z.array(z.object({ kind: z.literal("image"), url: mediaUrl, poster: z.null().optional() })).max(1, "One picture per post");
+const postTags = z.array(z.string().trim().max(LIMITS.topicTag, `Tags can be up to ${LIMITS.topicTag} characters`)).max(LIMITS.topicTags, `Up to ${LIMITS.topicTags} tags`);
 export const topicCreateSchema = z.object({
   /** which board (its slug); the first board when left out */
   board: z.string().trim().max(40).optional(),
   title: text(LIMITS.topicTitle, 3),
   body: text(LIMITS.topicBody).default(""),
-  media: mediaList.optional(),
-}).refine((v) => v.body.length > 0 || (v.media?.length ?? 0) > 0, { path: ["body"], message: "Write something, or add a picture or video" });
+  media: postImage.optional(),
+  tags: postTags.optional(),
+}).refine((v) => v.body.length > 0 || (v.media?.length ?? 0) > 0, { path: ["body"], message: "Write something, or add a picture" });
 export const topicUpdateSchema = z.object({
   title: text(LIMITS.topicTitle, 3).optional(),
   body: text(LIMITS.topicBody).optional(),
-  media: mediaList.optional(),
+  media: postImage.optional(),
+  tags: postTags.optional(),
   /** owners/admins only */
   pinned: z.boolean().optional(),
   locked: z.boolean().optional(),
@@ -207,12 +239,18 @@ const eventFields = {
   /** ISO 4217 code; defaults to the country's currency */
   currency: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/).optional(),
   online: z.boolean().default(false),
+  ticketUrl: clearableUrl,
+  onlineUrl: clearableUrl,
   capacity: z.number().int().min(1).max(100_000).optional().nullable(),
   coverImage: clearableUrl,
 };
 
+/** chipping in toward an event: so much a unit, up to so many units at a time (null switches it off) */
+const contributionInput = z.object({ label: z.string().trim().max(60).default(""), unitPrice: z.number().int().min(100).max(1_000_000), maxQuantity: z.number().int().min(1).max(100).default(1) }).nullable().optional();
+
 export const eventCreateSchema = z.object({
   ...eventFields,
+  contribution: contributionInput,
   interest: interestId.optional(),
   /** host this event inside a community / subcommunity */
   communitySlug: z.string().trim().max(80).optional(),
@@ -231,9 +269,12 @@ export const eventUpdateSchema = z.object({
   priceNaira: z.number().int().min(0).max(100_000_000).optional(),
   currency: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/).optional(),
   online: z.boolean().optional(),
+  ticketUrl: clearableUrl,
+  onlineUrl: clearableUrl,
   capacity: z.number().int().min(1).max(100_000).optional().nullable(),
   coverImage: clearableUrl,
   cancelled: z.boolean().optional(),
+  contribution: contributionInput,
 });
 
 export const eventListQuery = pageQuery.extend({
@@ -271,6 +312,15 @@ export const startConversationSchema = z.object({
   message: z.string().trim().min(1).max(LIMITS.messageBody).optional(),
 });
 const stickerUrl = z.string().trim().min(1).max(600);
+/** a poll posted in a chat: a question, 2 to 10 answers (each with an emoji if you like), and how long it runs */
+export const POLL_HOURS = [1, 4, 8, 24, 72, 168] as const;
+export const pollInput = z.object({
+  question: text(300, 1),
+  answers: z.array(z.object({ text: text(55, 1), emoji: z.preprocess(blankToUndef, z.string().trim().max(16).optional()) })).min(2, "Add at least two answers").max(10, "Up to ten answers"),
+  multiple: z.boolean().default(false),
+  anonymous: z.boolean().default(false),
+  hours: z.number().int().refine((h) => (POLL_HOURS as readonly number[]).includes(h), "Pick how long it runs").default(24),
+});
 const chatPayload = z
   .object({
     body: z.string().trim().max(2000).default(""),
@@ -279,9 +329,11 @@ const chatPayload = z
     stickerUrl: stickerUrl.optional(),
     images: z.array(mediaUrl).max(4, "Up to 4 pictures per message").default([]),
     replyToId: objectId.optional(),
+    poll: pollInput.optional(),
   })
-  .refine((v) => v.body.length > 0 || !!v.sticker || !!v.stickerUrl || v.images.length > 0, { message: "Write a message, add a picture or pick a sticker.", path: ["body"] });
+  .refine((v) => v.body.length > 0 || !!v.sticker || !!v.stickerUrl || v.images.length > 0 || !!v.poll, { message: "Write a message, add a picture or pick a sticker.", path: ["body"] });
 export const sendMessageSchema = chatPayload;
+export const pollVoteSchema = z.object({ answerIds: z.array(z.string().max(12)).max(10) });
 export const editMessageSchema = z.object({ body: z.string().trim().min(1, "A message can't be empty.").max(2000) });
 export const messageListQuery = z.object({
   before: z.preprocess(blankToUndef, objectId.optional()),
@@ -290,7 +342,7 @@ export const messageListQuery = z.object({
 /* -------------------------------- safety ---------------------------- */
 
 export const reportSchema = z.object({
-  targetType: z.enum(["user", "post", "event", "community", "subcommunity", "message", "channelMessage", "ad"]),
+  targetType: z.enum(["user", "post", "event", "community", "subcommunity", "message", "channelMessage", "ad", "feedPost"]),
   targetId: objectId,
   reason: z.enum(REPORT_REASONS.map((r) => r.id) as [string, ...string[]]),
   details: optText(LIMITS.reportDetails),
@@ -353,7 +405,7 @@ export const friendRespondSchema = z.object({ action: z.enum(["accept", "decline
 /* -------------------------------- uploads --------------------------- */
 
 export const uploadSignSchema = z.object({
-  kind: z.enum(["avatar", "photo", "video"]),
+  kind: z.enum(["avatar", "photo", "video", "effect"]),
   files: z
     .array(z.object({ variant: z.enum(["main", "sm", "poster"]), type: z.string().max(40), size: z.number().int().min(1).max(200 * 1024 * 1024) }))
     .min(1)
@@ -470,7 +522,7 @@ export const adminSourceSchema = z.object({
 
 /* --------------------------------- ads ------------------------------ */
 
-const adSlot = z.enum(["home-hero", "home-feed", "home-rail", "events-list", "event-page", "search"]);
+const adSlot = z.enum(["home-feed", "home-rail", "events-list", "event-page", "search", "communities"]);
 
 export const adServeQuery = z.object({
   slot: adSlot,
@@ -483,8 +535,9 @@ export const adServeQuery = z.object({
 
 export const adInputSchema = z.object({
   name: z.string().trim().min(1, "Give the ad a name").max(120),
-  kind: z.enum(["event", "brand"]),
+  kind: z.enum(["event", "brand", "community"]),
   eventId: z.union([objectId, z.null()]).optional(),
+  communityId: z.union([objectId, z.null()]).optional(),
   advertiser: z.string().max(80).optional(),
   title: z.string().max(120).optional(),
   body: z.string().max(200).optional(),
@@ -546,8 +599,9 @@ export const crewMessageSchema = z
     stickerUrl: stickerUrl.optional(),
     images: z.array(mediaUrl).max(4, "Up to 4 pictures per message").default([]),
     replyToId: z.string().regex(/^[a-f0-9]{24}$/).nullish(),
+    poll: pollInput.optional(),
   })
-  .refine((v) => v.body.length > 0 || !!v.sticker || !!v.stickerUrl || v.images.length > 0, { message: "Write a message, add a picture or pick a sticker.", path: ["body"] });
+  .refine((v) => v.body.length > 0 || !!v.sticker || !!v.stickerUrl || v.images.length > 0 || !!v.poll, { message: "Write a message, add a picture or pick a sticker.", path: ["body"] });
 export const crewEditSchema = z.object({ body: text(1000, 1) });
 
 /* ----------------------------- stickers ----------------------------- */
@@ -596,7 +650,7 @@ export const adCampaignSchema = z.object({
 
 const naira = z.number().int().min(0).max(100_000_000);
 export const adPricingSchema = z.object({
-  perDay: z.partialRecord(z.enum(["home-hero", "home-feed", "home-rail", "events-list", "event-page", "search"]), naira).optional(),
+  perDay: z.partialRecord(z.enum(["home-feed", "home-rail", "events-list", "event-page", "search"]), naira).optional(),
   reach: z.partialRecord(z.enum(["city", "country", "world"]), z.number().min(0.1).max(100)).optional(),
   minDays: z.number().int().min(1).max(365).optional(),
   maxDays: z.number().int().min(1).max(365).optional(),
@@ -606,38 +660,76 @@ export const adReviewSchema = z.object({ action: z.enum(["approve", "changes", "
 export const adCampaignListQuery = z.object({ status: z.enum(["review", "approved", "running", "all"]).default("review") });
 export const adVerifySchema = z.object({ reference: z.string().trim().min(6).max(80) });
 
-/* ------------------------------ points ------------------------------ */
+/* ------------------------------ Hype (bought) ------------------------------ */
 
-const pointsN = z.number().int().min(0).max(1_000_000);
-export const pointsConfigSchema = z.object({
+const hypeN = z.number().int().min(0).max(1_000_000);
+/** a design you can unlock with Hype (lib/wallet StyleKey) */
+const STYLE_KEY_RX = /^(frame|name|theme|effect|anim):[a-z0-9-]+$/;
+export const walletConfigSchema = z.object({
   packs: z
-    .array(z.object({ id: z.string().trim().regex(/^[a-z0-9-]{1,24}$/), points: z.number().int().min(1).max(1_000_000), price: z.number().int().min(100).max(10_000_000) }))
+    .array(z.object({ id: z.string().trim().regex(/^[a-z0-9-]{1,24}$/), hype: z.number().int().min(1).max(1_000_000), price: z.number().int().min(100).max(10_000_000) }))
     .min(1)
     .max(8)
     .optional(),
   unlockDays: z.number().int().min(1).max(365).optional(),
-  defaultPrice: z.object({ frame: pointsN, name: pointsN }).partial().optional(),
-  prices: z.record(z.string().regex(/^(frame|name):[a-z0-9-]+$/), pointsN).optional(),
+  defaultPrice: z.object({ frame: hypeN, name: hypeN, theme: hypeN, effect: hypeN, anim: hypeN }).partial().optional(),
+  prices: z.record(z.string().regex(STYLE_KEY_RX), hypeN).optional(),
 });
-export const styleUnlockSchema = z.object({ key: z.string().regex(/^(frame|name):[a-z0-9-]+$/), autoRenew: z.boolean().optional() });
-export const autoRenewSchema = z.object({ key: z.string().regex(/^(frame|name):[a-z0-9-]+$/), autoRenew: z.boolean() });
-export const buyPointsSchema = z.object({ packId: z.string().trim().min(1).max(24) });
-export const pointsHistoryQuery = z.object({ before: z.string().datetime().optional() });
-export const adminPointsAdjustSchema = z.object({ who: z.string().trim().min(1).max(40), amount: z.number().int().min(-1_000_000).max(1_000_000), note: z.string().trim().max(200).default("") });
-export const adminPointsUserQuery = z.object({ who: z.string().trim().min(1).max(40) });
+export const styleUnlockSchema = z.object({ key: z.string().regex(STYLE_KEY_RX), autoRenew: z.boolean().optional() });
+export const autoRenewSchema = z.object({ key: z.string().regex(STYLE_KEY_RX), autoRenew: z.boolean() });
+export const buyHypeSchema = z.object({ packId: z.string().trim().min(1).max(24) });
+export const hypeHistoryQuery = z.object({ before: z.string().datetime().optional() });
+/** Admin → Points → People: give (+) or take (−) Hype or points. */
+export const adminAdjustSchema = z.object({ who: z.string().trim().min(1).max(40), currency: z.enum(["hype", "points"]).default("hype"), amount: z.number().int().min(-1_000_000).max(1_000_000), note: z.string().trim().max(200).default("") });
+export const adminWalletUserQuery = z.object({ who: z.string().trim().min(1).max(40) });
 
-/* ------------------------------ ranks ------------------------------ */
+/* ------------------------------ points (earned) ------------------------------ */
 
-const hypeN = z.number().int().min(0).max(10_000);
-export const ranksConfigSchema = z.object({
-  ranks: z
-    .array(z.object({ name: z.string().trim().min(1).max(20), hype: z.number().int().min(0).max(10_000_000), points: z.number().int().min(0).max(1_000_000) }))
-    .min(2)
-    .max(10)
-    .optional(),
-  actions: z.object({ attend: hypeN, hostAttendee: hypeN, crew: hypeN }).partial().optional(),
-  dailyCap: z.number().int().min(1).max(1_000_000).optional(),
+const pointAction = z.enum(["attend", "hostAttendee", "crew", "postUpvote", "boardUpvote", "reaction"]);
+export const pointsEarningSchema = z.object({
+  actions: z.partialRecord(pointAction, z.number().int().min(0).max(10_000)).optional(),
+  caps: z.partialRecord(pointAction, z.number().int().min(0).max(1_000_000)).optional(),
 });
+/** Admin → Profile effects: an uploaded animation, its still picture, a name and a Hype price (null: the default). */
+export const profileEffectSchema = z.object({
+  name: z.string().trim().min(1, "Give it a name").max(40),
+  kind: z.enum(["image", "lottie"]),
+  fileUrl: z.string().trim().url().max(1000),
+  previewUrl: z.string().trim().url().max(1000),
+  price: z.number().int().min(0).max(1_000_000).nullable().optional(),
+  active: z.boolean().optional(),
+});
+
+/* ------------------------------ money ------------------------------ */
+
+export const moneyConfigSchema = z.object({
+  donationFeePercent: z.number().min(0).max(50).optional(),
+  contributionFeePercent: z.number().min(0).max(50).optional(),
+  minPayout: z.number().int().min(100).max(10_000_000).optional(),
+});
+export const donationButtonSchema = z.object({
+  title: z.string().trim().min(1, "Give it a name").max(60),
+  description: z.string().trim().max(300).optional(),
+  goal: z.number().int().min(100).max(1_000_000_000).nullable().optional(),
+  active: z.boolean().optional(),
+});
+/** a donation: they must tick that donations can't be refunded */
+export const donateSchema = z.object({ buttonId: objectId, amount: z.number().int().min(100).max(5_000_000), message: z.string().trim().max(200).optional(), agree: z.literal(true, { message: "Tick that you understand donations can't be refunded." }) });
+/** a contribution: they must tick the refund terms */
+export const contributeSchema = z.object({ quantity: z.number().int().min(1).max(100), agree: z.literal(true, { message: "Tick that you've read how refunds work." }) });
+export const payVerifySchema = z.object({ reference: z.string().trim().regex(/^k(dn|ct)_[a-f0-9]{18}$/, "That isn't a payment reference.") });
+export const payoutRequestSchema = z.object({
+  useSaved: z.boolean().optional(),
+  bankCode: z.string().trim().max(20).optional(),
+  bankName: z.string().trim().max(80).optional(),
+  accountNumber: z.string().trim().max(20).optional(),
+  accountName: z.string().trim().max(120).optional(),
+});
+export const payoutDecisionSchema = z.object({ decision: z.enum(["paid", "rejected"]), reference: z.string().trim().max(120).optional(), note: z.string().trim().max(300).optional() });
+export const payoutListQuery = z.object({ status: z.enum(["requested", "paid", "rejected", "all"]).default("requested") });
+
+/** An owner or admin deciding on a member's event: a reason is needed to turn one down. */
+export const eventReviewSchema = z.object({ decision: z.enum(["approve", "reject"]), reason: z.string().trim().max(500).default("") });
 export const attendanceSchema = z.object({ userIds: z.array(z.string().regex(/^[a-f0-9]{24}$/)).min(1).max(500), attended: z.boolean() });
 
 /** Admin → Categories: the whole list, in order. */

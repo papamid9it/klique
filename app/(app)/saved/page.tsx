@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { EventService } from "@/app/services/EventService";
 import { EventCard } from "@/components/domain/EventCard";
+import { CommunitiesPanel } from "@/components/layout/CommunitiesPanel";
 import { PageBanner, PillTabs } from "@/components/layout/PageTitle";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { Button } from "@/components/ui/Button";
@@ -82,6 +83,7 @@ export default function SavedPage() {
 
   return (
     <div>
+      <CommunitiesPanel section="saved" />
       <PageBanner
         eyebrow="Your calendar"
         title="Your events"

@@ -33,6 +33,9 @@ export interface EventInput {
   city: CityId;
   neighborhood?: string;
   online?: boolean;
+  /** "" or null clears it */
+  ticketUrl?: string | null;
+  onlineUrl?: string | null;
   venue: string;
   /** ISO 8601 */
   startsAt: string;
@@ -41,6 +44,8 @@ export interface EventInput {
   currency?: string;
   capacity?: number | null;
   coverImage?: string | null;
+  /** chipping in toward it (null switches it off) */
+  contribution?: { label: string; unitPrice: number; maxQuantity: number } | null;
   /** host inside a community / one of its groups (you must be a member) */
   communitySlug?: string;
   subSlug?: string;
@@ -64,6 +69,8 @@ export const EventService = {
   update: (id: string, patch: Partial<Omit<EventInput, "communitySlug" | "subSlug">> & { cancelled?: boolean }) =>
     api.patch<Envelope<EventDTO>>(`/api/events/${id}`, patch),
   remove: (id: string) => api.delete<Envelope<{ deleted: boolean }>>(`/api/events/${id}`),
+  /** an owner or admin deciding on a member's event (a reason is needed to turn it down) */
+  review: (id: string, decision: "approve" | "reject", reason = "") => api.post<Envelope<EventDTO>>(`/api/events/${id}/review`, { decision, reason }),
 
   rsvp: (id: string, status: RsvpStatus = "going") => api.post<Envelope<EventDTO>>(`/api/events/${id}/rsvp`, { status }),
   cancelRsvp: (id: string) => api.delete<Envelope<EventDTO>>(`/api/events/${id}/rsvp`),

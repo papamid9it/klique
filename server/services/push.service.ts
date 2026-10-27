@@ -5,7 +5,7 @@ import { expoAccessToken, webPushConfig } from "../env";
 import { PushToken } from "../models/PushToken";
 import { WebPushSubscription, type IWebPushSubscription } from "../models/WebPushSubscription";
 import { User, type IUser } from "../models/User";
-import { Notification } from "../models/Notification";
+import { Notification, type NotifyAction } from "../models/Notification";
 import { notifyPrefsOf, type NotifyCategory } from "@/lib/notifications";
 import { publish, rtChannel } from "./realtime";
 import { sid } from "./helpers";
@@ -147,6 +147,12 @@ export interface NotifyMeta {
    * inbox line). For chatty things like crew chat.
    */
   pushOnce?: boolean;
+  /** who did it: their face shows on the inbox line ("Ngozi and 2 others") */
+  actorId?: Types.ObjectId | string;
+  /** a picture for the inbox line (an event's cover) */
+  image?: string | null;
+  /** answered right from the inbox line: Accept / Decline, Going */
+  action?: NotifyAction;
 }
 
 const INBOX_DAYS = 60;
@@ -157,14 +163,16 @@ async function toInbox(ids: string[], p: PushPayload, meta: NotifyMeta) {
   await Promise.all(
     ids.map(async (userId) => {
       if (meta.groupKey) {
-        const open = await Notification.findOne({ userId, groupKey: meta.groupKey, read: false }).select("count").lean<{ _id: Types.ObjectId; count: number }>();
+        const open = await Notification.findOne({ userId, groupKey: meta.groupKey, read: false }).select("count actorIds").lean<{ _id: Types.ObjectId; count: number; actorIds?: Types.ObjectId[] }>();
         if (open) {
           const count = open.count + 1;
-          await Notification.updateOne({ _id: open._id }, { $set: { title: meta.many?.(count) ?? p.title, body: p.body, href, expiresAt }, $inc: { count: 1 } });
+          // the newest three different people, newest first
+          const actorIds = meta.actorId ? [String(meta.actorId), ...(open.actorIds ?? []).map(String).filter((a) => a !== String(meta.actorId))].slice(0, 3) : open.actorIds;
+          await Notification.updateOne({ _id: open._id }, { $set: { title: meta.many?.(count) ?? p.title, body: p.body, href, expiresAt, actorIds, ...(meta.image !== undefined ? { image: meta.image } : {}), action: count > 1 && meta.action?.kind !== "event" ? null : (meta.action ?? null) }, $inc: { count: 1 } });
           return;
         }
       }
-      await Notification.create({ userId, category: meta.category, title: p.title, body: p.body, href, groupKey: meta.groupKey ?? null, expiresAt });
+      await Notification.create({ userId, category: meta.category, title: p.title, body: p.body, href, groupKey: meta.groupKey ?? null, expiresAt, actorIds: meta.actorId ? [meta.actorId] : [], image: meta.image ?? null, action: meta.action ?? null });
     }),
   );
 }

@@ -113,3 +113,28 @@ export const getNameEffect = (id?: string | null) => NAME_EFFECTS.find((f) => f.
 
 /** Quick banner colours (people can also upload a picture). */
 export const BANNER_COLORS = ["#c8f560", "#a79bff", "#ff6b4a", "#38bdf8", "#ff71ce", "#f5c542", "#34d399", "#7c3aed", "#ef4444", "#64748b", "#ffffff", "#111111"];
+
+/* ---------------- profile themes and effects ---------------- */
+
+/** Quick colours for themes (people can pick any colour too). */
+export const STYLE_COLORS = ["#ffffff", "#ff4d6d", "#ff9f1c", "#ffd60a", "#3bff8f", "#22d3ee", "#4d7cff", "#a855f7", "#ff2bd6", "#c8f560", "#111111"];
+
+
+/** Two colours that tint the whole profile card, like Nitro themes. */
+export interface ProfileTheme {
+  primary: string;
+  accent: string;
+}
+export const THEME_PRESETS: { name: string; primary: string; accent: string }[] = [
+  { name: "Dusk", primary: "#2b1055", accent: "#d53369" },
+  { name: "Lagoon", primary: "#0f2027", accent: "#2c7a8c" },
+  { name: "Ember", primary: "#3a0d0d", accent: "#ff7a18" },
+  { name: "Mint", primary: "#0b3d2e", accent: "#5ee7b0" },
+  { name: "Candy", primary: "#ff8fb8", accent: "#7f5af0" },
+  { name: "Gold", primary: "#2d2205", accent: "#e8b923" },
+];
+
+/* Profile effects are uploaded by site admins (models/ProfileEffect): see components/ui/ProfileEffect. */
+
+/** An uploaded picture that moves (avatars and banners need "Animated avatar & banner" for these). */
+export const isAnimatedPicture = (url?: string | null) => !!url && /\.gif($|[?#])/i.test(url.split("#")[0]);

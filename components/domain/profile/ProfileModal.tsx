@@ -1,8 +1,11 @@
 "use client";
 
+import { ProfileEffect } from "@/components/ui/ProfileEffect";
+import { themeStyle } from "@/components/ui/profileTheme";
 import { placeLabel } from "@/lib/places";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { FriendService } from "@/app/services/FriendService";
 import { ProfileService } from "@/app/services/ProfileService";
 import { Avatar } from "@/components/ui/Avatar";
 import { InterestChip } from "@/components/ui/Chip";
@@ -14,7 +17,8 @@ import { getInterest } from "@/lib/constants";
 import { compactCount, dateChip } from "@/lib/format";
 import { useApi } from "@/lib/hooks/useApi";
 import type { CommunityCardDTO, EventDTO, UserBrief } from "@/lib/types";
-import { longDate, monthYear, ProfileActions, ProfileBanner, useMutualCommunities, ZoomAvatar } from "./ProfileParts";
+import { longDate, monthYear, PresenceDot, ProfileActions, ProfileBanner, useMutualCommunities, ZoomAvatar } from "./ProfileParts";
+import { PointsPill } from "./ProfileCard";
 import { UserName } from "@/components/ui/UserName";
 
 type Tab = "activity" | "friends" | "communities";
@@ -72,11 +76,16 @@ function Empty({ children }: { children: React.ReactNode }) {
   return <p className="rounded-card border border-dashed border-line p-6 text-center text-sm text-ink-muted">{children}</p>;
 }
 
-/** The big profile: identity + actions on the left, Activity / Mutual friends / Mutual communities on the right. */
+/**
+ * The full profile (Discord's): identity, actions and details on the left; on the right Activity, Mutual
+ * communities and Mutual friends, or for yourself About, Your communities and Friends.
+ */
 function ProfileBody({ handle, onClose, onOpenPerson }: { handle: string; onClose: () => void; onOpenPerson: (handle: string) => void }) {
   const { data: view, loading, status, setData, reload } = useApi(() => ProfileService.get(handle), [handle], { key: `profile:${handle}` });
   const mutual = useMutualCommunities(view);
   const [tab, setTab] = useState<Tab>("activity");
+  // your own friends (for others, the mutual ones come with the profile)
+  const myFriends = useApi(view?.isSelf ? () => FriendService.list() : null, [view?.isSelf]);
 
   if (loading) {
     return (
@@ -98,26 +107,39 @@ function ProfileBody({ handle, onClose, onOpenPerson }: { handle: string; onClos
 
   const p = view.profile;
   const place = [p.neighborhood, placeLabel(p)].filter(Boolean).join(", ");
-  const tabs: { id: Tab; label: string }[] = [
-    { id: "activity", label: "Activity" },
-    ...(view.isSelf ? [] : [{ id: "friends" as const, label: view.mutualFriends.length ? `Mutual friends · ${view.mutualFriends.length}` : "Mutual friends" }]),
-    { id: "communities", label: view.isSelf ? `Communities · ${view.communities.length}` : mutual.length ? `Mutual communities · ${mutual.length}` : "Mutual communities" },
-  ];
+  const friends = view.isSelf ? (myFriends.data ?? []).map((f) => f.user) : view.mutualFriends;
+  const tabs: { id: Tab; label: string }[] = view.isSelf
+    ? [
+        { id: "activity", label: "About" },
+        { id: "communities", label: `Your communities · ${view.communities.length}` },
+        { id: "friends", label: friends.length ? `Friends · ${friends.length}` : "Friends" },
+      ]
+    : [
+        { id: "activity", label: "Activity" },
+        { id: "communities", label: mutual.length ? `Mutual communities · ${mutual.length}` : "Mutual communities" },
+        { id: "friends", label: friends.length ? `Mutual friends · ${friends.length}` : "Mutual friends" },
+      ];
   const upcoming = view.upcomingEvents;
 
   return (
-    <div className="flex max-h-[88dvh] flex-col overflow-y-auto md:min-h-[28rem] md:flex-row md:overflow-hidden">
-      {/* ------------------------------ identity ------------------------------ */}
-      <aside className="shrink-0 border-b border-line bg-raised/40 md:w-[19rem] md:overflow-y-auto md:border-r md:border-b-0">
-        <ProfileBanner handle={p.handle} bannerUrl={p.bannerUrl} bannerColor={p.bannerColor} className="h-24" zoomable />
-        <div className="px-5 pb-5">
-          <span className="-mt-11 inline-block rounded-full bg-surface p-1.5">
+    <div className="flex h-full flex-col overflow-y-auto sm:max-h-[88dvh] md:min-h-[34rem] md:flex-row md:overflow-hidden">
+      {/* ------------------------------ identity (tinted by their theme, with their effect over it) ------------------------------ */}
+      <aside className={cx("relative shrink-0 border-b border-line md:w-[22rem] md:overflow-y-auto md:border-r md:border-b-0", !p.profileTheme && "bg-raised/40")} style={themeStyle(p.profileTheme)}>
+        <ProfileEffect id={p.profileEffect} />
+        <ProfileBanner handle={p.handle} bannerUrl={p.bannerUrl} bannerColor={p.bannerColor} className="h-32" zoomable />
+        <div className="relative px-5 pb-5">
+          <span className="relative -mt-14 inline-block rounded-full bg-surface p-1.5">
             <ZoomAvatar url={p.avatarUrl} name={p.displayName}>
-              <Avatar name={p.displayName} src={p.avatarUrl} frame={p.avatarFrame} size={88} />
+              <Avatar name={p.displayName} src={p.avatarUrl} frame={p.avatarFrame} size={104} />
             </ZoomAvatar>
+            <PresenceDot presence={p.presence} className="right-2 bottom-2 size-[22px]" />
           </span>
           <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] break-words"><UserName name={p.displayName} effect={p.nameEffect} /></h2>
-          <p className="font-mono text-[13px] text-ink-muted">@{p.handle}</p>
+          <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[13px] text-ink-muted">
+            <span className="font-mono">@{p.handle}</span>
+            {p.pronouns && <span>· {p.pronouns}</span>}
+            <PointsPill n={p.points} />
+          </p>
 
           <div className="mt-4">
             <ProfileActions view={view} layout="stack" onFriendship={(friendship) => setData((d) => (d ? { ...d, friendship } : d))} onReload={() => void reload()} onNavigate={onClose} />
@@ -206,10 +228,10 @@ function ProfileBody({ handle, onClose, onOpenPerson }: { handle: string; onClos
               {upcoming.length === 0 && view.hostedEvents.length === 0 && !view.attendanceHidden && <Empty>No recent activity.</Empty>}
             </>
           ) : tab === "friends" ? (
-            view.mutualFriends.length ? (
-              view.mutualFriends.map((u) => <PersonListRow key={u.id} u={u} onOpen={onOpenPerson} />)
+            friends.length ? (
+              friends.map((u) => <PersonListRow key={u.id} u={u} onOpen={onOpenPerson} />)
             ) : (
-              <Empty>No mutual friends yet.</Empty>
+              <Empty>{view.isSelf ? "No friends yet. Add people from their profile." : "No mutual friends yet."}</Empty>
             )
           ) : (view.isSelf ? view.communities : mutual).length ? (
             (view.isSelf ? view.communities : mutual).map((c) => <CommunityListRow key={c.id} c={c} onNavigate={onClose} />)
@@ -241,10 +263,10 @@ export function ProfileModal({ handle, onClose, onOpenPerson }: { handle: string
       onClick={(e) => {
         if (e.target === ref.current) onClose();
       }}
-      className="m-auto w-[calc(100%-1.5rem)] max-w-3xl overflow-hidden rounded-card border border-line bg-surface p-0 text-ink shadow-2xl backdrop:bg-black/60 backdrop:backdrop-blur-sm"
+      className="m-0 h-dvh max-h-none w-full max-w-none overflow-hidden border-line bg-surface p-0 text-ink shadow-2xl backdrop:bg-black/60 backdrop:backdrop-blur-sm sm:m-auto sm:h-auto sm:max-h-[88dvh] sm:w-[calc(100%-1.5rem)] sm:max-w-[900px] sm:rounded-card sm:border"
     >
       {handle && (
-        <div className="relative">
+        <div className="relative h-full">
           <button type="button" onClick={onClose} aria-label="Close" className="absolute top-3 right-3 z-10 inline-flex size-9 items-center justify-center rounded-full bg-surface/80 text-ink-muted backdrop-blur hover:bg-raised hover:text-ink">
             <Icon name="x" />
           </button>

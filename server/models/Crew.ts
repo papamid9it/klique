@@ -114,6 +114,8 @@ export interface ICrewMessage {
   deletedAt?: Date | null;
   /** the message this one answers */
   replyToId: Types.ObjectId | null;
+  /** a poll posted with this message (models/Poll) */
+  pollId?: Types.ObjectId | null;
   expiresAt: Date;
   createdAt: Date;
 }
@@ -130,6 +132,7 @@ const CrewMessageSchema = new Schema<ICrewMessage>(
     editedAt: { type: Date, default: null },
     deletedAt: { type: Date, default: null },
     replyToId: { type: Schema.Types.ObjectId, ref: "CrewMessage", default: null },
+    pollId: { type: Schema.Types.ObjectId, ref: "Poll", default: null },
     expiresAt: { type: Date, required: true },
   },
   { timestamps: { createdAt: true, updatedAt: false } },

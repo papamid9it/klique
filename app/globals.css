@@ -23,6 +23,9 @@
   --color-accent2-text: var(--accent2-text);
   --color-danger: var(--danger);
   --color-success: var(--success);
+  /* votes look the same in every mood: up green, down red */
+  --color-vote-up: #22c55e;
+  --color-vote-down: #f2384a;
 
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
@@ -152,25 +155,53 @@ body {
   border-radius: 0.75rem;
 }
 
-/* Thin, themed scrollbars. */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--accent) var(--raised);
+/* Scrollbars stay out of sight: a clear track, and a thin thumb that only shows (dim, tinted from the ink colour, so
+   light moods get a dark tint) while you're over, focused in or scrolling the thing that scrolls. The bar keeps its
+   room all the time, so nothing shifts when it appears. Browsers that support scrollbar-color (Firefox, Chrome
+   121+) use it; older WebKit uses the ::-webkit rules. Touch screens keep their own overlay scrollbars. */
+@media (hover: hover) {
+  * {
+    scrollbar-width: thin;
+    /* ink at 0%, not "transparent": fading from transparent passes through black */
+    scrollbar-color: color-mix(in oklab, var(--ink) 0%, transparent) transparent;
+    transition: scrollbar-color 0.2s;
+  }
+  *:hover,
+  *:focus-within,
+  [data-scrolling] {
+    scrollbar-color: color-mix(in oklab, var(--ink) 10%, transparent) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  *::-webkit-scrollbar-track,
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 999px;
+  }
+  *:hover::-webkit-scrollbar-thumb,
+  *:focus-within::-webkit-scrollbar-thumb,
+  [data-scrolling]::-webkit-scrollbar-thumb {
+    background: color-mix(in oklab, var(--ink) 10%, transparent);
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in oklab, var(--ink) 20%, transparent);
+  }
 }
-*::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+
+/* A hint never wraps (a long "Message #channel-name" ends in …), and an empty text box never shows a scrollbar. */
+textarea::placeholder,
+input::placeholder {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-*::-webkit-scrollbar-track {
-  background: var(--raised);
-  border-radius: 999px;
-}
-*::-webkit-scrollbar-thumb {
-  background: var(--accent);
-  border-radius: 999px;
-}
-*::-webkit-scrollbar-corner {
-  background: transparent;
+textarea:placeholder-shown {
+  overflow-y: hidden;
 }
 
 /* Rows that can scroll sideways (tab strips, the rail on phones) but never show a bar. */
@@ -288,3 +319,123 @@ button:hover > .emoji-hover {
 @media (prefers-reduced-motion: reduce) {
   .kq-ring, .kq-glow, .kq-orbit, .kq-name, .kq-name::before, .kq-name::after { animation: none !important; }
 }
+
+/* double-tap upvote on a feed post: pops where you tapped, floats up and fades */
+.vote-burst {
+  animation: vote-burst 0.8s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+@keyframes vote-burst {
+  0% { transform: scale(0.3); opacity: 0; }
+  20% { transform: scale(1.15); opacity: 1; }
+  35% { transform: scale(0.95); }
+  70% { transform: translateY(-14px) scale(1); opacity: 1; }
+  100% { transform: translateY(-34px) scale(0.9); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vote-burst { animation: vote-burst-fade 0.6s ease-out both; }
+}
+@keyframes vote-burst-fade {
+  0%, 60% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* donate buttons: gold, with a slow shine passing over (still when reduced motion is on) */
+.btn-gold {
+  position: relative;
+  overflow: hidden;
+  color: #2b1d00;
+  background: linear-gradient(135deg, #f7d774 0%, #e8b923 45%, #f5cf55 70%, #d9a514 100%);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.35) inset, 0 6px 18px -8px rgba(232, 185, 35, 0.7);
+}
+.btn-gold::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 30%, rgba(255, 255, 255, 0.55) 48%, transparent 66%);
+  transform: translateX(-120%);
+  animation: gold-shine 3.2s ease-in-out infinite;
+  pointer-events: none;
+}
+.btn-gold:hover {
+  filter: brightness(1.05);
+}
+@keyframes gold-shine {
+  0%, 55% { transform: translateX(-120%); }
+  100% { transform: translateX(120%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn-gold::after { animation: none; }
+}
+
+/*
+ * A community's donate button: an ordinary button at rest (the usual border and colours). On hover or focus a
+ * bright gold light runs round the border (a conic gradient turning, masked to the 1.5px ring), and nothing else
+ * changes: no glow, no fill, the text and heart keep their colour. Reduced motion: no movement, just a gold border.
+ */
+@property --donate-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+.donate-btn {
+  position: relative;
+  isolation: isolate;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  transition: border-color 0.2s;
+}
+.donate-btn::before {
+  content: "";
+  position: absolute;
+  inset: -1.5px;
+  z-index: -1;
+  padding: 1.5px;
+  border-radius: inherit;
+  background: conic-gradient(from var(--donate-angle), transparent 0 70%, #f5c542 85%, #fff3c4 90%, #f5c542 95%, transparent);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+}
+.donate-btn:hover,
+.donate-btn:focus-visible {
+  border-color: transparent;
+}
+.donate-btn:hover {
+  outline: none;
+}
+/* keyboard only: a plain outline, no glow */
+.donate-btn:focus-visible {
+  outline: 2px solid var(--ink-muted);
+  outline-offset: 2px;
+}
+.donate-btn:hover::before,
+.donate-btn:focus-visible::before {
+  opacity: 1;
+  animation: donate-trace 2s linear infinite;
+}
+@keyframes donate-trace {
+  to {
+    --donate-angle: 360deg;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .donate-btn::before {
+    display: none;
+  }
+  .donate-btn:hover,
+  .donate-btn:focus-visible {
+    border-color: #f5cf55;
+  }
+}
+
+/* data saver: decorative motion stops too (it costs battery on the phones that need it most) */
+html[data-saver="on"] .kq-name,
+html[data-saver="on"] .kq-name::before,
+html[data-saver="on"] .kq-name::after {
+  animation: none !important;
+}
+

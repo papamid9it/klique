@@ -11,7 +11,7 @@ export const NOTIFY_CATEGORIES = [
   { id: "community", label: "Your communities", hint: "Your request to join was approved, you were added to a group, or made (or no longer) an admin." },
   { id: "events", label: "Events", hint: "New events in your communities and groups, events you're going to changing time or place, being cancelled or removed, and \"starting soon\"." },
   { id: "ads", label: "Your ads", hint: "Your ad was approved, needs changes, started, ends tomorrow, or ended (with its results)." },
-  { id: "points", label: "Rank, points and styles", hint: "You ranked up, points you bought, were given or had taken back, and a frame or name style ending in 3 days, renewed, or ended." },
+  { id: "points", label: "Hype and styles", hint: "Hype you bought, were given or had taken back, and a frame or name style ending in 3 days, renewed, or ended." },
   { id: "friends", label: "Friends", hint: "Friend requests, and when someone accepts yours." },
   { id: "messages", label: "Direct messages", hint: "New DMs. These already show in Messages, so this is push only.", pushOnly: true },
 ] as const;

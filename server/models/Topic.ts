@@ -2,8 +2,9 @@ import { Schema, model, models, type Model, type Types } from "mongoose";
 import { defineModel } from "./define";
 
 /**
- * Topics are a community's Reddit-style board: a titled post members discuss in threaded comments.
- * (Chat channels are the live, Discord-style side; topics are the slower, searchable side.)
+ * Topics are a community's board posts, like Discord forum posts: a title, some text and a picture, upvotes, tags,
+ * and a live chat of replies (a hidden channel with `topicId`, see channels.service). TopicComment is the older
+ * threaded-comment storage; a post's old comments move into its chat the first time it's opened.
  */
 /**
  * A board is a named section of a community's topics. Admins decide what to call them ("Updates", "Projects",
@@ -55,9 +56,11 @@ export interface ITopic {
   pinned: boolean;
   /** managers lock a topic: nobody can comment (managers excepted) */
   locked: boolean;
-  /** denormalised counters; likes/comments keep them in step */
+  /** denormalised counters: upvotes (likes) and replies in the post's chat */
   likeCount: number;
   commentCount: number;
+  /** a few short labels the poster picks, shown on the card and used to filter the board */
+  tags: string[];
   editedAt: Date | null;
   /** newest comment (or the topic itself): drives "recently active" */
   lastActivityAt: Date;
@@ -77,6 +80,7 @@ const TopicSchema = new Schema<ITopic>(
     locked: { type: Boolean, default: false },
     likeCount: { type: Number, default: 0 },
     commentCount: { type: Number, default: 0 },
+    tags: { type: [String], default: [] },
     editedAt: { type: Date, default: null },
     lastActivityAt: { type: Date, default: Date.now },
   },
@@ -88,7 +92,29 @@ TopicSchema.index({ communityId: 1, createdAt: -1 });
 TopicSchema.index({ boardId: 1, pinned: -1, createdAt: -1 });
 TopicSchema.index({ authorId: 1, createdAt: -1 });
 
-export const Topic: Model<ITopic> = (models.Topic as Model<ITopic>) || model<ITopic>("Topic", TopicSchema);
+TopicSchema.index({ boardId: 1, tags: 1 });
+
+export const Topic: Model<ITopic> = defineModel<ITopic>("Topic", TopicSchema);
+
+/** Following a post: you hear about new replies in its chat. The author follows their own post, and replying follows it. */
+export interface ITopicFollow {
+  _id: Types.ObjectId;
+  userId: Types.ObjectId;
+  topicId: Types.ObjectId;
+  createdAt: Date;
+}
+
+const FollowSchema = new Schema<ITopicFollow>(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    topicId: { type: Schema.Types.ObjectId, ref: "Topic", required: true },
+  },
+  { timestamps: { createdAt: true, updatedAt: false } },
+);
+FollowSchema.index({ topicId: 1, userId: 1 }, { unique: true });
+FollowSchema.index({ userId: 1 });
+
+export const TopicFollow: Model<ITopicFollow> = defineModel<ITopicFollow>("TopicFollow", FollowSchema);
 
 export interface ITopicComment {
   _id: Types.ObjectId;

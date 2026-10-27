@@ -1,6 +1,6 @@
 import ApiClient from "@/app/ApiCore";
 import type { NotifyPrefs } from "@/lib/notifications";
-import type { Envelope, NotificationDTO, Paginated } from "@/lib/types";
+import type { Envelope, NotificationDTO, Paginated, PendingDTO } from "@/lib/types";
 
 const api = new ApiClient();
 
@@ -13,6 +13,11 @@ export const InboxService = {
       ...(q.unread ? { unread: "1" } : {}),
     }),
   markRead: (input: { ids?: string[]; all?: true }) => api.post<Envelope<{ unread: number }>>("/api/me/notifications/read", input),
+  /** mark one read, or unread again */
+  setRead: (id: string, read: boolean) => api.patch<Envelope<{ read: boolean; unread: number }>>(`/api/me/notifications/${id}`, { read }),
+  remove: (id: string) => api.delete<Envelope<{ removed: boolean; unread: number }>>(`/api/me/notifications/${id}`),
+  /** join requests waiting on you (crews you host, private communities you run) */
+  pending: () => api.get<Envelope<PendingDTO>>("/api/me/pending"),
   prefs: () => api.get<Envelope<NotifyPrefs>>("/api/me/notify-prefs"),
   updatePrefs: (patch: Partial<Record<keyof NotifyPrefs, { inApp?: boolean; push?: boolean }>>) => api.patch<Envelope<NotifyPrefs>>("/api/me/notify-prefs", patch),
 };

@@ -1,6 +1,6 @@
 import ApiClient from "@/app/ApiCore";
 import type { CityId, InterestId } from "@/lib/constants";
-import type { CommunityCardDTO, CommunityDTO, CommunityPrivacy, Envelope, GroupPolicy, MyCommunityDTO, Paginated, SidebarDTO } from "@/lib/types";
+import type { CommunityCardDTO, CommunityDTO, CommunityPrivacy, Envelope, GroupPolicy, MyCommunityDTO, Paginated, SidebarDTO, CommunityDashboardDTO } from "@/lib/types";
 
 const api = new ApiClient();
 
@@ -24,6 +24,13 @@ export interface CommunityInput {
   neighborhood?: string;
   privacy?: CommunityPrivacy;
   groupPolicy?: GroupPolicy;
+  /** the Posts section (pictures and videos): off, or who may post */
+  feedPolicy?: GroupPolicy;
+  /** points needed to join and to post (0: anyone) */
+  minPointsJoin?: number;
+  minPointsPost?: number;
+  /** members may send events in for approval */
+  memberEvents?: boolean;
   coverImage?: string | null;
 }
 
@@ -36,5 +43,7 @@ export const CommunityService = {
   get: (slug: string) => api.get<Envelope<CommunityDTO>>(`/api/communities/${slug}`, undefined, { ttl: 15 }),
   create: (input: CommunityInput) => api.post<Envelope<CommunityDTO>>("/api/communities", input),
   update: (slug: string, patch: Partial<CommunityInput>) => api.patch<Envelope<CommunityDTO>>(`/api/communities/${slug}`, patch),
+  /** the owner's dashboard: members and growth, what's waiting for approval, this week (owners and admins) */
+  dashboard: (slug: string) => api.get<Envelope<CommunityDashboardDTO>>(`/api/communities/${slug}/dashboard`),
   remove: (slug: string) => api.delete<Envelope<{ deleted: boolean }>>(`/api/communities/${slug}`),
 };

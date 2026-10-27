@@ -1,7 +1,7 @@
 import { boardCreateSchema, boardUpdateSchema, commentCreateSchema, commentUpdateSchema, topicCreateSchema, topicListQuery, topicUpdateSchema } from "../validators/schemas";
 import { resolveSpaceFor } from "../services/spaces.service";
 import { boardSidebar, createBoard, deleteBoard, listBoards, updateBoard } from "../services/boards.service";
-import { createComment, createTopic, deleteComment, deleteTopic, getTopic, listTopics, toggleLike, topicFeed, trendingTopics, updateComment, updateTopic } from "../services/topics.service";
+import { createComment, createTopic, deleteComment, deleteTopic, getTopic, listTopics, setFollow, toggleLike, topicFeed, trendingTopics, updateComment, updateTopic } from "../services/topics.service";
 import { remember } from "../cache";
 import { created, readJson, readQuery, withApi } from "./api";
 
@@ -71,6 +71,18 @@ export const topicLike = withApi<Topic, "required">({ auth: "required" }, async 
   return toggleLike(viewer, space, access, params.topicId);
 });
 
+/** Follow a post (hear about new replies), or stop following it. */
+export const topicFollow = withApi<Topic, "required">({ auth: "required" }, async ({ params, viewer }) => {
+  const { space, access } = await resolveSpaceFor(viewer, params.slug);
+  return setFollow(viewer, space, access, params.topicId, true);
+});
+
+export const topicUnfollow = withApi<Topic, "required">({ auth: "required" }, async ({ params, viewer }) => {
+  const { space, access } = await resolveSpaceFor(viewer, params.slug);
+  return setFollow(viewer, space, access, params.topicId, false);
+});
+
+/** Threaded comments: posts now reply in their own chat, but these stay for older app versions. */
 export const commentCreate = withApi<Topic, "required">({ auth: "required" }, async ({ req, params, viewer }) => {
   const input = await readJson(req, commentCreateSchema);
   const { space, access } = await resolveSpaceFor(viewer, params.slug);

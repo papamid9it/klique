@@ -25,12 +25,15 @@ import { CommunityInfo } from "@/components/domain/chat/CommunityInfo";
 import { GroupInfo } from "@/components/domain/chat/GroupInfo";
 import { GroupSettings } from "@/components/domain/space/GroupSettings";
 import { PostsPanel } from "@/components/domain/space/PostsPanel";
+import { FeedPanel } from "@/components/domain/feed/FeedPanel";
+import { PostsSidebar } from "@/components/domain/feed/PostsSidebar";
 import { CommunityRail } from "@/components/layout/CommunityRail";
 import { noteCommunityOpened } from "@/components/layout/prefetchCommunity";
 import { JoinButton } from "@/components/domain/JoinButton";
 import { ReportDialog } from "@/components/domain/ReportDialog";
 import { SectionHeader } from "@/components/domain/SectionHeader";
 import { GroupsView } from "@/components/domain/space/GroupsView";
+import { DashboardView } from "@/components/domain/space/DashboardView";
 import { CommunitySettings } from "@/components/domain/space/CommunitySettings";
 import { MembersPanel } from "@/components/domain/space/MembersPanel";
 import { ConfirmModal, SpaceError } from "@/components/domain/space/parts";
@@ -53,7 +56,9 @@ import { softNavigate } from "@/lib/nav";
 import type { ChannelDTO, ChannelGroupDTO, ChannelsDTO, CommunityDTO, MyCommunityDTO } from "@/lib/types";
 
 const VIEWS: Record<WorkspaceView, { label: string; icon: IconName }> = {
+  dashboard: { label: "Dashboard", icon: "sliders" },
   topics: { label: "Topics", icon: "topics" },
+  posts: { label: "Posts", icon: "image" },
   events: { label: "Events", icon: "calendar" },
   crews: { label: "Crews", icon: "pin" },
   groups: { label: "Groups", icon: "folder" },
@@ -163,6 +168,7 @@ function CommunityWorkspace({ slug }: { slug: string }) {
   const view = (
     requestedView && requestedView in viewTable &&
     (requestedView !== "members" || (gSlug ? !!g?.viewer.isMember : member)) &&
+    (requestedView !== "dashboard" || (!gSlug && !!c?.viewer.canManage)) &&
     (gSlug ? requestedView !== "groups" : requestedView !== "updates")
       ? requestedView
       : null
@@ -342,7 +348,11 @@ function CommunityWorkspace({ slug }: { slug: string }) {
   // the right panel only opens for what you're looking at: a topic's comments or a call's roster
   // on a wide screen a board with no topic open gets its sidebar (trending, rules, contributors, events)
   const boardSide = view === "topics" && !g && !threadId && activeBoard ? activeBoard : null;
-  const sideKind = threadId ? "comments" : voiceChannel ? "voice" : boardSide ? "board" : null;
+  // Posts gets one too (about the community, top posters, events)
+  const postsSide = view === "posts" && !g && !!c && (c.feedPolicy ?? "off") !== "off";
+  const sideKind = threadId ? "comments" : voiceChannel ? "voice" : boardSide ? "board" : postsSide ? "posts" : null;
+  // the wide-screen-only panels: no header button, no slide-over on narrow screens
+  const panelOnly = sideKind === "board" || sideKind === "posts";
   const side = (onNavigate?: () => void) =>
     sideKind === "comments" ? (
       <TopicSide onClose={closeTopic} bare={!!onNavigate} />
@@ -350,8 +360,10 @@ function CommunityWorkspace({ slug }: { slug: string }) {
       <VoiceSide channel={voiceChannel} communityName={g ? g.name : c.name} snapshot={voice} />
     ) : sideKind === "board" && boardSide ? (
       <BoardSidebar slug={slug} communityId={c.id} board={boardSide} onBoardChanged={() => void boardsApi.reload()} />
+    ) : sideKind === "posts" && c ? (
+      <PostsSidebar c={c} onCommunity={(next) => setData({ ...c, ...next })} />
     ) : null;
-  const sideLabel = sideKind === "comments" ? "Topic" : sideKind === "board" ? "About this board" : "Voice info";
+  const sideLabel = sideKind === "comments" ? "Post" : sideKind === "board" ? "About this board" : sideKind === "posts" ? `About ${c?.name ?? "this community"}` : "Voice info";
   const closeAbout = () => setAboutOpen(false);
 
   const headerIcon: IconName = crewOpen ? "pin" : view ? viewTable[view].icon : activeChannel?.type === "announcement" ? "megaphone" : activeChannel?.type === "voice" ? "mic" : "hash";
@@ -439,7 +451,7 @@ function CommunityWorkspace({ slug }: { slug: string }) {
               {slowModeLabel(activeChannel.slowModeSec)}
             </span>
           )}
-          {sideKind && sideKind !== "board" && (
+          {sideKind && !panelOnly && (
             <button type="button" onClick={() => setRightOpen(true)} aria-label={sideLabel} className="inline-flex size-10 shrink-0 items-center justify-center rounded-full text-ink hover:bg-raised xl:hidden">
               <Icon name={sideKind === "comments" ? "message" : "mic"} size={19} />
             </button>
@@ -458,16 +470,26 @@ function CommunityWorkspace({ slug }: { slug: string }) {
         ) : view === "events" ? (
           <Scroll inner full>
             <SectionHeader title="Events" />
-            <SpaceEvents slug={slug} subSlug={gSlug ?? undefined} canHost={g ? g.viewer.canManage : c.canHostEvents} />
+            <SpaceEvents slug={slug} subSlug={gSlug ?? undefined} canHost={g ? g.viewer.canManage : c.canHostEvents} canSubmit={!g && c.canSubmitEvents} />
+          </Scroll>
+        ) : view === "posts" && !g ? (
+          <Scroll inner>
+            <FeedPanel c={c} />
           </Scroll>
         ) : view === "topics" && !g ? (
-          <Scroll inner>
+          // the post list fills the room between the channels and an open post
+          <Scroll inner fill>
             <TopicsPanel slug={slug} communityName={c.name} isMember={member} openId={threadId} board={activeBoard} />
           </Scroll>
         ) : view === "updates" && g ? (
           <Scroll inner>
             <SectionHeader title="Updates" />
             <PostsPanel slug={slug} subSlug={g.slug} canPost={g.viewer.canPost} />
+          </Scroll>
+        ) : view === "dashboard" && !g ? (
+          <Scroll inner wide>
+            <SectionHeader title="Dashboard" />
+            <DashboardView c={c} />
           </Scroll>
         ) : view === "groups" && !g ? (
           <Scroll inner full>
@@ -529,7 +551,7 @@ function CommunityWorkspace({ slug }: { slug: string }) {
       </section>
 
       {sideKind && (
-        <aside className={cx("hidden shrink-0 border-l border-line xl:block", sideKind === "comments" ? "w-[30rem] overflow-hidden 2xl:w-[34rem]" : sideKind === "board" ? "w-[22rem] overflow-hidden 2xl:w-[24rem]" : "w-[24rem] overflow-hidden")} aria-label={sideLabel}>
+        <aside className={cx("hidden shrink-0 border-l border-line xl:block", sideKind === "comments" ? "w-[30rem] overflow-hidden 2xl:w-[34rem]" : panelOnly ? "w-[22rem] overflow-hidden 2xl:w-[24rem]" : "w-[24rem] overflow-hidden")} aria-label={sideLabel}>
           {side()}
         </aside>
       )}
@@ -561,7 +583,7 @@ function CommunityWorkspace({ slug }: { slug: string }) {
         {list(closeLeft)}
       </SlideOver>
       {/* below xl the right panel is a drawer; an open topic opens it by itself, and closing it closes the topic */}
-      <SlideOver open={(rightOpen && !!sideKind && sideKind !== "board") || (sideKind === "comments" && !wide)} onClose={sideKind === "comments" ? () => (setRightOpen(false), closeTopic()) : closeRight} side="right" title={sideLabel} wide={sideKind === "comments"}>
+      <SlideOver open={(rightOpen && !!sideKind && !panelOnly) || (sideKind === "comments" && !wide)} onClose={sideKind === "comments" ? () => (setRightOpen(false), closeTopic()) : closeRight} side="right" title={sideLabel} wide={sideKind === "comments"}>
         {side(sideKind === "comments" ? () => (setRightOpen(false), closeTopic()) : closeRight)}
       </SlideOver>
 
@@ -603,10 +625,11 @@ function CommunityWorkspace({ slug }: { slug: string }) {
 }
 
 /** Scrollable page area. `inner` constrains width for non-chat views; `wide` and `full` loosen it. */
-function Scroll({ children, inner, wide, full }: { children: ReactNode; inner?: boolean; wide?: boolean; full?: boolean }) {
+function Scroll({ children, inner, wide, full, fill }: { children: ReactNode; inner?: boolean; wide?: boolean; full?: boolean; fill?: boolean }) {
   return (
     <div className={inner ? "min-h-0 flex-1 overflow-y-auto" : "h-dvh overflow-y-auto"}>
-      {inner ? <div className={cx("mx-auto px-4 py-6 sm:px-8", full ? "max-w-6xl" : wide ? "max-w-5xl" : "max-w-3xl")}>{children}</div> : <div className="p-4 sm:p-8">{children}</div>}
+      {inner ? <div className={cx("mx-auto px-4 py-6 sm:px-8", fill ? "max-w-none" : full ? "max-w-6xl" : wide ? "max-w-5xl" : "max-w-3xl")}>{children}</div> : <div className="p-4 sm:p-8">{children}</div>}
     </div>
   );
 }
+

@@ -1,5 +1,5 @@
 import ApiClient from "@/app/ApiCore";
-import type { CityId, DmPolicy, InterestId, ProfileVisibility } from "@/lib/constants";
+import type { CityId, DmPolicy, InterestId, Presence, ProfileVisibility } from "@/lib/constants";
 import type { MoodId } from "@/lib/moods";
 import type { Envelope, Paginated, ProfileView, UserBrief, UserMe } from "@/lib/types";
 
@@ -8,6 +8,8 @@ const api = new ApiClient();
 export interface ProfileUpdate {
   displayName?: string;
   bio?: string;
+  pronouns?: string;
+  presence?: Presence;
   country?: string;
   region?: string;
   city?: CityId;
@@ -18,6 +20,8 @@ export interface ProfileUpdate {
   bannerColor?: string | null;
   avatarFrame?: string | null;
   nameEffect?: string | null;
+  profileTheme?: { primary: string; accent: string } | null;
+  profileEffect?: string | null;
   mood?: MoodId;
   profileVisibility?: ProfileVisibility;
   attendancePublic?: boolean;

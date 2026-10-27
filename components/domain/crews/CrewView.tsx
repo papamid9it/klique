@@ -17,7 +17,6 @@ import { useAuth } from "@/components/providers/AuthProvider";
 import { ProfileTrigger } from "@/components/providers/ProfileCardProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import { Avatar } from "@/components/ui/Avatar";
-import { RankBadge } from "@/components/ui/RankBadge";
 import { Button } from "@/components/ui/Button";
 import { TextArea, TextField } from "@/components/ui/Field";
 import { Icon } from "@/components/ui/Icon";
@@ -300,7 +299,6 @@ function Crew({ crew, tab, embedded, onChange, onGone, onRead, onMenu, reload }:
                 <ProfileTrigger handle={m.handle} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
                   <Avatar name={m.displayName} src={m.avatarUrl} size={30} />
                   <span className="truncate text-sm font-medium">{m.displayName}</span>
-                  <RankBadge rank={m.rank} />
                   {i === 0 && <span className="rounded bg-accent/15 px-1.5 text-[10px] font-bold tracking-wide text-accent-text uppercase">Host</span>}
                 </ProfileTrigger>
                 {isHost && i > 0 && (

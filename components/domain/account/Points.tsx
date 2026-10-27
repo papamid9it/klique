@@ -1,5 +1,6 @@
 "use client";
 
+import { ProfileEffect } from "@/components/ui/ProfileEffect";
 import { useEffect, useRef, useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
 import { PointsService } from "@/app/services/PointsService";
@@ -7,7 +8,6 @@ import { useAuth } from "@/components/providers/AuthProvider";
 import { useRealtimeEvent } from "@/components/providers/RealtimeProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import { Avatar } from "@/components/ui/Avatar";
-import { RankCard } from "./RankCard";
 import { Button } from "@/components/ui/Button";
 import { Switch } from "@/components/ui/Field";
 import { Icon } from "@/components/ui/Icon";
@@ -18,8 +18,9 @@ import { UserName } from "@/components/ui/UserName";
 import { cx } from "@/components/ui/cx";
 import { formatPrice } from "@/lib/format";
 import { useApi, useNow } from "@/lib/hooks/useApi";
-import { styleName, stylePrice, type StyleKey } from "@/lib/points";
-import type { PointTxnDTO, PointsWalletDTO, StyleUnlockDTO, UserMe } from "@/lib/types";
+import type { HypeTxnDTO, HypeWalletDTO, StyleUnlockDTO, UserMe } from "@/lib/types";
+import { styleName, stylePrice, type StyleKey } from "@/lib/wallet";
+import { PointsCard } from "./PointsCard";
 
 const DAY = 24 * 60 * 60 * 1000;
 const n = (v: number) => v.toLocaleString("en-NG");
@@ -27,36 +28,41 @@ const dayLabel = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { da
 const daysLeft = (iso: string, now: Date) => Math.max(0, Math.ceil((+new Date(iso) - +now) / DAY));
 
 /**
- * Your wallet, shared by the Points tab and the Profile style picker (same cache key, so both stay in step).
+ * Your Hype wallet, shared by the Hype & points tab and the Profile style picker (same cache key, so both stay in step).
  * Anything that changes it (buying, unlocking, an admin gift, a renewal) also updates the balance on your account.
  */
-export function usePointsWallet() {
+export function useHypeWallet() {
   const { status, user, setUser } = useAuth();
   const authed = status === "authed";
-  const api = useApi(authed ? () => PointsService.wallet() : null, [authed], { key: "points-wallet" });
-  // points arrived, a design renewed or ended: refresh
+  const api = useApi(authed ? () => PointsService.wallet() : null, [authed], { key: "hype-wallet" });
+  // Hype arrived, a design renewed or ended: refresh
   useRealtimeEvent(() => void api.reload(), { filter: (e) => e.type === "notify" && e.category === "points", debounceMs: 300 });
   const balance = api.data?.balance;
   useEffect(() => {
-    if (user && balance !== undefined && user.points !== balance) setUser({ ...user, points: balance });
+    if (user && balance !== undefined && user.hype !== balance) setUser({ ...user, hype: balance });
   }, [balance, user, setUser]);
   return api;
 }
 
 /** What one design costs you right now: free, yours until a date, or locked at a price. */
-export function styleAccess(w: PointsWalletDTO | null, key: StyleKey): { price: number; until: string | null; locked: boolean } {
+export function styleAccess(w: HypeWalletDTO | null, key: StyleKey): { price: number; until: string | null; locked: boolean } {
   if (!w || w.allFree) return { price: 0, until: null, locked: false };
   const price = stylePrice(w.config, key);
   const until = w.unlocks.find((u) => u.key === key)?.expiresAt ?? null;
   return { price, until, locked: price > 0 && !until };
 }
 
-export function StylePreview({ k, me, size = 44 }: { k: string; me: Pick<UserMe, "displayName" | "avatarUrl">; size?: number }) {
+export function StylePreview({ k, me, size = 44 }: { k: string; me: Pick<UserMe, "displayName" | "avatarUrl" | "profileTheme">; size?: number }) {
   const [kind, id] = k.split(":");
-  return kind === "frame" ? <Avatar name={me.displayName} src={me.avatarUrl ?? null} size={size} frame={id} /> : <span className="max-w-[9rem] truncate text-[15px] font-semibold"><UserName name={me.displayName} effect={id} /></span>;
+  if (kind === "frame") return <Avatar name={me.displayName} src={me.avatarUrl ?? null} size={size} frame={id} />;
+  if (kind === "name") return <span className="max-w-[9rem] truncate text-[15px] font-semibold"><UserName name={me.displayName} effect={id} /></span>;
+  const box = { width: size * 1.6, height: size };
+  if (kind === "theme") return <span className="block rounded-control" style={{ ...box, background: me.profileTheme ? `linear-gradient(165deg, ${me.profileTheme.primary}, ${me.profileTheme.accent})` : "linear-gradient(165deg, #2b1055, #d53369)" }} />;
+  if (kind === "effect") return <span className="relative block overflow-hidden rounded-control bg-raised" style={box}><ProfileEffect id={id} /></span>;
+  return <span className="inline-flex items-center justify-center rounded-control bg-raised text-accent-text" style={box}><Icon name="image" size={Math.round(size / 2.2)} /></span>;
 }
 
-function PointsPill({ value, className }: { value: number; className?: string }) {
+function HypePill({ value, className }: { value: number; className?: string }) {
   return (
     <span className={cx("inline-flex items-center gap-1 font-mono font-semibold", className)}>
       <Icon name="coin" size={14} /> {n(value)}
@@ -64,8 +70,8 @@ function PointsPill({ value, className }: { value: number; className?: string })
   );
 }
 
-/** Spend points on one design: what it is, what it costs, for how long, and renew-by-itself. */
-export function UnlockDialog({ k, wallet, me, onClose, onDone, onGetPoints }: { k: StyleKey | null; wallet: PointsWalletDTO | null; me: UserMe; onClose: () => void; onDone: (w: PointsWalletDTO) => void; onGetPoints?: () => void }) {
+/** Spend Hype on one design: what it is, what it costs, for how long, and renew-by-itself. */
+export function UnlockDialog({ k, wallet, me, onClose, onDone, onGetHype }: { k: StyleKey | null; wallet: HypeWalletDTO | null; me: UserMe; onClose: () => void; onDone: (w: HypeWalletDTO) => void; onGetHype?: () => void }) {
   const toast = useToast();
   const [autoRenew, setAutoRenew] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -99,26 +105,26 @@ export function UnlockDialog({ k, wallet, me, onClose, onDone, onGetPoints }: { 
         <dl className="space-y-1.5 text-sm">
           <div className="flex justify-between">
             <dt className="text-ink-muted">{until ? `Another ${days} days` : `${days} days`}</dt>
-            <dd><PointsPill value={price} /></dd>
+            <dd><HypePill value={price} /></dd>
           </div>
           <div className="flex justify-between">
-            <dt className="text-ink-muted">Your points</dt>
-            <dd><PointsPill value={wallet.balance} className={short ? "text-danger" : undefined} /></dd>
+            <dt className="text-ink-muted">Your Hype</dt>
+            <dd><HypePill value={wallet.balance} className={short ? "text-danger" : undefined} /></dd>
           </div>
         </dl>
-        {!until && <Switch checked={autoRenew} onChange={setAutoRenew} label="Renew by itself" hint={`Every ${days} days from your points. We'll tell you 3 days before if you're short.`} />}
+        {!until && <Switch checked={autoRenew} onChange={setAutoRenew} label="Renew by itself" hint={`Every ${days} days from your Hype. We'll tell you 3 days before if you're short.`} />}
         {short > 0 ? (
           <div className="space-y-2">
-            <p className="text-sm font-medium text-danger">You need {n(short)} more points.</p>
-            {onGetPoints && (
-              <Button variant="primary" className="w-full" onClick={onGetPoints}>
-                <Icon name="coin" size={15} /> Get points
+            <p className="text-sm font-medium text-danger">You need {n(short)} more Hype.</p>
+            {onGetHype && (
+              <Button variant="primary" className="w-full" onClick={onGetHype}>
+                <Icon name="coin" size={15} /> Get Hype
               </Button>
             )}
           </div>
         ) : (
           <Button variant="primary" className="w-full" loading={busy} onClick={() => void unlock()}>
-            {until ? `Add ${days} days` : "Unlock"} · {n(price)} points
+            {until ? `Add ${days} days` : "Unlock"} · {n(price)} Hype
           </Button>
         )}
         <p className="text-center text-xs text-ink-muted">Your picture and banner are always free.</p>
@@ -157,16 +163,19 @@ function UnlockRow({ u, me, now, onAdd, onRenew }: { u: StyleUnlockDTO; me: User
   );
 }
 
-const KIND_ICON: Record<PointTxnDTO["kind"], "coin" | "asterisk" | "clock" | "heart" | "x"> = { purchase: "coin", earn: "coin", grant: "heart", revoke: "x", unlock: "asterisk", renew: "clock" };
+const KIND_ICON: Record<HypeTxnDTO["kind"], "coin" | "asterisk" | "clock" | "heart" | "x"> = { purchase: "coin", earn: "coin", grant: "heart", revoke: "x", unlock: "asterisk", renew: "clock" };
 
-/** Settings → Points: balance, packs to buy, the designs you have, and every change to your points. */
-export function PointsTab({ me, onStyle }: { me: UserMe; onStyle: () => void }) {
+/**
+ * Settings → Hype & points: your points (earned) on top, then your Hype (bought): balance, packs to buy, the
+ * designs you have, and every change to your Hype.
+ */
+export function HypeTab({ me, onStyle }: { me: UserMe; onStyle: () => void }) {
   const toast = useToast();
   const now = useNow();
-  const { data: w, loading, error, reload, setData } = usePointsWallet();
+  const { data: w, loading, error, reload, setData } = useHypeWallet();
   const [buying, setBuying] = useState<string | null>(null);
   const [adding, setAdding] = useState<StyleKey | null>(null);
-  const [older, setOlder] = useState<PointTxnDTO[]>([]);
+  const [older, setOlder] = useState<HypeTxnDTO[]>([]);
   const [hasMore, setHasMore] = useState<boolean | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
 
@@ -180,10 +189,10 @@ export function PointsTab({ me, onStyle }: { me: UserMe; onStyle: () => void }) 
     void PointsService.verify(ref)
       .then((res) => {
         setData(res.data.wallet);
-        toast(res.data.paid ? `${n(res.data.points)} points added` : "We couldn't confirm that payment yet. If you paid, your points arrive in a minute.", res.data.paid ? "success" : "error");
+        toast(res.data.paid ? `${n(res.data.hype)} Hype added` : "We couldn't confirm that payment yet. If you paid, your Hype arrives in a minute.", res.data.paid ? "success" : "error");
       })
       .catch((e) => toast(errorMessage(e), "error"))
-      .finally(() => window.history.replaceState(null, "", "/settings#points"));
+      .finally(() => window.history.replaceState(null, "", "/settings#hype"));
   }, [setData, toast]);
 
   if (loading) return <Skeleton className="h-80 w-full rounded-card" />;
@@ -226,19 +235,19 @@ export function PointsTab({ me, onStyle }: { me: UserMe; onStyle: () => void }) 
     }
   }
 
-  const best = Math.max(...w.config.packs.map((p) => p.points / p.price));
+  const best = Math.max(...w.config.packs.map((p) => p.hype / p.price));
 
   return (
     <div className="space-y-8">
-      <RankCard />
+      <PointsCard />
       <section className="flex flex-wrap items-center justify-between gap-4 rounded-card border border-line bg-surface p-5">
         <div>
-          <p className="eyebrow">Your points</p>
+          <p className="eyebrow">Your Hype</p>
           <p className="mt-1 flex items-center gap-2 text-4xl font-bold tracking-[-0.03em]">
             <Icon name="coin" size={28} className="text-accent-text" /> {n(w.balance)}
           </p>
           <p className="mt-1.5 max-w-md text-sm text-ink-muted">
-            {w.allFree ? "You're a site admin, so every frame and name style is free for you. Just pick one in Profile style." : `Spend them on picture frames and name styles. Each one lasts ${w.config.unlockDays} days. Your picture and banner are always free.`}
+            {w.allFree ? "You're a site admin, so every frame and name style is free for you. Just pick one in Profile style." : `Hype is what you buy and spend: picture frames and name styles. Each one lasts ${w.config.unlockDays} days. Your picture and banner are always free.`}
           </p>
         </div>
         <Button onClick={onStyle}>
@@ -247,12 +256,12 @@ export function PointsTab({ me, onStyle }: { me: UserMe; onStyle: () => void }) 
       </section>
 
       <section>
-        <h3 className="eyebrow mb-3">Get points</h3>
+        <h3 className="eyebrow mb-3">Get Hype</h3>
         <div className="grid gap-3 sm:grid-cols-3">
           {w.config.packs.map((p) => (
             <div key={p.id} className="relative flex flex-col items-start gap-1 rounded-card border border-line bg-surface p-4">
-              {w.config.packs.length > 1 && p.points / p.price === best && <span className="absolute top-3 right-3 rounded-full bg-accent px-2 py-0.5 text-[11px] font-bold text-accent-ink">Best value</span>}
-              <PointsPill value={p.points} className="text-xl" />
+              {w.config.packs.length > 1 && p.hype / p.price === best && <span className="absolute top-3 right-3 rounded-full bg-accent px-2 py-0.5 text-[11px] font-bold text-accent-ink">Best value</span>}
+              <HypePill value={p.hype} className="text-xl" />
               <span className="text-sm text-ink-muted">{formatPrice(p.price, "NGN")}</span>
               <Button size="sm" variant="primary" className="mt-2 w-full" loading={buying === p.id} disabled={!w.canBuy || (!!buying && buying !== p.id)} onClick={() => void buy(p.id)}>
                 Buy
@@ -260,7 +269,7 @@ export function PointsTab({ me, onStyle }: { me: UserMe; onStyle: () => void }) 
             </div>
           ))}
         </div>
-        <p className="mt-2 text-xs text-ink-muted">{w.canBuy ? "Paid by card on Paystack. Points can't be cashed out or sent to someone else." : "Buying points isn't switched on yet."}</p>
+        <p className="mt-2 text-xs text-ink-muted">{w.canBuy ? "Paid by card on Paystack. Hype can't be cashed out or sent to someone else, and it never adds to your points." : "Buying Hype isn't switched on yet."}</p>
       </section>
 
       <section>
@@ -282,9 +291,9 @@ export function PointsTab({ me, onStyle }: { me: UserMe; onStyle: () => void }) 
       </section>
 
       <section>
-        <h3 className="eyebrow mb-3">History</h3>
+        <h3 className="eyebrow mb-3">Hype history</h3>
         {txns.length === 0 ? (
-          <p className="text-sm text-ink-muted">No points yet.</p>
+          <p className="text-sm text-ink-muted">No Hype yet.</p>
         ) : (
           <ul className="divide-y divide-line overflow-hidden rounded-card border border-line bg-surface">
             {txns.map((t) => (

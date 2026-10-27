@@ -26,7 +26,9 @@ import {
   assertCanView,
   assertSubVisibleOrHidden,
   canSetRole,
+  gateOf,
   outranks,
+  pointsShort,
   spaceAccess,
   type Space,
   type SpaceAccess,
@@ -101,6 +103,10 @@ export async function joinSpace(
     return { status: "joined", message: `Welcome to ${spaceLabel(space)}.` };
   }
 
+  // the points this community asks for, to join or to ask to (site admins never need any; Klique never asks)
+  const short = pointsShort(space.community.minPointsJoin, null, gateOf(viewer), !!space.community.official);
+  if (short) throw forbidden(`${space.community.name} needs ${short.toLocaleString("en-NG")} points to join. You have ${(viewer.points ?? 0).toLocaleString("en-NG")}.`);
+
   // 2) Open to this person (public community, or a group open to its parent's members).
   if (access.canJoinDirectly) {
     await addMember(space, viewer._id);
@@ -113,7 +119,7 @@ export async function joinSpace(
       return { status: "already_requested", message: "Your request is waiting for an admin." };
     }
     rateLimit(`join-request:${sid(viewer._id)}`, 10, 60 * 60 * 1000);
-    await MembershipRequest.create({
+    const request = await MembershipRequest.create({
       userId: viewer._id,
       ...spaceFilter(space),
       message: input.message ?? "",
@@ -123,7 +129,7 @@ export async function joinSpace(
     notify(
       staff.map((m) => m.userId),
       { title: `${viewer.displayName} wants to join ${space.community.name}`, body: input.message ? `"${input.message}"` : "Tap to review the request.", data: { href: `/communities/${space.community.slug}?settings=requests` } },
-      { category: "admin", groupKey: `join-req:${sid(space.community._id)}`, many: (n) => `${n} people want to join ${space.community.name}`, ref: `requests:${sid(space.community._id)}` },
+      { actorId: viewer._id, action: { kind: "communityRequest", slug: space.community.slug, requestId: sid(request._id) }, category: "admin", groupKey: `join-req:${sid(space.community._id)}`, many: (n) => `${n} people want to join ${space.community.name}`, ref: `requests:${sid(space.community._id)}` },
     );
     return { status: "requested", message: "Request sent. An admin will take a look." };
   }

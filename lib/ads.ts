@@ -3,12 +3,9 @@
  * server (which always recomputes the price itself). Prices are per day, per placement, in naira; how far an
  * ad reaches multiplies it.
  */
-import { DISCOVER_BANNER_ADS } from "./constants";
-
-/** Every placement there is, including ones switched off. */
+/** Every placement there is. */
 export const ALL_AD_PLACEMENTS = [
-  { id: "home-hero", label: "Discover banner", hint: "The big banner at the top of the homepage. One ad at a time, the first thing people see." },
-  { id: "home-feed", label: "Homepage feed", hint: "Between the event rows on the homepage. The most seen spot." },
+  { id: "home-feed", label: "Homepage feed", hint: "Between posts in the home feed, every few posts. The most seen spot." },
   { id: "home-rail", label: "Homepage side panel", hint: "The column beside the homepage on big screens." },
   { id: "events-list", label: "Events page", hint: "In the list on the Events page." },
   { id: "event-page", label: "Event pages", hint: "On other events' pages, under the RSVP button." },
@@ -17,7 +14,7 @@ export const ALL_AD_PLACEMENTS = [
 export type AdPlacement = (typeof ALL_AD_PLACEMENTS)[number]["id"];
 
 /** The placements on sale: what Create ad, the price list and the server accept. */
-export const AD_PLACEMENTS = ALL_AD_PLACEMENTS.filter((p) => DISCOVER_BANNER_ADS || p.id !== "home-hero");
+export const AD_PLACEMENTS = ALL_AD_PLACEMENTS;
 
 export const AD_REACHES = [
   { id: "city", label: "One city", hint: "People looking at events in that city." },
@@ -38,7 +35,7 @@ export interface AdPricing {
 
 export const DEFAULT_AD_PRICING: AdPricing = {
   currency: "NGN",
-  perDay: { "home-hero": 20000, "home-feed": 10000, "home-rail": 6000, "events-list": 5000, "event-page": 3000, search: 3000 },
+  perDay: { "home-feed": 10000, "home-rail": 6000, "events-list": 5000, "event-page": 3000, search: 3000 },
   reach: { city: 1, country: 2, world: 3 },
   minDays: 1,
   maxDays: 30,
@@ -55,7 +52,8 @@ export function pricingOf(stored: unknown): AdPricing {
   const s = (stored && typeof stored === "object" ? stored : {}) as Partial<AdPricing>;
   return {
     currency: "NGN",
-    perDay: { ...DEFAULT_AD_PRICING.perDay, ...(s.perDay ?? {}) },
+    // only placements that still exist (older saved prices may name ones since removed)
+    perDay: Object.fromEntries(Object.entries(DEFAULT_AD_PRICING.perDay).map(([id, v]) => [id, s.perDay?.[id as AdPlacement] ?? v])) as Record<AdPlacement, number>,
     reach: { ...DEFAULT_AD_PRICING.reach, ...(s.reach ?? {}) },
     minDays: s.minDays ?? DEFAULT_AD_PRICING.minDays,
     maxDays: s.maxDays ?? DEFAULT_AD_PRICING.maxDays,

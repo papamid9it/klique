@@ -48,7 +48,9 @@ export const UploadService = {
     let done: Compressed;
     try {
       opts.onProgress?.(0.02);
-      done = kind === "video" ? await compressVideo(file, (p) => opts.onProgress?.(p * share)) : await compressImage(kind, file);
+      // a profile effect goes up exactly as it is: recompressing would lose the animation
+      const type = /\.json$/i.test(file.name) ? "application/json" : /\.webp$/i.test(file.name) ? "image/webp" : "image/png";
+      done = kind === "effect" ? { files: [{ variant: "main", blob: file.type === type ? file : new Blob([file], { type }) }], width: null, height: null, duration: null } : kind === "video" ? await compressVideo(file, (p) => opts.onProgress?.(p * share)) : await compressImage(kind, file);
     } catch (e) {
       if (e instanceof CompressError) throw new ApiRequestError(400, e.message, "invalid_file");
       throw new ApiRequestError(400, kind === "video" ? "Couldn't compress that video. Try a different file." : "Couldn't process that picture. Try a different file.", "invalid_file");

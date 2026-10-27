@@ -18,7 +18,7 @@ import { prefetchCommunity } from "./prefetchCommunity";
 
 /**
  * Your communities, one tile each, so you can hop between them without going back to a list.
- * Shows an unread dot and an @mention count; the active one gets a marker on its left edge.
+ * Shows an unread dot and an @mention count; the active one turns from a circle into a rounded square.
  * `horizontal` is the compact strip used inside the mobile drawer.
  */
 export function CommunityRail({ activeSlug, horizontal, onNavigate }: { activeSlug: string | null; horizontal?: boolean; onNavigate?: () => void }) {
@@ -86,7 +86,7 @@ export function CommunityRail({ activeSlug, horizontal, onNavigate }: { activeSl
           aria-current={active ? "page" : undefined}
           className={cx("group flex flex-col items-center gap-1", horizontal ? "w-14" : "w-full")}
         >
-          <span className={cx("relative block overflow-hidden transition-[border-radius,box-shadow]", horizontal ? "size-11" : "size-14", active ? "rounded-[14px] ring-2 ring-ink" : "rounded-full group-hover:rounded-[14px]")}>
+          <span className={cx("relative block overflow-hidden transition-[border-radius,box-shadow]", horizontal ? "size-11" : "size-14", active ? "rounded-[14px]" : "rounded-full group-hover:rounded-[14px]")}>
             <Cover src={c.coverImage} seed={c.id} interest={c.interest} className="size-full" />
           </span>
           {/* how many unseen messages (channels and your crews' chats); red when some mention you */}

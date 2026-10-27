@@ -6,7 +6,7 @@ import { when } from "./events.service";
 import { notifyNow } from "./push.service";
 import { runCrewReminders } from "./crews.service";
 import { runAdLifecycle } from "./ad-campaigns.service";
-import { runStyleLifecycle } from "./points.service";
+import { runStyleLifecycle } from "./wallet.service";
 
 /**
  * "Starting soon" reminders to everyone going, on their phones (mobile app) and browsers (desktop and web app).
@@ -16,7 +16,7 @@ const LEAD_MS = 75 * 60 * 1000;
 
 export async function runReminders(): Promise<{ events: number; notified: number }> {
   const now = new Date();
-  const due = await Event.find({ cancelled: false, reminderSentAt: null, startsAt: { $gt: now, $lte: new Date(+now + LEAD_MS) } })
+  const due = await Event.find({ cancelled: false, review: null, reminderSentAt: null, startsAt: { $gt: now, $lte: new Date(+now + LEAD_MS) } })
     .limit(200)
     .lean<IEvent[]>();
 
@@ -29,7 +29,7 @@ export async function runReminders(): Promise<{ events: number; notified: number
     await notifyNow(
       going.map((g) => g.userId),
       { title: "Starting soon", body: `${e.title} · ${when(e.startsAt)}`, data: { type: "event", id: String(e._id) } },
-      { category: "events", ref: `event:${String(e._id)}` },
+      { category: "events", ref: `event:${String(e._id)}`, image: e.coverImage ?? null, action: { kind: "event", eventId: String(e._id) } },
     );
     notified += going.length;
   }
@@ -37,7 +37,7 @@ export async function runReminders(): Promise<{ events: number; notified: number
   notified += await runCrewReminders(now);
   // ads: "ends tomorrow" and "ended" (with results)
   notified += await runAdLifecycle(now);
-  // points: styles from before points existed, "ends in 3 days", auto-renew or take off
+  // Hype: styles from before unlocks existed, "ends in 3 days", auto-renew or take off
   notified += await runStyleLifecycle(now);
   return { events: due.length, notified };
 }

@@ -2,7 +2,7 @@
  * API contract shared by the backend (server/serializers) and every client
  * (this web app today; mobile / desktop later). Pure types — no runtime code.
  */
-import type { CityId, DmPolicy, InterestId, ProfileVisibility, ReportReason } from "./constants";
+import type { CityId, DmPolicy, InterestId, Presence, ProfileVisibility, ReportReason } from "./constants";
 import type { MoodId } from "./moods";
 
 export type Id = string;
@@ -33,8 +33,6 @@ export interface UserBrief {
   avatarFrame?: string | null;
   /** animated name style (lib/cosmetics NameEffectId), if chosen */
   nameEffect?: string | null;
-  /** rank number (1 = first rank, lib/ranks); names come from GET /api/ranks */
-  rank?: number;
   /** ISO country code, e.g. "NG" */
   country: string;
   city: CityId;
@@ -54,6 +52,14 @@ export interface UserProfile extends UserBrief {
   neighborhood: string;
   interests: InterestId[];
   joinedAt: ISODate;
+  /** points: earned reputation shown on the profile (can't be bought) */
+  points: number;
+  pronouns: string;
+  /** the status they set: the dot on their picture ("invisible" shows none) */
+  presence: Presence;
+  /** two colours tinting their profile card, and an animated layer over it (Hype designs) */
+  profileTheme: { primary: string; accent: string } | null;
+  profileEffect: string | null;
 }
 
 /** The signed-in user's own account. */
@@ -86,9 +92,7 @@ export interface UserMe extends UserProfile {
   unreadMessages: number;
   /** unread entries in the notification inbox (the bell) */
   unreadNotifications: number;
-  /** points balance (spent on picture frames and name styles) */
-  points: number;
-  /** Hype earned so far (ranks) */
+  /** Hype balance, bought (spent on picture frames and name styles) */
   hype: number;
   /** a site admin (opens /admin) */
   isAdmin: boolean;
@@ -172,6 +176,8 @@ export interface ViewerAccess {
   canPost: boolean;
   /** groups: the community's owner or a site admin (sees and manages every group, may delete it) */
   canModerate?: boolean;
+  /** a member who can't post yet: the points this space asks for (they have fewer) */
+  pointsToPost?: number;
 }
 
 export interface CommunityCardDTO {
@@ -192,6 +198,9 @@ export interface CommunityCardDTO {
   memberCount: number | null;
   coverImage: string | null;
   locked: boolean;
+  /** points (lib/points) needed to join and to post; 0 when anyone can */
+  minPointsJoin: number;
+  minPointsPost: number;
   viewer: ViewerAccess;
 }
 
@@ -204,6 +213,14 @@ export interface CommunityDTO extends CommunityCardDTO {
   canCreateGroup: boolean;
   /** the viewer may post events in this community (its owner and admins) */
   canHostEvents: boolean;
+  /** members may send events in for approval */
+  memberEvents: boolean;
+  /** the viewer is a member who can send an event in for the owner or an admin to approve */
+  canSubmitEvents: boolean;
+  /** the Posts section: "off", or who may post ("admins" or "members") */
+  feedPolicy: GroupPolicy;
+  /** the viewer may post there */
+  canPostToFeed: boolean;
   owner: UserBrief | null;
   subcommunityCount: number | null;
   upcomingEventCount: number | null;
@@ -219,11 +236,57 @@ export interface SubcommunityDTO {
   visibility: SubVisibility;
   memberCount: number | null;
   locked: boolean;
+  /** points (lib/points) needed to be added, and to post; 0 when anyone can */
+  minPointsJoin: number;
+  minPointsPost: number;
   createdAt: ISODate;
   parent: Pick<CommunityCardDTO, "id" | "slug" | "name" | "country" | "region" | "city" | "interest" | "privacy">;
   viewer: ViewerAccess;
   /** parent owner/admin moderating a private sub they are not a member of */
   moderationOnly?: boolean;
+}
+
+/* ------------------------- community posts ------------------------- */
+
+/** A post in a community's Posts section (Instagram style). */
+export interface FeedPostDTO {
+  id: Id;
+  community: { id: Id; slug: string; name: string; interest: InterestId; coverImage: string | null; privacy: CommunityPrivacy };
+  author: UserBrief;
+  caption: string;
+  /** pictures, or one video */
+  media: TopicMediaDTO[];
+  upCount: number;
+  downCount: number;
+  /** the viewer's vote: 1 up, -1 down, 0 none */
+  myVote: 1 | -1 | 0;
+  commentCount: number;
+  createdAt: ISODate;
+  editedAt: ISODate | null;
+  /** the viewer is a member of its community (may vote and comment) */
+  isMember: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
+}
+
+export interface FeedCommentDTO {
+  id: Id;
+  postId: Id;
+  parentId: Id | null;
+  /** empty when deleted */
+  body: string;
+  deleted: boolean;
+  createdAt: ISODate;
+  author: UserBrief;
+  reactions: ReactionDTO[];
+  canDelete: boolean;
+}
+
+/** One entry in the home feed: a post from your communities, or now and then a trending one from elsewhere. */
+export interface HomeFeedItem {
+  post: FeedPostDTO;
+  /** from a public community you're not in (shown with a Join button) */
+  trending: boolean;
 }
 
 export interface PostDTO {
@@ -304,6 +367,10 @@ export interface EventDTO {
   neighborhood: string;
   /** an online event: `venue` is where to join (a link or platform name) */
   online: boolean;
+  /** the host's ticket page ("Get tickets") */
+  ticketUrl: string | null;
+  /** the link to join an online event ("Join online") */
+  onlineUrl: string | null;
   venue: string;
   startsAt: ISODate;
   endsAt: ISODate | null;
@@ -326,7 +393,11 @@ export interface EventDTO {
   isPast: boolean;
   isFull: boolean;
   /** `mustJoin`: a community's event the viewer isn't a member of: going or saving it means joining first */
-  viewer: { rsvp: RsvpStatus | null; saved: boolean; isHost: boolean; canEdit: boolean; mustJoin?: boolean };
+  viewer: { rsvp: RsvpStatus | null; saved: boolean; isHost: boolean; canEdit: boolean; mustJoin?: boolean; canReview?: boolean; canManageMoney?: boolean };
+  /** a member's event not approved yet: waiting for the space's owner or an admin, or turned down (with why) */
+  review: { status: "pending" | "rejected"; reason: string } | null;
+  /** chipping in toward it (lib/money): so much a unit; what's been raised; the viewer's units; paid out yet */
+  contribution: EventContributionDTO | null;
 }
 
 /* ------------------------------ crews ------------------------------- */
@@ -411,7 +482,8 @@ export interface EventCrewsDTO {
 export interface HostingOptionsDTO {
   /** site admins may post anywhere, including public events outside any community */
   siteAdmin: boolean;
-  communities: { slug: string; name: string; privacy: CommunityPrivacy; groupsOnly: boolean }[];
+  /** `submit`: a member's community, where an event waits for the owner or an admin to approve it */
+  communities: { slug: string; name: string; privacy: CommunityPrivacy; groupsOnly: boolean; submit?: boolean }[];
 }
 
 export interface AttendeesDTO {
@@ -485,6 +557,8 @@ export interface MessageDTO {
   editedAt: ISODate | null;
   /** unsent: body is empty */
   deleted: boolean;
+  /** a poll posted with this message */
+  pollId?: Id | null;
 }
 
 /** A picture someone saved as a sticker. `url` is the file itself; thumbnails use its small copy (lib/cdn). */
@@ -516,7 +590,7 @@ export interface ConversationDetailDTO {
 
 /* ------------------------------ safety ------------------------------ */
 
-export type ReportTargetType = "user" | "post" | "event" | "community" | "subcommunity" | "message" | "channelMessage" | "ad";
+export type ReportTargetType = "user" | "post" | "event" | "community" | "subcommunity" | "message" | "channelMessage" | "ad" | "feedPost";
 
 export interface ReportInput {
   targetType: ReportTargetType;
@@ -650,8 +724,31 @@ export interface ChannelMessageDTO {
   /** people tagged with @handle */
   mentions: MentionDTO[];
   mentionsMe: boolean;
+  /** a poll posted with this message (load it with PollService) */
+  pollId?: Id | null;
   /** only on optimistic client-side rows */
   pending?: boolean;
+}
+
+/** A poll posted in a chat (see ChannelMessageDTO.pollId / MessageDTO.pollId). */
+export interface PollDTO {
+  id: Id;
+  question: string;
+  answers: { id: string; text: string; emoji: string | null; votes: number }[];
+  /** people who voted (with several answers each, the answer counts can add up to more) */
+  totalVoters: number;
+  multiple: boolean;
+  anonymous: boolean;
+  /** when it ends, or ended (early, if someone ended it) */
+  endsAt: ISODate;
+  ended: boolean;
+  /** the viewer's answer ids */
+  myVotes: string[];
+  canVote: boolean;
+  canEnd: boolean;
+  /** tapping an answer shows who picked it (not for anonymous polls or big communities) */
+  votersVisible: boolean;
+  creator: UserBrief | null;
 }
 
 /** `hasMore` means "older messages exist" for the initial/`before` pages, "more new ones" for `after`. */
@@ -691,6 +788,112 @@ export interface BoardDTO {
 }
 
 /** What the desktop sidebar beside a board shows (refreshed live as people post and comment). */
+/** One profile effect people can unlock with Hype (uploaded by a site admin). */
+export interface ProfileEffectDTO {
+  /** its slug: what a profile stores */
+  id: string;
+  name: string;
+  /** "image": an animated WebP or APNG; "lottie": a Lottie JSON */
+  kind: "image" | "lottie";
+  fileUrl: string;
+  /** a still picture: the tile, and what people who want things still see */
+  previewUrl: string;
+  active: boolean;
+  /** Hype */
+  price: number;
+}
+
+/* ------------------------------ money ------------------------------ */
+
+export interface EventContributionDTO {
+  label: string;
+  unitPrice: number;
+  maxQuantity: number;
+  /** paid, not refunded */
+  raised: number;
+  contributors: number;
+  /** units the viewer has paid for */
+  mine: number;
+  /** the community has been paid what was raised */
+  withdrawn: boolean;
+}
+
+export interface DonationButtonDTO {
+  id: Id;
+  title: string;
+  description: string;
+  goal: number | null;
+  raised: number;
+  donors: number;
+  active: boolean;
+}
+
+export interface PaymentDTO {
+  id: Id;
+  kind: "donation" | "contribution";
+  user: UserBrief;
+  amount: number;
+  fee: number;
+  net: number;
+  quantity: number;
+  message: string;
+  status: "pending" | "paid" | "refunded";
+  createdAt: ISODate;
+  /** what it was for */
+  forTitle: string;
+  eventId: Id | null;
+  /** a contribution not paid out yet: the host or an admin may refund it (minus the fee) */
+  refundable: boolean;
+}
+
+export interface PayoutDTO {
+  id: Id;
+  amount: number;
+  status: "requested" | "paid" | "rejected";
+  bank: { bankName: string; accountName: string; accountNumber: string; bankCode: string };
+  reference: string;
+  note: string;
+  createdAt: ISODate;
+  decidedAt: ISODate | null;
+  community?: { slug: string; name: string };
+  requestedBy?: UserBrief;
+}
+
+/** A community's money, for its owner and admins. */
+export interface CommunityMoneyDTO {
+  fees: { donationPercent: number; contributionPercent: number };
+  minPayout: number;
+  /** paid in and not paid out (after Klique's fee) */
+  available: number;
+  /** waiting in a payout request */
+  requested: number;
+  paidOut: number;
+  totals: { donations: number; contributions: number; last30: number };
+  buttons: DonationButtonDTO[];
+  recent: PaymentDTO[];
+  payouts: PayoutDTO[];
+  bank: PayoutDTO["bank"] | null;
+  /** card payments are set up */
+  canTakePayments: boolean;
+  /** the owner asks for payouts */
+  canRequestPayout: boolean;
+}
+
+/** A community's owner dashboard (owners and admins). */
+export interface CommunityDashboardDTO {
+  members: { total: number; new7: number; new30: number; perDay: { day: string; joined: number }[] };
+  /** members' events waiting for approval, oldest first */
+  pendingEvents: EventDTO[];
+  /** people asking to join (private communities) */
+  pendingRequests: number;
+  activity: { posts7: number; upcomingEvents: number };
+}
+
+/** Beside a community's Posts: who posted the most in the last 7 days (and the upvotes they got). */
+export interface FeedSidebarDTO {
+  topPosters: { user: UserBrief; posts: number; upvotes: number }[];
+}
+
 export interface BoardSidebarDTO {
   /** the most liked and discussed topics active in the last 7 days */
   trending: { id: Id; title: string; likeCount: number; commentCount: number }[];
@@ -705,14 +908,19 @@ export interface TopicDTO {
   board: { id: Id; slug: string; name: string };
   title: string;
   body: string;
-  /** pictures or one video, shown with the topic */
+  /** its picture (new posts have at most one; older ones may have several, or a video) */
   media: TopicMediaDTO[];
   pinned: boolean;
   locked: boolean;
+  /** upvotes */
   likeCount: number;
+  /** replies in its chat */
   commentCount: number;
-  /** the viewer liked it */
+  tags: string[];
+  /** the viewer upvoted it */
   liked: boolean;
+  /** the viewer hears about new replies */
+  following: boolean;
   createdAt: ISODate;
   editedAt: ISODate | null;
   lastActivityAt: ISODate;
@@ -749,8 +957,10 @@ export interface TopicCommentDTO {
 
 export interface TopicDetailDTO {
   topic: TopicDTO;
-  /** every comment, oldest first; the client nests them by `parentId` */
-  comments: TopicCommentDTO[];
+  /** the post's chat (its replies): a channel that never shows in the channel list */
+  thread: ChannelDTO;
+  /** the chat's newest page, so the post and its replies show together */
+  messages: ChatPage;
 }
 
 export type TopicSort = "hot" | "new" | "top";
@@ -774,12 +984,13 @@ export interface UploadStatusDTO {
   avatar: boolean;
   photo: boolean;
   video: boolean;
+  effect: boolean;
 }
 
 /** Short-lived permission to put one upload (and its small copy or still frame) straight into storage. */
 export interface UploadSignatureDTO {
-  kind: "avatar" | "photo" | "video";
-  resource: "image" | "video";
+  kind: "avatar" | "photo" | "video" | "effect";
+  resource: "image" | "video" | "file";
   items: { variant: "main" | "sm" | "poster"; uploadUrl: string; headers: Record<string, string>; url: string }[];
 }
 
@@ -989,6 +1200,8 @@ export interface AdminSummaryDTO {
   pendingDrafts: number;
   /** ad requests waiting for review */
   pendingAds: number;
+  /** community payouts waiting to be sent */
+  pendingPayouts: number;
 }
 
 export type AdminUserFilter = "all" | "new" | "admins" | "suspended" | "unverified";
@@ -1072,12 +1285,13 @@ export interface SystemStatusDTO {
 
 /* -------------------------------- ads ------------------------------- */
 
-export type AdSlot = "home-hero" | "home-feed" | "home-rail" | "events-list" | "event-page" | "search";
+/** "communities": "Sponsored communities" on the Communities page (sponsored-community ads only) */
+export type AdSlot = "home-feed" | "home-rail" | "events-list" | "event-page" | "search" | "communities";
 
 /** An ad as the app shows it. Always rendered with a "Sponsored" label. */
 export interface AdDTO {
   id: Id;
-  kind: "event" | "brand";
+  kind: "event" | "brand" | "community";
   advertiser: string;
   title: string;
   body: string;
@@ -1087,12 +1301,15 @@ export interface AdDTO {
   url: string | null;
   /** promoted events: the event itself */
   event: EventDTO | null;
+  /** sponsored communities: the community */
+  community?: { id: Id; slug: string; name: string; interest: InterestId; coverImage: string | null; memberCount: number } | null;
 }
 
 export interface AdInput {
   name: string;
-  kind: "event" | "brand";
+  kind: "event" | "brand" | "community";
   eventId?: string | null;
+  communityId?: string | null;
   advertiser?: string;
   title?: string;
   body?: string;
@@ -1110,13 +1327,15 @@ export interface AdInput {
 }
 
 /** An ad in the admin console, with its numbers. */
-export interface AdminAdDTO extends Required<Omit<AdInput, "eventId" | "status">> {
+export interface AdminAdDTO extends Required<Omit<AdInput, "eventId" | "communityId" | "status">> {
   id: Id;
   status: "active" | "paused";
   /** shown now: active and inside its dates */
   live: boolean;
   event: { id: Id; title: string; startsAt: ISODate; cancelled: boolean } | null;
   eventId: Id | null;
+  community: { id: Id; slug: string; name: string } | null;
+  communityId: Id | null;
   impressions: number;
   clicks: number;
   reports: number;
@@ -1171,6 +1390,20 @@ export interface NotificationDTO {
   count: number;
   read: boolean;
   updatedAt: ISODate;
+  /** who did it (the newest few of a bundle) */
+  actors: UserBrief[];
+  /** a picture for the line (an event's cover) */
+  image: string | null;
+  /** answered right from the line */
+  action: { kind: "crewRequest"; crewId: Id; userId: Id } | { kind: "communityRequest"; slug: string; requestId: Id } | { kind: "event"; eventId: Id } | { kind: "eventReview"; eventId: Id } | null;
+}
+
+/** What's waiting on you (the right column of Notifications): join requests you can answer right there. */
+export interface PendingDTO {
+  crewRequests: { crewId: Id; area: string; eventTitle: string; user: UserBrief; message: string }[];
+  communityRequests: { slug: string; communityName: string; requestId: Id; user: UserBrief; message: string }[];
+  /** members' events waiting for this owner or admin to approve them */
+  eventReviews: { eventId: Id; title: string; communityName: string; user: UserBrief }[];
 }
 
 /* ------------------------------- ad requests ------------------------------- */
@@ -1232,7 +1465,7 @@ export interface AdCampaignInput {
   startOn?: string | null;
 }
 
-/* ------------------------------ points ------------------------------ */
+/* ------------------------------ Hype (bought) ------------------------------ */
 
 export interface StyleUnlockDTO {
   /** "frame:fire", "name:gold-shimmer" */
@@ -1240,75 +1473,71 @@ export interface StyleUnlockDTO {
   name: string;
   expiresAt: string;
   autoRenew: boolean;
-  /** "gift": free (worn before points existed, or given by an admin) */
-  source: "points" | "gift";
+  /** "gift": free (worn before unlocks existed, or given by an admin) */
+  source: "hype" | "gift";
   /** what renewing costs now */
   price: number;
 }
 
-export interface PointTxnDTO {
+export interface HypeTxnDTO {
   id: string;
   amount: number;
   balanceAfter: number;
+  /** "earn": from the old ranks, before Hype could only be bought */
   kind: "purchase" | "unlock" | "renew" | "grant" | "revoke" | "earn";
   note: string;
   createdAt: string;
 }
 
-/** Your points: balance, what you've unlocked, prices, packs to buy and your history. */
-export interface PointsWalletDTO {
+/** Your Hype: balance, what you've unlocked, prices, packs to buy and your history. */
+export interface HypeWalletDTO {
   balance: number;
   /** site admins: every design is free, nothing to unlock */
   allFree: boolean;
-  config: import("./points").PointsConfig;
+  config: import("./wallet").WalletConfig;
   unlocks: StyleUnlockDTO[];
-  history: PointTxnDTO[];
+  history: HypeTxnDTO[];
   hasMoreHistory: boolean;
   /** card payments are set up (Paystack keys present) */
   canBuy: boolean;
 }
 
-export interface PointSaleDTO {
+export interface HypeSaleDTO {
   id: string;
   user: UserBrief | null;
-  points: number;
+  hype: number;
   amount: number;
   status: "pending" | "paid";
   createdAt: string;
   paidAt: string | null;
 }
 
-export interface AdminPointsOverviewDTO {
-  /** naira and points sold, last 30 days and all time */
-  sales: { last30: { amount: number; points: number; count: number }; all: { amount: number; points: number; count: number } };
-  /** points people hold right now */
+export interface AdminHypeOverviewDTO {
+  /** naira and Hype sold, last 30 days and all time */
+  sales: { last30: { amount: number; hype: number; count: number }; all: { amount: number; hype: number; count: number } };
+  /** Hype people hold right now */
   outstanding: number;
-  /** designs being worn on points right now */
+  /** designs being worn on Hype right now */
   activeUnlocks: number;
-  recent: PointSaleDTO[];
+  recent: HypeSaleDTO[];
 }
 
-export interface AdminPointsUserDTO {
+/** One person, for Admin → Points: their Hype (with unlocks and history) and their points. */
+export interface AdminWalletUserDTO {
   user: UserBrief;
-  balance: number;
   hype: number;
+  points: number;
   unlocks: StyleUnlockDTO[];
-  history: PointTxnDTO[];
+  history: HypeTxnDTO[];
 }
 
-/* ------------------------------ ranks ------------------------------ */
+/* ------------------------------ points (earned) ------------------------------ */
 
-/** Your rank and how far to the next. */
-export interface RankProgressDTO {
-  rank: number;
-  name: string;
-  hype: number;
-  /** Hype your rank needed */
-  current: number;
-  next: { name: string; hype: number; points: number } | null;
-  /** Hype you can still earn today */
-  todayLeft: number;
-  recent: { action: import("./ranks").HypeAction; amount: number; createdAt: ISODate }[];
+/** Your points, what earns them, and how much of each you can still earn today. */
+export interface PointsProgressDTO {
+  points: number;
+  actions: { id: import("./points").PointAction; label: string; hint: string; worth: number; todayLeft: number }[];
+  recent: { action: import("./points").PointAction; amount: number; createdAt: ISODate }[];
 }
 
 /** The host's "Who came?" list. */

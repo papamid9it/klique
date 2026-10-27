@@ -1,76 +1,56 @@
-import { FRAMES, NAME_EFFECTS } from "./cosmetics";
-
 /**
- * Points: what you spend to wear a picture frame or a name style. Your picture and banner are always free.
- * An unlock lasts `unlockDays` (30 by default); it can renew itself from your balance. Points are bought in
- * packs (set by a site admin), given by admins, and later earned from Hype. They can't be cashed out or sent
- * to someone else, and they never raise your rank.
+ * Points: earned reputation, like Reddit karma. Never bought, never spent, and they never go down because of
+ * someone's bad reaction. You earn them from other people only: hosting events people come to, showing up,
+ * going with a crew that met, upvotes on your posts and board posts, and good reactions to your messages in
+ * community, group and crew chats (not DMs). Each kind has its own daily cap so it can't be farmed. A site admin
+ * sets what each is worth and the caps. Communities can ask for a minimum to join or to post.
+ * (Hype is the currency you buy: see lib/wallet.ts.)
  */
 
-export type StyleKind = "frame" | "name";
-/** "frame:fire", "name:gold-shimmer" */
-export type StyleKey = `${StyleKind}:${string}`;
-
-export interface PointPack {
-  id: string;
-  points: number;
-  /** naira */
-  price: number;
-}
+export type PointAction = "attend" | "hostAttendee" | "crew" | "postUpvote" | "boardUpvote" | "reaction";
 
 export interface PointsConfig {
-  currency: "NGN";
-  packs: PointPack[];
-  /** how long one unlock lasts */
-  unlockDays: number;
-  /** price of any frame / name style without its own price */
-  defaultPrice: Record<StyleKind, number>;
-  /** per-design prices; 0 makes that design free */
-  prices: Record<string, number>;
+  /** points per action */
+  actions: Record<PointAction, number>;
+  /** most points anyone can earn from each kind of action in one day (Lagos time) */
+  caps: Record<PointAction, number>;
 }
+
+export const POINT_ACTIONS: { id: PointAction; label: string; hint: string }[] = [
+  { id: "attend", label: "Came to an event", hint: "The host confirms you were there." },
+  { id: "hostAttendee", label: "Someone came to your event", hint: "Per person the host confirms (up to 50 per event)." },
+  { id: "crew", label: "Went with a crew", hint: "You were in a crew of 2 or more for an event you were confirmed at." },
+  { id: "postUpvote", label: "Upvote on your post", hint: "Someone else upvoted a post of yours (once per person per post)." },
+  { id: "boardUpvote", label: "Upvote on your board post", hint: "Someone else upvoted a board post of yours (once per person per post)." },
+  { id: "reaction", label: "Good reaction to your message", hint: "Someone else reacted 👍 ❤️ 😂 😮 🥳 🔥 to your message in a community, group or crew chat. Not DMs." },
+];
 
 export const DEFAULT_POINTS_CONFIG: PointsConfig = {
-  currency: "NGN",
-  packs: [
-    { id: "small", points: 500, price: 1000 },
-    { id: "medium", points: 1200, price: 2000 },
-    { id: "large", points: 3000, price: 4500 },
-  ],
-  unlockDays: 30,
-  defaultPrice: { frame: 300, name: 200 },
-  prices: {},
+  actions: { attend: 30, hostAttendee: 5, crew: 15, postUpvote: 2, boardUpvote: 2, reaction: 1 },
+  caps: { attend: 90, hostAttendee: 150, crew: 45, postUpvote: 50, boardUpvote: 50, reaction: 25 },
 };
-
-export const STYLE_KEYS: StyleKey[] = [...FRAMES.map((f) => `frame:${f.id}` as StyleKey), ...NAME_EFFECTS.map((e) => `name:${e.id}` as StyleKey)];
-export const isStyleKey = (k: string): k is StyleKey => (STYLE_KEYS as string[]).includes(k);
-
-export function styleName(key: string): string {
-  const [kind, id] = key.split(":");
-  const spec = kind === "frame" ? FRAMES.find((f) => f.id === id) : NAME_EFFECTS.find((e) => e.id === id);
-  return spec ? `${spec.name} ${kind === "frame" ? "frame" : "name style"}` : key;
-}
-
-export function stylePrice(c: PointsConfig, key: StyleKey): number {
-  const own = c.prices[key];
-  return typeof own === "number" ? own : c.defaultPrice[key.split(":")[0] as StyleKind];
-}
 
 const int = (v: unknown, min: number, max: number, fallback: number) => (typeof v === "number" && Number.isFinite(v) ? Math.min(max, Math.max(min, Math.round(v))) : fallback);
 
-/** Stored settings merged over the defaults, with anything odd dropped. */
+/** Stored settings over the defaults, tidied. */
 export function pointsConfigOf(stored: unknown): PointsConfig {
   const s = (stored && typeof stored === "object" ? stored : {}) as Partial<PointsConfig>;
-  const packs = Array.isArray(s.packs) ? s.packs.filter((p) => p && typeof p.id === "string" && p.points > 0 && p.price > 0).map((p) => ({ id: p.id, points: int(p.points, 1, 1_000_000, 1), price: int(p.price, 100, 10_000_000, 100) })) : DEFAULT_POINTS_CONFIG.packs;
-  const prices: Record<string, number> = {};
-  for (const [k, v] of Object.entries(s.prices ?? {})) if (isStyleKey(k) && typeof v === "number") prices[k] = int(v, 0, 1_000_000, 0);
-  return {
-    currency: "NGN",
-    packs: packs.sort((a, b) => a.points - b.points),
-    unlockDays: int(s.unlockDays, 1, 365, DEFAULT_POINTS_CONFIG.unlockDays),
-    defaultPrice: {
-      frame: int(s.defaultPrice?.frame, 0, 1_000_000, DEFAULT_POINTS_CONFIG.defaultPrice.frame),
-      name: int(s.defaultPrice?.name, 0, 1_000_000, DEFAULT_POINTS_CONFIG.defaultPrice.name),
-    },
-    prices,
-  };
+  const a = (s.actions ?? {}) as Partial<Record<PointAction, number>>;
+  const c = (s.caps ?? {}) as Partial<Record<PointAction, number>>;
+  const actions = {} as Record<PointAction, number>;
+  const caps = {} as Record<PointAction, number>;
+  for (const { id } of POINT_ACTIONS) {
+    actions[id] = int(a[id], 0, 10_000, DEFAULT_POINTS_CONFIG.actions[id]);
+    caps[id] = int(c[id], 0, 1_000_000, DEFAULT_POINTS_CONFIG.caps[id]);
+  }
+  return { actions, caps };
+}
+
+/** Reactions that earn the author points; the rest (👎 😡 😢) earn nothing and never take any away. */
+export const GOOD_REACTIONS = new Set(["like", "love", "laugh", "wow", "party", "fire", "clap", "hundred"]);
+
+/** For a member without the points a space asks for to post in its Posts section (undefined when that's not why). */
+export function pointsNote(need: number | undefined, have: number): string | undefined {
+  if (!need) return undefined;
+  return `New posts here need ${need.toLocaleString("en-NG")} points. You have ${have.toLocaleString("en-NG")}: upvotes and good reactions from others earn them. You can still chat, use boards, comment, vote and react.`;
 }

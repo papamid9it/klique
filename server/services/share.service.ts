@@ -121,3 +121,10 @@ export async function profileShare(handle: string): Promise<ShareInfo | null> {
     return null;
   }
 }
+
+/** Klique's current fees, for the payment terms page (public). */
+export async function publicFees(): Promise<{ donationFeePercent: number; contributionFeePercent: number; minPayout: number }> {
+  await connectDb();
+  const { getMoneyConfig } = await import("./money.service");
+  return getMoneyConfig();
+}

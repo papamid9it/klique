@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import { ApiError } from "./http/errors";
 import { mongoUri } from "./env";
+import { migrateCurrency } from "./migrations/currency";
 
 /**
  * One cached connection per server process (survives Next.js dev hot reloads).
@@ -20,6 +21,12 @@ export async function connectDb(): Promise<typeof mongoose> {
         serverSelectionTimeoutMS: 6000,
         maxPoolSize: 10,
         autoIndex: process.env.NODE_ENV !== "production",
+      })
+      // one-off data changes that must land before anything reads the data (each runs once per database)
+      .then(async (m) => {
+        const done = await migrateCurrency(m.connection);
+        if (done === "migrated") console.log("[db] moved bought points to Hype and earned Hype to points");
+        return m;
       })
       .catch((err) => {
         cache.promise = null; // allow retry on the next request

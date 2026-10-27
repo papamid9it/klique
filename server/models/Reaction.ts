@@ -1,8 +1,9 @@
 import { Schema, type Model, type Types } from "mongoose";
 import { defineModel } from "./define";
 
-/** One person's reaction of one kind on one message (a channel message, a direct message or a crew chat message). Toggled on/off. */
-export type ReactionTarget = "channel" | "dm" | "crew";
+/** One person's reaction of one kind on one message (a channel message, a direct message or a crew chat message)
+ * or on a comment under a community post ("feedComment"). Toggled on/off. */
+export type ReactionTarget = "channel" | "dm" | "crew" | "feedComment";
 
 export interface IReaction {
   _id: Types.ObjectId;
@@ -15,7 +16,7 @@ export interface IReaction {
 
 const ReactionSchema = new Schema<IReaction>(
   {
-    targetType: { type: String, enum: ["channel", "dm", "crew"], required: true },
+    targetType: { type: String, enum: ["channel", "dm", "crew", "feedComment"], required: true },
     targetId: { type: Schema.Types.ObjectId, required: true },
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     kind: { type: String, required: true, maxlength: 20 },

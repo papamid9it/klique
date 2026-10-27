@@ -1,8 +1,10 @@
 "use client";
 
+import { ContributeCard, ContributionFields, ContributionsPanel, contributionDraftOf, contributionInput, type ContributionDraft } from "@/components/domain/money/Contribute";
+import { usePaymentReturn } from "@/components/domain/money/Donate";
+import { ReviewBar } from "@/components/domain/events/ReviewBar";
 import { useCategories } from "@/lib/hooks/useCategories";
 import { WhoCame } from "@/components/domain/events/WhoCame";
-import { ProfileTrigger } from "@/components/providers/ProfileCardProvider";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -15,7 +17,6 @@ import { ShareButton } from "@/components/domain/ShareButton";
 import { ReminderPrompt } from "@/components/domain/events/ReminderPrompt";
 import { SponsoredBox, useAds } from "@/components/domain/ads/Sponsored";
 import { useToast } from "@/components/providers/ToastProvider";
-import { Avatar } from "@/components/ui/Avatar";
 import { ImageField } from "@/components/ui/ImageField";
 import { useMediaViewer } from "@/components/providers/MediaViewerProvider";
 import { Button, buttonClass } from "@/components/ui/Button";
@@ -33,8 +34,10 @@ import { currencyOf, placeLabel, type Place } from "@/lib/places";
 import { CURRENCIES, formatDateLong, formatDateShort, formatPrice, formatTime } from "@/lib/format";
 import { useApi, useNow } from "@/lib/hooks/useApi";
 import { useEventActions } from "@/lib/hooks/useEventActions";
+import { domainOf, isHttpLink, normalizeLink } from "@/lib/links";
 import type { EventDTO } from "@/lib/types";
 import { EventCrews } from "@/components/domain/crews/EventCrews";
+import { EventPanel } from "@/components/domain/events/EventPanel";
 import { crewsHref } from "@/components/domain/crews/parts";
 
 /** Lagos (UTC+1) wall-clock parts for form inputs. */
@@ -57,12 +60,15 @@ function EditModal({ event, open, onClose, onSaved }: { event: EventDTO; open: b
   const [currency, setCurrency] = useState(event.currency);
   const [neighborhood, setNeighborhood] = useState(event.neighborhood);
   const [venue, setVenue] = useState(event.venue);
+  const [ticketUrl, setTicketUrl] = useState(event.ticketUrl ?? "");
+  const [onlineUrl, setOnlineUrl] = useState(event.onlineUrl ?? "");
   const [date, setDate] = useState(s.date);
   const [start, setStart] = useState(s.time);
   const [end, setEnd] = useState(en?.time ?? "");
   const [price, setPrice] = useState(String(event.priceNaira));
   const [capacity, setCapacity] = useState(event.capacity ? String(event.capacity) : "");
   const [cover, setCover] = useState(event.coverImage ?? "");
+  const [chipIn, setChipIn] = useState<ContributionDraft>(() => contributionDraftOf(event.contribution));
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
@@ -83,17 +89,33 @@ function EditModal({ event, open, onClose, onSaved }: { event: EventDTO; open: b
       setErrors({ capacity: "Capacity must be 1 or more." });
       return;
     }
+    const tickets = normalizeLink(ticketUrl);
+    const joinLink = online ? normalizeLink(onlineUrl) : "";
+    if ((tickets && !isHttpLink(tickets)) || (joinLink && !isHttpLink(joinLink))) {
+      setErrors({ ...(tickets && !isHttpLink(tickets) ? { ticketUrl: "Enter a valid link, like https://tix.africa/your-event" } : {}), ...(joinLink && !isHttpLink(joinLink) ? { onlineUrl: "Enter a valid link" } : {}) });
+      return;
+    }
+    let contribution;
+    try {
+      contribution = contributionInput(chipIn);
+    } catch (err) {
+      setErrors({ contribution: (err as Error).message });
+      return;
+    }
     setBusy(true);
     setErrors({});
     setFormError(null);
     try {
       const res = await EventService.update(event.id, {
+        contribution,
         title: title.trim(),
         description: description.trim(),
         interest,
         ...place,
         neighborhood,
         online,
+        ticketUrl: tickets,
+        onlineUrl: joinLink,
         currency,
         venue: venue.trim(),
         startsAt: toIso(date, start),
@@ -132,6 +154,7 @@ function EditModal({ event, open, onClose, onSaved }: { event: EventDTO; open: b
         </label>
         <PlaceFields value={place} onChange={setPlace} neighborhood={neighborhood} onNeighborhood={setNeighborhood} errors={errors} />
         <TextField label={online ? "Where to join" : "Venue"} value={venue} onChange={(e) => setVenue(e.target.value)} maxLength={LIMITS.venue} error={errors.venue} />
+        {online && <TextField label="Join link (optional)" type="url" inputMode="url" value={onlineUrl} onChange={(e) => setOnlineUrl(e.target.value)} onBlur={() => setOnlineUrl((v) => normalizeLink(v))} error={errors.onlineUrl} placeholder="https://meet.google.com/…" hint="Shows as a Join online button." />}
         <div className="grid gap-4 sm:grid-cols-3">
           <TextField label="Date" type="date" value={date} onChange={(e) => setDate(e.target.value)} error={errors.date} />
           <TextField label="Starts" type="time" value={start} onChange={(e) => setStart(e.target.value)} error={errors.startsAt} />
@@ -148,7 +171,9 @@ function EditModal({ event, open, onClose, onSaved }: { event: EventDTO; open: b
           </div>
           <TextField label="Capacity" type="number" min={1} value={capacity} onChange={(e) => setCapacity(e.target.value)} error={errors.capacity} hint="Empty = unlimited" />
         </div>
+        <TextField label="Ticket link (optional)" type="url" inputMode="url" value={ticketUrl} onChange={(e) => setTicketUrl(e.target.value)} onBlur={() => setTicketUrl((v) => normalizeLink(v))} error={errors.ticketUrl} placeholder="https://tix.africa/…" hint="Shows as a Get tickets button." />
         <ImageField kind="photo" label="Cover image" value={cover} onChange={setCover} error={errors.coverImage} />
+        {event.community && !event.community.official && <ContributionFields value={chipIn} onChange={setChipIn} error={errors.contribution} />}
         {formError && (
           <p role="alert" className="text-sm font-medium text-danger">
             {formError}
@@ -224,8 +249,9 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
   const going = event.viewer.rsvp === "going";
   const [partnerAd] = useAds("event-page", { interest: event.interest, exclude: event.id });
   const isHost = event.viewer.isHost;
+  // back from paying on Paystack: confirm, then show the new total
+  usePaymentReturn(() => void EventService.get(event.id).then((r) => onChange(r.data)).catch(() => {}));
   const cancelled = (event as EventDTO & { cancelled?: boolean }).cancelled === true;
-  const spots = event.capacity ? `${event.goingCount} of ${event.capacity} spots` : `${event.goingCount} going`;
 
   async function setCancelled() {
     setWorking(true);
@@ -256,7 +282,8 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
 
   return (
     <article>
-      <Link href="/events" className="mb-4 inline-flex items-center gap-1.5 text-sm text-ink-muted hover:text-ink">
+      <EventPanel event={event} people={people} namesHidden={!!attendees.data?.namesHidden} />
+      <Link href="/events" className="mb-4 inline-flex items-center gap-1.5 text-sm text-ink-muted hover:text-ink lg:hidden">
         <Icon name="arrow-left" size={15} /> All events
       </Link>
       <Cover src={eventPhoto(event.id, event.coverImage)} seed={event.id} interest={event.interest} className="aspect-[16/8] w-full rounded-card border border-line">
@@ -271,6 +298,7 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
 
       <div className="mt-6 grid gap-8 lg:grid-cols-[1fr_20rem]">
         <div className="min-w-0 space-y-6">
+          <ReviewBar event={event} onChange={onChange} onEdit={() => setEditing(true)} />
           <header>
             <div className="mb-3 flex flex-wrap gap-2">
               <InterestChip id={event.interest} />
@@ -325,7 +353,7 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
           )}
 
           {event.description && (
-            <section aria-label="About this event">
+            <section id="about" aria-label="About this event" className="scroll-mt-6">
               <h2 className="mb-2 text-base font-semibold">About</h2>
               <p className="leading-relaxed whitespace-pre-line text-ink">{event.description}</p>
             </section>
@@ -336,35 +364,14 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
             <PersonRow user={event.host} />
           </section>
 
-          <section aria-label="Who's going" className="kq-calm">
-            <h2 className="mb-2 text-base font-semibold">{spots}</h2>
-            {attendees.loading ? (
-              <Skeleton className="h-10 w-48" />
-            ) : (
-              <>
-                {people.length > 0 && (
-                  <ul className="flex flex-wrap gap-2">
-                    {people.map((p) => (
-                      <li key={p.id}>
-                        <ProfileTrigger handle={p.handle} title={p.displayName} className="block rounded-full ring-2 ring-surface transition hover:ring-accent text-left">
-                          <Avatar name={p.displayName} src={p.avatarUrl} frame={p.avatarFrame} size={40} />
-                          <span className="sr-only">{p.displayName}</span>
-                        </ProfileTrigger>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {attendees.data?.namesHidden && <p className="mt-2 text-sm text-ink-muted">Some people keep attendance private.</p>}
-                {!attendees.data?.namesHidden && people.length === 0 && !attendees.error && <p className="text-sm text-ink-muted">Nobody yet. Be the first.</p>}
-              </>
-            )}
-          </section>
 
+          {event.contribution && event.viewer.canManageMoney && <ContributionsPanel event={event} />}
           {/* events outside any community keep their crews here; the rest live in their community's Crews view */}
           {!event.isPast && !cancelled && !event.community && <EventCrews event={event} />}
         </div>
 
         <aside className="space-y-3 lg:sticky lg:top-6 lg:self-start">
+          <ContributeCard event={event} />
           <div className="space-y-3 rounded-card border border-line bg-surface p-4">
             {isHost ? (
               <>
@@ -383,6 +390,8 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
                   </Button>
                 )}
               </>
+            ) : event.review ? (
+              <p className="text-sm text-ink-muted">{event.review.status === "pending" ? "Going opens once it's approved." : "This event wasn't approved."}</p>
             ) : cancelled ? (
               <p className="text-sm font-medium text-danger">This event was cancelled.</p>
             ) : event.isPast ? (
@@ -435,6 +444,22 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
               </Button>
             )}
           </div>
+          {/* the host's own links: tickets, and where to join an online event (both go through "You're leaving Klique") */}
+          {!cancelled && !event.isPast && (event.ticketUrl || event.onlineUrl) && (
+            <div className="space-y-2 rounded-card border border-line bg-surface p-4">
+              {event.ticketUrl && (
+                <a href={event.ticketUrl} target="_blank" rel="noopener noreferrer nofollow" className={buttonClass("primary", "md", "w-full")}>
+                  <Icon name="ticket" size={16} /> Get tickets
+                </a>
+              )}
+              {event.onlineUrl && (
+                <a href={event.onlineUrl} target="_blank" rel="noopener noreferrer nofollow" className={buttonClass(event.ticketUrl ? "secondary" : "primary", "md", "w-full")}>
+                  <Icon name="video" size={16} /> Join online
+                </a>
+              )}
+              <p className="truncate text-center font-mono text-[11px] text-ink-muted">{[...new Set([event.ticketUrl, event.onlineUrl].map((u) => (u ? domainOf(u) : null)).filter(Boolean))].join(" · ")}</p>
+            </div>
+          )}
           {!event.online && !event.isPast && !cancelled && (
             <div className="space-y-2 rounded-card border border-line bg-surface p-4">
               <p className="flex items-center gap-2 text-sm font-semibold">

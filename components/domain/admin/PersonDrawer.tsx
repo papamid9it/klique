@@ -5,6 +5,7 @@ import { useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
 import { AdminService } from "@/app/services/AdminService";
 import { useToast } from "@/components/providers/ToastProvider";
+import { profileHref } from "@/components/providers/ProfileCardProvider";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { TextArea } from "@/components/ui/Field";
@@ -122,7 +123,7 @@ export function PersonDrawer({ userId, onClose, onChange }: { userId: string | n
           <section>
             <h3 className="eyebrow mb-2">Actions</h3>
             <div className="flex flex-wrap gap-2">
-              <Button size="sm" href={`/people/${u.handle}`}>
+              <Button size="sm" href={profileHref(u.handle)}>
                 <Icon name="user" size={14} /> View profile
               </Button>
               <Button size="sm" onClick={() => setSigningOut(true)} disabled={busy}>

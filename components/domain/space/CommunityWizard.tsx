@@ -11,7 +11,7 @@ import { ImageField } from "@/components/ui/ImageField";
 import { Icon } from "@/components/ui/Icon";
 import { cx } from "@/components/ui/cx";
 import { LIMITS, isInterestId, type InterestId } from "@/lib/constants";
-import type { CommunityPrivacy } from "@/lib/types";
+import type { CommunityPrivacy, GroupPolicy } from "@/lib/types";
 
 const STEPS = ["Who can join", "About it", "Where it is"] as const;
 
@@ -23,6 +23,7 @@ export function CommunityWizard({ onSubmit }: { onSubmit: (input: CommunityInput
   const categories = useCategories();
   const [step, setStep] = useState(0);
   const [privacy, setPrivacy] = useState<CommunityPrivacy>("public");
+  const [feedPolicy, setFeedPolicy] = useState<GroupPolicy>("off");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [interest, setInterest] = useState<InterestId>(categories[0].id);
@@ -38,7 +39,7 @@ export function CommunityWizard({ onSubmit }: { onSubmit: (input: CommunityInput
     setErrors({});
     setGeneral(null);
     try {
-      await onSubmit({ name: name.trim(), description: description.trim(), interest, ...place, neighborhood: neighborhood.trim(), privacy, coverImage: coverImage.trim() || null });
+      await onSubmit({ name: name.trim(), description: description.trim(), interest, ...place, neighborhood: neighborhood.trim(), privacy, feedPolicy, coverImage: coverImage.trim() || null });
     } catch (err) {
       if (isApiError(err) && err.errors) {
         setErrors(err.errors);
@@ -111,6 +112,11 @@ export function CommunityWizard({ onSubmit }: { onSubmit: (input: CommunityInput
               ))}
             </SelectField>
             <TextArea label="Description (optional)" value={description} onChange={(e) => setDescription(e.target.value)} maxLength={LIMITS.communityDescription} counter={LIMITS.communityDescription} error={errors.description} placeholder="Who is this for and what do you do together?" />
+            <SelectField label="Posts (pictures and videos)" value={feedPolicy} onChange={(e) => setFeedPolicy(e.target.value as GroupPolicy)} hint="An Instagram-style section with votes and comments. Its posts reach members' home feeds. You can change this later.">
+              <option value="off">Off</option>
+              <option value="admins">On: only owners and admins post</option>
+              <option value="members">On: any member can post</option>
+            </SelectField>
           </div>
         )}
 

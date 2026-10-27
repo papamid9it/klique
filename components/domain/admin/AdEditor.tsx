@@ -5,7 +5,7 @@ import { useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
 import { AdService } from "@/app/services/AdService";
 import { AdminService } from "@/app/services/AdminService";
-import { SponsoredBox, SponsoredCard } from "@/components/domain/ads/Sponsored";
+import { SponsoredBox, SponsoredCard, SponsoredCommunity } from "@/components/domain/ads/Sponsored";
 import { PlaceFields } from "@/components/domain/places/PlaceFields";
 import { useToast } from "@/components/providers/ToastProvider";
 import { Button } from "@/components/ui/Button";
@@ -18,18 +18,49 @@ import { type InterestId } from "@/lib/constants";
 import { formatDateShort } from "@/lib/format";
 import { useApi, useDebounced } from "@/lib/hooks/useApi";
 import { parseScope, scopeLabel, type Place } from "@/lib/places";
-import { DISCOVER_BANNER_ADS } from "@/lib/constants";
-import type { AdDTO, AdInput, AdminAdDTO, AdminEventRow, AdSlot } from "@/lib/types";
+import type { AdDTO, AdInput, AdminAdDTO, AdminCommunityRow, AdminEventRow, AdSlot } from "@/lib/types";
 
-const ALL_SLOTS: { id: AdSlot; label: string; hint: string }[] = [
-  { id: "home-hero", label: "Discover banner", hint: "The big banner at the top of the home page (replaces the featured event)" },
-  { id: "home-feed", label: "Home feed", hint: "A card in “Happening around you” (phones and desktop)" },
+export const SLOTS: { id: AdSlot; label: string; hint: string }[] = [
+  { id: "home-feed", label: "Home feed", hint: "A card between posts in the home feed, every few posts (phones and desktop)" },
   { id: "home-rail", label: "Home side box", hint: "Right column of the home page, desktop only" },
   { id: "events-list", label: "Events list", hint: "Top of the list, and once further down" },
   { id: "event-page", label: "Event page", hint: "Partner box under “I'm going”. No picture." },
   { id: "search", label: "Search", hint: "First result, when the search words match" },
+  { id: "communities", label: "Sponsored communities", hint: "“Sponsored communities” on the Communities page (sponsored communities only)" },
 ];
-export const SLOTS = ALL_SLOTS.filter((s) => DISCOVER_BANNER_ADS || s.id !== "home-hero");
+
+function CommunityPicker({ value, onPick }: { value: AdminAdDTO["community"]; onPick: (c: AdminCommunityRow) => void }) {
+  const [q, setQ] = useState("");
+  const query = useDebounced(q.trim(), 300);
+  const { data, loading } = useApi(() => AdminService.communities({ q: query, sort: "members" }), [query]);
+  const list = (data?.items ?? []).filter((c) => c.privacy === "public").slice(0, 6);
+  return (
+    <div className="space-y-2">
+      {value && (
+        <p className="rounded-control border border-line bg-raised/50 px-3 py-2 text-sm">
+          <span className="text-ink-muted">Sponsoring:</span> <span className="font-semibold">{value.name}</span>
+        </p>
+      )}
+      <TextField label={value ? "Pick a different community" : "Community to sponsor"} type="search" placeholder="Search public communities" value={q} onChange={(e) => setQ(e.target.value)} hint="Shown under “Sponsored communities” on the Communities page, to people who aren't in it yet." />
+      <ul className="divide-y divide-line rounded-control border border-line">
+        {loading && !list.length ? (
+          <li className="px-3 py-2 text-sm text-ink-muted">Loading…</li>
+        ) : list.length ? (
+          list.map((c) => (
+            <li key={c.id}>
+              <button type="button" onClick={() => onPick(c)} className={cx("flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-raised/60", value?.id === c.id && "bg-raised")}>
+                <span className="min-w-0 truncate font-medium">{c.name}</span>
+                <span className="shrink-0 font-mono text-[11px] text-ink-muted">{c.memberCount} members</span>
+              </button>
+            </li>
+          ))
+        ) : (
+          <li className="px-3 py-2 text-sm text-ink-muted">No public communities match.</li>
+        )}
+      </ul>
+    </div>
+  );
+}
 
 const toLocal = (iso: string | null | undefined) => {
   if (!iso) return "";
@@ -86,8 +117,9 @@ export function AdEditor({ ad, onClose, onSaved }: { ad: AdminAdDTO | "new"; onC
   const start = ad === "new" ? null : ad;
   const [f, setF] = useState({
     name: start?.name ?? "",
-    kind: (start?.kind ?? "event") as "event" | "brand",
+    kind: (start?.kind ?? "event") as "event" | "brand" | "community",
     event: start?.event ?? null,
+    community: start?.community ?? null,
     advertiser: start?.advertiser ?? "",
     title: start?.title ?? "",
     body: start?.body ?? "",
@@ -112,13 +144,14 @@ export function AdEditor({ ad, onClose, onSaved }: { ad: AdminAdDTO | "new"; onC
     name: f.name.trim(),
     kind: f.kind,
     eventId: f.kind === "event" ? (f.event?.id ?? null) : null,
+    communityId: f.kind === "community" ? (f.community?.id ?? null) : null,
     advertiser: f.advertiser,
     title: f.title,
     body: f.body,
     imageUrl: f.imageUrl.trim() || null,
     ctaLabel: f.ctaLabel,
     url: f.url.trim(),
-    slots: f.slots,
+    slots: f.kind === "community" ? ["communities"] : f.slots.filter((s) => s !== "communities"),
     places: f.places,
     interests: f.interests,
     keywords: f.keywords.split(",").map((k) => k.trim()).filter(Boolean),
@@ -152,6 +185,7 @@ export function AdEditor({ ad, onClose, onSaved }: { ad: AdminAdDTO | "new"; onC
     ctaLabel: f.ctaLabel || (f.kind === "event" ? "See event" : "Learn more"),
     url: f.kind === "brand" ? f.url || "#" : null,
     event: null,
+    community: f.kind === "community" ? { id: f.community?.id ?? "preview", slug: f.community?.slug ?? "", name: f.community?.name ?? "Pick a community", interest: "music", coverImage: f.imageUrl || null, memberCount: 0 } : null,
   };
 
   return (
@@ -161,11 +195,12 @@ export function AdEditor({ ad, onClose, onSaved }: { ad: AdminAdDTO | "new"; onC
 
         <TextField label="Name (only admins see this)" value={f.name} onChange={(e) => set("name", e.target.value)} maxLength={120} placeholder="e.g. FlexRide October" required />
 
-        <div role="radiogroup" aria-label="Kind of ad" className="grid grid-cols-2 gap-2">
+        <div role="radiogroup" aria-label="Kind of ad" className="grid grid-cols-3 gap-2">
           {(
             [
               { id: "event", label: "Promoted event", hint: "Push an event on Klique" },
               { id: "brand", label: "Brand ad", hint: "Picture, text and a link" },
+              { id: "community", label: "Sponsored community", hint: "On the Communities page" },
             ] as const
           ).map((k) => (
             <button key={k.id} type="button" role="radio" aria-checked={f.kind === k.id} onClick={() => set("kind", k.id)} className={cx("rounded-control border px-3 py-2.5 text-left", f.kind === k.id ? "border-accent-text bg-raised" : "border-line hover:bg-raised/50")}>
@@ -175,7 +210,12 @@ export function AdEditor({ ad, onClose, onSaved }: { ad: AdminAdDTO | "new"; onC
           ))}
         </div>
 
-        {f.kind === "event" ? (
+        {f.kind === "community" ? (
+          <section className="space-y-3">
+            <CommunityPicker value={f.community} onPick={(c) => set("community", { id: c.id, slug: c.slug, name: c.name })} />
+            <ImageField kind="photo" label="Picture (optional)" value={f.imageUrl} onChange={(v) => set("imageUrl", v)} hint="Leave empty to use the community's own picture." />
+          </section>
+        ) : f.kind === "event" ? (
           <section className="space-y-3">
             <EventPicker value={f.event} onPick={(e) => set("event", { id: e.id, title: e.title, startsAt: e.startsAt, cancelled: e.cancelled })} />
             <TextField label="Headline (optional)" value={f.title} onChange={(e) => set("title", e.target.value)} maxLength={120} hint="Leave empty to use the event's title." />
@@ -194,10 +234,10 @@ export function AdEditor({ ad, onClose, onSaved }: { ad: AdminAdDTO | "new"; onC
           </section>
         )}
 
-        <section>
+        {f.kind !== "community" && <section>
           <h3 className="eyebrow mb-2">Where it shows</h3>
           <div className="space-y-1.5">
-            {SLOTS.map((s) => (
+            {SLOTS.filter((s) => s.id !== "communities").map((s) => (
               <label key={s.id} className="flex cursor-pointer items-start gap-3 rounded-control border border-line px-3 py-2 has-[:checked]:border-accent-text">
                 <input type="checkbox" checked={f.slots.includes(s.id)} onChange={() => set("slots", toggle(f.slots, s.id))} className="mt-1 accent-[var(--accent-text)]" />
                 <span>
@@ -207,7 +247,7 @@ export function AdEditor({ ad, onClose, onSaved }: { ad: AdminAdDTO | "new"; onC
               </label>
             ))}
           </div>
-        </section>
+        </section>}
 
         <section className="space-y-3">
           <h3 className="eyebrow">Who sees it</h3>
@@ -261,6 +301,11 @@ export function AdEditor({ ad, onClose, onSaved }: { ad: AdminAdDTO | "new"; onC
 
         <section>
           <h3 className="eyebrow mb-2">Preview</h3>
+          {f.kind === "community" ? (
+            <div className="pointer-events-none max-w-xs">
+              <SponsoredCommunity ad={preview} />
+            </div>
+          ) : (
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="pointer-events-none">
               <SponsoredCard ad={preview} />
@@ -270,6 +315,7 @@ export function AdEditor({ ad, onClose, onSaved }: { ad: AdminAdDTO | "new"; onC
               <p className="text-xs text-ink-muted">{f.kind === "event" ? "Promoted events use the event's own picture." : ""}</p>
             </div>
           </div>
+          )}
         </section>
 
         {error && (

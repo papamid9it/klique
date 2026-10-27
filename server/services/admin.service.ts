@@ -1,4 +1,7 @@
 import "server-only";
+import { Payout } from "../models/Money";
+import { FeedComment, FeedPost, FeedVote, type IFeedPost } from "../models/FeedPost";
+import { Reaction } from "../models/Reaction";
 import { VOICE_ENABLED } from "@/lib/constants";
 import type { Types } from "mongoose";
 import type {
@@ -55,7 +58,14 @@ async function describeTarget(r: IReport, briefs: Map<string, UserBrief>): Promi
     case "user": {
       const u = await User.findById(r.targetId).lean<IUser>();
       if (!u) return none;
-      return { title: `${u.displayName} (@${u.handle})${u.suspendedAt ? " · suspended" : ""}`, body: u.bio, images: [u.avatarUrl, u.bannerUrl].filter((x): x is string => !!x), author: toBrief(u), href: `/people/${u.handle}`, gone: false, removable: false };
+      return { title: `${u.displayName} (@${u.handle})${u.suspendedAt ? " · suspended" : ""}`, body: u.bio, images: [u.avatarUrl, u.bannerUrl].filter((x): x is string => !!x), author: toBrief(u), href: `/?profile=${u.handle}`, gone: false, removable: false };
+    }
+    case "feedPost": {
+      const p = await FeedPost.findById(r.targetId).lean<IFeedPost>();
+      if (!p) return none;
+      const c = await Community.findById(p.communityId).select("slug name").lean<Pick<ICommunity, "slug" | "name">>();
+      const author = (await loadBriefs([p.authorId])).get(sid(p.authorId)) ?? null;
+      return { title: `Post in ${c?.name ?? "a community"}`, body: p.caption, images: p.media.map((m) => (m.kind === "video" ? (m.poster ?? m.url) : m.url)), author, href: c ? `/communities/${c.slug}?view=posts&p=${sid(p._id)}` : null, gone: false, removable: true };
     }
     case "post": {
       const p = await Post.findById(r.targetId).lean<IPost>();
@@ -85,9 +95,9 @@ async function describeTarget(r: IReport, briefs: Map<string, UserBrief>): Promi
     case "channelMessage": {
       const m = await ChannelMessage.findById(r.targetId).lean<IChannelMessage>();
       if (!m) return none;
-      const [ch, c] = await Promise.all([Channel.findById(m.channelId).select("slug name").lean<Pick<IChannel, "slug" | "name">>(), Community.findById(m.communityId).select("slug name").lean<Pick<ICommunity, "slug" | "name">>()]);
+      const [ch, c] = await Promise.all([Channel.findById(m.channelId).select("slug name topicId").lean<Pick<IChannel, "slug" | "name" | "topicId">>(), Community.findById(m.communityId).select("slug name").lean<Pick<ICommunity, "slug" | "name">>()]);
       const author = (await loadBriefs([m.authorId])).get(sid(m.authorId)) ?? null;
-      return { title: `Message in ${c?.name ?? "a community"} #${ch?.name ?? "channel"}`, body: m.deletedAt ? "" : m.body, images: m.deletedAt ? [] : [...(m.images ?? []), ...(m.stickerUrl ? [m.stickerUrl] : [])], author, href: c && ch ? `/communities/${c.slug}?c=${ch.slug}` : null, gone: !!m.deletedAt, removable: !m.deletedAt };
+      return { title: ch?.topicId ? `Reply to the post "${ch.name}" in ${c?.name ?? "a community"}` : `Message in ${c?.name ?? "a community"} #${ch?.name ?? "channel"}`, body: m.deletedAt ? "" : m.body, images: m.deletedAt ? [] : [...(m.images ?? []), ...(m.stickerUrl ? [m.stickerUrl] : [])], author, href: c && ch ? (ch.topicId ? `/communities/${c.slug}?view=topics&t=${sid(ch.topicId)}` : `/communities/${c.slug}?c=${ch.slug}`) : null, gone: !!m.deletedAt, removable: !m.deletedAt };
     }
     case "ad": {
       const a = await Ad.findById(r.targetId).lean<IAd>();
@@ -176,6 +186,14 @@ async function removeTarget(r: IReport, admin: IUser) {
       deleteUploads([...(m.images ?? []), m.stickerUrl], { force: true }); // removed by a moderator: saved copies go too
       return;
     }
+    case "feedPost": {
+      const p = await FeedPost.findById(r.targetId).lean<IFeedPost>();
+      if (!p) return;
+      const comments = await FeedComment.find({ postId: p._id }).distinct("_id");
+      await Promise.all([Reaction.deleteMany({ targetType: "feedComment", targetId: { $in: comments } }), FeedComment.deleteMany({ postId: p._id }), FeedVote.deleteMany({ postId: p._id }), FeedPost.deleteOne({ _id: p._id })]);
+      deleteUploads(p.media.flatMap((m) => [m.url, m.poster]), { force: true });
+      return;
+    }
     case "ad":
       // reported ads are paused, not deleted, so the advertiser's record and numbers survive
       await Ad.updateOne({ _id: r.targetId }, { status: "paused" });
@@ -203,6 +221,8 @@ async function authorOf(r: IReport): Promise<Types.ObjectId | null> {
       return (await ChannelMessage.findById(r.targetId).select("authorId").lean<Pick<IChannelMessage, "authorId">>())?.authorId ?? null;
     case "message":
       return (await Message.findById(r.targetId).select("senderId").lean<Pick<IMessage, "senderId">>())?.senderId ?? null;
+    case "feedPost":
+      return (await FeedPost.findById(r.targetId).select("authorId").lean<Pick<IFeedPost, "authorId">>())?.authorId ?? null;
     case "ad":
       return null;
   }
@@ -350,7 +370,7 @@ export async function setSuspended(admin: IUser, userId: string, on: boolean, re
     on ? { suspendedAt: new Date(), suspendedReason: reason.slice(0, 300), $inc: { tokenVersion: 1 } } : { suspendedAt: null, suspendedReason: "" },
     { returnDocument: "after" },
   ).lean<IUser>();
-  await logAction(admin, on ? "user.suspend" : "user.restore", "user", u!._id, `@${u!.handle}`, on ? reason : "", `/people/${u!.handle}`);
+  await logAction(admin, on ? "user.suspend" : "user.restore", "user", u!._id, `@${u!.handle}`, on ? reason : "", `/?profile=${u!.handle}`);
   return toAdminUser(u!);
 }
 
@@ -358,7 +378,7 @@ export async function setSuspended(admin: IUser, userId: string, on: boolean, re
 export async function revokeSessions(admin: IUser, userId: string): Promise<AdminUserDTO> {
   await findUser(userId);
   const u = await User.findByIdAndUpdate(userId, { $inc: { tokenVersion: 1 } }, { returnDocument: "after" }).lean<IUser>();
-  await logAction(admin, "user.signout", "user", u!._id, `@${u!.handle}`, "", `/people/${u!.handle}`);
+  await logAction(admin, "user.signout", "user", u!._id, `@${u!.handle}`, "", `/?profile=${u!.handle}`);
   return toAdminUser(u!);
 }
 
@@ -465,8 +485,8 @@ export async function adminDeleteCommunity(admin: IUser, id: string, note = "") 
 
 /** The tab counts in the admin menu. */
 export async function adminSummary(): Promise<AdminSummaryDTO> {
-  const [reports, pendingDrafts, pendingAds] = await Promise.all([reportCounts(), EventDraft.countDocuments({ status: "pending" }), AdCampaign.countDocuments({ status: "pending" })]);
-  return { reports, pendingDrafts, pendingAds };
+  const [reports, pendingDrafts, pendingAds, pendingPayouts] = await Promise.all([reportCounts(), EventDraft.countDocuments({ status: "pending" }), AdCampaign.countDocuments({ status: "pending" }), Payout.countDocuments({ status: "requested" })]);
+  return { reports, pendingDrafts, pendingAds, pendingPayouts };
 }
 
 export async function adminOverview(): Promise<AdminOverviewDTO> {

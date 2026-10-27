@@ -9,6 +9,7 @@ import { RightRail } from "./RightRail";
 import { VerifyBanner } from "./VerifyBanner";
 import { CommunityPreloader } from "./CommunityPreloader";
 import { Sidebar } from "./Sidebar";
+import { HomePanel } from "./HomePanel";
 
 /** /communities/<slug> (not /communities/new) is the chat workspace and owns its own panes; so does a crew (its chat). */
 const isWorkspace = (p: string) => /^\/communities\/(?!new$)[^/]+\/?$/.test(p) || /^\/crews\/[^/]+\/?$/.test(p) || p === "/messages" || p.startsWith("/messages/");
@@ -17,8 +18,8 @@ const SKIP =
   "sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[200] focus:rounded-control focus:bg-ink focus:px-4 focus:py-2 focus:text-canvas";
 
 /**
- * Home: nav · feed · suggestions rail. Other pages: nav · content (wider, no rail). Mobile: top bar + bottom tabs.
- * Community pages: slim nav · [channels · chat · community info] — the right side is the page's own
+ * Home and other top-level pages: home panel (main nav) · content; the home feed also gets a suggestions rail.
+ * Mobile: top bar + bottom tabs. Community pages: slim nav · [channels · chat · community info] — the right side is the page's own
  * content, not a fixed rail, so it can show whatever that page needs.
  */
 export function AppShell({ children }: { children: ReactNode }) {
@@ -55,7 +56,7 @@ function Shell({ children }: { children: ReactNode }) {
         <a href="#main" className={SKIP}>
           Skip to content
         </a>
-        <Sidebar compact />
+        <Sidebar />
         <main id="main" className="h-dvh min-w-0">
           {children}
         </main>
@@ -65,14 +66,14 @@ function Shell({ children }: { children: ReactNode }) {
     );
   }
 
-  // Ads Manager and Notifications bring their own left panel: slim icon rail · their panel · page.
-  if (/^\/(ads|notifications)(\/|$)/.test(pathname)) {
+  // Ads Manager brings its own left panel: icon rail · its panel · page.
+  if (/^\/ads(\/|$)/.test(pathname)) {
     return (
       <div className="min-h-dvh lg:grid lg:grid-cols-[76px_minmax(0,1fr)]">
         <a href="#main" className={SKIP}>
           Skip to content
         </a>
-        <Sidebar compact />
+        <Sidebar />
         <div className="min-w-0">
           <MobileTopBar />
           <VerifyBanner />
@@ -85,16 +86,17 @@ function Shell({ children }: { children: ReactNode }) {
     );
   }
 
-  // The suggestions rail belongs to the home feed only; every other page gets the room instead.
+  // Everything else (Home, Events, Notifications, Communities, Saved, search…): the home panel · page,
+  // and the suggestions rail beside the home feed on wide screens.
   const home = pathname === "/";
-  const wide = ["/events", "/saved", "/communities", "/search"].includes(pathname.replace(/\/$/, "")) || pathname.startsWith("/people/");
+  const wide = ["/events", "/saved", "/communities", "/search", "/notifications"].includes(pathname.replace(/\/$/, ""));
 
   return (
     <div className={home ? "min-h-dvh lg:grid lg:grid-cols-[272px_minmax(0,1fr)] xl:grid-cols-[272px_minmax(0,1fr)_320px]" : "min-h-dvh lg:grid lg:grid-cols-[272px_minmax(0,1fr)]"}>
       <a href="#main" className={SKIP}>
         Skip to content
       </a>
-      <Sidebar />
+      <HomePanel />
       <div className="min-w-0">
         <MobileTopBar />
         <VerifyBanner />

@@ -1,4 +1,5 @@
 import type { Types } from "mongoose";
+import { Payment } from "./models/Money";
 import { canHostInSpace, isSiteAdmin } from "./policies/hosting";
 import { isKlique } from "./services/klique-id";
 import type {
@@ -21,7 +22,7 @@ import type { IPost } from "./models/Post";
 import { Rsvp, SavedEvent } from "./models/Rsvp";
 import { Subcommunity, type ISubcommunity } from "./models/Subcommunity";
 import { User, type IUser } from "./models/User";
-import { canCreateGroup, communityAccessFrom, type SpaceAccess } from "./policies/access";
+import { canCreateGroup, communityAccessFrom, gateOf, type SpaceAccess } from "./policies/access";
 
 const sid = (id: Types.ObjectId | string) => String(id);
 
@@ -35,19 +36,19 @@ export function viewerAccess(a: SpaceAccess): ViewerAccess {
     canView: a.canView,
     canPost: a.canPost,
     ...(a.canModerate ? { canModerate: true } : {}),
+    ...(a.pointsToPost ? { pointsToPost: a.pointsToPost } : {}),
   };
 }
 
 /* ------------------------------- users ------------------------------ */
 
-export const toBrief = (u: Pick<IUser, "_id" | "handle" | "displayName" | "avatarUrl" | "country" | "city"> & Partial<Pick<IUser, "avatarFrame" | "nameEffect" | "rank">>): UserBrief => ({
+export const toBrief = (u: Pick<IUser, "_id" | "handle" | "displayName" | "avatarUrl" | "country" | "city"> & Partial<Pick<IUser, "avatarFrame" | "nameEffect">>): UserBrief => ({
   id: sid(u._id),
   handle: u.handle,
   displayName: u.displayName,
   avatarUrl: u.avatarUrl ?? null,
   avatarFrame: u.avatarFrame ?? null,
   nameEffect: u.nameEffect ?? null,
-  rank: u.rank ?? 1,
   country: u.country ?? "NG",
   city: u.city,
 });
@@ -61,6 +62,11 @@ export const toProfile = (u: IUser): UserProfile => ({
   neighborhood: u.neighborhood,
   interests: u.interests,
   joinedAt: u.createdAt.toISOString(),
+  points: u.points ?? 0,
+  pronouns: u.pronouns ?? "",
+  presence: u.presence ?? "online",
+  profileTheme: u.profileTheme ?? null,
+  profileEffect: u.profileEffect ?? null,
 });
 
 export const toMe = (u: IUser, unreadMessages = 0, unreadNotifications = 0): UserMe => ({
@@ -75,12 +81,11 @@ export const toMe = (u: IUser, unreadMessages = 0, unreadNotifications = 0): Use
   dmPolicy: u.dmPolicy,
   unreadMessages,
   unreadNotifications,
-  points: u.points ?? 0,
   hype: u.hype ?? 0,
   isAdmin: isSiteAdmin(u),
 });
 
-const BRIEF_FIELDS = "handle displayName avatarUrl avatarFrame nameEffect rank country city";
+const BRIEF_FIELDS = "handle displayName avatarUrl avatarFrame nameEffect country city";
 
 export async function loadBriefs(ids: (Types.ObjectId | string)[]): Promise<Map<string, UserBrief>> {
   const unique = [...new Set(ids.map(sid))];
@@ -125,7 +130,7 @@ export async function toCommunityCards(
   }
 
   return communities.map((c) => {
-    const access = communityAccessFrom(c, memberships.get(sid(c._id)) ?? null, pending.has(sid(c._id)));
+    const access = communityAccessFrom(c, memberships.get(sid(c._id)) ?? null, pending.has(sid(c._id)), gateOf(viewer));
     return communityCard(c, access);
   });
 }
@@ -147,6 +152,9 @@ export function communityCard(c: ICommunity, access: SpaceAccess): CommunityCard
     memberCount: locked ? null : c.memberCount,
     coverImage: locked ? null : c.coverImage,
     locked,
+    // points minimums (never on Klique)
+    minPointsJoin: c.official ? 0 : (c.minPointsJoin ?? 0),
+    minPointsPost: c.official ? 0 : (c.minPointsPost ?? 0),
     viewer: viewerAccess(access),
   };
 }
@@ -163,8 +171,13 @@ export async function toCommunityDetail(
     createdAt: c.createdAt.toISOString(),
     groupPolicy: c.groupPolicy ?? "admins",
     canCreateGroup: canCreateGroup(c, access),
+    feedPolicy: c.feedPolicy ?? "off",
+    // the Posts section: owners/admins when it's on, everyone who's a member when members may post
+    canPostToFeed: (c.feedPolicy ?? "off") !== "off" && !access.banned && (access.canManage || (c.feedPolicy === "members" && access.canPost && !access.pointsToPost)),
     // Klique: only site admins post its events (its owner here; the others from Admin → Events)
     canHostEvents: isKlique(c) ? access.role === "owner" : canHostInSpace(access),
+    memberEvents: c.memberEvents !== false,
+    canSubmitEvents: !isKlique(c) && !canHostInSpace(access) && access.isMember && !access.banned && c.memberEvents !== false,
     owner,
     subcommunityCount: card.locked ? null : extra.subcommunityCount,
     upcomingEventCount: card.locked ? null : extra.upcomingEventCount,
@@ -187,6 +200,8 @@ export function toSubcommunity(
     description: redact ? "" : s.description,
     visibility: s.visibility,
     memberCount: redact ? null : s.memberCount,
+    minPointsJoin: s.minPointsJoin ?? 0,
+    minPointsPost: s.minPointsPost ?? 0,
     locked: redact,
     createdAt: s.createdAt.toISOString(),
     parent: {
@@ -259,6 +274,21 @@ export async function toEvents(events: IEvent[], viewer: IUser | null): Promise<
   const savedSet = new Set(saved.map((s) => sid(s.eventId)));
   const now = Date.now();
 
+  // chipping in (lib/money): what each has raised, the viewer's units, and whether it's all been paid out
+  const chipIn = events.filter((e) => e.contribution).map((e) => e._id);
+  const [raisedRows, mineRows] = chipIn.length
+    ? await Promise.all([
+        Payment.aggregate<{ _id: Types.ObjectId; raised: number; people: Types.ObjectId[]; unpaid: number }>([
+          { $match: { eventId: { $in: chipIn }, status: "paid" } },
+          { $lookup: { from: "payouts", localField: "payoutId", foreignField: "_id", as: "po" } },
+          { $group: { _id: "$eventId", raised: { $sum: "$amount" }, people: { $addToSet: "$userId" }, unpaid: { $sum: { $cond: [{ $eq: [{ $arrayElemAt: ["$po.status", 0] }, "paid"] }, 0, 1] } } } },
+        ]),
+        viewer ? Payment.aggregate<{ _id: Types.ObjectId; q: number }>([{ $match: { eventId: { $in: chipIn }, status: "paid", userId: viewer._id } }, { $group: { _id: "$eventId", q: { $sum: "$quantity" } } }]) : Promise.resolve([]),
+      ])
+    : [[], []];
+  const raisedMap = new Map(raisedRows.map((r) => [sid(r._id), r]));
+  const mineMap = new Map(mineRows.map((r) => [sid(r._id), r.q]));
+
   return events.map((e) => {
     const c = e.communityId ? communityMap.get(sid(e.communityId)) : undefined;
     const s = e.subcommunityId ? subMap.get(sid(e.subcommunityId)) : undefined;
@@ -274,6 +304,8 @@ export async function toEvents(events: IEvent[], viewer: IUser | null): Promise<
       city: e.city,
       neighborhood: e.neighborhood,
       online: !!e.online,
+      ticketUrl: e.ticketUrl ?? null,
+      onlineUrl: e.online ? (e.onlineUrl ?? null) : null,
       venue: e.venue,
       startsAt: e.startsAt.toISOString(),
       endsAt: e.endsAt ? e.endsAt.toISOString() : null,
@@ -292,6 +324,13 @@ export async function toEvents(events: IEvent[], viewer: IUser | null): Promise<
       crewCount: crewMap.get(sid(e._id)) ?? 0,
       isPast: end < now,
       isFull: e.capacity !== null && e.goingCount >= e.capacity,
+      review: e.review ? { status: e.review, reason: e.reviewReason ?? "" } : null,
+      contribution: e.contribution
+        ? (() => {
+            const r = raisedMap.get(sid(e._id));
+            return { label: e.contribution.label, unitPrice: e.contribution.unitPrice, maxQuantity: e.contribution.maxQuantity, raised: r?.raised ?? 0, contributors: r?.people.length ?? 0, mine: mineMap.get(sid(e._id)) ?? 0, withdrawn: !!r && r.unpaid === 0 };
+          })()
+        : null,
       viewer: {
         rsvp: rsvpMap.get(sid(e._id)) ?? null,
         saved: savedSet.has(sid(e._id)),

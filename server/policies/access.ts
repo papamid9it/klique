@@ -30,9 +30,30 @@ export interface SpaceAccess extends ViewerAccess {
   canJoinDirectly: boolean;
   /** parent owner/admin who can moderate a subcommunity (delete it) without being able to read a private one */
   canModerate: boolean;
+  /**
+   * A member without the points this space asks for to post in its Posts section: the minimum they need (0:
+   * nothing in the way). Chat, boards, comments, votes and reactions are never held back by it.
+   */
+  pointsToPost: number;
 }
 
 const isManager = (r: Role | null) => r === "owner" || r === "admin";
+
+/** Who's asking, for a space's points minimums (lib/points): their points, and whether they're a site admin. */
+export interface PointsGate {
+  points: number;
+  siteAdmin: boolean;
+}
+export const gateOf = (viewer: Pick<IUser, "points" | "email"> | null): PointsGate | undefined => (viewer ? { points: viewer.points ?? 0, siteAdmin: isSiteAdmin(viewer) } : undefined);
+
+/**
+ * The points a space asks for that this person doesn't have (0 when they're fine). Owners, admins and site admins
+ * never need any, and the Klique community never asks.
+ */
+export function pointsShort(min: number | undefined, role: Role | null, gate: PointsGate | undefined, official = false): number {
+  if (!min || official || !gate || gate.siteAdmin || isManager(role)) return 0;
+  return gate.points >= min ? 0 : min;
+}
 
 export async function findMembership(
   userId: Types.ObjectId | string,
@@ -48,13 +69,15 @@ function activeRole(m: IMembership | null): Role | null {
 
 /** Pure community-level access from already-loaded rows (lets list pages batch the lookups). */
 export function communityAccessFrom(
-  community: Pick<ICommunity, "privacy">,
+  community: Pick<ICommunity, "privacy"> & Partial<Pick<ICommunity, "official" | "minPointsPost">>,
   membership: IMembership | null,
   pendingRequest: boolean,
+  gate?: PointsGate,
 ): SpaceAccess {
   const role = activeRole(membership);
   const banned = membership?.status === "banned";
   const isPublic = community.privacy === "public";
+  const short = role ? pointsShort(community.minPointsPost, role, gate, !!community.official) : 0;
   return {
     role,
     isMember: role !== null,
@@ -62,6 +85,7 @@ export function communityAccessFrom(
     canManage: isManager(role),
     canView: isPublic ? true : role !== null,
     canPost: role !== null,
+    pointsToPost: short,
     banned,
     parentRole: role,
     canJoinDirectly: isPublic && !banned && role === null,
@@ -76,15 +100,17 @@ export function communityAccessFrom(
  * its owner and admins add people from the community.
  */
 export function subAccessFrom(
-  _sub: unknown,
+  sub: Partial<Pick<ISubcommunity, "minPointsPost">> | null,
   parentMembership: IMembership | null,
   subMembership: IMembership | null,
   viewerIsSiteAdmin = false,
+  points?: number,
 ): SpaceAccess {
   const parentRole = activeRole(parentMembership);
   const role = activeRole(subMembership);
   const banned = subMembership?.status === "banned";
   const overseer = parentRole === "owner" || viewerIsSiteAdmin;
+  const short = role && points !== undefined ? pointsShort(sub?.minPointsPost, overseer ? "owner" : role, { points, siteAdmin: viewerIsSiteAdmin }) : 0;
   return {
     role,
     isMember: role !== null,
@@ -92,6 +118,7 @@ export function subAccessFrom(
     canManage: isManager(role) || overseer,
     canView: role !== null || overseer,
     canPost: role !== null,
+    pointsToPost: short,
     banned,
     parentRole,
     canJoinDirectly: false,
@@ -112,6 +139,7 @@ export async function spaceAccess(space: Space, viewer: IUser | null): Promise<S
     parentRole: null,
     canJoinDirectly: false,
     canModerate: false,
+    pointsToPost: 0,
   };
 
   const { community, sub } = space;
@@ -128,7 +156,7 @@ export async function spaceAccess(space: Space, viewer: IUser | null): Promise<S
           subcommunityId: null,
           status: "pending",
         }));
-    return communityAccessFrom(community, m, pending);
+    return communityAccessFrom(community, m, pending, gateOf(viewer));
   }
 
   // ---- subcommunity ----
@@ -138,7 +166,7 @@ export async function spaceAccess(space: Space, viewer: IUser | null): Promise<S
     findMembership(viewer._id, community._id, null),
     findMembership(viewer._id, community._id, sub._id),
   ]);
-  return subAccessFrom(sub, parentM, subM, isSiteAdmin(viewer));
+  return subAccessFrom(sub, parentM, subM, isSiteAdmin(viewer), viewer.points ?? 0);
 }
 
 /* ---------------------------- assertions ---------------------------- */
@@ -149,6 +177,11 @@ export function assertCanView(access: SpaceAccess, what = "this") {
 
 export function assertCanPost(access: SpaceAccess) {
   if (!access.canPost) throw forbidden("Join this community to post or host here.");
+}
+
+/** For a new post in the Posts section: the points this space asks for (nothing else needs them). */
+export function assertPointsToPost(access: SpaceAccess) {
+  if (access.pointsToPost) throw forbidden(`You need ${access.pointsToPost.toLocaleString("en-NG")} points to post here.`);
 }
 
 export function assertCanManage(access: SpaceAccess) {
@@ -178,24 +211,46 @@ export async function eventVisibilityFilter(viewer: IUser | null): Promise<Recor
   ]);
   // Klique's events, and any old event that never had a community
   const forEveryone = { communityId: { $in: klique ? [klique, null] : [null] }, subcommunityId: null };
-  if (!viewer) return forEveryone;
+  // a member's event waiting for approval (or turned down) shows to its host only
+  if (!viewer) return { $and: [forEveryone, publishedEvents(null)] };
 
   const communityIds = memberships.filter((m) => !m.subcommunityId).map((m) => m.communityId);
   const subIds = memberships.filter((m) => m.subcommunityId).map((m) => m.subcommunityId!);
   return {
-    $or: [
-      forEveryone,
-      // community events, but never a group's: those belong to the group
-      { communityId: { $in: communityIds }, subcommunityId: null },
-      { subcommunityId: { $in: subIds } },
-      { hostId: viewer._id },
+    $and: [
+      {
+        $or: [
+          forEveryone,
+          // community events, but never a group's: those belong to the group
+          { communityId: { $in: communityIds }, subcommunityId: null },
+          { subcommunityId: { $in: subIds } },
+          { hostId: viewer._id },
+        ],
+      },
+      publishedEvents(viewer),
     ],
   };
+}
+
+/** Approved events (not waiting for review, not turned down), plus the viewer's own whatever their state. */
+export function publishedEvents(viewer: Pick<IUser, "_id"> | null): Record<string, unknown> {
+  return viewer ? { $or: [{ review: null }, { hostId: viewer._id }] } : { review: null };
+}
+
+/** May this person approve or turn down events in the event's space? Its owners and admins, and site admins. */
+export async function canReviewEvent(event: Pick<IEvent, "communityId" | "subcommunityId">, viewer: IUser | null): Promise<boolean> {
+  if (!viewer || !event.communityId) return false;
+  if (isSiteAdmin(viewer)) return true;
+  const rows = await Membership.find({ userId: viewer._id, communityId: event.communityId, status: "active", subcommunityId: { $in: [null, event.subcommunityId ?? null] } }).select("subcommunityId role").lean<Pick<IMembership, "subcommunityId" | "role">[]>();
+  const parent = rows.find((m) => !m.subcommunityId)?.role ?? null;
+  const own = event.subcommunityId ? (rows.find((m) => m.subcommunityId && String(m.subcommunityId) === String(event.subcommunityId))?.role ?? null) : parent;
+  return isManager(own) || (!!event.subcommunityId && parent === "owner");
 }
 
 /** The same rule for one event: would it show up in this viewer's feeds (and ads)? */
 export async function canSeeEventInFeeds(event: IEvent, viewer: IUser | null): Promise<boolean> {
   if (viewer && String(event.hostId) === String(viewer._id)) return true;
+  if (event.review) return false;
   if (!event.subcommunityId && (!event.communityId || String(event.communityId) === String(await kliqueId()))) return true;
   if (!viewer) return false;
   const m = await findMembership(viewer._id, event.communityId!, event.subcommunityId ?? null);
@@ -208,6 +263,8 @@ export async function canSeeEventInFeeds(event: IEvent, viewer: IUser | null): P
  * group's events stay with their members.
  */
 export async function canViewEvent(event: IEvent, viewer: IUser | null): Promise<boolean> {
+  // waiting for approval or turned down: its host, and whoever can approve it
+  if (event.review) return (!!viewer && String(event.hostId) === String(viewer._id)) || (await canReviewEvent(event, viewer));
   if (await canSeeEventInFeeds(event, viewer)) return true;
   if (event.subcommunityId || !event.communityId) return false;
   const c = await Community.findById(event.communityId).select("privacy").lean<Pick<ICommunity, "privacy">>();

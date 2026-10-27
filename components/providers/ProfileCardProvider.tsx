@@ -7,9 +7,9 @@ import { ProfileModal } from "@/components/domain/profile/ProfileModal";
 import { cx } from "@/components/ui/cx";
 
 interface Ctx {
-  /** Small card next to `anchor` (a bottom sheet on phones). Clicking the same anchor again closes it. */
+  /** The profile popout next to `anchor` (a bottom sheet on phones). Clicking the same anchor again closes it. */
   open: (handle: string, anchor?: Element | null) => void;
-  /** The big profile modal. */
+  /** The full profile (a wide modal; full screen on phones). There's no profile page: these two are the profile. */
   openFull: (handle: string) => void;
   close: () => void;
 }
@@ -23,6 +23,9 @@ export function useProfileCard(): Ctx {
 }
 
 const CARD_W = 340;
+
+/** A link that opens someone's full profile (on Home). Old /people/<handle> links land here too. */
+export const profileHref = (handle: string) => `/?profile=${encodeURIComponent(handle)}`;
 const GAP = 8;
 
 interface Pop {
@@ -80,6 +83,7 @@ export function ProfileCardProvider({ children }: { children: ReactNode }) {
       if (cardRef.current?.contains(t)) return;
       if (t.closest("[data-profile-trigger]")) return; // the trigger's own click decides (toggle / switch)
       if (t.closest("dialog")) return; // block / report dialogs opened from the card
+      if (t.closest("[role=menu]")) return; // menus opened from the card (⋯, your status) sit outside it
       setPop(null);
     };
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setPop(null);
@@ -141,6 +145,7 @@ export function ProfileCardProvider({ children }: { children: ReactNode }) {
       {/* the address is only known at request time, so this listens inside its own Suspense boundary */}
       <Suspense fallback={null}>
         <CloseOnNavigate onNavigate={closeAll} />
+        <OpenFromUrl onOpen={openFull} />
       </Suspense>
     </ProfileCtx.Provider>
   );
@@ -148,7 +153,9 @@ export function ProfileCardProvider({ children }: { children: ReactNode }) {
 
 /** Going to another page (or another view of it, like a community's Members) closes the card and the modal. */
 function CloseOnNavigate({ onNavigate }: { onNavigate: () => void }) {
-  const where = `${usePathname()}?${useSearchParams().toString()}`;
+  const params = new URLSearchParams(useSearchParams().toString());
+  params.delete("profile"); // opening a profile from the address isn't moving away
+  const where = `${usePathname()}?${params.toString()}`;
   const seen = useRef(where);
   useEffect(() => {
     if (seen.current === where) return;
@@ -166,4 +173,17 @@ export function ProfileTrigger({ handle, children, className, title, ...rest }: 
       {children}
     </button>
   );
+}
+
+/** ?profile=<handle> in the address (profileHref, old profile links): open that full profile, then tidy the address. */
+function OpenFromUrl({ onOpen }: { onOpen: (handle: string) => void }) {
+  const handle = useSearchParams().get("profile");
+  useEffect(() => {
+    if (!handle) return;
+    onOpen(handle);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("profile");
+    window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+  }, [handle, onOpen]);
+  return null;
 }
