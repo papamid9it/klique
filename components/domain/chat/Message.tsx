@@ -14,6 +14,7 @@ import { Embeds } from "./Embeds";
 import { ReplyQuote } from "./ReplyQuote";
 import { EditedTag, MessageEditor } from "./MessageEditor";
 import { ReactButton, ReactionBar, StickerView } from "./Reactions";
+import { MessageSheet, useMessageSheet } from "./MessageSheet";
 import { PollCard } from "./Polls";
 import { UserName } from "@/components/ui/UserName";
 
@@ -86,6 +87,7 @@ export const Message = memo(function Message({
   onSaveSticker?: (url: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
+  const sheet = useMessageSheet();
   const saveable = !m.deleted && !m.pending ? (m.stickerUrl ?? (m.images.length === 1 ? m.images[0] : null)) : null;
   const items: OverflowItem[] = [
     ...(saveable && onSaveSticker ? [{ label: m.stickerUrl ? "Save sticker" : "Save as sticker", icon: "sticker" as const, onSelect: () => onSaveSticker(saveable) }] : []),
@@ -97,8 +99,8 @@ export const Message = memo(function Message({
   ];
 
   return (
-    // tabIndex -1: tapping a message on a touch screen focuses it, which reveals its toolbar (focus-within below)
-    <li id={`msg-${m.id}`} tabIndex={-1} className={cx("group relative flex gap-3 px-4 outline-none hover:bg-raised/40 focus-within:bg-raised/40 sm:px-6", showHead ? "mt-4 pt-0.5" : "", m.mentionsMe && "border-l-2 border-accent bg-accent/10 hover:bg-accent/15", m.pending && "opacity-60")}>
+    // on a touch screen, press and hold for the actions sheet (the hover toolbar is for mice)
+    <li id={`msg-${m.id}`} tabIndex={-1} {...(!m.pending && !m.deleted && !editing ? sheet.press : {})} className={cx("group relative flex gap-3 px-4 outline-none hover:bg-raised/40 focus-within:bg-raised/40 sm:px-6", showHead ? "mt-4 pt-0.5" : "", m.mentionsMe && "border-l-2 border-accent bg-accent/10 hover:bg-accent/15", m.pending && "opacity-60")}>
       <div className="w-10 shrink-0 pt-0.5">
         {showHead ? (
           <ProfileTrigger handle={m.author.handle} aria-label={`${m.author.displayName}'s profile`}>
@@ -167,11 +169,12 @@ export const Message = memo(function Message({
         )}
       </div>
       {(items.length > 0 || (canReact && onReact)) && !m.pending && !m.deleted && !editing && (
-        <div className="absolute -top-3 right-4 flex items-center rounded-full border border-line bg-surface pointer-events-none opacity-0 shadow-sm transition group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100 sm:right-6">
+        <div className="absolute -top-3 right-4 flex items-center rounded-full border border-line bg-surface pointer-events-none opacity-0 shadow-sm transition group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100 sm:right-6 [@media(pointer:coarse)]:hidden">
           {canReact && onReact && <ReactButton onPick={(k) => onReact(m, k)} />}
           {items.length > 0 && <OverflowMenu items={items} label="Message actions" compact />}
         </div>
       )}
+      {sheet.open && <MessageSheet open onClose={sheet.close} onReact={canReact && onReact ? (k) => onReact(m, k) : undefined} items={items} copyText={m.body || undefined} />}
     </li>
   );
 });

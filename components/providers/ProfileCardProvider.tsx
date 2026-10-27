@@ -128,6 +128,24 @@ export function ProfileCardProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<Ctx>(() => ({ open, openFull, close }), [open, openFull, close]);
 
+  // swipe the phone sheet down to close it (only when its content is scrolled to the top)
+  const [drag, setDrag] = useState(0);
+  const dragFrom = useRef<number | null>(null);
+  useEffect(() => setDrag(0), [pop?.handle]);
+  const swipe = {
+    onTouchStart: (e: React.TouchEvent) => {
+      dragFrom.current = (cardRef.current?.scrollTop ?? 0) <= 0 ? e.touches[0].clientY : null;
+    },
+    onTouchMove: (e: React.TouchEvent) => {
+      if (dragFrom.current !== null) setDrag(Math.max(0, e.touches[0].clientY - dragFrom.current));
+    },
+    onTouchEnd: () => {
+      if (drag > 90) close();
+      else setDrag(0);
+      dragFrom.current = null;
+    },
+  };
+
   let style: React.CSSProperties | undefined;
   if (pop && !pop.sheet && pop.rect && typeof window !== "undefined") {
     const vw = window.innerWidth;
@@ -155,12 +173,15 @@ export function ProfileCardProvider({ children }: { children: ReactNode }) {
             ref={cardRef}
             role="dialog"
             aria-label={`@${pop.handle}`}
-            style={pop.sheet ? undefined : style}
+            style={pop.sheet ? (drag > 0 ? { transform: `translateY(${drag}px)`, transition: "none" } : undefined) : style}
+            {...(pop.sheet ? swipe : {})}
             className={cx(
               "z-[71] animate-pop overflow-y-auto border border-line bg-surface text-ink shadow-2xl",
               pop.sheet ? "fixed inset-x-0 bottom-0 max-h-[85dvh] rounded-t-[1.25rem] pb-[env(safe-area-inset-bottom)]" : "fixed max-h-[calc(100dvh-1rem)] rounded-card",
             )}
           >
+            {/* on a phone it's a sheet: drag it down (from the top of its content) to close */}
+            {pop.sheet && <span className="absolute top-2 left-1/2 z-20 block h-1 w-10 -translate-x-1/2 rounded-full bg-white/70 shadow" aria-hidden="true" />}
             <ProfileCard handle={pop.handle} onClose={close} onExpand={() => openFull(pop.handle)} />
           </div>
         </Layer>

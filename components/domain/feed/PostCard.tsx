@@ -8,6 +8,8 @@ import { SpaceService } from "@/app/services/SpaceService";
 import { OverflowMenu } from "@/components/domain/OverflowMenu";
 import { ShareButton, absoluteUrl } from "@/components/domain/ShareButton";
 import { FeedMedia } from "./FeedMedia";
+import { LongPost, TextCard } from "./TextPost";
+import { ExplicitCover } from "./ExplicitCover";
 import { ReportDialog } from "@/components/domain/ReportDialog";
 import { ConfirmModal } from "@/components/domain/space/parts";
 import { useAuth } from "@/components/providers/AuthProvider";
@@ -21,6 +23,7 @@ import { UserName } from "@/components/ui/UserName";
 import { cx } from "@/components/ui/cx";
 import { compactCount, relativeStamp } from "@/lib/format";
 import { useNow } from "@/lib/hooks/useApi";
+import { textStyleOf } from "@/lib/feedText";
 import type { FeedPostDTO } from "@/lib/types";
 
 export const postHref = (p: Pick<FeedPostDTO, "id" | "community">) => `/communities/${p.community.slug}?view=posts&p=${p.id}`;
@@ -33,7 +36,8 @@ export function useVote(p: FeedPostDTO, onChange: (p: FeedPostDTO) => void) {
   const [busy, setBusy] = useState(false);
   return async function vote(dir: 1 | -1) {
     if (busy || !requireAuth()) return;
-    if (!p.isMember) return toast(`Join ${p.community.name} to vote.`);
+    // a public community's posts take anyone's vote (suggested posts on the home feed); a private one needs you in
+    if (!p.isMember && p.community.privacy !== "public") return toast(`Join ${p.community.name} to vote.`);
     const value = p.myVote === dir ? 0 : dir;
     const before = p;
     const up = p.upCount - (p.myVote === 1 ? 1 : 0) + (value === 1 ? 1 : 0);
@@ -85,6 +89,8 @@ export function PostCard({ post: p, onChange, onRemoved, onOpenComments, showCom
   const [joining, setJoining] = useState(false);
   const long = p.caption.length > 180;
   const vote = useVote(p, onChange);
+  // no pictures or video: a coloured card (short text) or a title and text (long), lib/feedText
+  const style = textStyleOf(p);
 
   async function join() {
     if (!requireAuth()) return;
@@ -103,6 +109,10 @@ export function PostCard({ post: p, onChange, onRemoved, onOpenComments, showCom
   const menu = [
     { label: "Copy link", icon: "link" as const, onSelect: () => void navigator.clipboard?.writeText(absoluteUrl(postHref(p))).then(() => toast("Link copied", "success")) },
     { label: "Report post", icon: "flag" as const, danger: true, onSelect: () => setReporting(true) },
+    // in a community that allows explicit content: the poster and its owner and admins mark posts explicit (blurred)
+    ...(p.community.explicit && p.canDelete
+      ? [{ label: p.explicit ? "Not explicit" : "Mark as explicit", icon: "eye" as const, onSelect: () => void FeedService.setExplicit(p.community.slug, p.id, !p.explicit).then((r) => onChange(r.data), (e) => toast(errorMessage(e), "error")) }]
+      : []),
     ...(p.canDelete ? [{ label: "Delete post", icon: "trash" as const, danger: true, onSelect: () => setDeleting(true) }] : []),
   ];
 
@@ -110,7 +120,7 @@ export function PostCard({ post: p, onChange, onRemoved, onOpenComments, showCom
     <article className="rounded-card border border-line bg-surface p-4" aria-label={`Post by ${p.author.displayName}`}>
       {trending && (
         <p className="mb-2.5 flex items-center gap-1.5 text-[12px] font-medium text-ink-muted">
-          <Icon name="asterisk" size={12} className="text-accent-text" /> Trending in a community you&apos;re not in
+          <Icon name="asterisk" size={12} className="text-accent-text" /> Suggested · from {p.community.name}
         </p>
       )}
       <header className="flex items-center gap-2.5">
@@ -148,7 +158,7 @@ export function PostCard({ post: p, onChange, onRemoved, onOpenComments, showCom
       </header>
 
       {/* the caption leads, like a Reddit title */}
-      {p.caption && (
+      {!style && p.caption && (
         <>
           <p className={cx("mt-2.5 text-[16px] leading-snug font-semibold break-words whitespace-pre-wrap text-ink", !more && long && "line-clamp-3")}>{p.caption}</p>
           {long && !more && (
@@ -160,7 +170,20 @@ export function PostCard({ post: p, onChange, onRemoved, onOpenComments, showCom
       )}
 
       {/* a tap opens the post; a double tap upvotes (a downvote turns up; an upvote is never taken back) */}
-      {p.media.length > 0 && <FeedMedia media={p.media} className="mt-3" onOpen={onOpenComments} onDoubleTap={() => p.myVote !== 1 && void vote(1)} />}
+      {(p.media.length > 0 || style === "card") && (
+        <div className="mt-3">
+          <ExplicitCover explicit={p.explicit}>
+            {p.media.length > 0 ? <FeedMedia media={p.media} onOpen={onOpenComments} onDoubleTap={() => p.myVote !== 1 && void vote(1)} /> : <TextCard post={p} onOpen={onOpenComments} onDoubleTap={() => p.myVote !== 1 && void vote(1)} />}
+          </ExplicitCover>
+        </div>
+      )}
+      {style === "long" && (
+        <div className="mt-2.5">
+          <ExplicitCover explicit={p.explicit}>
+            <LongPost post={p} clamp onOpen={onOpenComments} />
+          </ExplicitCover>
+        </div>
+      )}
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <VoteControl post={p} onChange={onChange} />
@@ -168,7 +191,7 @@ export function PostCard({ post: p, onChange, onRemoved, onOpenComments, showCom
           <Icon name="message" size={17} />
           <span className="font-mono tabular-nums">{compactCount(p.commentCount)}</span>
         </button>
-        <ShareButton path={postHref(p)} text={p.caption ? `${p.caption.slice(0, 80)} · ${p.community.name}` : `A post in ${p.community.name}`} variant="pill" size="sm" />
+        <ShareButton path={postHref(p)} text={p.title || p.caption ? `${(p.title || p.caption).slice(0, 80)} · ${p.community.name}` : `A post in ${p.community.name}`} variant="pill" size="sm" />
       </div>
 
       <ConfirmModal

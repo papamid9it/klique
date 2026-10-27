@@ -64,6 +64,20 @@ const CAPTIONS = [
   "",
   "",
 ];
+// text-only posts (lib/feedText): short ones show as colour cards, long ones with a title as text posts
+const SHORT_TEXTS = [
+  "Who's pushing to Freedom Park on Sunday? Meet at the gate, 4pm 🛹",
+  "Hot take: the best shows in this city are the free ones.",
+  "Looking for someone to split a film camera rental this weekend.",
+  "First meetup was a vibe. Same time next month?",
+  "Rain or shine, we move. ☔",
+];
+const CARD_COLOURS = ["sunset", "dusk", "ocean", "forest", "lime", "paper", "ink"];
+const LONG_TEXTS = [
+  { title: "Where do you find vinyl that isn't overpriced?", text: "Been digging at the usual spots in Yaba and Surulere but prices have doubled this year. Anyone know sellers who still do fair prices, or swap meets coming up? Also open to trades: I've got a few highlife records I'd let go of if someone has Fela reissues." },
+  { title: "Tips for your first skate session", text: "Wear shoes with flat soles, bring water, and don't be shy about asking for help. Start on the flat ground near the benches before trying the ramps. Wrist guards look silly but save you a lot of pain. Everyone falls; the trick is getting back up and laughing about it." },
+  { title: "Can we plan a group trip for the festival?", text: "A few of us are thinking of going together in December. If we book early we can split an Airbnb and transport and it comes out much cheaper. Drop a comment if you're in, and say which days work for you so we can pick dates that suit most people." },
+];
 const COMMENTS = ["This is so good!", "Wait, where is this?", "I need to come next time.", "Haha the second one 😂", "Clean.", "Who took these?", "Love this energy", "Same time next week?", "Saving this", "No way that's Lagos", "Teach me!!", "🔥🔥🔥"];
 const REPLIES = ["Right?!", "Freedom Park, by the gate.", "Come through!", "It was a vibe.", "Me, on my phone 😅", "Next week for sure.", "Facts.", "Ask nicely 😂"];
 const REACTIONS = ["like", "love", "laugh", "wow"]; // must be kinds the app offers (lib/reactions REACTION_IDS)
@@ -166,7 +180,11 @@ async function seed() {
     };
     for (let k = rand() < 0.75 ? between(1, 4) : 0; k > 0; k--) add(null, 0, createdAt.getTime() + between(10, 600) * 60_000);
 
-    await FeedPost.collection.insertOne({ _id: postId, communityId: c._id, authorId: author, caption: pick(CAPTIONS), media: media(), upCount: up, downCount: voteRows.length - up, commentCount: commentRows.length, editedAt: null, createdAt, seed: TAG });
+    // about one post in six is text only, split between short cards and long posts with a title
+    const kind = rand();
+    const long = pick(LONG_TEXTS);
+    const content = kind < 0.09 ? { caption: pick(SHORT_TEXTS), title: "", textBg: pick(CARD_COLOURS), media: [] } : kind < 0.17 ? { caption: long.text, title: long.title, textBg: null, media: [] } : { caption: pick(CAPTIONS), title: "", textBg: null, media: media() };
+    await FeedPost.collection.insertOne({ _id: postId, communityId: c._id, authorId: author, ...content, upCount: up, downCount: voteRows.length - up, commentCount: commentRows.length, editedAt: null, createdAt, seed: TAG });
     if (voteRows.length) await FeedVote.collection.insertMany(voteRows);
     if (commentRows.length) await FeedComment.collection.insertMany(commentRows);
     if (reactionRows.length) await Reaction.collection.insertMany(reactionRows);

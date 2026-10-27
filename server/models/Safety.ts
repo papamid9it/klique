@@ -29,6 +29,8 @@ export interface IReport {
   reason: string;
   details: string;
   status: "open" | "reviewing" | "actioned" | "dismissed";
+  /** 2: involves a minor or isn't consensual (the content is hidden at once); 1: from an 18+ community; 0: the rest */
+  priority: number;
   createdAt: Date;
 }
 
@@ -45,6 +47,7 @@ const ReportSchema = new Schema<IReport>(
     reason: { type: String, required: true },
     details: { type: String, default: "", maxlength: 1000 },
     status: { type: String, enum: ["open", "reviewing", "actioned", "dismissed"], default: "open" },
+    priority: { type: Number, default: 0 },
   },
   { timestamps: { createdAt: true, updatedAt: false } },
 );

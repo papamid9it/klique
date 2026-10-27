@@ -35,15 +35,26 @@ export interface Category {
   hidden?: boolean;
 }
 
+/**
+ * A symbol glyph drawn as text, never as a colour emoji (some phones turn ✳ or ▶ into emoji): adds the text
+ * presentation mark to a lone symbol. Emoji people chose on purpose (with their own mark, or real emoji) are left.
+ */
+export function textGlyph(g: string): string {
+  const t = g.trim();
+  if (!t || /[\uFE0E\uFE0F]/.test(t) || [...t].length !== 1) return t;
+  const cp = t.codePointAt(0)!;
+  return cp >= 0x2190 && cp <= 0x2bff ? `${t}\uFE0E` : t;
+}
+
 export const DEFAULT_CATEGORIES: Category[] = [
-  { id: "skate", name: "Skateboarding", short: "Skate", glyph: "✳" },
-  { id: "music", name: "Alté & indie music", short: "Music", glyph: "♫" },
-  { id: "streetwear", name: "Streetwear", short: "Streetwear", glyph: "✦" },
-  { id: "photography", name: "Photography", short: "Photo", glyph: "◉" },
-  { id: "running", name: "Running", short: "Running", glyph: "↗" },
-  { id: "art", name: "Art", short: "Art", glyph: "◐" },
-  { id: "film", name: "Film", short: "Film", glyph: "▶" },
-  { id: "dance", name: "Dance", short: "Dance", glyph: "❋" },
+  { id: "skate", name: "Skateboarding", short: "Skate", glyph: "✳\uFE0E" },
+  { id: "music", name: "Alté & indie music", short: "Music", glyph: "♫\uFE0E" },
+  { id: "streetwear", name: "Streetwear", short: "Streetwear", glyph: "✦\uFE0E" },
+  { id: "photography", name: "Photography", short: "Photo", glyph: "◉\uFE0E" },
+  { id: "running", name: "Running", short: "Running", glyph: "↗\uFE0E" },
+  { id: "art", name: "Art", short: "Art", glyph: "✎\uFE0E" },
+  { id: "film", name: "Film", short: "Film", glyph: "▶\uFE0E" },
+  { id: "dance", name: "Dance", short: "Dance", glyph: "❋\uFE0E" },
 ];
 
 export type InterestId = string;
@@ -118,6 +129,7 @@ export const LIMITS = {
   messageBody: 2000,
   reportDetails: 1000,
   requestMessage: 300,
+  minInterests: 3,
   maxInterests: 8,
   pageSize: 12,
 } as const;
@@ -148,6 +160,8 @@ export const REPORT_REASONS = [
   { id: "hate", label: "Hate or discrimination" },
   { id: "unsafe", label: "Unsafe or illegal activity" },
   { id: "impersonation", label: "Impersonation" },
+  // hidden at once, top of the admin queue (policies/adult)
+  { id: "minor", label: "Involves a minor, or shared without consent" },
   { id: "other", label: "Something else" },
 ] as const;
 export type ReportReason = (typeof REPORT_REASONS)[number]["id"];

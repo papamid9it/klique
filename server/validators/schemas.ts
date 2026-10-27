@@ -4,6 +4,7 @@ import { DM_POLICIES, LIMITS, PRESENCES, PROFILE_VISIBILITY, REPORT_REASONS, SLO
 import { FRAME_IDS, NAME_EFFECT_IDS } from "@/lib/cosmetics";
 import { MOOD_IDS } from "@/lib/moods";
 import { REACTION_IDS, STICKER_IDS } from "@/lib/reactions";
+import { FEED_TITLE_MAX, TEXT_BACKGROUND_IDS, TEXT_CARD_MAX } from "@/lib/feedText";
 import { NOTIFY_CATEGORY_IDS } from "@/lib/notifications";
 import { blankToUndef, handle, httpUrl, interestId, objectId, pageQuery, placeDefault, placeOptional, placeRequired, whereParam } from "./common";
 
@@ -30,6 +31,11 @@ export const signupSchema = z.object({
   displayName: text(LIMITS.displayName, 1).pipe(z.string().min(1, "Tell us what to call you")),
   handle,
   ...placeDefault,
+  /** date of birth, "YYYY-MM-DD" (keeps 18+ communities to adults; set once) */
+  dob: z
+    .string({ error: "Add your date of birth" })
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Add your date of birth")
+    .refine((v) => { const d = Date.parse(`${v}T00:00:00Z`); return !Number.isNaN(d) && d < Date.now() && d > Date.parse("1900-01-01T00:00:00Z"); }, "Enter your real date of birth"),
 });
 
 export const loginSchema = z.object({
@@ -60,6 +66,7 @@ export const profileUpdateSchema = z.object({
     .array(interestId)
     .max(LIMITS.maxInterests)
     .transform((a) => [...new Set(a)])
+    .refine((a) => a.length >= LIMITS.minInterests, `Pick at least ${LIMITS.minInterests} interests.`)
     .optional(),
   avatarUrl: clearableUrl,
   bannerUrl: clearableUrl,
@@ -68,6 +75,12 @@ export const profileUpdateSchema = z.object({
   nameEffect: z.union([z.enum(NAME_EFFECT_IDS as [string, ...string[]]), z.literal(""), z.null()]).optional(),
   profileTheme: z.object({ primary: z.string().regex(/^#[0-9a-fA-F]{6}$/), accent: z.string().regex(/^#[0-9a-fA-F]{6}$/) }).nullable().optional(),
   profileEffect: z.union([z.string().regex(/^[a-z0-9-]{1,40}$/), z.literal(""), z.null()]).optional(),
+  /** date of birth, "YYYY-MM-DD": set once (users.service) */
+  dob: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a date")
+    .refine((v) => { const d = Date.parse(`${v}T00:00:00Z`); return !Number.isNaN(d) && d < Date.now() && d > Date.parse("1900-01-01T00:00:00Z"); }, "Enter your real date of birth")
+    .optional(),
   mood: z.enum(MOOD_IDS as [string, ...string[]]).optional(),
   profileVisibility: z.enum(PROFILE_VISIBILITY.map((p) => p.id) as [string, ...string[]]).optional(),
   attendancePublic: z.boolean().optional(),
@@ -91,7 +104,11 @@ export const communityCreateSchema = z.object({
   privacy: z.enum(["public", "private"]).default("public"),
   groupPolicy: z.enum(["admins", "members", "off"]).default("admins"),
   feedPolicy: z.enum(["admins", "members", "off"]).default("off"),
-  coverImage: clearableUrl,
+  /** required for new communities (it can be replaced later, not removed) */
+  coverImage: z.string({ error: "Add a cover image." }).trim().min(1, "Add a cover image.").pipe(httpUrl),
+  /** 18+ (private only), and allowing explicit content (18+ only): policies/adult */
+  adult: z.boolean().default(false),
+  explicit: z.boolean().default(false),
 });
 
 /** a points minimum to join or post (lib/points); 0 turns it off */
@@ -110,6 +127,8 @@ export const communityUpdateSchema = z.object({
   minPointsPost: minPoints,
   memberEvents: z.boolean().optional(),
   coverImage: clearableUrl,
+  adult: z.boolean().optional(),
+  explicit: z.boolean().optional(),
 });
 
 export const communityListQuery = pageQuery.extend({
@@ -175,10 +194,22 @@ const mediaList = z
   .refine((m) => m.filter((x) => x.kind === "video").length <= 1, "One video per post")
   .refine((m) => !m.some((x) => x.kind === "video") || m.length === 1, "A video can't be mixed with pictures");
 
+/** pictures or a video, text, or both (lib/feedText: short text is a card, long text needs a title) */
 export const feedPostSchema = z
-  .object({ caption: text(LIMITS.feedCaption).default(""), media: mediaList.default([]) })
-  .refine((v) => v.media.length > 0, { path: ["media"], message: "Add a picture or a video" });
-export const feedCaptionSchema = z.object({ caption: text(LIMITS.feedCaption) });
+  .object({
+    caption: text(LIMITS.feedCaption).default(""),
+    title: text(FEED_TITLE_MAX).default(""),
+    textBg: z.enum(TEXT_BACKGROUND_IDS, { error: "Pick one of the card colours." }).optional(),
+    /** explicit (only in a community that allows explicit content): blurred until tapped */
+    explicit: z.boolean().default(false),
+    media: mediaList.default([]),
+  })
+  .refine((v) => v.media.length > 0 || v.caption.length > 0, { path: ["caption"], message: "Add a picture, a video or some text." })
+  .refine((v) => v.media.length > 0 || v.caption.length <= TEXT_CARD_MAX || v.title.length > 0, { path: ["title"], message: "Add a title for a longer post." });
+/** edit a post: its caption (its author), or whether it's explicit (its author, or the community's owner and admins) */
+export const feedCaptionSchema = z.object({ caption: text(LIMITS.feedCaption).optional(), explicit: z.boolean().optional() }).refine((v) => v.caption !== undefined || v.explicit !== undefined, "Nothing to change.");
+/** edit your own comment's text */
+export const feedCommentEditSchema = z.object({ body: text(LIMITS.feedComment) });
 export const feedVoteSchema = z.object({ value: z.union([z.literal(1), z.literal(-1), z.literal(0)]) });
 export const feedCommentSchema = z
   .object({
@@ -444,7 +475,11 @@ export const adminEventsQuery = pageQuery.extend({
 export const adminCommunitiesQuery = pageQuery.extend({
   q: z.string().trim().max(100).default(""),
   sort: z.enum(["members", "new"]).default("members"),
+  /** only the 18+ ones */
+  adult: z.enum(["1", "0"]).optional(),
 });
+/** Admin: take a community's 18+ or explicit flag off */
+export const adminCommunityFlagsSchema = z.object({ adult: z.literal(false).optional(), explicit: z.literal(false).optional(), note: z.string().trim().max(300).optional() });
 
 export const adminAuditQuery = pageQuery.extend({
   q: z.string().trim().max(100).default(""),
@@ -467,6 +502,9 @@ export const adminUserUpdateSchema = z
 export const adminDraftsQuery = z.object({ status: z.enum(["pending", "approved", "rejected"]).default("pending") });
 
 export const adminImportSchema = z.object({ url: z.string().trim().min(1, "Paste a link").max(1000) });
+
+/** Settings → Show explicit content: on needs the agreement (users.service setExplicit) */
+export const explicitSettingSchema = z.object({ on: z.boolean(), agree: z.boolean().optional() });
 
 /* ------------------------------ event finder ------------------------------ */
 

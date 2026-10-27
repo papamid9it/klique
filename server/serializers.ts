@@ -1,4 +1,5 @@
 import type { Types } from "mongoose";
+import { isAdult } from "./policies/adult";
 import { Payment } from "./models/Money";
 import { canHostInSpace, isSiteAdmin } from "./policies/hosting";
 import { isKlique } from "./services/klique-id";
@@ -83,6 +84,11 @@ export const toMe = (u: IUser, unreadMessages = 0, unreadNotifications = 0): Use
   unreadNotifications,
   hype: u.hype ?? 0,
   isAdmin: isSiteAdmin(u),
+  dob: u.dob ? u.dob.toISOString().slice(0, 10) : null,
+  dobLocked: !!u.dobSetAt,
+  isAdult: isAdult(u),
+  adultConfirmed: !!u.adultConfirmedAt,
+  explicitOnAt: u.explicitOptInAt ? u.explicitOptInAt.toISOString() : null,
 });
 
 const BRIEF_FIELDS = "handle displayName avatarUrl avatarFrame nameEffect country city";
@@ -155,6 +161,8 @@ export function communityCard(c: ICommunity, access: SpaceAccess): CommunityCard
     // points minimums (never on Klique)
     minPointsJoin: c.official ? 0 : (c.minPointsJoin ?? 0),
     minPointsPost: c.official ? 0 : (c.minPointsPost ?? 0),
+    adult: !!c.adult,
+    explicit: !!c.explicit,
     viewer: viewerAccess(access),
   };
 }
@@ -169,6 +177,7 @@ export async function toCommunityDetail(
   return {
     ...card,
     createdAt: c.createdAt.toISOString(),
+    ageGate: access.adultGate ?? null,
     groupPolicy: c.groupPolicy ?? "admins",
     canCreateGroup: canCreateGroup(c, access),
     feedPolicy: c.feedPolicy ?? "off",
@@ -248,8 +257,8 @@ export async function toEvents(events: IEvent[], viewer: IUser | null): Promise<
     loadBriefs(hostIds),
     communityIds.length
       ? Community.find({ _id: { $in: communityIds } })
-          .select("slug name privacy official")
-          .lean<Pick<ICommunity, "_id" | "slug" | "name" | "privacy" | "official">[]>()
+          .select("slug name privacy official adult")
+          .lean<Pick<ICommunity, "_id" | "slug" | "name" | "privacy" | "official" | "adult">[]>()
       : [],
     subIds.length
       ? Subcommunity.find({ _id: { $in: subIds } })
@@ -316,7 +325,7 @@ export async function toEvents(events: IEvent[], viewer: IUser | null): Promise<
       host: hosts.get(sid(e.hostId)) ?? GHOST,
       // an event found elsewhere: who runs it, and its own page ("More info / tickets")
       organizer: e.organizerName || e.sourceUrl ? { name: e.organizerName ?? "", url: e.sourceUrl ?? null } : null,
-      community: c ? { slug: c.slug, name: c.name, privacy: c.privacy, official: isKlique(c) } : null,
+      community: c ? { slug: c.slug, name: c.name, privacy: c.privacy, official: isKlique(c), adult: !!c.adult } : null,
       subcommunity: s ? { slug: s.slug, name: s.name } : null,
       audience: e.audience,
       goingCount: e.goingCount,

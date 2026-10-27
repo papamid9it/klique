@@ -2,11 +2,12 @@ import { parseScope, scopeFilter } from "@/lib/places";
 import type { Types } from "mongoose";
 import type { z } from "zod";
 import type { Paginated, ProfileView, UserBrief, UserMe } from "@/lib/types";
-import { notFound } from "../http/errors";
+import { ApiError, forbidden, notFound } from "../http/errors";
 import { Community, type ICommunity } from "../models/Community";
 import { Membership } from "../models/Membership";
 import { Rsvp } from "../models/Rsvp";
 import { User, type IUser } from "../models/User";
+import { isAdult } from "../policies/adult";
 import { toBrief, toCommunityCards, toMe, toProfile } from "../serializers";
 import { deleteUploads } from "./media.service";
 import { sameFile } from "@/lib/focal";
@@ -37,6 +38,12 @@ export async function updateMe(viewer: IUser, patch: z.infer<typeof profileUpdat
   if (patch.city !== undefined) set.city = patch.city;
   if (patch.neighborhood !== undefined) set.neighborhood = patch.neighborhood;
   if (patch.interests !== undefined) set.interests = patch.interests as IUser["interests"];
+  // date of birth: once; after that only Klique (an admin) changes it
+  if (patch.dob !== undefined && patch.dob !== (viewer.dob ? viewer.dob.toISOString().slice(0, 10) : null)) {
+    if (viewer.dobSetAt) throw forbidden("Your date of birth is set. Contact Klique support to change it.");
+    set.dob = new Date(`${patch.dob}T00:00:00Z`);
+    set.dobSetAt = new Date();
+  }
   if (patch.avatarUrl !== undefined) set.avatarUrl = patch.avatarUrl || null;
   if (patch.bannerUrl !== undefined) set.bannerUrl = patch.bannerUrl || null;
   if (patch.bannerColor !== undefined) set.bannerColor = patch.bannerColor || null;
@@ -126,8 +133,10 @@ export async function getProfile(viewer: IUser | null, handle: string): Promise<
     .lean<{ communityId: Types.ObjectId }[]>();
   const communityRows = await Community.find({ _id: { $in: memberships.map((m) => m.communityId) } }).lean<ICommunity[]>();
   const cards = await toCommunityCards(communityRows, viewer);
-  // Someone's membership of a PRIVATE community is only visible to fellow members (and themselves).
-  const communities = cards.filter((c) => c.privacy === "public" || c.viewer.isMember);
+  // Someone's membership of a PRIVATE community is only visible to fellow members (and themselves); an 18+ one
+  // only to themselves
+  const self = !!viewer && sid(viewer._id) === sid(user._id);
+  const communities = cards.filter((c) => (c.privacy === "public" || c.viewer.isMember) && (!c.adult || self));
 
   const attendanceShown = isSelf || user.attendancePublic;
   const [hostedEvents, upcomingEvents, goingCount] = await Promise.all([
@@ -174,4 +183,31 @@ export async function listPeople(viewer: IUser | null, q: z.infer<typeof peopleQ
     .select("handle displayName avatarUrl avatarFrame nameEffect country city")
     .lean<IUser[]>();
   return { items: rows.slice(0, size).map(toBrief), page: q.page, hasMore: rows.length > size };
+}
+
+/** "I'm 18 or older", once, before first entering an 18+ community (policies/adult). Needs an 18+ date of birth. */
+export async function confirmAdult(viewer: IUser): Promise<UserMe> {
+  if (!viewer.dob) throw new ApiError(422, "Add your date of birth first.", { errors: { dob: "Add your date of birth" } });
+  if (!isAdult(viewer)) throw forbidden("You need to be 18 or older.");
+  if (!viewer.adultConfirmedAt) await User.updateOne({ _id: viewer._id }, { $set: { adultConfirmedAt: new Date() } });
+  return getMe((await User.findById(viewer._id).lean<IUser>())!);
+}
+
+/**
+ * Show explicit content (policies/adult): off by default. On needs an 18+ date of birth and the agreement ("I'm 18
+ * or older and I choose to see explicit content"), and is stored with when they agreed. Phone apps can only switch
+ * it off (app store rules): `fromApp` refuses on, pointing to the website.
+ */
+export async function setExplicit(viewer: IUser, on: boolean, agree: boolean, fromApp: boolean): Promise<UserMe> {
+  if (on) {
+    if (fromApp) throw forbidden("Turn this on at klique on the web. In the app you can only turn it off.");
+    if (!viewer.dob) throw new ApiError(422, "Add your date of birth first.", { errors: { dob: "Add your date of birth" } });
+    if (!isAdult(viewer)) throw forbidden("You need to be 18 or older.");
+    if (!agree) throw new ApiError(422, "Agree to the terms to turn this on.", { errors: { agree: "Required" } });
+    const now = new Date();
+    await User.updateOne({ _id: viewer._id }, { $set: { explicitOptInAt: now, ...(viewer.adultConfirmedAt ? {} : { adultConfirmedAt: now }) } });
+  } else {
+    await User.updateOne({ _id: viewer._id }, { $set: { explicitOptInAt: null } });
+  }
+  return getMe((await User.findById(viewer._id).lean<IUser>())!);
 }

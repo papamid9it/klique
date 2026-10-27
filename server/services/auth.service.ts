@@ -37,6 +37,8 @@ export async function signup(input: z.infer<typeof signupSchema>): Promise<AuthR
     country: input.country,
     region: input.region,
     city: input.city,
+    dob: new Date(`${input.dob}T00:00:00Z`),
+    dobSetAt: new Date(),
   });
   const lean = user.toObject() as IUser;
   await joinKlique(user._id); // everyone's in Klique, from the start

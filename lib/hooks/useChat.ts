@@ -220,13 +220,16 @@ export function useChat(source: ChatSource) {
     [src, commit],
   );
 
+  /** Delete a message: gone from the screen at once, the server told behind (put back if it says no). */
   const remove = useCallback(
     async (id: string): Promise<string | null> => {
+      const before = itemsRef.current.find((m) => m.id === id);
+      commit((prev) => prev.map((m) => (m.id === id ? { ...m, body: "", images: [], pinned: false, deleted: true, canDelete: false, canEdit: false } : m)));
       try {
         await src.remove(id);
-        commit((prev) => prev.map((m) => (m.id === id ? { ...m, body: "", images: [], pinned: false, deleted: true, canDelete: false, canEdit: false } : m)));
         return null;
       } catch (e) {
+        if (before) commit((prev) => prev.map((m) => (m.id === id ? before : m)));
         return errorMessage(e);
       }
     },
@@ -248,15 +251,17 @@ export function useChat(source: ChatSource) {
     [src, commit],
   );
 
-  /** Pin or unpin a message (owners and admins). Returns an error message on failure. */
+  /** Pin or unpin a message (owners and admins): shown at once, saved behind. Returns an error message on failure (rolled back). */
   const pin = useCallback(
     async (id: string, pinned: boolean): Promise<string | null> => {
+      if (!src.pin) return "Pinning isn't available here.";
+      commit((prev) => prev.map((m) => (m.id === id ? { ...m, pinned } : m)));
       try {
-        if (!src.pin) return "Pinning isn't available here.";
         const res = await src.pin(id, pinned);
         commit((prev) => prev.map((m) => (m.id === id ? { ...m, pinned: res.data.pinned } : m)));
         return null;
       } catch (e) {
+        commit((prev) => prev.map((m) => (m.id === id ? { ...m, pinned: !pinned } : m)));
         return errorMessage(e);
       }
     },

@@ -11,7 +11,7 @@ import type {
   PostDTO,
   Role,
 } from "@/lib/types";
-import { badRequest, conflict, forbidden, notFound } from "../http/errors";
+import { ApiError, badRequest, conflict, forbidden, notFound } from "../http/errors";
 import { ChannelMember } from "../models/Channel";
 import { Community, type ICommunity } from "../models/Community";
 import { Invitation, type IInvitation } from "../models/Invitation";
@@ -52,13 +52,29 @@ export async function resolveSpace(slug: string, subSlug?: string): Promise<Spac
   return { community, sub };
 }
 
-/** Resolve + authorise visibility in one step. Private groups 404 for outsiders. */
+/** Resolve + authorise visibility in one step. Private groups 404 for outsiders, and so do 18+ communities for under-18s. */
 export async function resolveSpaceFor(viewer: IUser | null, slug: string, subSlug?: string) {
   const space = await resolveSpace(slug, subSlug);
   const access = await spaceAccess(space, viewer);
+  assertAdultGate(access);
   assertSubVisibleOrHidden(space, access);
   return { space, access };
 }
+
+/** An 18+ community this person may not enter: not found for under-18s, otherwise what they still need to do. */
+export function assertAdultGate(access: SpaceAccess) {
+  const gate = access.adultGate;
+  if (!gate) return;
+  if (gate === "under_18") throw notFound("We couldn't find that community.");
+  throw new ApiError(403, ADULT_GATE_MESSAGE[gate], { code: "age_gate", errors: { gate } });
+}
+
+const ADULT_GATE_MESSAGE: Record<Exclude<NonNullable<SpaceAccess["adultGate"]>, "under_18">, string> = {
+  sign_in: "Sign in to see this community. It's for people 18 and over.",
+  dob_required: "This community is for people 18 and over. Add your date of birth to continue.",
+  confirm_adult: "This community is for people 18 and over. Confirm you're 18 or older to continue.",
+  explicit_optin: "This community shows explicit content. Turn on Show explicit content in Settings to see it.",
+};
 
 const spaceFilter = (space: Space) => ({
   communityId: space.community._id,

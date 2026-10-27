@@ -2,16 +2,48 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { CrewService } from "@/app/services/CrewService";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
+import { useApi } from "@/lib/hooks/useApi";
 import type { EventDTO } from "@/lib/types";
 import { CrewResults, useEventCrews } from "./CrewSearch";
+import { crewsHref } from "./parts";
 import { StartCrewModal } from "./StartCrewModal";
 
 /**
- * "Going together" on an event page: the crews heading there (yours first), and a button to start one.
- * Only for in-person events; nothing to show for online ones.
+ * "Going together" on an event's page: one line (how many crews, whether you're in one) and a link to the event's
+ * crews page, which has the list. Only for in-person events.
+ */
+export function EventCrewsRow({ event }: { event: EventDTO }) {
+  const { status } = useAuth();
+  // just whether one is yours: the list itself is on the crews page
+  const { data } = useApi(status === "authed" ? () => CrewService.forEvent(event.id, { limit: 1 }) : null, [event.id, status], { key: `crews-mine:${event.id}` });
+  if (event.online) return null;
+  const n = event.crewCount;
+  return (
+    <section aria-label="Going together" className="flex flex-wrap items-center gap-3 rounded-card border border-line bg-surface p-4">
+      <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-raised text-accent-text">
+        <Icon name="users" size={18} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-2 text-sm font-semibold">
+          Going together · {n ? `${n} ${n === 1 ? "crew" : "crews"}` : "no crews yet"}
+          {data?.mine && <span className="rounded-full bg-success/15 px-2 py-0.5 text-[11px] font-semibold text-success">Yours</span>}
+        </span>
+        <span className="block text-xs text-ink-muted">{n ? "Meet up first with people from your area and go together." : "Start a crew from your area and meet up first."}</span>
+      </span>
+      <Button href={crewsHref(event)} size="sm">
+        {data?.mine ? "Your crew" : n ? "See crews" : "Start a crew"}
+      </Button>
+    </section>
+  );
+}
+
+/**
+ * The crews heading to an event (yours first), searchable by area, and a button to start one: the event's crews
+ * page. Only for in-person events; nothing to show for online ones.
  */
 export function EventCrews({ event }: { event: EventDTO }) {
   const router = useRouter();

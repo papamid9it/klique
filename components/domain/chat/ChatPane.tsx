@@ -1,7 +1,7 @@
 "use client";
 
 import { errorMessage } from "@/app/ApiCore";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { SpaceRef } from "@/app/services/ChannelService";
 import { channelSource, type ChatSource } from "@/app/services/ChatSource";
 import { ReportDialog } from "@/components/domain/ReportDialog";
@@ -150,7 +150,10 @@ export function ChatPane({
     if (!isMember || loading || !newestId || newestId.startsWith("pending-") || lastMarked.current === newestId) return;
     if (document.visibilityState !== "visible" || !atBottom.current) return;
     lastMarked.current = newestId;
-    void src.markRead().then(onRead, () => undefined);
+    // the counts here and on the rail drop as soon as it's on screen, not when the server answers (the rail's next
+    // refresh corrects it if saving the read failed)
+    onRead();
+    void src.markRead().catch(() => undefined);
   }, [newestId, loading, isMember, src, onRead]);
 
   const onScroll = useCallback(() => {
@@ -176,7 +179,7 @@ export function ChatPane({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PinnedBar source={src} tick={pinTick} onJump={jump} onUnpin={(id) => void chat.pin(id, false).then((err) => (err ? toast(err, "error") : setPinTick((n) => n + 1)))} />
+      <PinnedBar source={src} tick={pinTick} items={items} onJump={jump} onUnpin={(id) => void chat.pin(id, false).then((err) => (err ? toast(err, "error") : setPinTick((n) => n + 1)))} />
       <div className="relative min-h-0 flex-1">
         <div ref={scroller} onScroll={onScroll} className="kq-calm h-full overflow-y-auto overscroll-contain pb-3" role="log" aria-live="polite" aria-relevant="additions" aria-label={`Messages in ${channel.name}`}>
           {loading ? (
@@ -261,8 +264,8 @@ export function ChatPane({
         confirmLabel="Delete"
         onConfirm={async () => {
           if (!deleting) return;
-          const err = await chat.remove(deleting.id);
-          if (err) throw new Error(err);
+          // gone at once; the server is told behind (it comes back with a note if that fails)
+          void chat.remove(deleting.id).then((err) => err && toast(err, "error"));
         }}
       />
       {reporting && <ReportDialog open onClose={() => setReporting(null)} targetType="channelMessage" targetId={reporting.id} subject={`this message from ${reporting.author.displayName}`} />}
@@ -276,8 +279,15 @@ export function ChatPane({
 }
 
 /** A thin strip under the channel header listing pinned messages (owners and admins can unpin). */
-function PinnedBar({ source, tick, onJump, onUnpin }: { source: ChatSource; tick: number; onJump: (id: string) => void; onUnpin: (id: string) => void }) {
-  const [pins, setPins] = useState<ChannelMessageDTO[]>([]);
+function PinnedBar({ source, tick, items, onJump, onUnpin }: { source: ChatSource; tick: number; items: ChannelMessageDTO[]; onJump: (id: string) => void; onUnpin: (id: string) => void }) {
+  const [saved, setPins] = useState<ChannelMessageDTO[]>([]);
+  // what's pinned right now: the server's list, with any pin or unpin made on screen since (they show at once)
+  const pins = useMemo(() => {
+    const here = new Map(items.map((m) => [m.id, m]));
+    const list = saved.filter((p) => here.get(p.id)?.pinned !== false);
+    for (const m of items) if (m.pinned && !m.deleted && !list.some((p) => p.id === m.id)) list.unshift(m);
+    return list;
+  }, [saved, items]);
   const [open, setOpen] = useState(false);
   useEffect(() => {
     if (!source.pins) return;

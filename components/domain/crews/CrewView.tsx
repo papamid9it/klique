@@ -131,7 +131,7 @@ function Crew({ crew, tab, embedded, onChange, onGone, onRead, onMenu, reload }:
   const isHost = v.standing === "host";
   const inCrew = v.standing === "host" || v.standing === "member";
   // back to this event's crews: in the community when there is one, else on the event page
-  const backHref = crew.space ? `/communities/${crew.space.slug}?${crew.space.sub ? `g=${crew.space.sub}&` : ""}view=crews&e=${crew.event.id}` : `/events/${crew.event.id}#crews`;
+  const backHref = crew.space ? `/communities/${crew.space.slug}?${crew.space.sub ? `g=${crew.space.sub}&` : ""}view=crews&e=${crew.event.id}` : `/events/${crew.event.id}/crews`;
 
   async function act(key: string, fn: () => Promise<{ data: CrewDTO }>, done?: string) {
     setBusy(key);

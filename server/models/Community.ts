@@ -30,6 +30,9 @@ export interface ICommunity {
   minPointsPost?: number;
   /** members may send events in for the owner or an admin to approve (default on) */
   memberEvents?: boolean;
+  /** 18+ (private only), and of those, allowing explicit content: who may see them, policies/adult */
+  adult?: boolean;
+  explicit?: boolean;
   /** where payouts go, saved from the owner's last request (only the owner and admins see it) */
   payoutBank?: { bankCode: string; bankName: string; accountNumber: string; accountName: string } | null;
   createdAt: Date;
@@ -56,6 +59,8 @@ const CommunitySchema = new Schema<ICommunity>(
     minPointsJoin: { type: Number, default: 0, min: 0, max: 1_000_000 },
     minPointsPost: { type: Number, default: 0, min: 0, max: 1_000_000 },
     memberEvents: { type: Boolean, default: true },
+    adult: { type: Boolean, default: false },
+    explicit: { type: Boolean, default: false },
     payoutBank: { type: Schema.Types.Mixed, default: null },
     official: { type: Boolean, default: false },
   },

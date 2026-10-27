@@ -127,7 +127,7 @@ function ProfileBody({ handle, onClose, onOpenPerson, tryOn }: { handle: string;
   return (
     <div className="flex h-full flex-col overflow-y-auto sm:max-h-[88dvh] md:min-h-[34rem] md:flex-row md:overflow-hidden">
       {/* ------------------------------ identity (tinted by their theme, with their effect over it) ------------------------------ */}
-      <aside className={cx("relative shrink-0 border-b border-line md:w-[22rem] md:overflow-y-auto md:border-r md:border-b-0", !p.profileTheme && "bg-raised/40")} style={themeStyle(p.profileTheme)}>
+      <aside className={cx("kq-live relative shrink-0 border-b border-line md:w-[22rem] md:overflow-y-auto md:border-r md:border-b-0", !p.profileTheme && "bg-raised/40")} style={themeStyle(p.profileTheme)}>
         <ProfileEffect id={p.profileEffect} />
         <ProfileBanner handle={p.handle} bannerUrl={p.bannerUrl} bannerColor={p.bannerColor} className="h-32" zoomable />
         <div className="relative px-5 pb-5">

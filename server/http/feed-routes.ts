@@ -1,6 +1,6 @@
-import { feedCaptionSchema, feedCommentSchema, feedPostSchema, feedReactSchema, feedVoteSchema, homeFeedQuery } from "../validators/schemas";
+import { feedCaptionSchema, feedCommentEditSchema, feedCommentSchema, feedPostSchema, feedReactSchema, feedVoteSchema, homeFeedQuery } from "../validators/schemas";
 import { resolveSpaceFor } from "../services/spaces.service";
-import { addComment, createPost, deleteComment, deletePost, editCaption, feedSidebar, getPost, homeFeed, listComments, listPosts, reactToComment, vote } from "../services/feed.service";
+import { addComment, createPost, deleteComment, deletePost, editCaption, editComment, feedSidebar, getPost, homeFeed, listComments, listPosts, reactToComment, setPostExplicit, vote } from "../services/feed.service";
 import { created, readJson, readQuery, withApi } from "./api";
 
 /** Handlers for a community's Posts section (`/api/communities/[slug]/feed/…`) and the home feed. Authorization lives in the service. */
@@ -32,9 +32,13 @@ export const feedGet = withApi<Post>({ auth: "optional" }, async ({ params, view
 });
 
 export const feedEdit = withApi<Post, "required">({ auth: "required" }, async ({ req, params, viewer }) => {
-  const { caption } = await readJson(req, feedCaptionSchema);
+  const { caption, explicit } = await readJson(req, feedCaptionSchema);
   const { space, access } = await resolveSpaceFor(viewer, params.slug);
-  return editCaption(viewer, space, access, params.postId, caption);
+  if (explicit !== undefined) {
+    const p = await setPostExplicit(viewer, space, access, params.postId, explicit);
+    if (caption === undefined) return p;
+  }
+  return editCaption(viewer, space, access, params.postId, caption!);
 });
 
 export const feedDelete = withApi<Post, "required">({ auth: "required" }, async ({ params, viewer }) => {
@@ -57,6 +61,12 @@ export const feedCommentCreate = withApi<Post, "required">({ auth: "required" },
   const input = await readJson(req, feedCommentSchema);
   const { space, access } = await resolveSpaceFor(viewer, params.slug);
   return created(await addComment(viewer, space, access, params.postId, input));
+});
+
+export const feedCommentEdit = withApi<Comment, "required">({ auth: "required" }, async ({ req, params, viewer }) => {
+  const { body } = await readJson(req, feedCommentEditSchema);
+  const { space, access } = await resolveSpaceFor(viewer, params.slug);
+  return editComment(viewer, space, access, params.postId, params.commentId, body);
 });
 
 export const feedCommentDelete = withApi<Comment, "required">({ auth: "required" }, async ({ params, viewer }) => {

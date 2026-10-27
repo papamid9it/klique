@@ -12,6 +12,8 @@ export interface SignupInput {
   country: string;
   region: string;
   city: CityId;
+  /** "YYYY-MM-DD" */
+  dob: string;
 }
 
 /** `token` is only present for native/desktop clients (see ApiClient.configure({ native: true })). */

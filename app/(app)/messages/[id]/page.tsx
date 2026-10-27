@@ -32,6 +32,7 @@ import { recallApi, rememberApi } from "@/lib/hooks/useApi";
 import { EditedTag, MessageEditor } from "@/components/domain/chat/MessageEditor";
 import { ConfirmModal } from "@/components/domain/space/parts";
 import { AttachedSticker, StickerPicker, StickerView, ReactButton, ReactionBar, type StickerChoice } from "@/components/domain/chat/Reactions";
+import { MessageSheet, PressRow } from "@/components/domain/chat/MessageSheet";
 import { useStickers } from "@/lib/hooks/useStickers";
 import { applyReaction, type ReactionKind } from "@/lib/reactions";
 import type { ConversationDetailDTO, MessageDTO, ReactionDTO } from "@/lib/types";
@@ -84,6 +85,14 @@ export default function ConversationPage() {
     const url = m.stickerUrl ?? (m.images?.length === 1 ? m.images[0] : null);
     return url ? [{ label: m.stickerUrl ? "Save sticker" : "Save as sticker", icon: "sticker" as const, onSelect: () => void stickers.save(url).then((err) => toast(err ?? "Saved to your stickers.", err ? "error" : "success")) }] : [];
   };
+  /** a message's actions: the ⋯ menu (mouse) and the press-and-hold sheet (touch) */
+  const actionsFor = (m: Local) => [
+    ...(detail?.canSend ? [{ label: "Reply", icon: "reply" as const, onSelect: () => setReplyTo(m) }] : []),
+    ...(m.mine && !(m.sticker || m.stickerUrl) ? [{ label: "Edit message", icon: "edit" as const, onSelect: () => setEditingId(m.id) }] : []),
+    ...saveItem(m),
+    ...(m.mine ? [{ label: "Delete message", icon: "trash" as const, danger: true, onSelect: () => setDeleteMsg(m) }] : [{ label: "Report message", icon: "flag" as const, danger: true, onSelect: () => setReportMsg(m.id) }]),
+  ];
+  const [sheetFor, setSheetFor] = useState<Local | null>(null);
 
   const jump = (mid: string) => {
     const el = document.getElementById(`msg-${mid}`);
@@ -343,7 +352,7 @@ export default function ConversationPage() {
           return (
             <div key={m.id} className="kq-live">
               {showDay && <p className="eyebrow my-4 text-center">{day}</p>}
-              <div className={cx("group flex items-end gap-1.5", m.mine ? "flex-row-reverse" : "flex-row")}>
+              <PressRow onLong={() => !m.pending && !m.failed && !m.deleted && editingId !== m.id && setSheetFor(m)} className={cx("group flex items-end gap-1.5", m.mine ? "flex-row-reverse" : "flex-row")}>
                 <div className={cx("flex max-w-[80%] flex-col", m.mine ? "items-end" : "items-start")}>
                   {m.deleted ? (
                     <div className="rounded-2xl border border-dashed border-line px-3.5 py-2 text-sm text-ink-muted italic">Message deleted</div>
@@ -375,27 +384,18 @@ export default function ConversationPage() {
                   )}
                   {!m.pending && !m.failed && !m.deleted && editingId !== m.id && <ReactionBar reactions={m.reactions ?? []} canReact={detail.canSend} onToggle={(k) => void react(m, k)} mine={m.mine} />}
                 </div>
-                {!m.pending && !m.failed && !m.deleted && editingId !== m.id && detail.canSend && <ReactButton onPick={(k) => void react(m, k)} align={m.mine ? "right" : "left"} className="opacity-0 transition group-hover:opacity-100 focus-within:opacity-100 max-sm:opacity-100" />}
+                {/* touch screens: press and hold the message instead (MessageSheet) */}
+                {!m.pending && !m.failed && !m.deleted && editingId !== m.id && detail.canSend && <ReactButton onPick={(k) => void react(m, k)} align={m.mine ? "right" : "left"} className="opacity-0 transition group-hover:opacity-100 focus-within:opacity-100 [@media(pointer:coarse)]:hidden" />}
                 {m.failed && (
                   <button type="button" onClick={() => void send(m)} className="text-xs font-medium text-danger underline underline-offset-2">
                     Retry
                   </button>
                 )}
                 {m.mine && !m.pending && !m.failed && !m.deleted && editingId !== m.id && (
-                  <OverflowMenu
-                    label="Message options"
-                    className="opacity-0 transition group-hover:opacity-100 focus-within:opacity-100 max-sm:opacity-100 [&>button]:size-8 [&>button]:border-transparent [&>button]:bg-transparent"
-                    align="right"
-                    items={[
-                      ...(detail.canSend ? [{ label: "Reply", icon: "reply" as const, onSelect: () => setReplyTo(m) }] : []),
-                      ...(m.sticker || m.stickerUrl ? [] : [{ label: "Edit message", icon: "edit" as const, onSelect: () => setEditingId(m.id) }]),
-                      ...saveItem(m),
-                      { label: "Delete message", icon: "trash" as const, danger: true, onSelect: () => setDeleteMsg(m) },
-                    ]}
-                  />
+                  <OverflowMenu label="Message options" className="opacity-0 transition group-hover:opacity-100 focus-within:opacity-100 [@media(pointer:coarse)]:hidden [&>button]:size-8 [&>button]:border-transparent [&>button]:bg-transparent" align="right" items={actionsFor(m)} />
                 )}
-                {!m.mine && !m.pending && !m.deleted && <OverflowMenu label="Message options" className="opacity-0 transition group-hover:opacity-100 focus-within:opacity-100 max-sm:opacity-100 [&>button]:size-8 [&>button]:border-transparent [&>button]:bg-transparent" align="left" items={[...(detail.canSend ? [{ label: "Reply", icon: "reply" as const, onSelect: () => setReplyTo(m) }] : []), ...saveItem(m), { label: "Report message", icon: "flag" as const, danger: true, onSelect: () => setReportMsg(m.id) }]} />}
-              </div>
+                {!m.mine && !m.pending && !m.deleted && <OverflowMenu label="Message options" className="opacity-0 transition group-hover:opacity-100 focus-within:opacity-100 [@media(pointer:coarse)]:hidden [&>button]:size-8 [&>button]:border-transparent [&>button]:bg-transparent" align="left" items={actionsFor(m)} />}
+              </PressRow>
             </div>
           );
         })}
@@ -493,12 +493,18 @@ export default function ConversationPage() {
         confirmLabel="Delete"
         onConfirm={async () => {
           if (!deleteMsg) return;
-          await MessageService.remove(id, deleteMsg.id);
-          setMessages((prev) => prev.map((x) => (x.id === deleteMsg.id ? { ...x, body: "", sticker: null, stickerUrl: null, images: [], replyTo: null, deleted: true } : x)));
+          // gone at once; the server is told behind (put back with a note if that fails)
+          const before = deleteMsg;
+          setMessages((prev) => prev.map((x) => (x.id === before.id ? { ...x, body: "", sticker: null, stickerUrl: null, images: [], replyTo: null, deleted: true } : x)));
+          void MessageService.remove(id, before.id).catch((e) => {
+            setMessages((prev) => prev.map((x) => (x.id === before.id ? before : x)));
+            toast(errorMessage(e), "error");
+          });
         }}
       />
       <ReportDialog open={reportUser} onClose={() => setReportUser(false)} targetType="user" targetId={other.id} subject={`@${other.handle}`} />
       <ReportDialog open={reportMsg !== null} onClose={() => setReportMsg(null)} targetType="message" targetId={reportMsg ?? ""} subject="this message" />
+      {sheetFor && <MessageSheet open onClose={() => setSheetFor(null)} onReact={detail.canSend ? (k) => void react(sheetFor, k) : undefined} items={actionsFor(sheetFor)} copyText={sheetFor.body || undefined} />}
     </div>
   );
 }

@@ -205,7 +205,7 @@ export function StylePicker({ value, onChange, name, handle, avatarUrl, access, 
         onOpen={() => setOpen("anim")}
       />
 
-      {Object.keys(tried).length > 0 && <TryOnPanel look={look} saved={value} tried={tried} access={a} balance={balance} onReset={() => setTried({})} onUnlock={(k) => onLocked?.(k)} onUnlockAll={onUnlockAll} onGetHype={onGetHype} onSave={onSave} handle={handle} />}
+      {Object.keys(tried).length > 0 && <TryOnPanel look={look} saved={value} tried={tried} access={a} balance={balance} onReset={() => setTried({})} onUnlock={(k) => onLocked?.(k)} onUnlockAll={onUnlockAll} onGetHype={onGetHype} onSave={(patch) => save(patch)()} handle={handle} />}
 
       {open === "name" && <NameEffectModal {...picker} saved={value.nameEffect} onTry={tryOn("nameEffect")} onSave={(v) => save({ nameEffect: v })()} />}
       {open === "frame" && <FrameModal {...picker} saved={value.avatarFrame} onTry={tryOn("avatarFrame")} onSave={(v) => save({ avatarFrame: v })()} />}

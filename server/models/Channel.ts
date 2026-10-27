@@ -119,6 +119,8 @@ export interface IChannelMessage {
   editedAt: Date | null;
   /** soft delete: the row stays so the timeline doesn't jump and reports keep their target */
   deletedAt: Date | null;
+  /** hidden pending review (a "minor or non-consensual" report): shown as removed until an admin decides */
+  hiddenAt?: Date | null;
   deletedById: Types.ObjectId | null;
   createdAt: Date;
 }
@@ -140,6 +142,7 @@ const MessageSchema = new Schema<IChannelMessage>(
     editedAt: { type: Date, default: null },
     deletedAt: { type: Date, default: null },
     deletedById: { type: Schema.Types.ObjectId, default: null },
+    hiddenAt: { type: Date, default: null },
   },
   { timestamps: { createdAt: true, updatedAt: false } },
 );

@@ -26,6 +26,7 @@ export function ImageField({
   error,
   fallback,
   reposition,
+  required,
 }: {
   kind: Extract<UploadKind, "avatar" | "photo">;
   label: string;
@@ -38,6 +39,8 @@ export function ImageField({
   fallback?: React.ReactNode;
   /** let people choose what part shows (drag and zoom) in a frame of this shape, after uploading and any time later */
   reposition?: { aspect: number; round?: boolean };
+  /** a picture must stay: it can be replaced but not removed */
+  required?: boolean;
 }) {
   const status = useUploadStatus();
   const input = useRef<HTMLInputElement>(null);
@@ -75,7 +78,7 @@ export function ImageField({
       <p className="mb-1.5 text-sm font-medium" id={id}>
         {label}
       </p>
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-4">
         <div className={cx("relative flex shrink-0 items-center justify-center overflow-hidden border border-line bg-raised", shape === "round" ? "size-20 rounded-full" : "h-24 w-40 rounded-control")}>
           {value ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -89,7 +92,7 @@ export function ImageField({
             </span>
           )}
         </div>
-        <div className="min-w-0 space-y-2">
+        <div className="min-w-0 flex-1 basis-44 space-y-2">
           <input ref={input} type="file" hidden accept={spec.formats.map((f) => `.${f}`).join(",")} onChange={(e) => void pick(e.target.files?.[0])} aria-labelledby={id} />
           <div className="flex flex-wrap gap-2">
             {enabled && (
@@ -102,7 +105,7 @@ export function ImageField({
                 <Icon name="move" size={15} /> Reposition
               </Button>
             )}
-            {value && (
+            {value && !required && (
               <Button size="sm" variant="ghost" onClick={() => onChange("")} disabled={busy}>
                 Remove
               </Button>
@@ -114,7 +117,7 @@ export function ImageField({
             )}
           </div>
           {(!enabled || link) && status && (
-            <input type="url" value={value} onChange={(e) => onChange(e.target.value)} placeholder="https://…" aria-label={`${label} link`} className="h-9 w-full min-w-48 rounded-control border border-line bg-surface px-3 text-sm placeholder:text-ink-muted/70 focus:border-accent-text focus:outline-none" />
+            <input type="url" value={value} onChange={(e) => onChange(e.target.value)} placeholder="https://…" aria-label={`${label} link`} className="h-9 w-full min-w-0 rounded-control border border-line bg-surface px-3 text-sm placeholder:text-ink-muted/70 focus:border-accent-text focus:outline-none" />
           )}
           {shown ? (
             <p role="alert" className="text-sm text-danger">

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { Avatar } from "@/components/ui/Avatar";
 import { CommunityRail } from "./CommunityRail";
+import { LogoMark } from "./Logo";
 import { UserMenu } from "./UserMenu";
 
 /** The icon rail inside a community, a crew chat and Messages; other pages have the home panel (HomePanel). */
@@ -24,10 +25,8 @@ function SlimNav({ pathname }: { pathname: string }) {
     <aside className="sticky top-0 hidden h-dvh flex-col items-center border-r border-line lg:flex" aria-label="Primary">
       {/* the home button sits on its own above the scrolling part, so nothing ever passes behind it */}
       <div className="flex w-full shrink-0 flex-col items-center gap-3 pt-4 pb-3">
-        <Link href="/" aria-label="klique — home" className="inline-flex size-11 items-center justify-center rounded-full bg-accent text-accent-ink">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
-            <path d="M12 3.5v17M4.6 7.8l14.8 8.4M4.6 16.2 19.4 7.8" />
-          </svg>
+        <Link href="/" aria-label="Klique — home" className="inline-flex size-11 items-center justify-center rounded-[14px] bg-raised transition hover:bg-surface">
+          <LogoMark size={34} />
         </Link>
         <span aria-hidden="true" className="h-px w-8 bg-line" />
       </div>

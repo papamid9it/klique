@@ -1,4 +1,6 @@
 import "server-only";
+import { forgetAdultCommunities } from "../policies/adult";
+import { unhideAfterReview } from "./safety.service";
 import { Payout } from "../models/Money";
 import { FeedComment, FeedPost, FeedVote, type IFeedPost } from "../models/FeedPost";
 import { Reaction } from "../models/Reaction";
@@ -65,7 +67,7 @@ async function describeTarget(r: IReport, briefs: Map<string, UserBrief>): Promi
       if (!p) return none;
       const c = await Community.findById(p.communityId).select("slug name").lean<Pick<ICommunity, "slug" | "name">>();
       const author = (await loadBriefs([p.authorId])).get(sid(p.authorId)) ?? null;
-      return { title: `Post in ${c?.name ?? "a community"}`, body: p.caption, images: p.media.map((m) => (m.kind === "video" ? (m.poster ?? m.url) : m.url)), author, href: c ? `/communities/${c.slug}?view=posts&p=${sid(p._id)}` : null, gone: false, removable: true };
+      return { title: `Post in ${c?.name ?? "a community"}`, body: p.title ? `${p.title}\n\n${p.caption}` : p.caption, images: p.media.map((m) => (m.kind === "video" ? (m.poster ?? m.url) : m.url)), author, href: c ? `/communities/${c.slug}?view=posts&p=${sid(p._id)}` : null, gone: false, removable: true };
     }
     case "post": {
       const p = await Post.findById(r.targetId).lean<IPost>();
@@ -116,8 +118,9 @@ async function describeTarget(r: IReport, briefs: Map<string, UserBrief>): Promi
 
 export async function listReports(status: ReportStatus, page: number): Promise<{ items: ReportDTO[]; page: number; hasMore: boolean }> {
   const size = 20;
+  // most urgent first: a minor or non-consensual (2), then anything from an 18+ community (1)
   const rows = await Report.find({ status })
-    .sort({ createdAt: status === "open" ? 1 : -1 })
+    .sort({ priority: -1, createdAt: status === "open" ? 1 : -1 })
     .skip((page - 1) * size)
     .limit(size + 1)
     .lean<IReport[]>();
@@ -136,6 +139,7 @@ export async function listReports(status: ReportStatus, page: number): Promise<{
       targetType: r.targetType,
       targetId: sid(r.targetId),
       reason: r.reason,
+      priority: r.priority ?? 0,
       details: r.details,
       createdAt: r.createdAt.toISOString(),
       reporter: briefs.get(sid(r.reporterId)) ?? null,
@@ -239,6 +243,7 @@ export async function actOnReport(admin: IUser, id: string, action: ReportAction
   }
   if (action === "dismiss") {
     await closeAll(r, "dismissed");
+    await unhideAfterReview(r.targetType, r.targetId);
     await logAction(admin, "report.dismiss", r.targetType, r.targetId, label, note || r.reason, target.gone ? null : target.href);
     return { status: "dismissed" as const };
   }
@@ -443,9 +448,12 @@ export async function adminDeleteEvent(admin: IUser, id: string, note = "") {
 
 /* ---------------------------- communities --------------------------- */
 
-export async function listAdminCommunities(q: { q: string; sort: "members" | "new"; page: number }): Promise<Paginated<AdminCommunityRow>> {
+export async function listAdminCommunities(q: { q: string; sort: "members" | "new"; page: number; adult?: "1" | "0" }): Promise<Paginated<AdminCommunityRow>> {
   const size = 25;
-  const filter = q.q.trim() ? { $or: [{ name: new RegExp(escapeRegex(q.q.trim()), "i") }, { slug: new RegExp(escapeRegex(q.q.trim()), "i") }] } : {};
+  const filter = {
+    ...(q.q.trim() ? { $or: [{ name: new RegExp(escapeRegex(q.q.trim()), "i") }, { slug: new RegExp(escapeRegex(q.q.trim()), "i") }] } : {}),
+    ...(q.adult === "1" ? { adult: true } : {}),
+  };
   const rows = await Community.find(filter)
     .sort(q.sort === "new" ? { createdAt: -1 } : { memberCount: -1, createdAt: -1 })
     .skip((q.page - 1) * size)
@@ -466,10 +474,24 @@ export async function listAdminCommunities(q: { q: string; sort: "members" | "ne
       city: c.city,
       owner: owners.get(sid(c.ownerId)) ?? null,
       createdAt: c.createdAt.toISOString(),
+      adult: !!c.adult,
+      explicit: !!c.explicit,
     })),
     page: q.page,
     hasMore: rows.length > size,
   };
+}
+
+/** Take a community's 18+ flag off (which also ends explicit content), or just its explicit flag. */
+export async function adminCommunityFlags(admin: IUser, id: string, input: { adult?: false; explicit?: false; note?: string }) {
+  const c = await Community.findById(id).lean<ICommunity>();
+  if (!c) throw notFound("That community is gone.");
+  const set = input.adult === false ? { adult: false, explicit: false } : input.explicit === false ? { explicit: false } : null;
+  if (!set) throw badRequest("Nothing to change.");
+  await Community.updateOne({ _id: c._id }, { $set: set });
+  forgetAdultCommunities();
+  await logAction(admin, input.adult === false ? "community.unadult" : "community.unexplicit", "community", c._id, c.name, input.note || "", `/communities/${c.slug}`);
+  return { ...set };
 }
 
 export async function adminDeleteCommunity(admin: IUser, id: string, note = "") {

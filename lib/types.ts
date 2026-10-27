@@ -96,6 +96,14 @@ export interface UserMe extends UserProfile {
   hype: number;
   /** a site admin (opens /admin) */
   isAdmin: boolean;
+  /** date of birth ("YYYY-MM-DD"), set once (then only Klique can change it), and what it allows (policies/adult) */
+  dob: string | null;
+  dobLocked: boolean;
+  isAdult: boolean;
+  /** said "I'm 18 or older" (before first entering an 18+ community) */
+  adultConfirmed: boolean;
+  /** Show explicit content: on since this moment (null: off). Phone apps can only switch it off; on is web only */
+  explicitOnAt: ISODate | null;
 }
 
 /** What a viewer is allowed to know about a profile. */
@@ -201,13 +209,21 @@ export interface CommunityCardDTO {
   /** points (lib/points) needed to join and to post; 0 when anyone can */
   minPointsJoin: number;
   minPointsPost: number;
+  /** 18+ (private only), and allowing explicit content */
+  adult: boolean;
+  explicit: boolean;
   viewer: ViewerAccess;
 }
+
+/** what stands between the viewer and an 18+ community (server/policies/adult) */
+export type AdultGate = "sign_in" | "under_18" | "dob_required" | "confirm_adult" | "explicit_optin";
 
 export type GroupPolicy = "admins" | "members" | "off";
 
 export interface CommunityDTO extends CommunityCardDTO {
   createdAt: ISODate;
+  /** an 18+ community the viewer may not enter yet, and why (the page asks for it instead of showing anything) */
+  ageGate: AdultGate | null;
   groupPolicy: GroupPolicy;
   /** the viewer may start a group here (server-computed from the policy and their role) */
   canCreateGroup: boolean;
@@ -251,10 +267,16 @@ export interface SubcommunityDTO {
 /** A post in a community's Posts section (Instagram style). */
 export interface FeedPostDTO {
   id: Id;
-  community: { id: Id; slug: string; name: string; interest: InterestId; coverImage: string | null; privacy: CommunityPrivacy };
+  community: { id: Id; slug: string; name: string; interest: InterestId; coverImage: string | null; privacy: CommunityPrivacy; explicit?: boolean };
   author: UserBrief;
   caption: string;
-  /** pictures, or one video */
+  /** a text-only post's title ("" otherwise; lib/feedText) */
+  title: string;
+  /** a short text-only post's card background (lib/feedText), null otherwise */
+  textBg: string | null;
+  /** marked explicit (in a community that allows it): blurred until tapped */
+  explicit: boolean;
+  /** pictures, or one video; empty for a text post */
   media: TopicMediaDTO[];
   upCount: number;
   downCount: number;
@@ -280,9 +302,12 @@ export interface FeedCommentDTO {
   stickerUrl: string | null;
   deleted: boolean;
   createdAt: ISODate;
+  editedAt: ISODate | null;
   author: UserBrief;
   reactions: ReactionDTO[];
   canDelete: boolean;
+  /** your own comment: you may change its text */
+  canEdit: boolean;
 }
 
 /** One entry in the home feed: a post from your communities, or now and then a trending one from elsewhere. */
@@ -386,7 +411,7 @@ export interface EventDTO {
   /** an event found elsewhere and approved by Klique: who really runs it, and where its tickets are */
   organizer: { name: string; url: string | null } | null;
   /** `official`: it's in Klique, the default community everyone's in (so everyone sees it) */
-  community: { slug: string; name: string; privacy: CommunityPrivacy; official?: boolean } | null;
+  community: { slug: string; name: string; privacy: CommunityPrivacy; official?: boolean; adult?: boolean } | null;
   subcommunity: { slug: string; name: string } | null;
   audience: EventAudience;
   goingCount: number;
@@ -1069,6 +1094,8 @@ export interface ReportDTO {
   targetId: Id;
   reason: string;
   details: string;
+  /** 2: involves a minor or isn't consensual (hidden at once); 1: from an 18+ community; 0: the rest */
+  priority: number;
   createdAt: ISODate;
   reporter: UserBrief | null;
   /** open reports about the same thing, this one included */
@@ -1277,6 +1304,9 @@ export interface AdminCommunityRow {
   city: string;
   owner: UserBrief | null;
   createdAt: ISODate;
+  /** 18+, and allowing explicit content */
+  adult: boolean;
+  explicit: boolean;
 }
 
 export interface SystemStatusDTO {

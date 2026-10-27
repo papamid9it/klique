@@ -15,9 +15,9 @@ export function LegalDoc({ title, updated, intro, children }: { title: string; u
   );
 }
 
-export function Section({ n, title, children }: { n: number; title: string; children: ReactNode }) {
+export function Section({ n, title, id, children }: { n: number; title: string; id?: string; children: ReactNode }) {
   return (
-    <section className="space-y-3 border-t border-line pt-6 text-[15px] leading-relaxed text-ink-muted [&_li]:pl-1 [&_strong]:text-ink [&_ul]:list-disc [&_ul]:space-y-1.5 [&_ul]:pl-5">
+    <section id={id} className="space-y-3 border-t border-line pt-6 text-[15px] leading-relaxed text-ink-muted [&_li]:pl-1 [&_strong]:text-ink [&_ul]:list-disc [&_ul]:space-y-1.5 [&_ul]:pl-5">
       <h2 className="text-lg font-semibold text-ink">
         {n}. {title}
       </h2>

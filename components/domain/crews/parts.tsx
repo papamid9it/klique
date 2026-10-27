@@ -10,10 +10,10 @@ import type { CrewCardDTO, CrewStanding, EventDTO, MyCrewDTO, UserBrief } from "
 
 /**
  * Where an event's crews live: the "Crews" view of its community (or group), opened on that event.
- * Events outside any community keep their crews on the event page.
+ * Events outside any community have a crews page of their own (/events/<id>/crews).
  */
 export function crewsHref(e: Pick<EventDTO, "id" | "community" | "subcommunity">): string {
-  if (!e.community) return `/events/${e.id}#crews`;
+  if (!e.community) return `/events/${e.id}/crews`;
   const q = new URLSearchParams();
   if (e.subcommunity) q.set("g", e.subcommunity.slug);
   q.set("view", "crews");

@@ -134,6 +134,11 @@ export async function createReport(viewer: IUser, input: z.infer<typeof reportSc
     }
   }
 
+  // a minor or something shared without consent: hidden at once until an admin decides, top of their queue;
+  // anything from an 18+ community comes next
+  const urgent = input.reason === "minor";
+  if (urgent) await hidePendingReview(input.targetType, input.targetId);
+  const priority = urgent ? 2 : communityId && (await Community.exists({ _id: communityId, adult: true })) ? 1 : 0;
   try {
     await Report.create({
       reporterId: viewer._id,
@@ -142,12 +147,29 @@ export async function createReport(viewer: IUser, input: z.infer<typeof reportSc
       communityId,
       reason: input.reason,
       details: input.details ?? "",
+      priority,
     });
   } catch (err) {
     // Same person reporting the same thing twice while the first is still open: treat as success.
     if ((err as { code?: number }).code !== 11000) throw err;
   }
   return { reported: true };
+}
+
+/** Hide a reported post or message until an admin decides (dismissing the report shows it again). */
+async function hidePendingReview(targetType: string, targetId: string) {
+  const set = { $set: { hiddenAt: new Date() } };
+  if (targetType === "feedPost") await FeedPost.updateOne({ _id: targetId, hiddenAt: null }, set);
+  if (targetType === "channelMessage") await ChannelMessage.updateOne({ _id: targetId, hiddenAt: null }, set);
+  if (targetType === "message") await Message.updateOne({ _id: targetId, hiddenAt: null }, set);
+}
+
+/** A dismissed report: whatever it hid comes back. */
+export async function unhideAfterReview(targetType: string, targetId: Types.ObjectId) {
+  const unset = { $set: { hiddenAt: null } };
+  if (targetType === "feedPost") await FeedPost.updateOne({ _id: targetId }, unset);
+  if (targetType === "channelMessage") await ChannelMessage.updateOne({ _id: targetId }, unset);
+  if (targetType === "message") await Message.updateOne({ _id: targetId }, unset);
 }
 
 async function loadSpace(communityId: Types.ObjectId, subId: Types.ObjectId | null) {

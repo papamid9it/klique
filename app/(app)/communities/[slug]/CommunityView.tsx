@@ -1,5 +1,6 @@
 "use client";
 
+import { AgeGate } from "@/components/domain/space/AgeGate";
 import { placeLabel } from "@/lib/places";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -242,6 +243,17 @@ function CommunityWorkspace({ slug }: { slug: string }) {
     return (
       <Scroll>
         <SpaceError status={status} message={error} onRetry={reload} />
+      </Scroll>
+    );
+  }
+
+  // an 18+ community they can't enter yet: ask for what's missing, show nothing else
+  if (c.ageGate) {
+    return (
+      <Scroll>
+        <div className="py-10">
+          <AgeGate community={c} onPassed={() => void reload()} />
+        </div>
       </Scroll>
     );
   }

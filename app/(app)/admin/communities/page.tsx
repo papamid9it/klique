@@ -24,9 +24,10 @@ function AdminCommunitiesPageContent() {
   const toast = useToast();
   const [sort, setSort] = useState<"members" | "new">("members");
   const [q, setQ] = useState("");
+  const [adultOnly, setAdultOnly] = useState(false);
   const query = useDebounced(q.trim(), 300);
   const [pending, setPending] = useState<AdminCommunityRow | null>(null);
-  const { items, loading, loadingMore, error, hasMore, loadMore, reload, setItems } = usePaged<AdminCommunityRow>((page) => AdminService.communities({ sort, q: query, page }), [sort, query], { keepPrevious: true });
+  const { items, loading, loadingMore, error, hasMore, loadMore, reload, setItems } = usePaged<AdminCommunityRow>((page) => AdminService.communities({ sort, q: query, page, ...(adultOnly ? { adult: "1" as const } : {}) }), [sort, query, adultOnly], { keepPrevious: true });
 
   return (
     <>
@@ -40,6 +41,15 @@ function AdminCommunitiesPageContent() {
           options={[
             { id: "members", label: "Most members" },
             { id: "new", label: "Newest" },
+          ]}
+        />
+        <Segmented
+          label="Which communities"
+          value={adultOnly ? "adult" : "all"}
+          onChange={(v) => setAdultOnly(v === "adult")}
+          options={[
+            { id: "all", label: "All" },
+            { id: "adult", label: "18+ only" },
           ]}
         />
       </Toolbar>
@@ -79,6 +89,8 @@ function AdminCommunitiesPageContent() {
                     <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
                       <InterestChip id={c.interest} short />
                       {c.privacy === "private" && <Badge>Private</Badge>}
+                      {c.adult && <Badge tone="bad">18+</Badge>}
+                      {c.explicit && <Badge tone="bad">Explicit</Badge>}
                       <span className="text-xs text-ink-muted">{placeShort(c)}</span>
                     </div>
                   </div>
@@ -102,6 +114,19 @@ function AdminCommunitiesPageContent() {
                   <Button size="sm" href={`/communities/${c.slug}`}>
                     Open
                   </Button>
+                  {(c.adult || c.explicit) && (
+                    <Button
+                      size="sm"
+                      onClick={() =>
+                        void AdminService.communityFlags(c.id, c.explicit ? { explicit: false } : { adult: false }).then(
+                          () => setItems((list) => list.map((x) => (x.id === c.id ? { ...x, explicit: false, adult: c.explicit ? x.adult : false } : x))),
+                          (e) => toast(errorMessage(e), "error"),
+                        )
+                      }
+                    >
+                      {c.explicit ? "Remove explicit" : "Remove 18+"}
+                    </Button>
+                  )}
                   <Button size="sm" variant="danger" onClick={() => setPending(c)} aria-label={`Delete ${c.name}`}>
                     <Icon name="trash" size={14} />
                   </Button>

@@ -99,7 +99,9 @@ export function UnlockDialog({ k, wallet, me, onClose, onDone, onGetHype }: { k:
     <Modal open onClose={onClose} title={until ? `Keep ${styleName(k)}` : `Unlock ${styleName(k)}`} size="sm">
       <div className="space-y-4">
         <div className="flex flex-col items-center gap-2 rounded-card border border-line bg-raised/40 px-4 py-5">
-          <StylePreview k={k} me={me} size={64} />
+          <span className="kq-live">
+            <StylePreview k={k} me={me} size={64} />
+          </span>
           <p className="text-sm text-ink-muted">{until && now ? `Yours until ${dayLabel(until)} · ${daysLeft(until, now)} days left` : `Wear it for ${days} days`}</p>
         </div>
         <dl className="space-y-1.5 text-sm">

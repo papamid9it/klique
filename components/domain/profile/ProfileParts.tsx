@@ -1,5 +1,6 @@
 "use client";
 
+import { StatusPicker } from "./StatusPicker";
 import { StillImage } from "@/components/ui/StillImage";
 import { isAnimatedPicture } from "@/lib/cosmetics";
 import { useCalm } from "@/lib/hooks/useCalm";
@@ -163,9 +164,12 @@ export function ProfileActions({
 
   if (view.isSelf) {
     return (
-      <Button variant="primary" href="/settings#profile" onClick={onNavigate} className={layout === "stack" ? "w-full" : undefined}>
-        <Icon name="edit" size={15} /> Edit profile
-      </Button>
+      <div className={cx("flex items-center gap-2", layout === "stack" && "w-full")}>
+        <Button variant="primary" href="/settings#profile" onClick={onNavigate} className={layout === "stack" ? "flex-1" : undefined}>
+          <Icon name="edit" size={15} /> Edit profile
+        </Button>
+        <StatusPicker />
+      </div>
     );
   }
 

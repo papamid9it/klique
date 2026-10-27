@@ -37,6 +37,7 @@ import { NotificationSettings } from "@/components/domain/account/NotificationSe
 import { ResendButton } from "@/components/domain/account/EmailStatus";
 import { StylePicker, themeOf, type StyleDraft } from "@/components/domain/account/StylePicker";
 import { HypeTab, UnlockDialog, styleAccess, useHypeWallet } from "@/components/domain/account/Points";
+import { AgeSettings } from "@/components/domain/account/AgeSettings";
 import type { StyleKey } from "@/lib/wallet";
 import { UserName } from "@/components/ui/UserName";
 import { ProfileBanner, monthYear } from "@/components/domain/profile/ProfileParts";
@@ -115,8 +116,12 @@ function ProfileForm({ me, onDraft }: { me: UserMe; onDraft?: (d: ProfileDraft) 
     onDraft?.({ displayName, bio, avatarUrl, place, neighborhood });
   }, [onDraft, displayName, bio, avatarUrl, place, neighborhood]);
 
+  // at least 3 (the server insists too); interests are only sent when changed, so someone with fewer from before
+  // can still save the rest of their profile
+  const interestsChanged = interests.length !== me.interests.length || interests.some((i) => !me.interests.includes(i));
+  const tooFew = interests.length < LIMITS.minInterests;
   function toggle(id: InterestId) {
-    setInterests((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : cur.length >= LIMITS.maxInterests ? cur : [...cur, id]));
+    setInterests((cur) => (cur.includes(id) ? (cur.length <= LIMITS.minInterests ? cur : cur.filter((x) => x !== id)) : cur.length >= LIMITS.maxInterests ? cur : [...cur, id]));
   }
 
   async function save(e: React.FormEvent) {
@@ -132,7 +137,7 @@ function ProfileForm({ me, onDraft }: { me: UserMe; onDraft?: (d: ProfileDraft) 
         ...place,
         neighborhood,
         avatarUrl: avatarUrl.trim() || null,
-        interests,
+        ...(interestsChanged ? { interests } : {}),
       });
       setUser(res.data);
       toast("Profile saved", "success");
@@ -156,18 +161,25 @@ function ProfileForm({ me, onDraft }: { me: UserMe; onDraft?: (d: ProfileDraft) 
 
       <fieldset>
         <legend className="text-[13px] font-medium">
-          Interests <span className="text-ink-muted">({interests.length}/{LIMITS.maxInterests})</span>
+          Interests <span className="text-ink-muted">({interests.length}/{LIMITS.maxInterests}) · pick at least {LIMITS.minInterests}</span>
         </legend>
+        {tooFew && (
+          <p className="mt-1 text-xs font-medium text-danger">
+            Pick {LIMITS.minInterests - interests.length} more {LIMITS.minInterests - interests.length === 1 ? "interest" : "interests"}, so we can show you the right communities and events.
+          </p>
+        )}
         <div className="mt-2 flex flex-wrap gap-2">
           {categories.map((i) => {
             const on = interests.includes(i.id);
             const locked = !on && interests.length >= LIMITS.maxInterests;
+            const keep = on && interests.length <= LIMITS.minInterests; // can't drop below the minimum
             return (
               <button
                 key={i.id}
                 type="button"
                 aria-pressed={on}
                 disabled={locked}
+                title={keep ? `Keep at least ${LIMITS.minInterests}: pick another first` : undefined}
                 onClick={() => toggle(i.id)}
                 className={cx("inline-flex h-9 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium transition disabled:opacity-40", on ? "border-accent bg-accent text-accent-ink" : "border-line bg-raised text-ink hover:border-ink-muted")}
               >
@@ -185,7 +197,7 @@ function ProfileForm({ me, onDraft }: { me: UserMe; onDraft?: (d: ProfileDraft) 
         </p>
       )}
       <div className="flex items-center gap-3">
-        <Button type="submit" variant="primary" loading={busy}>
+        <Button type="submit" variant="primary" loading={busy} disabled={interestsChanged && tooFew}>
           Save profile
         </Button>
         <button type="button" onClick={() => card.openFull(me.handle)} className="text-sm font-medium text-accent-text underline underline-offset-2">
@@ -429,7 +441,7 @@ function ProfileTab({ me }: { me: UserMe }) {
   const [draft, setDraft] = useState<ProfileDraft>(() => aboutOf(me));
   const onDraft = useCallback((d: ProfileDraft) => setDraft(d), []);
   return (
-    <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_17rem]">
+    <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_17rem]">
       <ProfileForm me={me} onDraft={onDraft} />
       <ProfilePreview me={me} draft={{ ...draft, ...styleOf(me) }} />
     </div>
@@ -489,7 +501,7 @@ function StyleTab({ me, go }: { me: UserMe; go: (t: Tab) => void }) {
   }
 
   return (
-    <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_17rem]">
+    <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_17rem]">
       <form onSubmit={save} className="space-y-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="max-w-md text-sm text-ink-muted">How you show up around klique. Your banner is free. {wallet?.allFree ? "As a site admin, every design is free for you." : <>Name effects, frames, themes, effects and animated pictures cost Hype{wallet ? ` and last ${wallet.config.unlockDays} days` : ""}.</>}</p>
@@ -690,11 +702,23 @@ export default function SettingsPage() {
             </div>
             {tab === "account" && <AccountTab me={user} go={select} onSignOut={out} onEverywhere={everywhere} busy={busy} />}
             {tab === "profile" && <ProfileTab me={user} />}
-            {tab === "style" && <StyleTab me={user} go={select} />}
-            {tab === "hype" && <HypeTab me={user} onStyle={() => select("style")} />}
+            {/* designs are the point here: they keep moving (globals.css kq-live) */}
+            {tab === "style" && (
+              <div className="kq-live">
+                <StyleTab me={user} go={select} />
+              </div>
+            )}
+            {tab === "hype" && (
+              <div className="kq-live">
+                <HypeTab me={user} onStyle={() => select("style")} />
+              </div>
+            )}
             {tab === "privacy" && (
               <div className="space-y-6">
                 <PrefsSections me={user} />
+                <Block title="Age & content" intro="Your date of birth keeps 18+ communities to adults. Explicit content is off unless you switch it on.">
+                  <AgeSettings me={user} />
+                </Block>
               </div>
             )}
             {tab === "blocked" && (
@@ -776,13 +800,12 @@ function MotionPicker() {
   );
 }
 
-/** Data saver for this device: Auto (follows the browser's Save-Data setting and slow connections), On or Off. */
+/** Data saver for this device: off unless switched on. */
 function DataSaverPicker() {
-  const { on, pref, slow } = useDataSaver();
+  const { pref } = useDataSaver();
   const options: { id: DataSaverPref; title: string; hint: string }[] = [
-    { id: "auto", title: "Automatic", hint: slow ? "Your connection looks slow or Data Saver is on in your browser, so it's on now." : "Turns on by itself on a slow connection or when your browser's Data Saver is on." },
-    { id: "on", title: "Always on", hint: "Lighter pictures everywhere. Tap a GIF or video to load it. Profile effects show a still frame." },
-    { id: "off", title: "Off", hint: "Full-size pictures, GIFs play, things load ahead of time." },
+    { id: "off", title: "Off", hint: "Full-size pictures, GIFs and videos play, things load ahead of time." },
+    { id: "on", title: "On", hint: "Lighter pictures everywhere. Tap a GIF or video to load it. Profile effects hold still." },
   ];
   return (
     <div className="space-y-2" role="radiogroup" aria-label="Data saver">
@@ -795,9 +818,6 @@ function DataSaverPicker() {
           <input type="radio" name="data-saver" checked={pref === o.id} onChange={() => setDataSaver(o.id)} className="size-4 accent-[var(--accent-text)]" />
         </label>
       ))}
-      <p className="pt-1 text-xs text-ink-muted" aria-live="polite">
-        Data saver is <span className="font-semibold text-ink">{on ? "on" : "off"}</span> right now.
-      </p>
     </div>
   );
 }

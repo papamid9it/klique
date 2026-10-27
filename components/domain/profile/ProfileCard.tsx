@@ -11,14 +11,14 @@ import { useAuth } from "@/components/providers/AuthProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
-import { Dropdown } from "@/components/ui/Dropdown";
 import { Icon } from "@/components/ui/Icon";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { UserName } from "@/components/ui/UserName";
-import { LIMITS, PRESENCES, type Presence } from "@/lib/constants";
+import { LIMITS, type Presence } from "@/lib/constants";
 import { useApi } from "@/lib/hooks/useApi";
 import type { ProfileView } from "@/lib/types";
 import { PresenceDot, ProfileActions, ProfileBanner } from "./ProfileParts";
+import { StatusPicker } from "./StatusPicker";
 
 /** The little points pill next to a handle. */
 export function PointsPill({ n }: { n: number }) {
@@ -57,8 +57,8 @@ export function ProfileCard({ handle, onClose, onExpand }: { handle: string; onC
 
   const p = view.profile;
   return (
-    // their theme tints the card, their effect plays over it
-    <div className="relative" style={themeStyle(p.profileTheme)}>
+    // their theme tints the card, their effect plays over it; their name and frame move here (kq-live)
+    <div className="kq-live relative" style={themeStyle(p.profileTheme)}>
       <ProfileEffect id={p.profileEffect} />
       <button type="button" onClick={onExpand} aria-label={`Open ${p.displayName}'s full profile`} className="relative block w-full">
         <ProfileBanner handle={p.handle} bannerUrl={p.bannerUrl} bannerColor={p.bannerColor} className="h-[60px]" />
@@ -145,40 +145,13 @@ function OtherActions({ view, onFriendship, onReload, onClose }: { view: Profile
 }
 
 /** You: Edit profile, and set your status (the dot on your picture). */
-function SelfActions({ view, onSaved, onClose }: { view: ProfileView; onSaved: (p: Presence) => void; onClose: () => void }) {
-  const toast = useToast();
-  const { user, setUser } = useAuth();
-  const current = view.profile.presence;
-  async function set(presence: Presence) {
-    try {
-      const res = await ProfileService.updateMe({ presence });
-      onSaved(presence);
-      if (user) setUser({ ...user, ...res.data });
-    } catch (e) {
-      toast(errorMessage(e), "error");
-    }
-  }
+function SelfActions({ onSaved, onClose }: { view: ProfileView; onSaved: (p: Presence) => void; onClose: () => void }) {
   return (
     <div className="mt-3.5 flex items-center gap-2">
       <Button variant="primary" size="sm" href="/settings#profile" onClick={onClose} className="flex-1">
         <Icon name="edit" size={14} /> Edit profile
       </Button>
-      <Dropdown
-        label="Set your status"
-        align="right"
-        width={200}
-        items={[{ type: "label", label: "Set your status" }, ...PRESENCES.map((s) => ({ label: s.label, hint: s.id === current ? "Current" : undefined, onSelect: () => void set(s.id) }))]}
-        trigger={({ props }) => (
-          <button {...props} className="inline-flex h-8 items-center gap-2 rounded-full border border-line bg-surface px-3 text-[12.5px] font-semibold hover:bg-raised">
-            <span className="relative size-2.5">
-              <PresenceDot presence={current} className="inset-0 size-2.5 ring-0" />
-              {current === "invisible" && <span className="absolute inset-0 rounded-full border-2 border-ink-muted" />}
-            </span>
-            {PRESENCES.find((s) => s.id === current)?.label}
-            <Icon name="chevron-down" size={12} />
-          </button>
-        )}
-      />
+      <StatusPicker onChange={onSaved} />
     </div>
   );
 }

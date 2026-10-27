@@ -150,6 +150,7 @@ function SignupCard({ next, google }: { next: string; google: boolean }) {
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [handle, setHandle] = useState("");
+  const [dob, setDob] = useState("");
   const [place, setPlace] = useState<Place>({ country: "NG", region: "lagos", city: "lagos" });
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -180,7 +181,7 @@ function SignupCard({ next, google }: { next: string; google: boolean }) {
     setErrors({});
     setFormError(null);
     try {
-      const res = await AuthService.signup({ email: email.trim(), password, displayName: displayName.trim(), handle: handle.replace(/^@/, ""), ...place });
+      const res = await AuthService.signup({ email: email.trim(), password, displayName: displayName.trim(), handle: handle.replace(/^@/, ""), ...place, dob });
       setSession(res.data.user);
       router.replace(next);
     } catch (err) {
@@ -224,6 +225,7 @@ function SignupCard({ next, google }: { next: string; google: boolean }) {
         ) : (
           <>
             <PlaceFields value={place} onChange={setPlace} errors={errors} />
+            <AuthField label="Date of birth" type="date" value={dob} onChange={(e) => setDob(e.target.value)} max={new Date().toISOString().slice(0, 10)} autoComplete="bday" hint="Keeps 18+ communities to adults. Never shown on your profile." error={errors.dob} required />
             {formError && !STEP1_FIELDS.some((f) => errors[f]) && <Notice tone="error">{formError}</Notice>}
             <Button type="submit" variant="primary" size="lg" loading={busy} className="h-12 w-full">
               Create account

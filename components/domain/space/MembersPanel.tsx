@@ -4,6 +4,7 @@ import { useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
 import { SpaceService } from "@/app/services/SpaceService";
 import { PersonRow } from "@/components/domain/PersonRow";
+import { OverflowMenu } from "@/components/domain/OverflowMenu";
 import { ReportDialog } from "@/components/domain/ReportDialog";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useToast } from "@/components/providers/ToastProvider";
@@ -116,26 +117,38 @@ export function MembersPanel({ slug, subSlug, group }: { slug: string; subSlug?:
                   <option value="admin">Admin</option>
                 </select>
               )}
-              {iOwn && m.user.id !== user?.id && (
-                <Button size="sm" variant="ghost" onClick={() => setHandingOver(m)}>
-                  Make owner
-                </Button>
-              )}
-              {m.canRemove && (
-                <>
-                  <Button size="sm" variant="ghost" onClick={() => setRemoving({ m, ban: false })}>
-                    Remove
+              {/* phones: these fold into ⋯ so each person stays one row */}
+              <span className="hidden sm:contents">
+                {iOwn && m.user.id !== user?.id && (
+                  <Button size="sm" variant="ghost" onClick={() => setHandingOver(m)}>
+                    Make owner
                   </Button>
-                  <Button size="sm" variant="danger" onClick={() => setRemoving({ m, ban: true })}>
-                    Ban
+                )}
+                {m.canRemove && (
+                  <>
+                    <Button size="sm" variant="ghost" onClick={() => setRemoving({ m, ban: false })}>
+                      Remove
+                    </Button>
+                    <Button size="sm" variant="danger" onClick={() => setRemoving({ m, ban: true })}>
+                      Ban
+                    </Button>
+                  </>
+                )}
+                {user && m.user.id !== user.id && (
+                  <Button size="sm" variant="ghost" onClick={() => setReporting(m)} aria-label={`Report ${m.user.displayName}`}>
+                    Report
                   </Button>
-                </>
-              )}
-              {user && m.user.id !== user.id && (
-                <Button size="sm" variant="ghost" onClick={() => setReporting(m)} aria-label={`Report ${m.user.displayName}`}>
-                  Report
-                </Button>
-              )}
+                )}
+              </span>
+              <OverflowMenu
+                className="sm:hidden"
+                label={`Options for ${m.user.displayName}`}
+                items={[
+                  ...(iOwn && m.user.id !== user?.id ? [{ label: "Make owner", icon: "shield" as const, onSelect: () => setHandingOver(m) }] : []),
+                  ...(m.canRemove ? [{ label: "Remove", icon: "logout" as const, onSelect: () => setRemoving({ m, ban: false }) }, { label: "Ban", icon: "ban" as const, danger: true, onSelect: () => setRemoving({ m, ban: true }) }] : []),
+                  ...(user && m.user.id !== user.id ? [{ label: "Report", icon: "flag" as const, onSelect: () => setReporting(m) }] : []),
+                ]}
+              />
             </div>
           }
         />

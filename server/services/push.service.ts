@@ -1,4 +1,5 @@
 import { after } from "next/server";
+import { isExplicitSlug } from "../policies/adult";
 import type { Types } from "mongoose";
 import webpush from "web-push";
 import { expoAccessToken, webPushConfig } from "../env";
@@ -133,6 +134,16 @@ async function deliverPhones(ids: string[], p: PushPayload) {
 
 /* ------------------------- the inbox ----------------------------- */
 
+/** For a link into a community with explicit content: a notification that tells nothing about what happened there. */
+async function explicitScrub(p: PushPayload, meta?: NotifyMeta): Promise<{ payload: PushPayload; meta?: NotifyMeta }> {
+  const slug = /^\/communities\/([^/?#]+)/.exec(p.data?.href ?? "")?.[1];
+  if (!slug || !(await isExplicitSlug(slug))) return { payload: p, meta };
+  return {
+    payload: { title: "New activity in one of your communities", body: "", data: p.data },
+    meta: meta ? { ...meta, many: () => "New activity in one of your communities", image: null } : meta,
+  };
+}
+
 /** What kind of notification this is, for the person's settings and for bundling. */
 export interface NotifyMeta {
   category: NotifyCategory;
@@ -182,9 +193,13 @@ async function toInbox(ids: string[], p: PushPayload, meta: NotifyMeta) {
  * and browsers, or neither (Settings → Notifications). Open tabs get a realtime ping either way, so whatever
  * they're looking at refreshes itself. Without `meta` it's a plain push (kept for old callers).
  */
-async function fanOut(userIds: (Types.ObjectId | string)[], p: PushPayload, meta?: NotifyMeta) {
+async function fanOut(userIds: (Types.ObjectId | string)[], payload: PushPayload, metaIn?: NotifyMeta) {
   const ids = [...new Set(userIds.map(sid))];
   if (!ids.length) return;
+  // a community with explicit content: the notification says nothing of it (no text, no picture), on any screen
+  const scrubbed = await explicitScrub(payload, metaIn);
+  const p = scrubbed.payload;
+  const meta = scrubbed.meta;
   if (!meta) return deliver(ids, p);
   const rows = await User.find({ _id: { $in: ids } }).select("notifyPrefs").lean<Pick<IUser, "_id" | "notifyPrefs">[]>();
   const inApp: string[] = [];

@@ -17,6 +17,8 @@ export interface IMessage {
   editedAt: Date | null;
   /** soft delete ("unsend"): the row stays so the timeline and reports keep their place */
   deletedAt: Date | null;
+  /** hidden pending review (a "minor or non-consensual" report): shown as removed until an admin decides */
+  hiddenAt?: Date | null;
   createdAt: Date;
 }
 
@@ -32,6 +34,7 @@ const MessageSchema = new Schema<IMessage>(
     pollId: { type: Schema.Types.ObjectId, ref: "Poll", default: null },
     editedAt: { type: Date, default: null },
     deletedAt: { type: Date, default: null },
+    hiddenAt: { type: Date, default: null },
   },
   { timestamps: { createdAt: true, updatedAt: false } },
 );

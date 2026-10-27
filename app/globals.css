@@ -115,6 +115,13 @@ body {
   }
 }
 
+/* a fieldset won't shrink below its content by default (min-width: min-content), which pushes phone layouts sideways */
+@layer base {
+  fieldset {
+    min-width: 0;
+  }
+}
+
 ::selection {
   background: var(--accent);
   color: var(--accent-ink);
@@ -347,6 +354,24 @@ html[data-motion="off"] .emoji-live, html[data-motion="off"] .emoji-pop, html[da
   html:not([data-motion="on"]) .kq-ring, html:not([data-motion="on"]) .kq-glow, html:not([data-motion="on"]) .kq-orbit, html:not([data-motion="on"]) .kq-name, html:not([data-motion="on"]) .kq-name::before, html:not([data-motion="on"]) .kq-name::after { animation: none !important; }
 }
 html[data-motion="off"] .kq-ring, html[data-motion="off"] .kq-glow, html[data-motion="off"] .kq-orbit, html[data-motion="off"] .kq-name, html[data-motion="off"] .kq-name::before, html[data-motion="off"] .kq-name::after { animation: none !important; }
+
+/*
+ * Crowds stay still: with many people on screen (comments, chat, member and friend lists…) every animated name and
+ * frame would run at once and drag the page. So they wait, paused (nothing animating, no repaints), until you point
+ * at, focus or tap the row they're in, or the name itself. Where one person is the focus (the profile popout, the
+ * full profile's side, Profile style) a `kq-live` wrapper keeps them moving.
+ * GIF pictures follow the same rule (Avatar: kq-gif / kq-gif-still).
+ */
+/* !important: each design's `animation` shorthand would otherwise reset the play state to running */
+.kq-name, .kq-name::before, .kq-name::after, .kq-ring, .kq-glow, .kq-orbit { animation-play-state: paused !important; }
+:is(.kq-live, li:hover, li:focus-within, a:hover, a:focus-visible, button:hover, button:focus-visible, .group:hover, .group:focus-within, .kq-frame:hover, .kq-name:hover) :is(.kq-ring, .kq-glow, .kq-orbit),
+:is(.kq-live, li:hover, li:focus-within, a:hover, a:focus-visible, button:hover, button:focus-visible, .group:hover, .group:focus-within) .kq-name,
+:is(.kq-live, li:hover, li:focus-within, a:hover, a:focus-visible, button:hover, button:focus-visible, .group:hover, .group:focus-within) .kq-name::before,
+:is(.kq-live, li:hover, li:focus-within, a:hover, a:focus-visible, button:hover, button:focus-visible, .group:hover, .group:focus-within) .kq-name::after,
+.kq-name:hover, .kq-name:hover::before, .kq-name:hover::after { animation-play-state: running !important; }
+.kq-gif { display: none; }
+:is(.kq-live, li:hover, li:focus-within, a:hover, button:hover, .group:hover, .kq-frame:hover) .kq-gif, .kq-gif:hover { display: inline-block; }
+:is(.kq-live, li:hover, li:focus-within, a:hover, button:hover, .group:hover, .kq-frame:hover) .kq-gif-still { display: none; }
 
 /* double-tap upvote on a feed post: pops where you tapped, floats up and fades */
 .vote-burst {

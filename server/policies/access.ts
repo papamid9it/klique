@@ -1,4 +1,5 @@
 import { Types } from "mongoose";
+import { adultCommunityIds, adultGate, type AdultGate } from "./adult";
 import type { Role, ViewerAccess } from "@/lib/types";
 import { forbidden, notFound } from "../http/errors";
 import type { IChannel } from "../models/Channel";
@@ -35,6 +36,8 @@ export interface SpaceAccess extends ViewerAccess {
    * nothing in the way). Chat, boards, comments, votes and reactions are never held back by it.
    */
   pointsToPost: number;
+  /** an 18+ community this person may not enter yet, and why (policies/adult); they're treated as an outsider */
+  adultGate?: AdultGate;
 }
 
 const isManager = (r: Role | null) => r === "owner" || r === "admin";
@@ -126,8 +129,19 @@ export function subAccessFrom(
   };
 }
 
-/** What `viewer` (possibly signed-out) may do in this space. */
+/**
+ * What `viewer` (possibly signed-out) may do in this space. An 18+ community they may not enter yet (too young,
+ * no date of birth, not confirmed, explicit content off) makes them an outsider there, members included, whatever
+ * else they'd have; site admins pass, to moderate.
+ */
 export async function spaceAccess(space: Space, viewer: IUser | null): Promise<SpaceAccess> {
+  const access = await rawSpaceAccess(space, viewer);
+  const gate = viewer && isSiteAdmin(viewer) ? null : adultGate(space.community, viewer);
+  if (!gate) return access;
+  return { ...access, role: null, isMember: false, canView: false, canPost: false, canManage: false, canJoinDirectly: false, canModerate: false, pendingRequest: false, adultGate: gate };
+}
+
+async function rawSpaceAccess(space: Space, viewer: IUser | null): Promise<SpaceAccess> {
   const none: SpaceAccess = {
     role: null,
     isMember: false,
@@ -214,8 +228,11 @@ export async function eventVisibilityFilter(viewer: IUser | null): Promise<Recor
   // a member's event waiting for approval (or turned down) shows to its host only
   if (!viewer) return { $and: [forEveryone, publishedEvents(null)] };
 
-  const communityIds = memberships.filter((m) => !m.subcommunityId).map((m) => m.communityId);
-  const subIds = memberships.filter((m) => m.subcommunityId).map((m) => m.subcommunityId!);
+  // 18+ communities' events (and their groups') stay on their own pages
+  const adult = new Set((await adultCommunityIds()).map(String));
+  const listed = memberships.filter((m) => !adult.has(String(m.communityId)));
+  const communityIds = listed.filter((m) => !m.subcommunityId).map((m) => m.communityId);
+  const subIds = listed.filter((m) => m.subcommunityId).map((m) => m.subcommunityId!);
   return {
     $and: [
       {
@@ -247,8 +264,12 @@ export async function canReviewEvent(event: Pick<IEvent, "communityId" | "subcom
   return isManager(own) || (!!event.subcommunityId && parent === "owner");
 }
 
+const inAdultCommunity = async (event: Pick<IEvent, "communityId">) => !!event.communityId && (await adultCommunityIds()).some((id) => String(id) === String(event.communityId));
+
 /** The same rule for one event: would it show up in this viewer's feeds (and ads)? */
 export async function canSeeEventInFeeds(event: IEvent, viewer: IUser | null): Promise<boolean> {
+  // an 18+ community's events stay on its own pages
+  if (await inAdultCommunity(event)) return false;
   if (viewer && String(event.hostId) === String(viewer._id)) return true;
   if (event.review) return false;
   if (!event.subcommunityId && (!event.communityId || String(event.communityId) === String(await kliqueId()))) return true;
@@ -265,6 +286,15 @@ export async function canSeeEventInFeeds(event: IEvent, viewer: IUser | null): P
 export async function canViewEvent(event: IEvent, viewer: IUser | null): Promise<boolean> {
   // waiting for approval or turned down: its host, and whoever can approve it
   if (event.review) return (!!viewer && String(event.hostId) === String(viewer._id)) || (await canReviewEvent(event, viewer));
+  // an 18+ community's event: its members who may enter it (policies/adult), and site admins
+  if (await inAdultCommunity(event)) {
+    if (!viewer) return false;
+    if (isSiteAdmin(viewer)) return true;
+    const c = await Community.findById(event.communityId).select("adult explicit").lean<Pick<ICommunity, "adult" | "explicit">>();
+    if (!c || adultGate(c, viewer)) return false;
+    const m = await findMembership(viewer._id, event.communityId!, event.subcommunityId ?? null);
+    return activeRole(m) !== null || String(event.hostId) === String(viewer._id);
+  }
   if (await canSeeEventInFeeds(event, viewer)) return true;
   if (event.subcommunityId || !event.communityId) return false;
   const c = await Community.findById(event.communityId).select("privacy").lean<Pick<ICommunity, "privacy">>();

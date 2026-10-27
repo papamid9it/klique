@@ -1,15 +1,30 @@
 import Link from "next/link";
+import { LogoArt, MarkArt, TAGLINE } from "@/lib/brand-logo";
 
-/** `compact`: on narrow phones the wordmark folds away and only the mark stays. */
-export function Logo({ className = "", compact }: { className?: string; compact?: boolean }) {
+/** the logo follows the mood: the word in ink, the crown in the accent, the swash in the second accent */
+const MOOD = { ink: "var(--ink)", accent: "var(--accent)", accent2: "var(--accent2)" };
+
+/**
+ * The Klique logo (lib/brand-logo). `compact`: on narrow phones only the mark (the K with its crown) stays.
+ * `tagline`: "FIND YOUR KLIQUE" under it, where there's room (sign in, onboarding, legal pages).
+ */
+export function Logo({ className = "", compact, tagline, height = 40 }: { className?: string; compact?: boolean; tagline?: boolean; height?: number }) {
   return (
-    <Link href="/" aria-label="klique — home" className={`inline-flex items-center gap-2.5 ${className}`}>
-      <span aria-hidden="true" className="inline-flex size-8 items-center justify-center rounded-full bg-accent text-accent-ink">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
-          <path d="M12 3.5v17M4.6 7.8l14.8 8.4M4.6 16.2 19.4 7.8" />
-        </svg>
+    <Link href="/" aria-label="Klique — home" className={`inline-flex flex-col items-start gap-1.5 ${className}`}>
+      <span className={compact ? "max-[399px]:hidden" : ""}>
+        <LogoArt height={height} colors={MOOD} title="" />
       </span>
-      <span className={`text-[26px] leading-none font-semibold tracking-[-0.045em] text-ink ${compact ? "max-[399px]:hidden" : ""}`}>klique.</span>
+      {compact && (
+        <span className="min-[400px]:hidden">
+          <MarkArt size={36} colors={MOOD} title="" />
+        </span>
+      )}
+      {tagline && <span className="pl-1 font-mono text-[10.5px] font-medium tracking-[0.3em] text-ink-muted">{TAGLINE}</span>}
     </Link>
   );
+}
+
+/** Just the mark, for tight spots (the rail's home button). */
+export function LogoMark({ size = 30 }: { size?: number }) {
+  return <MarkArt size={size} colors={MOOD} title="" />;
 }

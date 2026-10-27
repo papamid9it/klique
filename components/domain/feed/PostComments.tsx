@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
 import { FeedService } from "@/app/services/FeedService";
 import { AttachedSticker, ReactButton, ReactionBar, StickerPicker, StickerView, type StickerChoice } from "@/components/domain/chat/Reactions";
+import { EditedTag, MessageEditor } from "@/components/domain/chat/MessageEditor";
 import { Linkified } from "@/components/domain/topics/parts";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { ProfileTrigger } from "@/components/providers/ProfileCardProvider";
@@ -65,7 +66,7 @@ function Composer({ onSend, placeholder, autoFocus, onCancel }: { onSend: (draft
     >
       <AttachedSticker choice={sticker} onRemove={() => setSticker(null)} />
       {/* in the flow, as wide as the box: a popover would be cut off by the scrolling comment list */}
-      {tray && <StickerPicker onPick={setSticker} onClose={() => setTray(false)} className="mb-2 w-full! max-w-none!" />}
+      {tray && <StickerPicker onPick={setSticker} onClose={() => setTray(false)} className="mb-2 w-full! max-w-md!" />}
       <div className="flex items-end gap-2">
         <textarea
           value={body}
@@ -117,6 +118,7 @@ export function PostComments({ post, onCount, pinned, top }: { post: FeedPostDTO
   const list = useMemo(() => data ?? [], [data]);
   const tree = useMemo(() => nest(list), [list]);
   const [replying, setReplying] = useState<string | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
   const [folded, setFolded] = useState<Set<string>>(new Set());
   const canWrite = post.isMember;
 
@@ -134,12 +136,30 @@ export function PostComments({ post, onCount, pinned, top }: { post: FeedPostDTO
     }
   }
 
+  /** Your comment's new text: shown at once (with "edited"), saved behind; the old text comes back if that fails. */
+  async function saveEdit(c: FeedCommentDTO, body: string): Promise<string | null> {
+    const text = body.trim();
+    if (!text && !c.sticker && !c.stickerUrl) return "Write something, or delete the comment.";
+    setData((d) => (d ?? []).map((x) => (x.id === c.id ? { ...x, body: text, editedAt: new Date().toISOString() } : x)));
+    setEditing(null);
+    try {
+      await FeedService.editComment(slug, post.id, c.id, text);
+    } catch (e) {
+      setData((d) => (d ?? []).map((x) => (x.id === c.id ? c : x)));
+      toast(errorMessage(e), "error");
+    }
+    return null;
+  }
+
+  /** Gone at once ("Comment deleted"); the server is told behind, and it comes back with a note if that fails. */
   async function remove(c: FeedCommentDTO) {
+    setData((d) => (d ?? []).map((x) => (x.id === c.id ? { ...x, body: "", sticker: null, stickerUrl: null, deleted: true, reactions: [], canDelete: false } : x)));
+    onCount(Math.max(0, post.commentCount - 1));
     try {
       await FeedService.removeComment(slug, post.id, c.id);
-      setData((d) => (d ?? []).map((x) => (x.id === c.id ? { ...x, body: "", sticker: null, stickerUrl: null, deleted: true, reactions: [], canDelete: false } : x)));
-      onCount(Math.max(0, post.commentCount - 1));
     } catch (e) {
+      setData((d) => (d ?? []).map((x) => (x.id === c.id ? c : x)));
+      onCount(post.commentCount);
       toast(errorMessage(e), "error");
     }
   }
@@ -170,9 +190,12 @@ export function PostComments({ post, onCount, pinned, top }: { post: FeedPostDTO
                 <UserName name={c.author.displayName} effect={c.author.nameEffect} />
               </ProfileTrigger>
               <time dateTime={c.createdAt}>{now ? relativeStamp(c.createdAt, now) : ""}</time>
+              <EditedTag at={c.editedAt} />
             </p>
             {c.deleted ? (
               <p className="mt-0.5 text-[14px] text-ink-muted italic">Comment deleted</p>
+            ) : editing === c.id ? (
+              <MessageEditor className="mt-1" initial={c.body} max={LIMITS.feedComment} onCancel={() => setEditing(null)} onSave={(body) => saveEdit(c, body)} />
             ) : (
               <>
                 {c.body && (
@@ -195,8 +218,13 @@ export function PostComments({ post, onCount, pinned, top }: { post: FeedPostDTO
                 </button>
               )}
               {canWrite && !c.deleted && <ReactButton onPick={(k) => void react(c, k)} align="left" className="[&>button]:size-7" />}
+              {c.canEdit && editing !== c.id && (
+                <button type="button" onClick={() => setEditing(c.id)} className="inline-flex h-7 items-center gap-1 rounded-full px-2 opacity-0 transition group-hover:opacity-100 hover:bg-raised hover:text-ink focus:opacity-100 [@media(pointer:coarse)]:opacity-100">
+                  <Icon name="edit" size={13} /> Edit
+                </button>
+              )}
               {c.canDelete && (
-                <button type="button" onClick={() => void remove(c)} className="inline-flex h-7 items-center gap-1 rounded-full px-2 opacity-0 transition group-hover:opacity-100 hover:bg-raised hover:text-danger focus:opacity-100">
+                <button type="button" onClick={() => void remove(c)} className="inline-flex h-7 items-center gap-1 rounded-full px-2 opacity-0 transition group-hover:opacity-100 hover:bg-raised hover:text-danger focus:opacity-100 [@media(pointer:coarse)]:opacity-100">
                   <Icon name="trash" size={13} /> Delete
                 </button>
               )}

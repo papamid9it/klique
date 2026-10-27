@@ -48,11 +48,14 @@ export async function setMoneyConfig(input: z.infer<typeof moneyConfigSchema>): 
 
 /* ------------------------------ who may ------------------------------ */
 
+const NO_MONEY_EXPLICIT = "Communities with explicit content can't take donations, contributions or payouts on Klique.";
+
 async function managedCommunity(viewer: IUser, slug: string) {
   const { space, access } = await resolveSpaceFor(viewer, slug);
   if (space.sub) throw notFound("Money lives in the community, not in a group.");
   if (!access.canManage && !isSiteAdmin(viewer)) throw forbidden("Only this community's owner and admins can do that.");
   if (isKlique(space.community)) throw forbidden("Klique itself doesn't take donations.");
+  if (space.community.explicit) throw forbidden(NO_MONEY_EXPLICIT);
   return { community: space.community, access };
 }
 
@@ -137,6 +140,8 @@ export async function deleteDonationButton(viewer: IUser, slug: string, id: stri
 
 async function checkout(viewer: IUser, p: Pick<IPayment, "kind" | "communityId" | "buttonId" | "eventId" | "quantity" | "amount" | "message">, back: string): Promise<{ authorizationUrl: string; reference: string }> {
   if (!paystackConfig()) throw badRequest("Card payments aren't switched on yet.");
+  // no money moves for a community with explicit content (our payment provider doesn't allow adult content)
+  if (p.communityId && (await Community.exists({ _id: p.communityId, explicit: true }))) throw forbidden(NO_MONEY_EXPLICIT);
   if (p.amount < MIN_PAYMENT || p.amount > MAX_PAYMENT) throw badRequest(`Pick an amount between ${naira(MIN_PAYMENT)} and ${naira(MAX_PAYMENT)}.`);
   rateLimit(`pay:${sid(viewer._id)}`, 20, 60 * 60 * 1000);
   const config = await getMoneyConfig();

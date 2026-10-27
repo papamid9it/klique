@@ -63,7 +63,9 @@ export async function messagingEligibility(viewer: IUser | null, target: IUser):
 /* Serialisation                                                       */
 /* ------------------------------------------------------------------ */
 
-const toMessage = (m: IMessage, viewerId: Types.ObjectId, reactions: ReactionDTO[] = [], replyTo: ReplyRefDTO | null = null): MessageDTO => ({
+// hidden pending review reads as removed
+const toMessage = (raw: IMessage, viewerId: Types.ObjectId, reactions: ReactionDTO[] = [], replyTo: ReplyRefDTO | null = null): MessageDTO => toMessageShown(raw.hiddenAt && !raw.deletedAt ? { ...raw, deletedAt: raw.hiddenAt } : raw, viewerId, reactions, replyTo);
+const toMessageShown = (m: IMessage, viewerId: Types.ObjectId, reactions: ReactionDTO[], replyTo: ReplyRefDTO | null): MessageDTO => ({
   id: sid(m._id),
   conversationId: sid(m.conversationId),
   senderId: sid(m.senderId),

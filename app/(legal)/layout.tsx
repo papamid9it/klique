@@ -6,7 +6,7 @@ export default function LegalLayout({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-dvh">
       <header className="mx-auto flex max-w-3xl items-center justify-between px-4 pt-6 sm:px-8">
-        <Logo />
+        <Logo tagline />
         <nav aria-label="Legal" className="flex gap-4 text-sm text-ink-muted">
           <Link href="/terms" className="hover:text-ink">
             Terms

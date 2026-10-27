@@ -47,6 +47,8 @@ export async function communityShare(slug: string): Promise<ShareInfo | null> {
   await connectDb();
   try {
     const c = await getCommunity(null, slug);
+    // an 18+ community: a plain card, not even its name
+    if (c.adult) return { title: "Klique", description: "A community on Klique.", eyebrow: "Community", lines: [], image: null };
     if (c.privacy !== "public") return { title: c.name, description: "A private community on klique.", eyebrow: "Private community", lines: [], image: null };
     return {
       title: c.name,

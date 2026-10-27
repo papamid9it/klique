@@ -1,5 +1,6 @@
 "use client";
 
+import { AdultFields } from "./AdultFields";
 import { useCategories } from "@/lib/hooks/useCategories";
 import { useEffect, useState } from "react";
 import { isApiError } from "@/app/ApiCore";
@@ -21,6 +22,8 @@ export interface CommunityFormValues {
   neighborhood: string;
   privacy: CommunityPrivacy;
   coverImage: string;
+  adult: boolean;
+  explicit: boolean;
 }
 
 /** Create / edit form for a community. `onSubmit` should throw on failure; field errors from the API are shown inline. */
@@ -49,6 +52,8 @@ export function CommunityForm({
     neighborhood: initial?.neighborhood ?? "",
     privacy: initial?.privacy ?? "public",
     coverImage: initial?.coverImage ?? "",
+    adult: initial?.adult ?? false,
+    explicit: initial?.explicit ?? false,
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [general, setGeneral] = useState<string | null>(null);
@@ -74,7 +79,7 @@ export function CommunityForm({
         region: v.region,
         city: v.city,
         neighborhood: v.neighborhood.trim(),
-        ...(showPrivacy ? { privacy: v.privacy } : {}),
+        ...(showPrivacy ? { privacy: v.privacy, adult: v.privacy === "private" && v.adult, explicit: v.privacy === "private" && v.adult && v.explicit } : {}),
         coverImage: v.coverImage.trim() || null,
       });
     } catch (err) {
@@ -126,8 +131,15 @@ export function CommunityForm({
           )}
         </fieldset>
       )}
+      {showPrivacy && v.privacy === "private" && <AdultFields adult={v.adult} explicit={v.explicit} onChange={(x) => setV((p) => ({ ...p, ...x }))} />}
+      {(errors.adult || errors.explicit) && (
+        <p role="alert" className="-mt-2 text-xs font-medium text-danger">
+          {errors.adult ?? errors.explicit}
+        </p>
+      )}
 
-      <ImageField kind="photo" label="Cover image (optional)" value={v.coverImage} onChange={(u) => set("coverImage", u)} error={errors.coverImage} reposition={{ aspect: 16 / 9 }} hint="A wide picture. We'll use artwork if you skip it." />
+      {/* every new community has one; it can be replaced, not removed (older ones without a cover can add one) */}
+      <ImageField kind="photo" label="Cover image" required={!!initial?.coverImage} value={v.coverImage} onChange={(u) => set("coverImage", u)} error={errors.coverImage} reposition={{ aspect: 16 / 9 }} hint={initial?.coverImage ? "A wide picture. Upload a new one to replace it." : "A wide picture, so people can spot your community."} />
 
       {general && Object.keys(errors).length === 0 && (
         <p role="alert" className="text-sm font-medium text-danger">

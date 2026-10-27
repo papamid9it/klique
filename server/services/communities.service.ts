@@ -1,17 +1,18 @@
 import { parseScope, scopeFilter } from "@/lib/places";
+import { forgetAdultCommunities, isAdult } from "../policies/adult";
 import { deleteUploads } from "./media.service";
 import { sameFile } from "@/lib/focal";
 import { assertVerified } from "./account.service";
 import type { QueryFilter, Types } from "mongoose";
 import type { z } from "zod";
 import type { CommunityCardDTO, CommunityDTO, Paginated } from "@/lib/types";
-import { forbidden, unauthorized } from "../http/errors";
+import { ApiError, forbidden, notFound, unauthorized } from "../http/errors";
 import { rateLimit } from "../http/rate-limit";
 import { Community, type ICommunity } from "../models/Community";
 import { Event } from "../models/Event";
 import { Membership } from "../models/Membership";
 import { Subcommunity, type ISubcommunity } from "../models/Subcommunity";
-import type { IUser } from "../models/User";
+import { User, type IUser } from "../models/User";
 import { spaceAccess } from "../policies/access";
 import { ensureDefaultChannels } from "./channels.service";
 import { toCommunityCards, toCommunityDetail } from "../serializers";
@@ -60,6 +61,8 @@ export async function listCommunities(viewer: IUser | null, q: ListQuery): Promi
 export async function getCommunity(viewer: IUser | null, slug: string): Promise<CommunityDTO> {
   const space = await resolveSpace(slug);
   const access = await spaceAccess(space, viewer);
+  // an 18+ community: under-18s never learn it exists; anyone else not cleared yet gets a page that asks (ageGate)
+  if (access.adultGate === "under_18") throw notFound("We couldn't find that community.");
 
   let subcommunityCount: number | null = null;
   let upcomingEventCount: number | null = null;
@@ -78,9 +81,25 @@ export async function getCommunity(viewer: IUser | null, slug: string): Promise<
   return toCommunityDetail(space.community, access, { subcommunityCount, upcomingEventCount });
 }
 
+/**
+ * The 18+ and explicit flags (policies/adult): 18+ only on a private community, explicit only on an 18+ one, and
+ * only set by someone who could enter it themselves (so they're never locked out of their own community).
+ */
+async function assertAdultFlags(viewer: IUser, next: { privacy: string; adult: boolean; explicit: boolean }) {
+  if (next.explicit && !next.adult) throw new ApiError(422, "Only an 18+ community can allow explicit content.", { errors: { explicit: "Make it 18+ first" } });
+  if (next.adult && next.privacy !== "private") throw new ApiError(422, "Only a private community can be 18+.", { errors: { adult: "Make it private first" } });
+  if (!next.adult) return;
+  if (!viewer.dob) throw new ApiError(422, "Add your date of birth in Settings first: only people 18 and over can run an 18+ community.", { errors: { adult: "Add your date of birth first" } });
+  if (!isAdult(viewer)) throw forbidden("Only people 18 and over can run an 18+ community.");
+  if (next.explicit && !viewer.explicitOptInAt) throw new ApiError(422, "Turn on Show explicit content in Settings first.", { errors: { explicit: "Turn on Show explicit content first" } });
+  // marking it 18+ is their own "I'm 18 or older"
+  if (!viewer.adultConfirmedAt) await User.updateOne({ _id: viewer._id }, { $set: { adultConfirmedAt: new Date() } });
+}
+
 export async function createCommunity(viewer: IUser, input: z.infer<typeof communityCreateSchema>): Promise<CommunityDTO> {
   assertVerified(viewer);
   assertPlace(input, true);
+  await assertAdultFlags(viewer, { privacy: input.privacy, adult: input.adult, explicit: input.explicit });
   rateLimit(`community-create:${sid(viewer._id)}`, 5, 24 * 60 * 60 * 1000);
   const slug = await uniqueCommunitySlug(input.name);
   const doc = await Community.create({
@@ -96,8 +115,11 @@ export async function createCommunity(viewer: IUser, input: z.infer<typeof commu
     groupPolicy: input.groupPolicy,
     feedPolicy: input.feedPolicy,
     coverImage: input.coverImage || null,
+    adult: input.adult,
+    explicit: input.adult && input.explicit,
     ownerId: viewer._id,
   });
+  if (input.adult) forgetAdultCommunities();
   await Membership.create({ userId: viewer._id, communityId: doc._id, subcommunityId: null, role: "owner" });
   await recountMembers(doc._id, null);
   await ensureDefaultChannels(doc._id, viewer._id);
@@ -121,11 +143,25 @@ export async function updateCommunity(viewer: IUser, slug: string, patch: z.infe
   if (patch.region !== undefined) set.region = patch.region;
   if (patch.city !== undefined) set.city = patch.city;
   if (patch.neighborhood !== undefined) set.neighborhood = patch.neighborhood;
-  if (patch.coverImage !== undefined) set.coverImage = patch.coverImage || null;
+  if (patch.coverImage) set.coverImage = patch.coverImage;
+  // a cover can be replaced, not taken away (older communities that never had one can still save)
+  else if (patch.coverImage !== undefined && space.community.coverImage) throw new ApiError(422, "A community needs a cover image. Upload a new one to replace it.", { errors: { coverImage: "Upload a new one to replace it" } });
   if (patch.privacy !== undefined) set.privacy = patch.privacy;
   if (patch.groupPolicy !== undefined) set.groupPolicy = patch.groupPolicy;
   if (patch.feedPolicy !== undefined) set.feedPolicy = patch.feedPolicy;
   if (patch.memberEvents !== undefined) set.memberEvents = patch.memberEvents;
+  // 18+ and explicit: checked against what the community will be after this change
+  if (patch.adult !== undefined || patch.explicit !== undefined || patch.privacy !== undefined) {
+    const next = { privacy: patch.privacy ?? space.community.privacy, adult: patch.adult ?? !!space.community.adult, explicit: patch.explicit ?? !!space.community.explicit };
+    if (!next.adult) next.explicit = false;
+    if (next.adult !== !!space.community.adult || next.explicit !== !!space.community.explicit || next.privacy !== space.community.privacy) {
+      if (access.role !== "owner" && (next.adult !== !!space.community.adult || next.explicit !== !!space.community.explicit)) throw forbidden("Only the owner can change whether this community is 18+.");
+      await assertAdultFlags(viewer, next);
+      set.adult = next.adult;
+      set.explicit = next.explicit;
+      forgetAdultCommunities();
+    }
+  }
   // the Klique community never asks for points
   if (!space.community.official) {
     if (patch.minPointsJoin !== undefined) set.minPointsJoin = patch.minPointsJoin;

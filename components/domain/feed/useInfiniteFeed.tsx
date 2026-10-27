@@ -144,12 +144,14 @@ export function useInfiniteFeed<T>(key: string, fetchPage: (page: number, at?: n
     return () => s.removeEventListener("scroll", onScroll);
   }, [key, shown]);
 
-  // the next page when the bottom comes near
+  // the next page well before the bottom (about three or four posts ahead), so scrolling never waits at the end.
+  // Measured against the feed's own scroll area: against the window, a margin does nothing for a panel that scrolls.
   const hasMore = !!feed?.hasMore;
   useEffect(() => {
     const el = sentinel.current;
     if (!el || !hasMore || busy || error) return;
-    const io = new IntersectionObserver(([e]) => e.isIntersecting && void load(false), { rootMargin: "900px 0px" });
+    const root = scrollerOf(el);
+    const io = new IntersectionObserver(([e]) => e.isIntersecting && void load(false), { root: root instanceof Window ? null : root, rootMargin: "0px 0px 2000px 0px" });
     io.observe(el);
     return () => io.disconnect();
   }, [feed, hasMore, busy, error, load]);

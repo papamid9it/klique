@@ -107,7 +107,7 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
           <CommunityForm
             key={formKey}
             embedded={{ formId: "community-form", onDirty: setDirty, onBusy: setSaving }}
-            initial={{ name: c.name, description: c.description, interest: c.interest, country: c.country, region: c.region, city: c.city, neighborhood: c.neighborhood, coverImage: c.coverImage ?? "", privacy: c.privacy }}
+            initial={{ name: c.name, description: c.description, interest: c.interest, country: c.country, region: c.region, city: c.city, neighborhood: c.neighborhood, coverImage: c.coverImage ?? "", privacy: c.privacy, adult: c.adult, explicit: c.explicit }}
             submitLabel="Save changes"
             onSubmit={async (input) => {
               const res = await CommunityService.update(c.slug, input);

@@ -37,13 +37,19 @@ function AvatarPic({ name, src, size, className }: { name: string; src?: string 
   if (src && !failed) {
     // the person may have moved or zoomed their picture in its circle (lib/focal)
     const { src: file, focal } = splitFocal(src);
-    const img = calm && isAnimatedPicture(file) ? (
+    const animated = isAnimatedPicture(file);
+    const still = (extra?: string) => (
       <StillImage
         src={cdn(file, { w: size * 2, h: size * 2, fit: "face" })}
         onError={() => setFailed(true)}
         style={focal.z > 1 ? { ...focalStyle(focal), width: "100%", height: "100%" } : { ...style, ...focalStyle(focal) }}
-        className={cx("shrink-0 rounded-full object-cover", focal.z <= 1 && className)}
+        className={cx("shrink-0 rounded-full object-cover", focal.z <= 1 && className, extra)}
       />
+    );
+    // a GIF also waits on its first frame in crowded places, and plays where it's the focus or its row is pointed at
+    // (globals.css: kq-gif / kq-gif-still)
+    const img = calm && animated ? (
+      still()
     ) : (
       // eslint-disable-next-line @next/next/no-img-element
       <img
@@ -54,16 +60,24 @@ function AvatarPic({ name, src, size, className }: { name: string; src?: string 
         loading="lazy"
         onError={() => setFailed(true)}
         style={focal.z > 1 ? { ...focalStyle(focal), width: "100%", height: "100%" } : { ...style, ...focalStyle(focal) }}
-        className={cx("shrink-0 rounded-full object-cover", focal.z <= 1 && className)}
+        className={cx("shrink-0 rounded-full object-cover", focal.z <= 1 && className, animated && "kq-gif")}
       />
+    );
+    const shown = animated && !calm ? (
+      <>
+        {still("kq-gif-still")}
+        {img}
+      </>
+    ) : (
+      img
     );
     // zoomed in: clip to the circle so the enlarged picture doesn't spill out
     return focal.z > 1 ? (
       <span style={style} className={cx("inline-block shrink-0 overflow-hidden rounded-full", className)}>
-        {img}
+        {shown}
       </span>
     ) : (
-      img
+      shown
     );
   }
   return (

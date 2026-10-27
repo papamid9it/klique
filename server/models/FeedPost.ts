@@ -2,7 +2,8 @@ import { Schema, type Model, type Types } from "mongoose";
 import { defineModel } from "./define";
 
 /**
- * A community's Posts section, Instagram style: pictures (or one video) with a caption, voted up or down, with
+ * A community's Posts section, Instagram style: pictures (or one video) with a caption, or text on its own
+ * (lib/feedText: a coloured card when short, a title and body when long), voted up or down, with
  * Reddit-style nested comments that take emoji reactions. Turned on per community (Community.feedPolicy).
  * Posts from your communities make up the home feed. (Board posts are Topic; a group's updates are Post.)
  */
@@ -11,6 +12,14 @@ export interface IFeedPost {
   communityId: Types.ObjectId;
   authorId: Types.ObjectId;
   caption: string;
+  /** a text post's title (needed when its text is long: lib/feedText) */
+  title: string;
+  /** a short text post's card background (lib/feedText TEXT_BACKGROUNDS) */
+  textBg: string | null;
+  /** marked explicit (only in explicit communities): its pictures and video stay blurred until tapped */
+  explicit?: boolean;
+  /** hidden pending review (a "minor or non-consensual" report): nobody but site admins sees it */
+  hiddenAt?: Date | null;
   media: { kind: "image" | "video"; url: string; poster: string | null }[];
   /** denormalised vote and comment counts (FeedVote / FeedComment keep them in step) */
   upCount: number;
@@ -25,6 +34,10 @@ const FeedPostSchema = new Schema<IFeedPost>(
     communityId: { type: Schema.Types.ObjectId, ref: "Community", required: true },
     authorId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     caption: { type: String, default: "", trim: true, maxlength: 2200 },
+    title: { type: String, default: "", trim: true, maxlength: 120 },
+    textBg: { type: String, default: null },
+    explicit: { type: Boolean, default: false },
+    hiddenAt: { type: Date, default: null },
     media: { type: [new Schema({ kind: { type: String, enum: ["image", "video"], required: true }, url: { type: String, required: true }, poster: { type: String, default: null } }, { _id: false })], default: [] },
     upCount: { type: Number, default: 0 },
     downCount: { type: Number, default: 0 },
@@ -71,6 +84,7 @@ export interface IFeedComment {
   /** a built-in sticker id, or a saved picture sticker's link (lib/reactions, SavedSticker) */
   sticker: string | null;
   stickerUrl: string | null;
+  editedAt?: Date | null;
   deletedAt: Date | null;
   createdAt: Date;
 }
@@ -84,6 +98,7 @@ const FeedCommentSchema = new Schema<IFeedComment>(
     body: { type: String, default: "", maxlength: 2000 },
     sticker: { type: String, default: null },
     stickerUrl: { type: String, default: null },
+    editedAt: { type: Date, default: null },
     deletedAt: { type: Date, default: null },
   },
   { timestamps: { createdAt: true, updatedAt: false } },

@@ -153,7 +153,7 @@ export async function boardSidebar(viewer: IUser | null, space: Space, access: S
   const score = new Map<string, { topics: number; comments: number }>();
   for (const t of active) if (t.createdAt >= since) score.set(sid(t.authorId), { topics: (score.get(sid(t.authorId))?.topics ?? 0) + 1, comments: 0 });
   for (const c of comments) score.set(sid(c._id), { topics: score.get(sid(c._id))?.topics ?? 0, comments: c.n });
-  const top = [...score.entries()].sort((x, y) => y[1].topics * 3 + y[1].comments - (x[1].topics * 3 + x[1].comments)).slice(0, 5);
+  const top = [...score.entries()].sort((x, y) => y[1].topics * 3 + y[1].comments - (x[1].topics * 3 + x[1].comments)).slice(0, 3);
   const briefs = await loadBriefs(top.map(([id]) => new Types.ObjectId(id)));
   const contributors = top.flatMap(([id, s]) => {
     const user = briefs.get(id);

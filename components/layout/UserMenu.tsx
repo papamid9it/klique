@@ -4,9 +4,11 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useProfileCard } from "@/components/providers/ProfileCardProvider";
 import { Dropdown, type MenuEntry } from "@/components/ui/Dropdown";
+import { useSetStatus } from "@/components/domain/profile/StatusPicker";
+import { PRESENCES } from "@/lib/constants";
 
 /**
- * Your account menu: profile, ads, settings, admin, sign out. One menu used from the sidebar's profile card,
+ * Your account menu: your status, profile, ads, settings, admin, sign out. One menu used from the sidebar's profile card,
  * the slim rail's picture, and your own profile page on phones. Notifications aren't here: the sidebar and the
  * phone top bar already have them.
  */
@@ -14,8 +16,13 @@ export function UserMenu({ trigger, align = "left" }: { trigger: Parameters<type
   const router = useRouter();
   const { user, signOut } = useAuth();
   const card = useProfileCard();
+  const setStatus = useSetStatus();
   if (!user) return null;
   const items: MenuEntry[] = [
+    // your status, right here
+    { type: "label", label: "Your status" },
+    ...PRESENCES.map((s): MenuEntry => ({ label: s.label, hint: s.id === user.presence ? "Current" : undefined, onSelect: () => void setStatus(s.id) })),
+    { type: "sep" },
     { label: "Your profile", icon: "user", onSelect: () => card.openFull(user.handle) },
     { label: "Advertise", icon: "megaphone", onSelect: () => router.push("/ads") },
     { label: `Hype · ${(user.hype ?? 0).toLocaleString("en-NG")}`, icon: "coin", onSelect: () => router.push("/settings?tab=hype") },

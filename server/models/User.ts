@@ -51,6 +51,13 @@ export interface IUser {
   suspendedAt?: Date | null;
   /** finished joining: picked 3+ categories and joined 2+ communities (null: they're sent to /welcome) */
   onboardedAt?: Date | null;
+  /** date of birth: set once by the person (dobSetAt), changed after that only by a site admin (policies/adult) */
+  dob?: Date | null;
+  dobSetAt?: Date | null;
+  /** said "I'm 18 or older" before first entering an 18+ community */
+  adultConfirmedAt?: Date | null;
+  /** "Show explicit content" on in Settings (18+ only, with its agreement): when they agreed. Null: off */
+  explicitOptInAt?: Date | null;
   suspendedReason?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -91,6 +98,10 @@ const UserSchema = new Schema<IUser>(
     points: { type: Number, default: 0, min: 0 },
     suspendedAt: { type: Date, default: null },
     onboardedAt: { type: Date, default: null },
+    dob: { type: Date, default: null },
+    dobSetAt: { type: Date, default: null },
+    adultConfirmedAt: { type: Date, default: null },
+    explicitOptInAt: { type: Date, default: null },
     suspendedReason: { type: String, default: "", maxlength: 300 },
   },
   { timestamps: true },

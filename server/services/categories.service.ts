@@ -1,5 +1,5 @@
 import "server-only";
-import { CATEGORY_SLUG, DEFAULT_CATEGORIES, setCategories, type Category } from "@/lib/constants";
+import { CATEGORY_SLUG, DEFAULT_CATEGORIES, setCategories, textGlyph, type Category } from "@/lib/constants";
 import { badRequest } from "../http/errors";
 import { AppSetting } from "../models/AppSetting";
 import { Community } from "../models/Community";
@@ -22,7 +22,8 @@ const clean = (c: Category): Category => ({
   id: c.id,
   name: c.name.trim().slice(0, 40),
   short: (c.short || c.name).trim().slice(0, 16),
-  glyph: (c.glyph || "•").trim().slice(0, 4),
+  // Art's old ◐ drew as a broken half-circle in the app's font: saved lists that still have it get the pencil
+  glyph: textGlyph((c.id === "art" && c.glyph?.trim() === "◐" ? "✎" : c.glyph || "•").trim().slice(0, 4)),
   ...(c.hidden ? { hidden: true } : {}),
 });
 

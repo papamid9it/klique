@@ -36,7 +36,7 @@ import { useApi, useNow } from "@/lib/hooks/useApi";
 import { useEventActions } from "@/lib/hooks/useEventActions";
 import { domainOf, isHttpLink, normalizeLink } from "@/lib/links";
 import type { EventDTO } from "@/lib/types";
-import { EventCrews } from "@/components/domain/crews/EventCrews";
+import { EventCrewsRow } from "@/components/domain/crews/EventCrews";
 import { EventPanel } from "@/components/domain/events/EventPanel";
 import { crewsHref } from "@/components/domain/crews/parts";
 
@@ -366,8 +366,8 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
 
 
           {event.contribution && event.viewer.canManageMoney && <ContributionsPanel event={event} />}
-          {/* events outside any community keep their crews here; the rest live in their community's Crews view */}
-          {!event.isPast && !cancelled && !event.community && <EventCrews event={event} />}
+          {/* events outside any community have a crews page; the rest keep theirs in their community's Crews view */}
+          {!event.isPast && !cancelled && !event.community && <EventCrewsRow event={event} />}
         </div>
 
         <aside className="space-y-3 lg:sticky lg:top-6 lg:self-start">
@@ -472,7 +472,8 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
               </Button>
             </div>
           )}
-          {!event.isPast && !event.viewer.isHost && partnerAd && <SponsoredBox ad={partnerAd} image={false} />}
+          {/* no ads inside an 18+ community */}
+          {!event.isPast && !event.viewer.isHost && !event.community?.adult && partnerAd && <SponsoredBox ad={partnerAd} image={false} />}
           {/* found on another site: its own page has the full details and the tickets */}
           {event.organizer?.url && (
             <div className="space-y-2 rounded-card border border-line bg-surface p-4">

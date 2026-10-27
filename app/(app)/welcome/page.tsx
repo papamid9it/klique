@@ -144,7 +144,7 @@ function Frame({ children, onSignOut }: { children: React.ReactNode; onSignOut?:
   return (
     <div className="min-h-dvh bg-canvas">
       <header className="mx-auto flex max-w-5xl items-center justify-between px-4 py-5 sm:px-8">
-        <Logo />
+        <Logo tagline />
         {onSignOut && (
           <button type="button" onClick={onSignOut} className="text-sm font-medium text-ink-muted hover:text-ink">
             Sign out

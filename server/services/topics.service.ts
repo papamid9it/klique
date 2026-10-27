@@ -1,4 +1,5 @@
 import { Types } from "mongoose";
+import { withoutAdult } from "../policies/adult";
 import { deleteUploads } from "./media.service";
 import type { z } from "zod";
 import type { Paginated, TopicCommentDTO, TopicDTO, TopicDetailDTO } from "@/lib/types";
@@ -197,7 +198,8 @@ export async function topicFeed(viewer: IUser, limit = 8): Promise<TopicDTO[]> {
   const mine = await Membership.find({ userId: viewer._id, subcommunityId: null, status: "active" }).select("communityId").lean<Pick<IMembership, "communityId">[]>();
   if (!mine.length) return [];
   const hidden = await hiddenUserIds(viewer._id);
-  const rows = await Topic.find({ communityId: { $in: mine.map((m) => m.communityId) }, ...(hidden.length ? { authorId: { $nin: hidden } } : {}) })
+  // 18+ communities' topics stay inside them
+  const rows = await Topic.find({ communityId: { $in: await withoutAdult(mine.map((m) => m.communityId)) }, ...(hidden.length ? { authorId: { $nin: hidden } } : {}) })
     .sort({ createdAt: -1 })
     .limit(limit)
     .lean<ITopic[]>();
@@ -216,7 +218,7 @@ export async function trendingTopics(viewer: IUser | null, limit = 5): Promise<T
     .limit(limit * 4)
     .lean<ITopic[]>();
   if (!pool.length) return [];
-  const ids = [...new Set(pool.map((t) => sid(t.communityId)))];
+  const ids = await withoutAdult([...new Set(pool.map((t) => sid(t.communityId)))]);
   const [communities, mine] = await Promise.all([
     Community.find({ _id: { $in: ids } }).select("privacy").lean<Pick<ICommunity, "_id" | "privacy">[]>(),
     viewer ? Membership.find({ userId: viewer._id, communityId: { $in: ids }, subcommunityId: null, status: "active" }).select("communityId").lean<Pick<IMembership, "communityId">[]>() : [],

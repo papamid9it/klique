@@ -344,7 +344,7 @@ export function ChannelList({
     );
 
   /** Discord's server header: the name is the menu button. */
-  const headerButton = (name: string, locked: boolean, menu: MenuEntry[], label: string) => (
+  const headerButton = (name: string, locked: boolean, menu: MenuEntry[], label: string, adult = false) => (
     <Dropdown
       items={menu}
       label={label}
@@ -355,6 +355,7 @@ export function ChannelList({
           <span className="flex min-w-0 flex-1 items-center gap-1.5 text-[17px] font-semibold tracking-[-0.02em]">
             <span className="truncate">{name}</span>
             {locked && <Icon name="lock" size={13} className="shrink-0 text-ink-muted" />}
+            {adult && <span className="shrink-0 rounded-full border border-line px-1.5 py-px font-mono text-[10px] font-bold text-ink-muted" title="For people 18 and over">18+</span>}
           </span>
           <Icon name={open ? "x" : "chevron-down"} size={16} className="shrink-0 text-ink-muted" />
         </button>
@@ -429,12 +430,13 @@ export function ChannelList({
         <SoftLink href="/communities" onClick={onNavigate} className="eyebrow mb-0.5 inline-flex items-center gap-1 px-2.5 hover:text-ink">
           <Icon name="arrow-left" size={11} /> Communities
         </SoftLink>
-        {headerButton(c.name, c.privacy === "private", headerMenu, "Community menu")}
+        {headerButton(c.name, c.privacy === "private", headerMenu, "Community menu", c.adult)}
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-2 py-3">
         {/* the community's donation buttons, when it has any */}
-        {!c.locked && (
+        {/* no money in a community with explicit content */}
+        {!c.locked && !c.explicit && (
           <div className="mb-3 px-1 empty:hidden">
             <SupportButtons slug={c.slug} communityName={c.name} compact />
           </div>

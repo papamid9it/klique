@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { errorMessage } from "@/app/ApiCore";
 import { UploadService } from "@/app/services/UploadService";
 import { useAuth } from "@/components/providers/AuthProvider";
@@ -21,7 +22,8 @@ function useDismiss(onClose: () => void) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const down = (e: PointerEvent) => ref.current && !ref.current.contains(e.target as Node) && onClose();
-    const key = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    // this Esc is the popover's: without preventDefault the browser also closes the pop-up (post viewer) under it
+    const key = (e: KeyboardEvent) => e.key === "Escape" && (e.preventDefault(), onClose());
     document.addEventListener("pointerdown", down);
     document.addEventListener("keydown", key);
     return () => {
@@ -32,11 +34,24 @@ function useDismiss(onClose: () => void) {
   return ref;
 }
 
+/** Nudges a popover sideways so it stays on screen (8px from each edge), whichever way it was anchored. */
+export function useKeepOnScreen(ref: React.RefObject<HTMLElement | null>) {
+  const [dx, setDx] = useState(0);
+  useLayoutEffect(() => {
+    const r = ref.current?.getBoundingClientRect();
+    if (!r) return;
+    const vw = document.documentElement.clientWidth;
+    setDx(r.left < 8 ? 8 - r.left : r.right > vw - 8 ? Math.max(8 - r.left, vw - 8 - r.right) : 0);
+  }, [ref]);
+  return dx ? { translate: `${dx}px 0` } : undefined;
+}
+
 /** The row of reactions you can pick from. */
-export function ReactionPicker({ onPick, onClose, className }: { onPick: (k: ReactionKind) => void; onClose: () => void; className?: string }) {
+export function ReactionPicker({ onPick, onClose, className, style: place }: { onPick: (k: ReactionKind) => void; onClose: () => void; className?: string; style?: React.CSSProperties }) {
   const ref = useDismiss(onClose);
+  const keep = useKeepOnScreen(ref);
   return (
-    <div ref={ref} role="menu" aria-label="Pick a reaction" className={cx("z-30 flex gap-0.5 rounded-full border border-line bg-surface p-1 shadow-2xl animate-pop", className)}>
+    <div ref={ref} role="menu" aria-label="Pick a reaction" style={{ ...place, ...keep }} className={cx("z-30 flex gap-0.5 rounded-full border border-line bg-surface p-1 shadow-2xl animate-pop", className)}>
       {REACTIONS.map((r) => (
         <button
           key={r.id}
@@ -57,9 +72,11 @@ export function ReactionPicker({ onPick, onClose, className }: { onPick: (k: Rea
   );
 }
 
-/** Reaction chips under a message plus an add button. `canReact` false hides the add button and makes chips read-only. */
+/**
+ * Reaction chips under a message or comment (tap one to add yours or take it back). `canReact` false makes them
+ * read-only. Adding a new reaction is the one add button next to it (hover toolbar, beside Reply, beside the bubble).
+ */
 export function ReactionBar({ reactions, onToggle, canReact, mine, className }: { reactions: ReactionDTO[]; onToggle: (k: ReactionKind) => void; canReact: boolean; mine?: boolean; className?: string }) {
-  const [open, setOpen] = useState(false);
   if (!reactions.length) return null;
   return (
     <div className={cx("relative mt-1 flex flex-wrap items-center gap-1", mine && "justify-end", className)}>
@@ -79,14 +96,6 @@ export function ReactionBar({ reactions, onToggle, canReact, mine, className }: 
           <span className="font-mono text-[12px]">{r.count}</span>
         </button>
       ))}
-      {canReact && (
-        <span className="relative">
-          <button type="button" onClick={() => setOpen((o) => !o)} aria-label="Add reaction" aria-expanded={open} className="inline-flex size-7 items-center justify-center rounded-full border border-line text-ink-muted transition hover:border-ink-muted hover:text-ink">
-            <Icon name="smile" size={14} />
-          </button>
-          {open && <ReactionPicker onPick={onToggle} onClose={() => setOpen(false)} className={cx("absolute bottom-full mb-1", mine ? "right-0" : "left-0")} />}
-        </span>
-      )}
     </div>
   );
 }
@@ -94,12 +103,23 @@ export function ReactionBar({ reactions, onToggle, canReact, mine, className }: 
 /** A small button that opens the reaction picker (used in a message's hover toolbar). */
 export function ReactButton({ onPick, className, align = "right" }: { onPick: (k: ReactionKind) => void; className?: string; align?: "left" | "right" }) {
   const [open, setOpen] = useState(false);
+  const btn = useRef<HTMLButtonElement>(null);
+  // the picker floats over everything (in the page's top layer, or the open pop-up it's in), placed by the button
+  // and kept on screen, so no card, panel or scroll area can cut it off or cover it
+  const place = (): React.CSSProperties | null => {
+    const r = btn.current?.getBoundingClientRect();
+    if (!r) return null;
+    const above = r.top > 64;
+    return { position: "fixed", zIndex: 80, top: above ? r.top - 50 : r.bottom + 6, ...(align === "right" ? { right: document.documentElement.clientWidth - r.right } : { left: r.left }) };
+  };
+  const [pos, setPos] = useState<React.CSSProperties | null>(null);
   return (
     <span className={cx("relative inline-flex", className)}>
-      <button type="button" onClick={() => setOpen((o) => !o)} aria-label="Add reaction" aria-expanded={open} className="inline-flex size-8 items-center justify-center rounded-full text-ink-muted transition hover:bg-raised hover:text-ink">
+      {/* its own press doesn't count as "outside" (that would close the picker and the click reopen it) */}
+      <button ref={btn} type="button" onPointerDown={(e) => open && e.stopPropagation()} onClick={() => (open ? setOpen(false) : (setPos(place()), setOpen(true)))} aria-label="Add reaction" aria-expanded={open} className="inline-flex size-8 items-center justify-center rounded-full text-ink-muted transition hover:bg-raised hover:text-ink">
         <Icon name="smile" size={16} />
       </button>
-      {open && <ReactionPicker onPick={onPick} onClose={() => setOpen(false)} className={cx("absolute bottom-full mb-1", align === "right" ? "right-0" : "left-0")} />}
+      {open && pos && createPortal(<ReactionPicker onPick={onPick} onClose={() => setOpen(false)} style={pos} />, btn.current?.closest("dialog") ?? document.body)}
     </span>
   );
 }
@@ -212,6 +232,7 @@ function useQuickSave(url: string) {
  */
 export function StickerPicker({ onPick, onClose, className }: { onPick: (s: StickerChoice) => void; onClose: () => void; className?: string }) {
   const ref = useDismiss(onClose);
+  const keep = useKeepOnScreen(ref);
   const saved = useStickers();
   const toast = useToast();
   const uploads = useUploadStatus();
@@ -262,7 +283,7 @@ export function StickerPicker({ onPick, onClose, className }: { onPick: (s: Stic
   );
 
   return (
-    <div ref={ref} role="dialog" aria-label="Stickers" className={cx("z-30 w-[20rem] max-w-[calc(100vw-2rem)] rounded-card border border-line bg-surface p-2.5 shadow-2xl animate-pop", className)}>
+    <div ref={ref} role="dialog" aria-label="Stickers" style={keep} className={cx("z-30 w-[20rem] max-w-[calc(100vw-2rem)] rounded-card border border-line bg-surface p-2.5 shadow-2xl animate-pop", className)}>
       <div className="mb-2 flex items-center gap-1" role="tablist">
         {tabBtn("saved", "Saved")}
         {tabBtn("emoji", "Animated")}
@@ -275,7 +296,8 @@ export function StickerPicker({ onPick, onClose, className }: { onPick: (s: Stic
       </div>
 
       {tab === "emoji" ? (
-        <div className="grid grid-cols-5 gap-1">
+        // compact like a phone keyboard's sticker tray: small cells, as many as fit, scrolling inside
+        <div className="grid max-h-64 grid-cols-[repeat(auto-fill,minmax(44px,1fr))] gap-0.5 overflow-y-auto overscroll-contain">
           {STICKERS.map((s, i) => (
             <button
               key={s.id}
@@ -286,7 +308,7 @@ export function StickerPicker({ onPick, onClose, className }: { onPick: (s: Stic
                 onPick({ sticker: s.id });
                 onClose();
               }}
-              className="inline-flex aspect-square items-center justify-center rounded-control text-[30px] transition hover:bg-raised"
+              className="inline-flex aspect-square items-center justify-center rounded-control text-[26px] transition hover:bg-raised"
             >
               <span className="emoji-live" style={{ animationDuration: `${2.2 + (i % 5) * 0.35}s`, animationDelay: `${(i % 7) * -0.3}s` }}>
                 {s.emoji}
@@ -296,11 +318,11 @@ export function StickerPicker({ onPick, onClose, className }: { onPick: (s: Stic
         </div>
       ) : (
         <>
-          <div className="max-h-[19rem] overflow-y-auto overscroll-contain">
+          <div className="max-h-64 overflow-y-auto overscroll-contain">
           {top.length > 0 && (
             <>
               <p className="eyebrow mb-1.5 px-1">Most used</p>
-              <ul className="mb-3 grid grid-cols-4 gap-1.5">
+              <ul className="mb-3 grid grid-cols-[repeat(auto-fill,minmax(56px,1fr))] gap-1">
                 {top.map((s) => (
                   <li key={s.id}>
                     <button type="button" onClick={() => attach(s.url)} aria-label="Add this sticker (one of your most used)" className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-control p-1 transition hover:bg-raised">
@@ -313,7 +335,7 @@ export function StickerPicker({ onPick, onClose, className }: { onPick: (s: Stic
               {saved.list.length > top.length && <p className="eyebrow mb-1.5 px-1">More stickers</p>}
             </>
           )}
-          <ul className="grid grid-cols-4 gap-1.5">
+          <ul className="grid grid-cols-[repeat(auto-fill,minmax(56px,1fr))] gap-1">
             {uploads?.photo && !editing && (
               <li>
                 <input ref={file} type="file" hidden accept=".jpg,.jpeg,.png,.webp,.gif,.avif,.heic,.heif" onChange={(e) => void upload(e.target.files?.[0])} aria-label="Upload a sticker" />

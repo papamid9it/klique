@@ -38,8 +38,8 @@ export function HomePanel() {
 
   return (
     <aside className="sticky top-0 hidden h-dvh flex-col border-r border-line lg:flex" aria-label="Primary">
-      <div className="shrink-0 px-5 pt-7 pb-5">
-        <Logo />
+      <div className="shrink-0 px-6 pt-8 pb-6">
+        <Logo height={54} />
       </div>
       {own ? (
         // the page's own sections scroll between the logo and your account
@@ -50,7 +50,8 @@ export function HomePanel() {
         <>
           <div className="shrink-0 space-y-6 px-5 pb-5">
           <div className="space-y-2">
-            <Link href="/search" className="flex h-10 items-center gap-2 rounded-control border border-line bg-surface px-3 text-[13px] text-ink-muted transition hover:text-ink">
+            {/* on Home the right-hand column has the search box (wide screens), so this one steps aside there */}
+            <Link href="/search" className={cx("flex h-10 items-center gap-2 rounded-control border border-line bg-surface px-3 text-[13px] text-ink-muted transition hover:text-ink", pathname === "/" && "xl:hidden")}>
               <Icon name="search" size={14} /> Search scenes, people, events
             </Link>
             <ScopeButton />

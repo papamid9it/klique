@@ -19,6 +19,7 @@ import { deleteUploads } from "./media.service";
 import { notify } from "./push.service";
 import { purgeReactions, summarizeReactions, toggleReaction } from "./reactions";
 import { previewOf } from "./replies";
+import { TEXT_CARD_MAX, textStyleOf } from "@/lib/feedText";
 import { assertStickerUrl, noteStickerUse } from "./stickers.service";
 
 const PAGE = 10;
@@ -49,7 +50,7 @@ async function toPosts(rows: IFeedPost[], viewer: IUser | null): Promise<FeedPos
   const communityIds = [...new Set(rows.map((r) => sid(r.communityId)))];
   const [authors, communities, votes, roles, authorRoles] = await Promise.all([
     loadBriefs(rows.map((r) => r.authorId)),
-    Community.find({ _id: { $in: communityIds } }).select("slug name interest coverImage privacy").lean<Pick<ICommunity, "_id" | "slug" | "name" | "interest" | "coverImage" | "privacy">[]>(),
+    Community.find({ _id: { $in: communityIds } }).select("slug name interest coverImage privacy explicit").lean<Pick<ICommunity, "_id" | "slug" | "name" | "interest" | "coverImage" | "privacy" | "explicit">[]>(),
     viewer ? FeedVote.find({ userId: viewer._id, postId: { $in: rows.map((r) => r._id) } }).select("postId value").lean<{ postId: Types.ObjectId; value: 1 | -1 }[]>() : [],
     viewer ? Membership.find({ userId: viewer._id, communityId: { $in: communityIds }, subcommunityId: null, status: "active" }).select("communityId role").lean<Pick<IMembership, "communityId" | "role">[]>() : [],
     Membership.find({ communityId: { $in: communityIds }, subcommunityId: null, status: "active", userId: { $in: rows.map((r) => r.authorId) } }).select("communityId userId role").lean<Pick<IMembership, "communityId" | "userId" | "role">[]>(),
@@ -69,9 +70,12 @@ async function toPosts(rows: IFeedPost[], viewer: IUser | null): Promise<FeedPos
     return [
       {
         id: sid(p._id),
-        community: { id: sid(c._id), slug: c.slug, name: c.name, interest: c.interest, coverImage: c.coverImage ?? null, privacy: c.privacy },
+        community: { id: sid(c._id), slug: c.slug, name: c.name, interest: c.interest, coverImage: c.coverImage ?? null, privacy: c.privacy, explicit: !!c.explicit },
         author,
         caption: p.caption,
+        title: p.title ?? "",
+        explicit: !!p.explicit,
+        textBg: p.media.length ? null : (p.textBg ?? null),
         media: p.media.map((m) => ({ kind: m.kind, url: m.url, poster: m.poster ?? null })),
         upCount: p.upCount,
         downCount: p.downCount,
@@ -112,8 +116,10 @@ async function toComments(rows: IFeedComment[], viewer: IUser | null, managerRol
         stickerUrl: gone ? null : (c.stickerUrl ?? null),
         deleted: gone,
         createdAt: c.createdAt.toISOString(),
+        editedAt: !gone && c.editedAt ? c.editedAt.toISOString() : null,
         author,
         reactions: gone ? [] : (reactions.get(sid(c._id)) ?? []),
+        canEdit: !gone && sid(c.authorId) === me,
         canDelete: !gone && (sid(c.authorId) === me || (isManager(managerRole) && (target === undefined || outranks(managerRole, target)))),
       },
     ];
@@ -130,7 +136,7 @@ export async function listPosts(viewer: IUser | null, space: Space, access: Spac
   assertCanView(access, "posts");
   const hidden = await hiddenUserIds(viewer?._id ?? null);
   const now = at && at <= Date.now() && at > Date.now() - 24 * HOUR ? at : Date.now();
-  const rows = await FeedPost.find({ communityId: space.community._id, createdAt: { $lte: new Date(now) }, ...(hidden.length ? { authorId: { $nin: hidden } } : {}) })
+  const rows = await FeedPost.find({ communityId: space.community._id, createdAt: { $lte: new Date(now) }, hiddenAt: null, ...(hidden.length ? { authorId: { $nin: hidden } } : {}) })
     .sort({ createdAt: -1 })
     .skip((page - 1) * PAGE)
     .limit(PAGE + 1)
@@ -142,13 +148,25 @@ export async function createPost(viewer: IUser, space: Space, access: SpaceAcces
   assertFeed(space);
   if (!canPostIn(space.community, access)) throw forbidden(space.community.feedPolicy === "admins" ? "Only owners and admins post here." : access.pointsToPost ? `You need ${access.pointsToPost.toLocaleString("en-NG")} points to post here.` : "Join this community to post.");
   rateLimit(`feed-post:${sid(viewer._id)}`, 15, 60 * 60_000);
-  const doc = await FeedPost.create({ communityId: space.community._id, authorId: viewer._id, caption: input.caption, media: input.media.map((m) => ({ kind: m.kind, url: m.url, poster: m.poster ?? null })) });
+  // a title and a card colour only mean something on a post without pictures or a video
+  const style = textStyleOf(input);
+  const doc = await FeedPost.create({
+    communityId: space.community._id,
+    authorId: viewer._id,
+    caption: input.caption,
+    title: input.media.length ? "" : input.title,
+    textBg: style === "card" ? (input.textBg ?? "sunset") : null,
+    // only a community that allows explicit content takes explicit posts
+    explicit: !!space.community.explicit && input.explicit,
+    media: input.media.map((m) => ({ kind: m.kind, url: m.url, poster: m.poster ?? null })),
+  });
   return (await toPosts([doc.toObject() as IFeedPost], viewer))[0];
 }
 
 async function loadPost(space: Space, postId: string): Promise<IFeedPost> {
   if (!Types.ObjectId.isValid(postId)) throw notFound("That post is gone.");
-  const p = await FeedPost.findOne({ _id: postId, communityId: space.community._id }).lean<IFeedPost>();
+  // hidden pending review (a "minor or non-consensual" report): gone until an admin decides
+  const p = await FeedPost.findOne({ _id: postId, communityId: space.community._id, hiddenAt: null }).lean<IFeedPost>();
   if (!p) throw notFound("That post is gone.");
   return p;
 }
@@ -165,7 +183,20 @@ export async function editCaption(viewer: IUser, space: Space, access: SpaceAcce
   assertFeed(space);
   const p = await loadPost(space, postId);
   if (sid(p.authorId) !== sid(viewer._id) || !access.isMember) throw forbidden("You can only edit your own posts.");
+  // a text post keeps some text, and long text keeps a title (lib/feedText)
+  if (!p.media.length && !caption) throw badRequest("A post without pictures or a video needs some text.");
+  if (!p.media.length && caption.length > TEXT_CARD_MAX && !p.title) throw badRequest(`Keep it under ${TEXT_CARD_MAX} characters: longer posts need a title.`);
   await FeedPost.updateOne({ _id: p._id }, { $set: { caption, editedAt: new Date() } });
+  return getPost(viewer, space, access, postId);
+}
+
+/** Mark a post explicit or not (blurred until tapped): its author, or the community's owner and admins; only where explicit content is allowed. */
+export async function setPostExplicit(viewer: IUser, space: Space, access: SpaceAccess, postId: string, on: boolean): Promise<FeedPostDTO> {
+  assertFeed(space);
+  if (on && !space.community.explicit) throw badRequest("Only a community that allows explicit content can have explicit posts.");
+  const p = await loadPost(space, postId);
+  if (!((sid(p.authorId) === sid(viewer._id) && access.isMember) || access.canManage)) throw forbidden("Only the poster and this community's owner and admins can do that.");
+  await FeedPost.updateOne({ _id: p._id }, { $set: { explicit: on } });
   return getPost(viewer, space, access, postId);
 }
 
@@ -186,7 +217,8 @@ export async function deletePost(viewer: IUser, space: Space, access: SpaceAcces
 /** Vote up (1), down (-1) or take your vote back (0). Members only. Returns the post's fresh counts. */
 export async function vote(viewer: IUser, space: Space, access: SpaceAccess, postId: string, value: 1 | -1 | 0): Promise<Pick<FeedPostDTO, "upCount" | "downCount" | "myVote">> {
   assertFeed(space);
-  if (!access.isMember || access.banned) throw forbidden("Join this community to vote.");
+  // anyone signed in may vote on a public community's posts (suggested posts in the home feed); private ones need you in
+  if (access.banned || (!access.isMember && space.community.privacy !== "public")) throw forbidden("Join this community to vote.");
   rateLimit(`feed-vote:${sid(viewer._id)}`, 120, 60_000);
   const p = await loadPost(space, postId);
   // read the old vote and write the new one in one step, so two quick clicks can't both count
@@ -215,7 +247,7 @@ export async function feedSidebar(viewer: IUser | null, space: Space, access: Sp
     { $match: { communityId: space.community._id, createdAt: { $gte: new Date(Date.now() - 7 * 24 * HOUR) }, ...(hidden.length ? { authorId: { $nin: hidden } } : {}) } },
     { $group: { _id: "$authorId", posts: { $sum: 1 }, upvotes: { $sum: "$upCount" } } },
     { $sort: { upvotes: -1, posts: -1 } },
-    { $limit: 5 },
+    { $limit: 3 },
   ]);
   const people = await loadBriefs(rows.map((r) => r._id));
   return { topPosters: rows.flatMap((r) => (people.has(sid(r._id)) ? [{ user: people.get(sid(r._id))!, posts: r.posts, upvotes: r.upvotes }] : [])) };
@@ -271,6 +303,17 @@ async function loadComment(postId: string, commentId: string) {
   return c;
 }
 
+/** Change your own comment's text (a sticker stays; with no sticker, some text has to stay too). */
+export async function editComment(viewer: IUser, space: Space, access: SpaceAccess, postId: string, commentId: string, body: string): Promise<FeedCommentDTO> {
+  assertFeed(space);
+  const p = await loadPost(space, postId);
+  const c = await loadComment(sid(p._id), commentId);
+  if (sid(c.authorId) !== sid(viewer._id) || !access.isMember) throw forbidden("You can only edit your own comments.");
+  if (!body && !c.sticker && !c.stickerUrl) throw badRequest("Write something, or delete the comment.");
+  await FeedComment.updateOne({ _id: c._id }, { $set: { body, editedAt: new Date() } });
+  return (await toComments([{ ...c, body, editedAt: new Date() }], viewer, access.role))[0];
+}
+
 export async function deleteComment(viewer: IUser, space: Space, access: SpaceAccess, postId: string, commentId: string) {
   assertFeed(space);
   const p = await loadPost(space, postId);
@@ -300,43 +343,79 @@ export async function reactToComment(viewer: IUser, space: Space, access: SpaceA
 /* ------------------------------------------------------------------ */
 
 const HOUR = 3_600_000;
-/** Newer, busier posts first; pictures and videos count for more than they would as plain text. */
+/** Newer, busier posts first; videos rank above pictures, and pictures above text-only posts (still shown, lower). */
 function rank(p: IFeedPost, now: number) {
   const engagement = 1 + Math.max(0, p.upCount - p.downCount) + p.commentCount * 0.5;
-  const media = p.media.some((m) => m.kind === "video") ? 1.8 : p.media.length ? 1.5 : 1;
+  const media = p.media.some((m) => m.kind === "video") ? 1.8 : p.media.length ? 1.5 : 0.6;
   return (engagement * media) / Math.pow((now - p.createdAt.getTime()) / HOUR + 2, 1.3);
 }
 
 /**
- * Posts from your communities, best first (see rank), a page at a time. Every page also gets one trending post
- * from a public community you're not in (marked `trending`, shown with Join), when there is one.
+ * Text-only posts never open the feed and come at most one in four: each waits until at least three posts with
+ * pictures or a video have gone by since the last one (they still all show, at the end if they run out).
+ * Deterministic, so pages still line up.
+ */
+function spaceOutText(ranked: IFeedPost[]): IFeedPost[] {
+  const out: IFeedPost[] = [];
+  const waiting: IFeedPost[] = [];
+  let sinceText = 0;
+  for (const p of ranked) {
+    if (!p.media.length) {
+      waiting.push(p);
+    } else {
+      out.push(p);
+      sinceText++;
+    }
+    if (sinceText >= 3 && waiting.length) {
+      out.push(waiting.shift()!);
+      sinceText = 0;
+    }
+  }
+  return [...out, ...waiting];
+}
+
+/** after how many of your own posts a suggested one comes in */
+const SUGGEST_EVERY = 5;
+
+/**
+ * Posts from your communities, best first (see rank), a page at a time, with suggested posts from public
+ * communities you're not in mixed in: one after every SUGGEST_EVERY of yours, then only suggestions once yours run
+ * out, so the feed keeps going. Suggestions are what's taking off (the same rank: recent votes and comments), with
+ * pictures and video first; never from private communities, people you've hidden, or a community whose points
+ * minimum you can't meet yet. Each appears once (marked `trending`, shown with Join).
  */
 export async function homeFeed(viewer: IUser, page: number, at?: number): Promise<{ items: HomeFeedItem[]; page: number; hasMore: boolean; at: number }> {
   const mine = await Membership.find({ userId: viewer._id, subcommunityId: null, status: "active" }).select("communityId").lean<Pick<IMembership, "communityId">[]>();
   const mineIds = mine.map((m) => m.communityId);
-  const [open, hidden] = await Promise.all([
-    Community.find({ _id: { $in: mineIds }, feedPolicy: { $in: ["admins", "members"] } }).select("_id").lean<{ _id: Types.ObjectId }[]>(),
+  const [open, hidden, elsewhere] = await Promise.all([
+    // 18+ communities' posts stay inside them
+    Community.find({ _id: { $in: mineIds }, feedPolicy: { $in: ["admins", "members"] }, adult: { $ne: true } }).select("_id").lean<{ _id: Types.ObjectId }[]>(),
     hiddenUserIds(viewer._id),
+    Community.find({ _id: { $nin: mineIds }, privacy: "public", feedPolicy: { $in: ["admins", "members"] }, $or: [{ minPointsJoin: { $exists: false } }, { minPointsJoin: { $lte: viewer.points ?? 0 } }] }).select("_id").limit(500).lean<{ _id: Types.ObjectId }[]>(),
   ]);
   // later pages rank as of page 1 and leave out what was posted since, so the pages line up
   const now = at && at <= Date.now() && at > Date.now() - 24 * HOUR ? at : Date.now();
-  const notHidden = hidden.length ? { authorId: { $nin: hidden } } : {};
-  const pool = open.length
-    ? await FeedPost.find({ communityId: { $in: open.map((c) => c._id) }, createdAt: { $gte: new Date(now - 60 * 24 * HOUR), $lte: new Date(now) }, ...notHidden }).sort({ createdAt: -1 }).limit(400).lean<IFeedPost[]>()
-    : [];
+  const notHidden = { hiddenAt: null, ...(hidden.length ? { authorId: { $nin: hidden } } : {}) };
+  const [pool, suggestions] = await Promise.all([
+    open.length ? FeedPost.find({ communityId: { $in: open.map((c) => c._id) }, createdAt: { $gte: new Date(now - 60 * 24 * HOUR), $lte: new Date(now) }, ...notHidden }).sort({ createdAt: -1 }).limit(400).lean<IFeedPost[]>() : [],
+    elsewhere.length ? FeedPost.find({ communityId: { $in: elsewhere.map((c) => c._id) }, createdAt: { $gte: new Date(now - 14 * 24 * HOUR), $lte: new Date(now) }, ...notHidden }).sort({ createdAt: -1 }).limit(200).lean<IFeedPost[]>() : [],
+  ]);
   pool.sort((a, b) => rank(b, now) - rank(a, now));
-  const slice = pool.slice((page - 1) * PAGE, page * PAGE);
+  // what's taking off, pictures and video first
+  suggestions.sort((a, b) => Number(b.media.length > 0) - Number(a.media.length > 0) || rank(b, now) - rank(a, now));
 
-  // one trending post per page from a public community you're not in
-  const elsewhere = await Community.find({ _id: { $nin: mineIds }, privacy: "public", feedPolicy: { $in: ["admins", "members"] } }).select("_id").limit(500).lean<{ _id: Types.ObjectId }[]>();
-  const trendingPool = elsewhere.length
-    ? await FeedPost.find({ communityId: { $in: elsewhere.map((c) => c._id) }, createdAt: { $gte: new Date(now - 14 * 24 * HOUR), $lte: new Date(now) }, ...notHidden }).sort({ upCount: -1, commentCount: -1, createdAt: -1 }).limit(30).lean<IFeedPost[]>()
-    : [];
-  const pick = trendingPool[page - 1] ?? null;
+  // yours with a suggestion after every few, then suggestions only (the same order every time, so pages line up)
+  const merged: { post: IFeedPost; trending: boolean }[] = [];
+  let s = 0;
+  spaceOutText(pool).forEach((p, i) => {
+    merged.push({ post: p, trending: false });
+    if ((i + 1) % SUGGEST_EVERY === 0 && s < suggestions.length) merged.push({ post: suggestions[s++], trending: true });
+  });
+  while (s < suggestions.length) merged.push({ post: suggestions[s++], trending: true });
 
-  const dtos = await toPosts(pick ? [...slice, pick] : slice, viewer);
+  const slice = merged.slice((page - 1) * PAGE, page * PAGE);
+  const dtos = await toPosts(slice.map((x) => x.post), viewer);
   const byId = new Map(dtos.map((d) => [d.id, d]));
-  const items: HomeFeedItem[] = slice.flatMap((p) => (byId.has(sid(p._id)) ? [{ post: byId.get(sid(p._id))!, trending: false }] : []));
-  if (pick && byId.has(sid(pick._id))) items.splice(Math.min(4, items.length), 0, { post: byId.get(sid(pick._id))!, trending: true });
-  return { items, page, hasMore: pool.length > page * PAGE || !!trendingPool[page], at: now };
+  const items: HomeFeedItem[] = slice.flatMap((x) => (byId.has(sid(x.post._id)) ? [{ post: byId.get(sid(x.post._id))!, trending: x.trending }] : []));
+  return { items, page, hasMore: merged.length > page * PAGE, at: now };
 }

@@ -501,7 +501,9 @@ async function toMessages(rows: IChannelMessage[], viewer: IUser | null, access:
   const replyRows = replyIds.length ? await ChannelMessage.find({ _id: { $in: replyIds }, channelId: rows[0].channelId }).lean<IChannelMessage[]>() : [];
   const replyAuthors = await loadBriefs(replyRows.map((r) => r.authorId));
   const replyMap = new Map(replyRows.map((r) => [sid(r._id), toReplyRef(r, replyAuthors.get(sid(r.authorId))?.displayName ?? "Someone")]));
-  return rows.flatMap((r) => {
+  return rows.flatMap((raw) => {
+    // hidden pending review reads as removed
+    const r = raw.hiddenAt && !raw.deletedAt ? { ...raw, deletedAt: raw.hiddenAt } : raw;
     const author = authors.get(sid(r.authorId));
     if (!author) return [];
     const authorRole = roleByUser.get(sid(r.authorId));

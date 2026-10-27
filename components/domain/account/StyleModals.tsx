@@ -184,7 +184,7 @@ function PickModal({ title, options, current, saved, lookWith, accessOf, onSave,
   const access = need ? accessOf(need) : null;
   return (
     <Modal open onClose={onClose} title={title} size="xl">
-      <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_300px]">
+      <div className="kq-live grid gap-6 md:grid-cols-[minmax(0,1fr)_300px]">
         <div className="space-y-4">
           <div className={cx("grid gap-2", cols)} role="radiogroup" aria-label={title}>
             {options.map((o) => (
@@ -292,7 +292,7 @@ export function EffectModal({ look, saved, accessOf, onSave, onUnlock, onTry, on
 
   return (
     <Modal open onClose={onClose} title="Profile effect" size="xl">
-      <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_300px]">
+      <div className="kq-live grid gap-6 md:grid-cols-[minmax(0,1fr)_300px]">
         <div>
           {!loading && list.length === 0 ? (
             <div className="flex h-full min-h-56 flex-col items-center justify-center gap-2 rounded-card border border-dashed border-line p-6 text-center">
@@ -357,7 +357,7 @@ export function AnimatedModal({ look, accessOf, onUnlock, onClose }: Pick<Picker
   const using = isAnimatedPicture(look.avatarUrl) || isAnimatedPicture(look.bannerUrl);
   return (
     <Modal open onClose={onClose} title="Animated picture & banner" size="xl">
-      <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_300px]">
+      <div className="kq-live grid gap-6 md:grid-cols-[minmax(0,1fr)_300px]">
         <div className="space-y-3 text-sm">
           <p>Use a GIF as your profile picture or your banner, so it moves wherever people see you.</p>
           <ul className="space-y-1.5 text-ink-muted">

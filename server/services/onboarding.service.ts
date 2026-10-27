@@ -2,6 +2,7 @@ import "server-only";
 import type { Types } from "mongoose";
 import type { CommunityCardDTO, OnboardingDTO } from "@/lib/types";
 import { badRequest } from "../http/errors";
+import { LIMITS } from "@/lib/constants";
 import { Community, type ICommunity } from "../models/Community";
 import { Membership } from "../models/Membership";
 import { User, type IUser } from "../models/User";
@@ -15,7 +16,7 @@ import { kliqueId } from "./klique-id";
  * Until it's done the app sends them back here, existing accounts included (once).
  */
 
-export const MIN_INTERESTS = 3;
+export const MIN_INTERESTS = LIMITS.minInterests;
 export const MIN_COMMUNITIES = 2;
 const SUGGEST = 12;
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { AdultFields } from "./AdultFields";
 import { useCategories } from "@/lib/hooks/useCategories";
 import { useState } from "react";
 import { isApiError } from "@/app/ApiCore";
@@ -23,6 +24,7 @@ export function CommunityWizard({ onSubmit }: { onSubmit: (input: CommunityInput
   const categories = useCategories();
   const [step, setStep] = useState(0);
   const [privacy, setPrivacy] = useState<CommunityPrivacy>("public");
+  const [age, setAge] = useState({ adult: false, explicit: false });
   const [feedPolicy, setFeedPolicy] = useState<GroupPolicy>("off");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -39,11 +41,11 @@ export function CommunityWizard({ onSubmit }: { onSubmit: (input: CommunityInput
     setErrors({});
     setGeneral(null);
     try {
-      await onSubmit({ name: name.trim(), description: description.trim(), interest, ...place, neighborhood: neighborhood.trim(), privacy, feedPolicy, coverImage: coverImage.trim() || null });
+      await onSubmit({ name: name.trim(), description: description.trim(), interest, ...place, neighborhood: neighborhood.trim(), privacy, feedPolicy, coverImage: coverImage.trim() || null, ...(privacy === "private" ? age : {}) });
     } catch (err) {
       if (isApiError(err) && err.errors) {
         setErrors(err.errors);
-        if (err.errors.name || err.errors.description || err.errors.interest || err.errors.coverImage) setStep(1);
+        if (err.errors.name || err.errors.description || err.errors.interest || err.errors.coverImage || err.errors.adult || err.errors.explicit) setStep(1);
       }
       setGeneral(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
@@ -102,7 +104,7 @@ export function CommunityWizard({ onSubmit }: { onSubmit: (input: CommunityInput
 
         {step === 1 && (
           <div className="space-y-5">
-            <ImageField kind="photo" label="Cover image (optional)" value={coverImage} onChange={setCoverImage} error={errors.coverImage} reposition={{ aspect: 16 / 9 }} fallback={<span className="text-lg font-bold text-ink-muted">{initial}</span>} />
+            <ImageField kind="photo" label="Cover image" required value={coverImage} onChange={setCoverImage} error={errors.coverImage} hint={coverImage ? undefined : "Every community needs one: it's how people spot yours. A wide picture works best."} reposition={{ aspect: 16 / 9 }} fallback={<span className="text-lg font-bold text-ink-muted">{initial}</span>} />
             <TextField label="Community name" value={name} onChange={(e) => setName(e.target.value)} maxLength={LIMITS.communityName} required autoFocus error={errors.name} placeholder="Lekki Skate Crew" />
             <SelectField label="What's it about?" value={interest} onChange={(e) => isInterestId(e.target.value) && setInterest(e.target.value)} error={errors.interest}>
               {categories.map((i) => (
@@ -112,6 +114,12 @@ export function CommunityWizard({ onSubmit }: { onSubmit: (input: CommunityInput
               ))}
             </SelectField>
             <TextArea label="Description (optional)" value={description} onChange={(e) => setDescription(e.target.value)} maxLength={LIMITS.communityDescription} counter={LIMITS.communityDescription} error={errors.description} placeholder="Who is this for and what do you do together?" />
+            {privacy === "private" && <AdultFields adult={age.adult} explicit={age.explicit} onChange={setAge} />}
+            {(errors.adult || errors.explicit) && (
+              <p role="alert" className="-mt-2 text-xs font-medium text-danger">
+                {errors.adult ?? errors.explicit}
+              </p>
+            )}
             <SelectField label="Posts (pictures and videos)" value={feedPolicy} onChange={(e) => setFeedPolicy(e.target.value as GroupPolicy)} hint="An Instagram-style section with votes and comments. Its posts reach members' home feeds. You can change this later.">
               <option value="off">Off</option>
               <option value="admins">On: only owners and admins post</option>
@@ -143,7 +151,7 @@ export function CommunityWizard({ onSubmit }: { onSubmit: (input: CommunityInput
           </Button>
         )}
         {step === 1 && (
-          <Button variant="primary" onClick={() => setStep(2)} disabled={name.trim().length < 2}>
+          <Button variant="primary" onClick={() => setStep(2)} disabled={name.trim().length < 2 || !coverImage.trim()} title={coverImage.trim() ? undefined : "Add a cover image first"}>
             Next
           </Button>
         )}

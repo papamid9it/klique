@@ -91,6 +91,7 @@ export function FeedPanel({ c }: { c: CommunityDTO }) {
         <PostComposer
           slug={c.slug}
           communityName={c.name}
+          explicitAllowed={c.explicit}
           onClose={() => setComposing(false)}
           onPosted={(p) => {
             setComposing(false);

@@ -23,6 +23,9 @@ export interface CommunityInput {
   city: CityId;
   neighborhood?: string;
   privacy?: CommunityPrivacy;
+  /** 18+ (private only), and allowing explicit content (18+ only) */
+  adult?: boolean;
+  explicit?: boolean;
   groupPolicy?: GroupPolicy;
   /** the Posts section (pictures and videos): off, or who may post */
   feedPolicy?: GroupPolicy;

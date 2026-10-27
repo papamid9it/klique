@@ -65,6 +65,8 @@ function ReportCard({ r, onDone }: { r: ReportDTO; onDone: (id: string) => void 
       <header className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="eyebrow">
+            {r.priority === 2 && <span className="mr-1.5 rounded-full bg-danger px-1.5 py-0.5 text-[10px] font-bold text-white uppercase">Urgent · hidden</span>}
+            {r.priority === 1 && <span className="mr-1.5 rounded-full border border-danger px-1.5 py-0.5 text-[10px] font-bold text-danger">18+</span>}
             {KIND[r.targetType]} · {reasonLabel(r.reason)}
             {r.openCount > 1 && <span className="ml-2 text-danger">{r.openCount} open reports</span>}
           </p>

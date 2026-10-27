@@ -157,15 +157,14 @@ function FirstFrame({ src, className }: { src: string; className?: string }) {
 /**
  * A profile effect over a profile card, Discord style: a Lottie covering the card, starting when it opens and
  * looping. Purely decorative (no pointer events, hidden from screen readers). `paused` (a picker tile not pointed at),
- * Animations off or data saver switched on hold it on its chosen frame. `spec` skips the lookup (a preview of an effect that isn't
+ * Animations off or data saver hold it on its chosen frame. `spec` skips the lookup (a preview of an effect that isn't
  * worn yet). Effects added as animated WebP/APNG before effects became Lottie only still play (first frame when still).
  */
 export function ProfileEffect({ id, spec, paused, className }: { id?: string | null; spec?: ProfileEffectDTO | null; paused?: boolean; className?: string }) {
   const { data } = useEffectsCatalog();
-  // still when animations are off, or data saver is switched on by hand (not "automatic": that follows the
-  // connection, which can flip it back and forth mid-animation)
+  // still when animations are off or data saver is on
   const { reduce } = useMotion();
-  const saver = useDataSaver().pref === "on";
+  const saver = useDataSaver().on;
   const calm = reduce || saver;
   const e = spec ?? (id ? (data ?? []).find((x) => x.id === id) : null);
   if (!e) return null;
