@@ -66,7 +66,7 @@ const CAPTIONS = [
 ];
 const COMMENTS = ["This is so good!", "Wait, where is this?", "I need to come next time.", "Haha the second one 😂", "Clean.", "Who took these?", "Love this energy", "Same time next week?", "Saving this", "No way that's Lagos", "Teach me!!", "🔥🔥🔥"];
 const REPLIES = ["Right?!", "Freedom Park, by the gate.", "Come through!", "It was a vibe.", "Me, on my phone 😅", "Next week for sure.", "Facts.", "Ask nicely 😂"];
-const REACTIONS = ["like", "love", "laugh", "fire", "wow", "party", "clap"];
+const REACTIONS = ["like", "love", "laugh", "wow"]; // must be kinds the app offers (lib/reactions REACTION_IDS)
 
 function media() {
   const roll = rand();

@@ -4,6 +4,7 @@ import { useDataSaver } from "@/lib/hooks/useDataSaver";
 import { useEffect, type ReactNode } from "react";
 import { CategoryService } from "@/app/services/CategoryService";
 import { setCategories } from "@/lib/constants";
+import { isReducedMotion } from "@/lib/motion";
 import { AuthProvider } from "./AuthProvider";
 import { LeaveProvider } from "./LeaveProvider";
 import { PanelSlotProvider } from "@/components/layout/PagePanel";
@@ -39,7 +40,12 @@ function useScrollingMarker() {
   }, []);
 }
 
-/** Data saver on: say so on <html>, so styles can stop decorative animations (name styles, profile effects). */
+/** The Animations setting, marked on <html data-motion> from the first load (the CSS motion rules read it). */
+function useMotionMarker() {
+  useEffect(() => void isReducedMotion(), []);
+}
+
+/** Data saver on: say so on <html> (data-saver="on"). */
 function useDataSaverMarker() {
   const { on } = useDataSaver();
   useEffect(() => {
@@ -52,6 +58,7 @@ export function Providers({ children }: { children: ReactNode }) {
   useLoadCategories();
   useScrollingMarker();
   useDataSaverMarker();
+  useMotionMarker();
   return (
     <ToastProvider>
       <AuthProvider>

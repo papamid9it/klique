@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
 import { FeedService } from "@/app/services/FeedService";
-import { ReactButton, ReactionBar } from "@/components/domain/chat/Reactions";
+import { AttachedSticker, ReactButton, ReactionBar, StickerPicker, StickerView, type StickerChoice } from "@/components/domain/chat/Reactions";
 import { Linkified } from "@/components/domain/topics/parts";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { ProfileTrigger } from "@/components/providers/ProfileCardProvider";
@@ -38,15 +38,22 @@ function nest(list: FeedCommentDTO[]): Tree[] {
 
 const count = (n: Tree): number => n.kids.reduce((s, k) => s + 1 + count(k), 0);
 
-/** A box to write a comment or a reply. */
-function Composer({ onSend, placeholder, autoFocus, onCancel }: { onSend: (body: string) => Promise<boolean>; placeholder: string; autoFocus?: boolean; onCancel?: () => void }) {
+type Draft = { body: string } & StickerChoice;
+
+/** A box to write a comment or a reply, with a sticker tray like chat (the picked sticker waits above the box until Post). */
+function Composer({ onSend, placeholder, autoFocus, onCancel }: { onSend: (draft: Draft) => Promise<boolean>; placeholder: string; autoFocus?: boolean; onCancel?: () => void }) {
   const [body, setBody] = useState("");
+  const [sticker, setSticker] = useState<StickerChoice | null>(null);
+  const [tray, setTray] = useState(false);
   const [busy, setBusy] = useState(false);
   async function send() {
     const text = body.trim();
-    if (!text || busy) return;
+    if ((!text && !sticker) || busy) return;
     setBusy(true);
-    if (await onSend(text)) setBody("");
+    if (await onSend({ body: text, ...sticker })) {
+      setBody("");
+      setSticker(null);
+    }
     setBusy(false);
   }
   return (
@@ -55,33 +62,40 @@ function Composer({ onSend, placeholder, autoFocus, onCancel }: { onSend: (body:
         e.preventDefault();
         void send();
       }}
-      className="flex items-end gap-2"
     >
-      <textarea
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-            e.preventDefault();
-            void send();
-          } else if (e.key === "Escape" && onCancel) onCancel();
-        }}
-        rows={1}
-        autoFocus={autoFocus}
-        maxLength={LIMITS.feedComment}
-        placeholder={placeholder}
-        aria-label={placeholder}
-        className="max-h-32 min-h-10 flex-1 resize-none rounded-control border border-line bg-raised px-3 py-2.5 text-[14px] text-ink placeholder:text-ink-muted/70 focus:border-accent-text focus:outline-none"
-        style={{ fieldSizing: "content" } as React.CSSProperties}
-      />
-      {onCancel && (
-        <Button size="sm" variant="ghost" onClick={onCancel}>
-          Cancel
+      <AttachedSticker choice={sticker} onRemove={() => setSticker(null)} />
+      {/* in the flow, as wide as the box: a popover would be cut off by the scrolling comment list */}
+      {tray && <StickerPicker onPick={setSticker} onClose={() => setTray(false)} className="mb-2 w-full! max-w-none!" />}
+      <div className="flex items-end gap-2">
+        <textarea
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              void send();
+            } else if (e.key === "Escape" && onCancel) onCancel();
+          }}
+          rows={1}
+          autoFocus={autoFocus}
+          maxLength={LIMITS.feedComment}
+          placeholder={placeholder}
+          aria-label={placeholder}
+          className="max-h-32 min-h-10 flex-1 resize-none rounded-control border border-line bg-raised px-3 py-2.5 text-[14px] text-ink placeholder:text-ink-muted/70 focus:border-accent-text focus:outline-none"
+          style={{ fieldSizing: "content" } as React.CSSProperties}
+        />
+        <button type="button" onClick={() => setTray((o) => !o)} aria-label="Stickers" aria-expanded={tray} title="Stickers" className="inline-flex size-10 shrink-0 items-center justify-center rounded-full text-ink-muted transition hover:bg-raised hover:text-ink">
+          <Icon name="sticker" size={19} />
+        </button>
+        {onCancel && (
+          <Button size="sm" variant="ghost" onClick={onCancel}>
+            Cancel
+          </Button>
+        )}
+        <Button type="submit" size="sm" variant="primary" loading={busy} disabled={!body.trim() && !sticker}>
+          {onCancel ? "Reply" : "Post"}
         </Button>
-      )}
-      <Button type="submit" size="sm" variant="primary" loading={busy} disabled={!body.trim()}>
-        {onCancel ? "Reply" : "Post"}
-      </Button>
+      </div>
     </form>
   );
 }
@@ -106,10 +120,10 @@ export function PostComments({ post, onCount, pinned, top }: { post: FeedPostDTO
   const [folded, setFolded] = useState<Set<string>>(new Set());
   const canWrite = post.isMember;
 
-  async function add(body: string, parentId?: string): Promise<boolean> {
+  async function add(draft: Draft, parentId?: string): Promise<boolean> {
     if (!requireAuth()) return false;
     try {
-      const res = await FeedService.comment(slug, post.id, body, parentId);
+      const res = await FeedService.comment(slug, post.id, { ...draft, parentId });
       setData((d) => [...(d ?? []), res.data]);
       onCount(post.commentCount + 1);
       setReplying(null);
@@ -123,7 +137,7 @@ export function PostComments({ post, onCount, pinned, top }: { post: FeedPostDTO
   async function remove(c: FeedCommentDTO) {
     try {
       await FeedService.removeComment(slug, post.id, c.id);
-      setData((d) => (d ?? []).map((x) => (x.id === c.id ? { ...x, body: "", deleted: true, reactions: [], canDelete: false } : x)));
+      setData((d) => (d ?? []).map((x) => (x.id === c.id ? { ...x, body: "", sticker: null, stickerUrl: null, deleted: true, reactions: [], canDelete: false } : x)));
       onCount(Math.max(0, post.commentCount - 1));
     } catch (e) {
       toast(errorMessage(e), "error");
@@ -160,9 +174,18 @@ export function PostComments({ post, onCount, pinned, top }: { post: FeedPostDTO
             {c.deleted ? (
               <p className="mt-0.5 text-[14px] text-ink-muted italic">Comment deleted</p>
             ) : (
-              <p className="mt-0.5 text-[14px] leading-relaxed break-words whitespace-pre-wrap">
-                <Linkified text={c.body} />
-              </p>
+              <>
+                {c.body && (
+                  <p className="mt-0.5 text-[14px] leading-relaxed break-words whitespace-pre-wrap">
+                    <Linkified text={c.body} />
+                  </p>
+                )}
+                {(c.sticker || c.stickerUrl) && (
+                  <div className="mt-1">
+                    <StickerView id={c.sticker} url={c.stickerUrl} size={52} />
+                  </div>
+                )}
+              </>
             )}
             {!c.deleted && <ReactionBar reactions={c.reactions} canReact={canWrite && !!user} onToggle={(k) => void react(c, k)} className="mt-1" />}
             <div className="mt-1 flex items-center gap-1 text-[12.5px] font-semibold text-ink-muted">
@@ -185,7 +208,7 @@ export function PostComments({ post, onCount, pinned, top }: { post: FeedPostDTO
             </div>
             {replying === c.id && (
               <div className="mt-2">
-                <Composer autoFocus placeholder={`Reply to ${c.author.displayName}`} onSend={(body) => add(body, c.id)} onCancel={() => setReplying(null)} />
+                <Composer autoFocus placeholder={`Reply to ${c.author.displayName}`} onSend={(d) => add(d, c.id)} onCancel={() => setReplying(null)} />
               </div>
             )}
           </div>
@@ -201,7 +224,7 @@ export function PostComments({ post, onCount, pinned, top }: { post: FeedPostDTO
     );
   };
 
-  const box = canWrite ? <Composer placeholder="Add a comment…" onSend={(body) => add(body)} /> : <p className="rounded-control border border-line bg-raised/50 px-3 py-2.5 text-[13px] text-ink-muted">Join {post.community.name} to comment.</p>;
+  const box = canWrite ? <Composer placeholder="Add a comment…" onSend={(d) => add(d)} /> : <p className="rounded-control border border-line bg-raised/50 px-3 py-2.5 text-[13px] text-ink-muted">Join {post.community.name} to comment.</p>;
   const thread = loading ? <RowSkeleton rows={3} /> : tree.length ? <ul className="space-y-4">{tree.map((n) => node(n, 0))}</ul> : <p className="py-6 text-center text-sm text-ink-muted">No comments yet.</p>;
 
   if (pinned) {

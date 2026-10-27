@@ -1,5 +1,5 @@
 import { Types } from "mongoose";
-import { REACTIONS, type ReactionKind } from "@/lib/reactions";
+import { REACTIONS, REACTION_IDS, type ReactionKind } from "@/lib/reactions";
 import type { ReactionDTO } from "@/lib/types";
 import { Reaction, type ReactionTarget } from "../models/Reaction";
 import { sid } from "./helpers";
@@ -7,12 +7,15 @@ import { sid } from "./helpers";
 type Id = Types.ObjectId | string;
 const ORDER = new Map<string, number>(REACTIONS.map((r, i) => [r.id, i]));
 
-/** Counts per kind for each message, plus whether `viewerId` used each one. Messages with no reactions map to []. */
+/**
+ * Counts per kind for each message, plus whether `viewerId` used each one. Messages with no reactions map to [].
+ * Kinds the app no longer offers are left out: their chip couldn't be tapped (the server refuses the kind).
+ */
 export async function summarizeReactions(targetType: ReactionTarget, ids: Id[], viewerId: Id | null): Promise<Map<string, ReactionDTO[]>> {
   const out = new Map<string, ReactionDTO[]>();
   if (!ids.length) return out;
   const rows = await Reaction.aggregate<{ _id: { t: Types.ObjectId; k: string }; n: number; mine: number }>([
-    { $match: { targetType, targetId: { $in: ids.map((i) => new Types.ObjectId(sid(i))) } } },
+    { $match: { targetType, targetId: { $in: ids.map((i) => new Types.ObjectId(sid(i))) }, kind: { $in: REACTION_IDS } } },
     { $group: { _id: { t: "$targetId", k: "$kind" }, n: { $sum: 1 }, mine: { $sum: viewerId ? { $cond: [{ $eq: ["$userId", new Types.ObjectId(sid(viewerId))] }, 1, 0] } : 0 } } },
   ]);
   for (const r of rows) {

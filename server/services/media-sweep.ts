@@ -7,7 +7,7 @@ import { ChannelMessage } from "../models/Channel";
 import { Event } from "../models/Event";
 import { Message } from "../models/Message";
 import { Post } from "../models/Post";
-import { FeedPost } from "../models/FeedPost";
+import { FeedComment, FeedPost } from "../models/FeedPost";
 import { Topic } from "../models/Topic";
 import { User } from "../models/User";
 import { parseUpload, uploadBase } from "./media.service";
@@ -75,6 +75,7 @@ async function referencedKeys(): Promise<Set<string>> {
   for await (const m of ChannelMessage.find({ stickerUrl: has }).select("stickerUrl").lean().cursor()) add(m.stickerUrl);
   for await (const m of Message.find({ stickerUrl: has }).select("stickerUrl").lean().cursor()) add(m.stickerUrl);
   for await (const m of CrewMessage.find({ stickerUrl: has }).select("stickerUrl").lean().cursor()) add(m.stickerUrl);
+  for await (const c of FeedComment.find({ stickerUrl: has }).select("stickerUrl").lean().cursor()) add(c.stickerUrl);
   for await (const m of CrewMessage.find({ "images.0": { $exists: true } }).select("images").lean().cursor()) (m.images ?? []).forEach(add);
   for await (const a of Ad.find({ imageUrl: has }).select("imageUrl").lean().cursor()) add(a.imageUrl);
   for await (const d of EventDraft.find({ coverImage: has }).select("coverImage").lean().cursor()) add(d.coverImage);

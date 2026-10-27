@@ -8,6 +8,7 @@ import { cdn, videoPoster, videoSrc } from "@/lib/cdn";
 import { isGif } from "@/lib/data-saver";
 import { useAutoplay } from "@/lib/hooks/useAutoplay";
 import { useDataSaver } from "@/lib/hooks/useDataSaver";
+import { useMotion } from "@/lib/hooks/useCalm";
 import { useNearScreen } from "@/lib/hooks/useNearScreen";
 import type { TopicMediaDTO } from "@/lib/types";
 
@@ -72,9 +73,11 @@ const FeedVideo = forwardRef<VideoHandle, { url: string; poster: string | null; 
   const bar = useRef<HTMLSpanElement>(null);
   const saver = useDataSaver().on;
   const autoplay = useAutoplay();
+  const still = useMotion().reduce;
   const front = useSyncExternalStore(subscribePage, pageActive, () => false);
-  // plays by itself: in the feed when autoplay is on; in the viewer (opened on purpose) always. Never on data saver.
-  const allowed = !saver && (withSound || autoplay);
+  // plays by itself: in the feed when autoplay is on and animations aren't off; in the viewer (opened on purpose)
+  // always. Never on data saver.
+  const allowed = !saver && (withSound || (autoplay && !still));
   const [visible, setVisible] = useState(false);
   const [paused, setPaused] = useState(true);
   // paused by a tap: stays paused until it scrolls away and back

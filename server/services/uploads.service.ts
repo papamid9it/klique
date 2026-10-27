@@ -27,6 +27,8 @@ export async function signUpload(viewer: IUser, kind: UploadKind, files: { varia
   const cfg = r2Config();
   if (!cfg) throw new ApiError(503, `${UPLOAD_SPECS[kind].label} uploads aren't set up yet.`, { code: "uploads_not_configured" });
   if (kind === "effect" && !isSiteAdmin(viewer)) throw new ApiError(403, "Only the Klique team uploads profile effects.");
+  // effect files go through the server, which checks (and minifies) them: see /api/admin/effect-files
+  if (kind === "effect") throw new ApiError(422, "Upload profile effects in Admin → Profile effects.", { code: "invalid_file" });
   rateLimit(`upload:${sid(viewer._id)}`, 40, 10 * 60_000);
 
   const spec = UPLOAD_SPECS[kind];

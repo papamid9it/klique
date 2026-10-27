@@ -16,7 +16,8 @@ export const FeedService = {
   /** 1 up, -1 down, 0 take it back */
   vote: (slug: string, postId: string, value: 1 | -1 | 0) => api.post<Envelope<Pick<FeedPostDTO, "upCount" | "downCount" | "myVote">>>(`${base(slug)}/${postId}/vote`, { value }),
   comments: (slug: string, postId: string) => api.get<Envelope<FeedCommentDTO[]>>(`${base(slug)}/${postId}/comments`),
-  comment: (slug: string, postId: string, body: string, parentId?: string) => api.post<Envelope<FeedCommentDTO>>(`${base(slug)}/${postId}/comments`, { body, parentId }),
+  /** text, a sticker (built-in or saved), or both */
+  comment: (slug: string, postId: string, input: { body: string; sticker?: string; stickerUrl?: string; parentId?: string }) => api.post<Envelope<FeedCommentDTO>>(`${base(slug)}/${postId}/comments`, input),
   removeComment: (slug: string, postId: string, commentId: string) => api.delete<Envelope<{ deleted: boolean }>>(`${base(slug)}/${postId}/comments/${commentId}`),
   react: (slug: string, postId: string, commentId: string, kind: ReactionKind) => api.post<Envelope<ReactionDTO[]>>(`${base(slug)}/${postId}/comments/${commentId}/reactions`, { kind }),
   /** posts from your communities, best first, with a trending one from elsewhere now and then */

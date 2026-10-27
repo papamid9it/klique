@@ -47,6 +47,21 @@ export async function presignPut(key: string, contentType: string, size: number)
   return { url: signed.url, headers: { "Content-Type": contentType, "Cache-Control": CACHE_FOREVER } };
 }
 
+/**
+ * Write a file the server has checked itself (profile effects), cached forever like every upload. It goes up on a
+ * signed link as a plain, exact-length body: sent through the signing client, Next's fetch streams the body
+ * without a length, and R2 refuses that (411 Length Required).
+ */
+export async function putObject(key: string, body: Uint8Array, contentType: string): Promise<string> {
+  const cfg = r2Config();
+  if (!cfg) throw new Error("R2 isn't configured");
+  const bytes = body.slice().buffer; // its own buffer, exactly this long
+  const put = await presignPut(key, contentType, bytes.byteLength);
+  const res = await fetch(put.url, { method: "PUT", body: bytes, headers: { ...put.headers, "Content-Length": String(bytes.byteLength) } });
+  if (!res.ok) throw new Error(`R2 put ${key} failed (${res.status})`);
+  return publicUrlFor(cfg, key);
+}
+
 export async function deleteObject(key: string): Promise<void> {
   const cfg = r2Config();
   if (!cfg) return;

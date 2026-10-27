@@ -7,6 +7,28 @@
  */
 @import "./moods.css";
 
+/* motion-reduce / motion-safe follow the Animations setting (lib/motion): the device unless it's set to on or off */
+@custom-variant motion-reduce {
+  @media (prefers-reduced-motion: reduce) {
+    html:not([data-motion="on"]) & {
+      @slot;
+    }
+  }
+  html[data-motion="off"] & {
+    @slot;
+  }
+}
+@custom-variant motion-safe {
+  @media not (prefers-reduced-motion: reduce) {
+    html:not([data-motion="off"]) & {
+      @slot;
+    }
+  }
+  html[data-motion="on"] & {
+    @slot;
+  }
+}
+
 /* Tailwind utilities backed by the mood tokens: bg-canvas, text-ink, border-line… */
 @theme inline {
   --color-canvas: var(--canvas);
@@ -217,14 +239,18 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  html:not([data-motion="on"]) *, html:not([data-motion="on"]) *::before, html:not([data-motion="on"]) *::after {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
   }
+}
+html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="off"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
 }
 
 
@@ -260,8 +286,9 @@ button:hover > .emoji-hover {
   animation: emoji-pop 0.38s cubic-bezier(0.3, 1.5, 0.5, 1) both;
 }
 @media (prefers-reduced-motion: reduce) {
-  .emoji-live, .emoji-pop, .emoji-hover:hover, button:hover > .emoji-hover { animation: none; transform: none; }
+  html:not([data-motion="on"]) .emoji-live, html:not([data-motion="on"]) .emoji-pop, html:not([data-motion="on"]) .emoji-hover:hover, html:not([data-motion="on"]) button:hover > .emoji-hover { animation: none; transform: none; }
 }
+html[data-motion="off"] .emoji-live, html[data-motion="off"] .emoji-pop, html[data-motion="off"] .emoji-hover:hover, html[data-motion="off"] button:hover > .emoji-hover { animation: none; transform: none; }
 
 /* ---------- profile cosmetics: avatar frames + name effects (spec in lib/cosmetics.ts) ---------- */
 @keyframes kq-spin { to { transform: rotate(360deg); } }
@@ -317,8 +344,9 @@ button:hover > .emoji-hover {
 .kq-name.glitch::before, .kq-name.glitch::after { z-index: -1; }
 
 @media (prefers-reduced-motion: reduce) {
-  .kq-ring, .kq-glow, .kq-orbit, .kq-name, .kq-name::before, .kq-name::after { animation: none !important; }
+  html:not([data-motion="on"]) .kq-ring, html:not([data-motion="on"]) .kq-glow, html:not([data-motion="on"]) .kq-orbit, html:not([data-motion="on"]) .kq-name, html:not([data-motion="on"]) .kq-name::before, html:not([data-motion="on"]) .kq-name::after { animation: none !important; }
 }
+html[data-motion="off"] .kq-ring, html[data-motion="off"] .kq-glow, html[data-motion="off"] .kq-orbit, html[data-motion="off"] .kq-name, html[data-motion="off"] .kq-name::before, html[data-motion="off"] .kq-name::after { animation: none !important; }
 
 /* double-tap upvote on a feed post: pops where you tapped, floats up and fades */
 .vote-burst {
@@ -332,8 +360,9 @@ button:hover > .emoji-hover {
   100% { transform: translateY(-34px) scale(0.9); opacity: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .vote-burst { animation: vote-burst-fade 0.6s ease-out both; }
+  html:not([data-motion="on"]) .vote-burst { animation: vote-burst-fade 0.6s ease-out both; }
 }
+html[data-motion="off"] .vote-burst { animation: vote-burst-fade 0.6s ease-out both; }
 @keyframes vote-burst-fade {
   0%, 60% { opacity: 1; }
   100% { opacity: 0; }
@@ -364,8 +393,9 @@ button:hover > .emoji-hover {
   100% { transform: translateX(120%); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .btn-gold::after { animation: none; }
+  html:not([data-motion="on"]) .btn-gold::after { animation: none; }
 }
+html[data-motion="off"] .btn-gold::after { animation: none; }
 
 /*
  * A community's donate button: an ordinary button at rest (the usual border and colours). On hover or focus a
@@ -423,19 +453,18 @@ button:hover > .emoji-hover {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .donate-btn::before {
+  html:not([data-motion="on"]) .donate-btn::before {
     display: none;
   }
-  .donate-btn:hover,
-  .donate-btn:focus-visible {
+  html:not([data-motion="on"]) .donate-btn:hover, html:not([data-motion="on"]) .donate-btn:focus-visible {
     border-color: #f5cf55;
   }
 }
-
-/* data saver: decorative motion stops too (it costs battery on the phones that need it most) */
-html[data-saver="on"] .kq-name,
-html[data-saver="on"] .kq-name::before,
-html[data-saver="on"] .kq-name::after {
-  animation: none !important;
+html[data-motion="off"] .donate-btn::before {
+  display: none;
 }
+html[data-motion="off"] .donate-btn:hover, html[data-motion="off"] .donate-btn:focus-visible {
+  border-color: #f5cf55;
+}
+
 

@@ -180,7 +180,15 @@ export const feedPostSchema = z
   .refine((v) => v.media.length > 0, { path: ["media"], message: "Add a picture or a video" });
 export const feedCaptionSchema = z.object({ caption: text(LIMITS.feedCaption) });
 export const feedVoteSchema = z.object({ value: z.union([z.literal(1), z.literal(-1), z.literal(0)]) });
-export const feedCommentSchema = z.object({ body: text(LIMITS.feedComment, 1), parentId: z.preprocess(blankToUndef, objectId.optional()) });
+export const feedCommentSchema = z
+  .object({
+    body: text(LIMITS.feedComment),
+    sticker: z.enum(STICKER_IDS).optional(),
+    /** a saved picture sticker (checked against our uploads by the service) */
+    stickerUrl: z.string().trim().min(1).max(600).optional(),
+    parentId: z.preprocess(blankToUndef, objectId.optional()),
+  })
+  .refine((v) => v.body.length > 0 || !!v.sticker || !!v.stickerUrl, { message: "Write a comment or pick a sticker.", path: ["body"] });
 export const feedReactSchema = z.object({ kind: z.enum(REACTION_IDS) });
 /** a page of the home feed, or of a community's posts */
 /** `at`: when page 1 was made, so later pages rank the same posts the same way (no repeats, no gaps). */
@@ -690,12 +698,12 @@ export const pointsEarningSchema = z.object({
   actions: z.partialRecord(pointAction, z.number().int().min(0).max(10_000)).optional(),
   caps: z.partialRecord(pointAction, z.number().int().min(0).max(1_000_000)).optional(),
 });
-/** Admin → Profile effects: an uploaded animation, its still picture, a name and a Hype price (null: the default). */
+/** Admin → Profile effects: an uploaded Lottie JSON, the frame it waits on, a name and a Hype price (null: the default). */
 export const profileEffectSchema = z.object({
   name: z.string().trim().min(1, "Give it a name").max(40),
-  kind: z.enum(["image", "lottie"]),
-  fileUrl: z.string().trim().url().max(1000),
-  previewUrl: z.string().trim().url().max(1000),
+  fileUrl: z.string().trim().url().max(1000).refine((u) => /\.(json|lottie)($|[?#])/i.test(u), "Upload a Lottie: a .lottie or .json file."),
+  /** where it waits when it isn't playing (picker tiles, animations off, data saver), 0 to 1 */
+  posterFrame: z.number().min(0).max(1).optional(),
   price: z.number().int().min(0).max(1_000_000).nullable().optional(),
   active: z.boolean().optional(),
 });

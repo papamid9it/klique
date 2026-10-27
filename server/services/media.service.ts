@@ -2,6 +2,7 @@ import "server-only";
 import { after } from "next/server";
 import { ChannelMessage } from "../models/Channel";
 import { CrewMessage } from "../models/Crew";
+import { FeedComment } from "../models/FeedPost";
 import { Message } from "../models/Message";
 import { SavedSticker } from "../models/SavedSticker";
 import { deleteObject, keyFromUrl } from "./r2";
@@ -35,13 +36,14 @@ export function variantKeys(key: string): string[] {
 export async function stillStickers(urls: string[]): Promise<Set<string>> {
   if (!urls.length) return new Set();
   const q = { $in: urls };
-  const [saved, dms, channel, crew] = await Promise.all([
+  const [saved, dms, channel, crew, comments] = await Promise.all([
     SavedSticker.distinct("url", { url: q }),
     Message.distinct("stickerUrl", { stickerUrl: q, deletedAt: null }),
     ChannelMessage.distinct("stickerUrl", { stickerUrl: q, deletedAt: null }),
     CrewMessage.distinct("stickerUrl", { stickerUrl: q }),
+    FeedComment.distinct("stickerUrl", { stickerUrl: q, deletedAt: null }),
   ]);
-  return new Set([...saved, ...dms, ...channel, ...crew].map(String));
+  return new Set([...saved, ...dms, ...channel, ...crew, ...comments].map(String));
 }
 
 /**

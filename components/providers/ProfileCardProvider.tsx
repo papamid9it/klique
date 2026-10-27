@@ -33,6 +33,11 @@ interface Pop {
   rect: { top: number; left: number; right: number; bottom: number } | null;
   sheet: boolean;
   anchor: Element | null;
+  /**
+   * Opened from inside a modal (a post viewer, a list): such a <dialog> sits in the browser's top layer, above any
+   * z-index, and makes the rest of the page unclickable. Then the card goes in a modal <dialog> of its own, on top.
+   */
+  inModal: boolean;
 }
 
 export function ProfileCardProvider({ children }: { children: ReactNode }) {
@@ -40,6 +45,7 @@ export function ProfileCardProvider({ children }: { children: ReactNode }) {
   const [full, setFull] = useState<string | null>(null);
   const [height, setHeight] = useState(420);
   const cardRef = useRef<HTMLDivElement>(null);
+  const layerRef = useRef<HTMLDialogElement>(null);
 
   const close = useCallback(() => setPop(null), []);
   const open = useCallback((handle: string, anchor?: Element | null) => {
@@ -51,6 +57,7 @@ export function ProfileCardProvider({ children }: { children: ReactNode }) {
         anchor: anchor ?? null,
         rect: r ? { top: r.top, left: r.left, right: r.right, bottom: r.bottom } : null,
         sheet: window.innerWidth < 640 || !r,
+        inModal: !!document.querySelector("dialog:modal"),
       };
     });
   }, []);
@@ -86,7 +93,12 @@ export function ProfileCardProvider({ children }: { children: ReactNode }) {
       if (t.closest("[role=menu]")) return; // menus opened from the card (⋯, your status) sit outside it
       setPop(null);
     };
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setPop(null);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      // this Esc is the popout's: without this the browser also closes the post viewer (or other modal) under it
+      e.preventDefault();
+      setPop(null);
+    };
     const onResize = () => setPop(null);
     document.addEventListener("pointerdown", onDown);
     document.addEventListener("keydown", onKey);
@@ -97,6 +109,13 @@ export function ProfileCardProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("resize", onResize);
     };
   }, [popOpen]);
+
+  // Above an open modal: show the card's own dialog (it joins the top layer last, so it's on top)
+  const inModal = !!pop?.inModal;
+  useEffect(() => {
+    const d = layerRef.current;
+    if (inModal && d && !d.open) d.showModal();
+  }, [inModal, pop?.handle]);
 
   // Track the card's real height so it can be kept on screen once its content loads.
   useLayoutEffect(() => {
@@ -125,8 +144,13 @@ export function ProfileCardProvider({ children }: { children: ReactNode }) {
     <ProfileCtx.Provider value={value}>
       {children}
       {pop && (
-        <>
-          {pop.sheet && <div aria-hidden="true" className="fixed inset-0 z-[70] bg-black/50" onClick={close} />}
+        <Layer
+          inModal={pop.inModal}
+          sheet={pop.sheet}
+          dialogRef={layerRef}
+          onClose={close}
+        >
+          {pop.sheet && !pop.inModal && <div aria-hidden="true" className="fixed inset-0 z-[70] bg-black/50" onClick={close} />}
           <div
             ref={cardRef}
             role="dialog"
@@ -139,7 +163,7 @@ export function ProfileCardProvider({ children }: { children: ReactNode }) {
           >
             <ProfileCard handle={pop.handle} onClose={close} onExpand={() => openFull(pop.handle)} />
           </div>
-        </>
+        </Layer>
       )}
       <ProfileModal handle={full} onClose={closeFull} onOpenPerson={openFull} />
       {/* the address is only known at request time, so this listens inside its own Suspense boundary */}
@@ -187,3 +211,23 @@ function OpenFromUrl({ onOpen }: { onOpen: (handle: string) => void }) {
   }, [handle, onOpen]);
   return null;
 }
+
+/**
+ * Where the popout sits: straight in the page, or (opened from inside a modal) in a modal <dialog> of its own whose
+ * backdrop is clear (dimmed for the phone sheet). Pressing the backdrop or Esc closes it.
+ */
+function Layer({ inModal, sheet, dialogRef, onClose, children }: { inModal: boolean; sheet: boolean; dialogRef: React.RefObject<HTMLDialogElement | null>; onClose: () => void; children: ReactNode }) {
+  if (!inModal) return <>{children}</>;
+  return (
+    <dialog
+      ref={dialogRef}
+      aria-label="Profile"
+      onClose={onClose}
+      onClick={(e) => e.target === dialogRef.current && onClose()}
+      className={cx("fixed inset-0 m-0 size-full max-h-none max-w-none overflow-visible border-0 bg-transparent p-0", sheet ? "backdrop:bg-black/50" : "backdrop:bg-transparent")}
+    >
+      {children}
+    </dialog>
+  );
+}
+

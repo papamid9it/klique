@@ -47,14 +47,14 @@ export const UPLOAD_SPECS: Record<UploadKind, UploadSpec> = {
     maxPickBytes: 500 * MB,
     variants: { main: { types: ["video/mp4", "video/webm"], maxBytes: 100 * MB }, poster: { types: STILL, maxBytes: 1 * MB } },
   },
-  /** profile effects (site admins only): an animated WebP or APNG with transparency, or a Lottie JSON. Uploaded as they are, never recompressed (that would lose the animation). */
+  /** profile effects (site admins only): a Lottie, .json or .lottie. Uploaded through the server (/api/admin/effect-files), which checks it. */
   effect: {
     label: "Profile effect",
     resource: "file",
     folder: "effects",
-    formats: ["webp", "png", "apng", "json"],
+    formats: ["json", "lottie"],
     maxPickBytes: 8 * MB,
-    variants: { main: { types: ["image/webp", "image/png", "application/json"], maxBytes: 8 * MB } },
+    variants: { main: { types: ["application/json"], maxBytes: 8 * MB } },
   },
 };
 

@@ -16,7 +16,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { getInterest } from "@/lib/constants";
 import { compactCount, dateChip } from "@/lib/format";
 import { useApi } from "@/lib/hooks/useApi";
-import type { CommunityCardDTO, EventDTO, UserBrief } from "@/lib/types";
+import type { CommunityCardDTO, EventDTO, UserBrief, UserProfile } from "@/lib/types";
 import { longDate, monthYear, PresenceDot, ProfileActions, ProfileBanner, useMutualCommunities, ZoomAvatar } from "./ProfileParts";
 import { PointsPill } from "./ProfileCard";
 import { UserName } from "@/components/ui/UserName";
@@ -80,7 +80,10 @@ function Empty({ children }: { children: React.ReactNode }) {
  * The full profile (Discord's): identity, actions and details on the left; on the right Activity, Mutual
  * communities and Mutual friends, or for yourself About, Your communities and Friends.
  */
-function ProfileBody({ handle, onClose, onOpenPerson }: { handle: string; onClose: () => void; onOpenPerson: (handle: string) => void }) {
+/** Designs being tried on in Profile style, shown on your own profile before they're yours (only you see this). */
+export type TryOnLook = Partial<Pick<UserProfile, "avatarFrame" | "nameEffect" | "profileTheme" | "profileEffect">>;
+
+function ProfileBody({ handle, onClose, onOpenPerson, tryOn }: { handle: string; onClose: () => void; onOpenPerson: (handle: string) => void; tryOn?: TryOnLook }) {
   const { data: view, loading, status, setData, reload } = useApi(() => ProfileService.get(handle), [handle], { key: `profile:${handle}` });
   const mutual = useMutualCommunities(view);
   const [tab, setTab] = useState<Tab>("activity");
@@ -105,7 +108,7 @@ function ProfileBody({ handle, onClose, onOpenPerson }: { handle: string; onClos
     );
   }
 
-  const p = view.profile;
+  const p = tryOn ? { ...view.profile, ...tryOn } : view.profile;
   const place = [p.neighborhood, placeLabel(p)].filter(Boolean).join(", ");
   const friends = view.isSelf ? (myFriends.data ?? []).map((f) => f.user) : view.mutualFriends;
   const tabs: { id: Tab; label: string }[] = view.isSelf
@@ -244,7 +247,7 @@ function ProfileBody({ handle, onClose, onOpenPerson }: { handle: string; onClos
   );
 }
 
-export function ProfileModal({ handle, onClose, onOpenPerson }: { handle: string | null; onClose: () => void; onOpenPerson: (handle: string) => void }) {
+export function ProfileModal({ handle, onClose, onOpenPerson, tryOn }: { handle: string | null; onClose: () => void; onOpenPerson: (handle: string) => void; tryOn?: TryOnLook }) {
   const ref = useRef<HTMLDialogElement>(null);
   const open = handle !== null;
 
@@ -270,7 +273,12 @@ export function ProfileModal({ handle, onClose, onOpenPerson }: { handle: string
           <button type="button" onClick={onClose} aria-label="Close" className="absolute top-3 right-3 z-10 inline-flex size-9 items-center justify-center rounded-full bg-surface/80 text-ink-muted backdrop-blur hover:bg-raised hover:text-ink">
             <Icon name="x" />
           </button>
-          <ProfileBody key={handle} handle={handle} onClose={onClose} onOpenPerson={onOpenPerson} />
+          {tryOn && (
+            <p className="absolute bottom-4 left-1/2 z-20 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-ink px-3 py-1.5 text-[12px] font-semibold whitespace-nowrap text-canvas shadow-lg">
+              <Icon name="eye" size={13} /> Preview, only you can see this
+            </p>
+          )}
+          <ProfileBody key={handle} handle={handle} onClose={onClose} onOpenPerson={onOpenPerson} tryOn={tryOn} />
         </div>
       )}
     </dialog>

@@ -104,12 +104,20 @@ function ColorPicker({ label, value, onChange }: { label: string; value: string;
   );
 }
 
-/** Save, or (locked) unlock first: the footer of every pop-up. */
-function Footer({ access, onCancel, onSave, onUnlock, busy, disabled }: { access: Access; onCancel: () => void; onSave: () => void; onUnlock: () => void; busy: boolean; disabled?: boolean }) {
+/**
+ * Save, or (locked) unlock first: the footer of every pop-up. "Try on" keeps the pick on the preview (with whatever
+ * else is being tried) without saving or paying, to see designs together before unlocking them.
+ */
+function Footer({ access, onCancel, onSave, onUnlock, onTry, busy, disabled }: { access: Access; onCancel: () => void; onSave: () => void; onUnlock: () => void; onTry?: () => void; busy: boolean; disabled?: boolean }) {
   return (
     <div className="mt-6 flex flex-wrap items-center justify-end gap-2 border-t border-line pt-4">
-      {access?.locked && <span className="mr-auto text-[13px] text-ink-muted">Yours for 30 days for {access.price.toLocaleString("en-NG")} Hype.</span>}
+      {access?.locked && <span className="mr-auto text-[13px] text-ink-muted">Preview, only you can see this. Yours for 30 days for {access.price.toLocaleString("en-NG")} Hype.</span>}
       <Button onClick={onCancel}>Cancel</Button>
+      {onTry && !disabled && (
+        <Button onClick={onTry}>
+          <Icon name="eye" size={14} /> Try on
+        </Button>
+      )}
       {access?.locked ? (
         <Button variant="primary" onClick={onUnlock}>
           <Icon name="lock" size={14} /> Unlock · {access.price.toLocaleString("en-NG")} Hype
@@ -168,7 +176,7 @@ function useSave(onSave: (v: string) => Promise<void>, onClose: () => void) {
  * A Discord-style picker: a grid of options on the left (each previews in its tile), the profile card with the
  * picked one on the right, then Save (or Unlock when it isn't theirs yet). `extra` goes under the grid.
  */
-function PickModal({ title, options, current, lookWith, accessOf, onSave, onUnlock, onClose, cols = "grid-cols-2 sm:grid-cols-3", extra, keyFor }: { title: string; options: Option[]; current: string; lookWith: (v: string) => CardLook; accessOf: AccessOf; onSave: (v: string) => Promise<void>; onUnlock: (key: StyleKey) => void; onClose: () => void; cols?: string; extra?: (v: string, set: (v: string) => void) => React.ReactNode; keyFor?: (v: string) => StyleKey | undefined }) {
+function PickModal({ title, options, current, saved, lookWith, accessOf, onSave, onUnlock, onTry, onClose, cols = "grid-cols-2 sm:grid-cols-3", extra, keyFor }: { title: string; options: Option[]; current: string; saved: string; lookWith: (v: string) => CardLook; accessOf: AccessOf; onSave: (v: string) => Promise<void>; onUnlock: (key: StyleKey) => void; onTry: (v: string) => void; onClose: () => void; cols?: string; extra?: (v: string, set: (v: string) => void) => React.ReactNode; keyFor?: (v: string) => StyleKey | undefined }) {
   const [pick, setPick] = useState(current);
   const { busy, save } = useSave(onSave, onClose);
   // the unlock the pick needs: from its tile, or (a value with no tile, like their own colours) from `keyFor`
@@ -194,16 +202,32 @@ function PickModal({ title, options, current, lookWith, accessOf, onSave, onUnlo
           <PreviewCard look={lookWith(pick)} />
         </div>
       </div>
-      <Footer access={access} onCancel={onClose} onSave={() => void save(pick)} onUnlock={() => need && onUnlock(need)} busy={busy} disabled={pick === current} />
+      <Footer
+        access={access}
+        onCancel={onClose}
+        onSave={() => void save(pick)}
+        onUnlock={() => {
+          onTry(pick); // it stays on the preview while they unlock
+          if (need) onUnlock(need);
+        }}
+        onTry={() => (onTry(pick), onClose())}
+        busy={busy}
+        disabled={pick === saved}
+      />
     </Modal>
   );
 }
 
 export interface PickerProps {
+  /** the person with what they're trying on (the pickers open on it) */
   look: CardLook;
+  /** what this picker's design is saved as now ("" for none) */
+  saved: string;
   accessOf: AccessOf;
   onSave: (v: string) => Promise<void>;
   onUnlock: (key: StyleKey) => void;
+  /** keep this pick on the preview without saving it */
+  onTry: (v: string) => void;
   onClose: () => void;
 }
 
@@ -253,10 +277,11 @@ export function ThemeModal({ look, ...p }: PickerProps) {
 }
 
 /**
- * Profile effects (uploaded by the Klique team): each tile shows its still picture and plays while you point at it;
+ * Profile effects (uploaded by the Klique team): each small tile holds the effect still over your picture and plays it
+ * while you point at it;
  * the card plays the one picked.
  */
-export function EffectModal({ look, accessOf, onSave, onUnlock, onClose }: PickerProps) {
+export function EffectModal({ look, saved, accessOf, onSave, onUnlock, onTry, onClose }: PickerProps) {
   const { data, loading } = useEffectsCatalog();
   const list = data ?? [];
   const [pick, setPick] = useState(look.effect);
@@ -278,9 +303,10 @@ export function EffectModal({ look, accessOf, onSave, onUnlock, onClose }: Picke
               <p className="max-w-xs text-sm text-ink-muted">Animations that play over your profile card. Check back soon.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3" role="radiogroup" aria-label="Profile effect">
-              <button type="button" role="radio" aria-checked={!pick} onClick={() => setPick("")} className={cx("flex aspect-[4/5] flex-col items-center justify-center rounded-card border text-sm font-semibold", !pick ? "border-accent bg-accent/10" : "border-line bg-raised/40 hover:bg-raised")}>
-                <Icon name="ban" size={22} className="mb-1.5 text-ink-muted" /> None
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4" role="radiogroup" aria-label="Profile effect">
+              <button type="button" role="radio" aria-checked={!pick} onClick={() => setPick("")} className={cx("relative flex min-h-24 flex-col items-center justify-center gap-1.5 rounded-control border px-2 py-3 text-center transition", !pick ? "border-accent bg-accent/10" : "border-line bg-raised/40 hover:bg-raised")}>
+                <Avatar name={look.name} src={look.avatarUrl} size={52} />
+                <span className="text-[11px] font-medium text-ink-muted">None</span>
               </button>
               {list.map((e) => (
                 <button
@@ -293,19 +319,15 @@ export function EffectModal({ look, accessOf, onSave, onUnlock, onClose }: Picke
                   onMouseLeave={() => setHover(null)}
                   onFocus={() => setHover(e.id)}
                   onBlur={() => setHover(null)}
-                  className={cx("relative flex aspect-[4/5] flex-col overflow-hidden rounded-card border text-left", pick === e.id ? "border-accent ring-2 ring-accent/40" : "border-line hover:border-ink-muted")}
+                  className={cx("relative flex min-h-24 flex-col items-center justify-center gap-1.5 rounded-control border px-2 py-3 text-center transition", pick === e.id ? "border-accent bg-accent/10" : "border-line bg-raised/40 hover:bg-raised")}
                 >
-                  <span className="relative block flex-1 bg-raised" style={themeStyle(look.theme)}>
-                    {/* the still picture; it plays while you point at it */}
-                    {hover === e.id ? (
-                      <ProfileEffect spec={e} />
-                    ) : (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={e.previewUrl} alt="" className="absolute inset-0 size-full object-cover" />
-                    )}
-                    <TileTag a={accessOf(`effect:${e.id}`)} />
+                  <TileTag a={accessOf(`effect:${e.id}`)} />
+                  {/* your picture under the effect, held on a frame; it plays while you point at it */}
+                  <span className="relative flex size-[52px] items-center justify-center overflow-hidden rounded-control" style={themeStyle(look.theme)}>
+                    <Avatar name={look.name} src={look.avatarUrl} size={34} />
+                    <ProfileEffect spec={e} paused={hover !== e.id} />
                   </span>
-                  <span className="truncate px-2.5 py-2 text-[12.5px] font-semibold">{e.name}</span>
+                  <span className="max-w-full truncate text-[11px] font-medium text-ink-muted">{e.name}</span>
                 </button>
               ))}
             </div>
@@ -316,13 +338,21 @@ export function EffectModal({ look, accessOf, onSave, onUnlock, onClose }: Picke
           <PreviewCard look={{ ...look, effect: pick }} effectSpec={chosen} />
         </div>
       </div>
-      <Footer access={access} onCancel={onClose} onSave={() => void save(pick)} onUnlock={() => onUnlock(`effect:${pick}`)} busy={busy} disabled={pick === look.effect} />
+      <Footer
+        access={access}
+        onCancel={onClose}
+        onSave={() => void save(pick)}
+        onUnlock={() => (onTry(pick), onUnlock(`effect:${pick}`))}
+        onTry={() => (onTry(pick), onClose())}
+        busy={busy}
+        disabled={pick === saved}
+      />
     </Modal>
   );
 }
 
 /** Animated (GIF) picture and banner: what it is, whether it's theirs, and Unlock. Nothing to pick: the GIFs go in Profile and Banner. */
-export function AnimatedModal({ look, accessOf, onUnlock, onClose }: Omit<PickerProps, "onSave">) {
+export function AnimatedModal({ look, accessOf, onUnlock, onClose }: Pick<PickerProps, "look" | "accessOf" | "onUnlock" | "onClose">) {
   const a = accessOf("anim:profile");
   const using = isAnimatedPicture(look.avatarUrl) || isAnimatedPicture(look.bannerUrl);
   return (

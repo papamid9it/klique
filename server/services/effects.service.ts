@@ -18,7 +18,7 @@ const dto = (e: IProfileEffect, prices: Record<string, number>, fallback: number
   name: e.name,
   kind: e.kind,
   fileUrl: e.fileUrl,
-  previewUrl: e.previewUrl,
+  posterFrame: e.posterFrame ?? 0.5,
   active: e.active,
   price: prices[`effect:${e.slug}`] ?? fallback,
 });
@@ -41,7 +41,7 @@ async function setPrice(slug: string, price: number | null | undefined) {
 }
 
 export async function saveEffect(input: z.infer<typeof profileEffectSchema>, slug?: string): Promise<ProfileEffectDTO> {
-  const set = { name: input.name, kind: input.kind, fileUrl: input.fileUrl, previewUrl: input.previewUrl, active: input.active ?? true };
+  const set = { name: input.name, kind: "lottie" as const, fileUrl: input.fileUrl, posterFrame: input.posterFrame ?? 0.5, active: input.active ?? true };
   if (slug) {
     const e = await ProfileEffect.findOneAndUpdate({ slug }, { $set: set }, { returnDocument: "after" }).lean<IProfileEffect>();
     if (!e) throw notFound("We couldn't find that effect.");

@@ -18,6 +18,8 @@ import { awardPointsLater } from "./points.service";
 import { deleteUploads } from "./media.service";
 import { notify } from "./push.service";
 import { purgeReactions, summarizeReactions, toggleReaction } from "./reactions";
+import { previewOf } from "./replies";
+import { assertStickerUrl, noteStickerUse } from "./stickers.service";
 
 const PAGE = 10;
 const COMMENT_CAP = 500;
@@ -106,6 +108,8 @@ async function toComments(rows: IFeedComment[], viewer: IUser | null, managerRol
         postId: sid(c.postId),
         parentId: c.parentId ? sid(c.parentId) : null,
         body: gone ? "" : c.body,
+        sticker: gone ? null : (c.sticker ?? null),
+        stickerUrl: gone ? null : (c.stickerUrl ?? null),
         deleted: gone,
         createdAt: c.createdAt.toISOString(),
         author,
@@ -234,24 +238,28 @@ export async function addComment(viewer: IUser, space: Space, access: SpaceAcces
   assertFeed(space);
   if (!access.isMember || access.banned) throw forbidden("Join this community to comment.");
   rateLimit(`feed-comment:${sid(viewer._id)}`, 30, 5 * 60_000);
+  const sticker = input.sticker ?? null;
+  const stickerUrl = input.stickerUrl && !sticker ? assertStickerUrl(input.stickerUrl) : null;
   const p = await loadPost(space, postId);
   let parent: Pick<IFeedComment, "_id" | "authorId" | "deletedAt"> | null = null;
   if (input.parentId) {
     parent = await FeedComment.findOne({ _id: input.parentId, postId: p._id }).select("_id authorId deletedAt").lean<Pick<IFeedComment, "_id" | "authorId" | "deletedAt">>();
     if (!parent) throw badRequest("The comment you're replying to is gone.");
   }
-  const doc = await FeedComment.create({ postId: p._id, communityId: p.communityId, authorId: viewer._id, parentId: parent?._id ?? null, body: input.body });
+  const doc = await FeedComment.create({ postId: p._id, communityId: p.communityId, authorId: viewer._id, parentId: parent?._id ?? null, body: input.body, sticker, stickerUrl });
   await FeedPost.updateOne({ _id: p._id }, { $inc: { commentCount: 1 } });
+  noteStickerUse(viewer._id, stickerUrl);
+  const said = previewOf({ body: input.body, sticker, stickerUrl }).slice(0, 140);
   // the post's author and the person answered hear about it (never yourself), bundled per post
   const href = `/communities/${space.community.slug}?view=posts&p=${sid(p._id)}`;
   const me = sid(viewer._id);
   const told = new Set<string>([me]);
   if (parent && !parent.deletedAt && !told.has(sid(parent.authorId))) {
     told.add(sid(parent.authorId));
-    notify([parent.authorId], { title: `${viewer.displayName} replied to your comment`, body: input.body.slice(0, 140), data: { href } }, { actorId: viewer._id, category: "replies", groupKey: `feed:${sid(p._id)}`, many: (n) => `${n} new replies on your post`, ref: `feed:${sid(p._id)}` });
+    notify([parent.authorId], { title: `${viewer.displayName} replied to your comment`, body: said, data: { href } }, { actorId: viewer._id, category: "replies", groupKey: `feed:${sid(p._id)}`, many: (n) => `${n} new replies on your post`, ref: `feed:${sid(p._id)}` });
   }
   if (!told.has(sid(p.authorId))) {
-    notify([p.authorId], { title: `${viewer.displayName} commented on your post`, body: input.body.slice(0, 140), data: { href } }, { actorId: viewer._id, category: "replies", groupKey: `feed:${sid(p._id)}`, many: (n) => `${n} new comments on your post`, ref: `feed:${sid(p._id)}` });
+    notify([p.authorId], { title: `${viewer.displayName} commented on your post`, body: said, data: { href } }, { actorId: viewer._id, category: "replies", groupKey: `feed:${sid(p._id)}`, many: (n) => `${n} new comments on your post`, ref: `feed:${sid(p._id)}` });
   }
   return (await toComments([doc.toObject() as IFeedComment], viewer, access.role))[0];
 }
@@ -273,7 +281,7 @@ export async function deleteComment(viewer: IUser, space: Space, access: SpaceAc
     if (authorM && !outranks(access.role, authorM.role)) throw forbidden("You can't remove a comment from someone of equal or higher rank.");
   }
   // the row stays as "deleted" so the replies under it keep their place
-  await Promise.all([FeedComment.updateOne({ _id: c._id }, { $set: { body: "", deletedAt: new Date() } }), FeedPost.updateOne({ _id: p._id, commentCount: { $gt: 0 } }, { $inc: { commentCount: -1 } }), purgeReactions("feedComment", [c._id])]);
+  await Promise.all([FeedComment.updateOne({ _id: c._id }, { $set: { body: "", sticker: null, stickerUrl: null, deletedAt: new Date() } }), FeedPost.updateOne({ _id: p._id, commentCount: { $gt: 0 } }, { $inc: { commentCount: -1 } }), purgeReactions("feedComment", [c._id])]);
   return { deleted: true };
 }
 

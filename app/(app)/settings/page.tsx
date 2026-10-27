@@ -3,7 +3,10 @@
 import { ProfileEffect } from "@/components/ui/ProfileEffect";
 import { themeStyle } from "@/components/ui/profileTheme";
 import { setAutoplay } from "@/lib/autoplay";
+import { PointsService } from "@/app/services/PointsService";
 import { setDataSaver, type DataSaverPref } from "@/lib/data-saver";
+import { setMotion, type MotionPref } from "@/lib/motion";
+import { useMotion } from "@/lib/hooks/useCalm";
 import { useAutoplay } from "@/lib/hooks/useAutoplay";
 import { useDataSaver } from "@/lib/hooks/useDataSaver";
 import { useCategories } from "@/lib/hooks/useCategories";
@@ -457,6 +460,12 @@ function StyleTab({ me, go }: { me: UserMe; go: (t: Tab) => void }) {
     toast("Saved", "success");
   }
 
+  /** Try-on → "Unlock all": each locked design in turn (the server checks the Hype); stops at the first that fails. */
+  async function unlockAll(keys: StyleKey[]) {
+    for (const k of keys) setWallet((await PointsService.unlock(k)).data);
+    toast(keys.length === 1 ? "Unlocked" : `${keys.length} designs unlocked`, "success");
+  }
+
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -497,6 +506,9 @@ function StyleTab({ me, go }: { me: UserMe; go: (t: Tab) => void }) {
           access={wallet ? (k) => styleAccess(wallet, k) : undefined}
           onLocked={setUnlocking}
           onSave={saveDesign}
+          onUnlockAll={unlockAll}
+          balance={wallet?.allFree ? undefined : wallet?.balance}
+          onGetHype={() => go("hype")}
         />
         {unlocking && (
           <UnlockDialog
@@ -705,6 +717,9 @@ export default function SettingsPage() {
                 <Block title="Mood" intro="Pick the look of klique. It applies instantly and follows you across devices.">
                   <MoodPicker />
                 </Block>
+                <Block title="Animations" intro="Name effects, picture frames, profile effects, stickers and other motion. Saved on this device.">
+                  <MotionPicker />
+                </Block>
                 <Block title="Data saver" intro="Use less mobile data: lighter pictures, GIFs and videos wait for a tap, and nothing loads in the background. Saved on this device.">
                   <DataSaverPicker />
                 </Block>
@@ -735,12 +750,38 @@ function AutoplaySwitch() {
   return <Switch label="Autoplay videos" hint={saver ? "Data saver is on, so videos wait for a tap anyway." : "Videos in the feed play muted as you scroll to them. Off: tap one to play it."} checked={auto} onChange={setAutoplay} />;
 }
 
+/** Animations for this device: follow the device's reduce-motion setting (the default), always on, or off. */
+function MotionPicker() {
+  const { reduce, pref, deviceReduce } = useMotion();
+  const options: { id: MotionPref; title: string; hint: string }[] = [
+    { id: "device", title: "Follow my device", hint: deviceReduce ? "Your device asks for less motion, so animations are off now." : "Animations play unless your device asks for less motion." },
+    { id: "on", title: "Always on", hint: "Animations play even if your device asks for less motion." },
+    { id: "off", title: "Off", hint: "Everything stays still." },
+  ];
+  return (
+    <div className="space-y-2" role="radiogroup" aria-label="Animations">
+      {options.map((o) => (
+        <label key={o.id} className="flex cursor-pointer items-center gap-3 rounded-control border border-line bg-raised p-3 transition has-[:checked]:border-accent-text has-[:checked]:bg-surface">
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold">{o.title}</span>
+            <span className="block text-xs text-ink-muted">{o.hint}</span>
+          </span>
+          <input type="radio" name="motion" checked={pref === o.id} onChange={() => setMotion(o.id)} className="size-4 accent-[var(--accent-text)]" />
+        </label>
+      ))}
+      <p className="pt-1 text-xs text-ink-muted" aria-live="polite">
+        Animations are <span className="font-semibold text-ink">{reduce ? "off" : "on"}</span> right now.
+      </p>
+    </div>
+  );
+}
+
 /** Data saver for this device: Auto (follows the browser's Save-Data setting and slow connections), On or Off. */
 function DataSaverPicker() {
   const { on, pref, slow } = useDataSaver();
   const options: { id: DataSaverPref; title: string; hint: string }[] = [
     { id: "auto", title: "Automatic", hint: slow ? "Your connection looks slow or Data Saver is on in your browser, so it's on now." : "Turns on by itself on a slow connection or when your browser's Data Saver is on." },
-    { id: "on", title: "Always on", hint: "Lighter pictures everywhere. Tap a GIF or video to load it." },
+    { id: "on", title: "Always on", hint: "Lighter pictures everywhere. Tap a GIF or video to load it. Profile effects show a still frame." },
     { id: "off", title: "Off", hint: "Full-size pictures, GIFs play, things load ahead of time." },
   ];
   return (

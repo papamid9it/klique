@@ -68,6 +68,9 @@ export interface IFeedComment {
   authorId: Types.ObjectId;
   parentId: Types.ObjectId | null;
   body: string;
+  /** a built-in sticker id, or a saved picture sticker's link (lib/reactions, SavedSticker) */
+  sticker: string | null;
+  stickerUrl: string | null;
   deletedAt: Date | null;
   createdAt: Date;
 }
@@ -79,6 +82,8 @@ const FeedCommentSchema = new Schema<IFeedComment>(
     authorId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     parentId: { type: Schema.Types.ObjectId, ref: "FeedComment", default: null },
     body: { type: String, default: "", maxlength: 2000 },
+    sticker: { type: String, default: null },
+    stickerUrl: { type: String, default: null },
     deletedAt: { type: Date, default: null },
   },
   { timestamps: { createdAt: true, updatedAt: false } },

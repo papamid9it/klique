@@ -275,6 +275,9 @@ export interface FeedCommentDTO {
   parentId: Id | null;
   /** empty when deleted */
   body: string;
+  /** a built-in sticker id, or a saved picture sticker's link (null when deleted) */
+  sticker: string | null;
+  stickerUrl: string | null;
   deleted: boolean;
   createdAt: ISODate;
   author: UserBrief;
@@ -793,11 +796,11 @@ export interface ProfileEffectDTO {
   /** its slug: what a profile stores */
   id: string;
   name: string;
-  /** "image": an animated WebP or APNG; "lottie": a Lottie JSON */
+  /** "lottie": a Lottie JSON ("image", an animated WebP or APNG, only on effects added before they became Lottie only) */
   kind: "image" | "lottie";
   fileUrl: string;
-  /** a still picture: the tile, and what people who want things still see */
-  previewUrl: string;
+  /** where a Lottie pauses when it isn't playing, 0 (start) to 1 (end) */
+  posterFrame: number;
   active: boolean;
   /** Hype */
   price: number;

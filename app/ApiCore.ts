@@ -100,11 +100,16 @@ export default class ApiClient {
   delete<T>(path: string, params?: QueryParams) {
     return this.request<T>("DELETE", path + toQuery(params));
   }
+  /** Send a file's raw bytes as the body (not JSON). */
+  postFile<T>(path: string, file: Blob) {
+    return this.request<T>("POST", path, undefined, file);
+  }
 
-  private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  private async request<T>(method: string, path: string, body?: unknown, file?: Blob): Promise<T> {
     if (method !== "GET") cache.clear();
     const headers: Record<string, string> = { Accept: "application/json" };
-    if (body !== undefined || method === "POST" || method === "PATCH" || method === "PUT") {
+    if (file) headers["Content-Type"] = file.type || "application/octet-stream";
+    else if (body !== undefined || method === "POST" || method === "PATCH" || method === "PUT") {
       headers["Content-Type"] = "application/json";
     }
     if (config.native) headers["X-Klique-Client"] = "native";
@@ -116,7 +121,7 @@ export default class ApiClient {
       res = await fetch(config.baseUrl + path, {
         method,
         headers,
-        body: body !== undefined ? JSON.stringify(body) : method === "POST" || method === "PATCH" || method === "PUT" ? "{}" : undefined,
+        body: file ?? (body !== undefined ? JSON.stringify(body) : method === "POST" || method === "PATCH" || method === "PUT" ? "{}" : undefined),
         credentials: config.baseUrl ? "include" : "same-origin",
         cache: "no-store",
       });

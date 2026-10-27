@@ -42,15 +42,15 @@ export const UploadService = {
   async upload(kind: UploadKind, file: UploadableFile, opts: UploadOptions = {}): Promise<UploadedFileDTO> {
     const problem = checkFile(kind, file);
     if (problem) throw new ApiRequestError(400, problem, "invalid_file");
+    // profile effects go through the server, which checks them (EffectService.uploadFile)
+    if (kind === "effect") throw new ApiRequestError(400, "Upload profile effects in Admin → Profile effects.", "invalid_file");
 
     // 1. shrink on the device (videos take a while, so they get most of the progress bar)
     const share = kind === "video" ? 0.7 : 0.15;
     let done: Compressed;
     try {
       opts.onProgress?.(0.02);
-      // a profile effect goes up exactly as it is: recompressing would lose the animation
-      const type = /\.json$/i.test(file.name) ? "application/json" : /\.webp$/i.test(file.name) ? "image/webp" : "image/png";
-      done = kind === "effect" ? { files: [{ variant: "main", blob: file.type === type ? file : new Blob([file], { type }) }], width: null, height: null, duration: null } : kind === "video" ? await compressVideo(file, (p) => opts.onProgress?.(p * share)) : await compressImage(kind, file);
+      done = kind === "video" ? await compressVideo(file, (p) => opts.onProgress?.(p * share)) : await compressImage(kind, file);
     } catch (e) {
       if (e instanceof CompressError) throw new ApiRequestError(400, e.message, "invalid_file");
       throw new ApiRequestError(400, kind === "video" ? "Couldn't compress that video. Try a different file." : "Couldn't process that picture. Try a different file.", "invalid_file");
