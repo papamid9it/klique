@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { setPathUnderneath, softNavigate } from "@/lib/nav";
 import { FeedMedia } from "./FeedMedia";
 import { LongPost, TextCard } from "./TextPost";
 import { ExplicitCover } from "./ExplicitCover";
@@ -26,9 +27,7 @@ import { PostComments } from "./PostComments";
 /** `focusComment`: a comment to open its thread at and point out (the post was opened from a notification about it) */
 export function PostDialog({ post, onChange, onClose, focusComment }: { post: FeedPostDTO | null; onChange: (p: FeedPostDTO) => void; onClose: () => void; focusComment?: string | null }) {
   const ref = useRef<HTMLDialogElement>(null);
-  const now = useNow();
   const open = !!post;
-  const vote = useVote(post as FeedPostDTO, onChange);
   const style = post ? textStyleOf(post) : null;
   useEffect(() => {
     const d = ref.current;
@@ -47,64 +46,114 @@ export function PostDialog({ post, onChange, onClose, focusComment }: { post: Fe
       }}
       className={cx("m-0 h-dvh max-h-none w-full max-w-none overflow-hidden border-line bg-surface p-0 text-ink shadow-2xl backdrop:bg-black/70 backdrop:backdrop-blur-sm sm:m-auto sm:h-[88dvh] sm:w-[calc(100%-2rem)] sm:rounded-card sm:border lg:h-[min(88dvh,46rem)]", style === "long" ? "sm:max-w-[680px]" : "sm:max-w-[680px] lg:max-w-[1040px]")}
     >
-      {post && (
-        <div className="relative flex h-full flex-col lg:flex-row">
-          <button type="button" onClick={onClose} aria-label="Close" className="absolute top-2.5 right-2.5 z-10 inline-flex size-9 items-center justify-center rounded-full bg-surface/80 text-ink-muted backdrop-blur hover:bg-raised hover:text-ink">
-            <Icon name="x" size={18} />
-          </button>
-          {style !== "long" && (
-            <div className="flex shrink-0 items-center justify-center bg-black lg:min-w-0 lg:flex-[1.4]">
-              <ExplicitCover key={post.id} explicit={post.explicit}>
-                {style === "card" ? (
-                  <div className="w-full max-w-[26rem] p-4 lg:p-6">
-                    <TextCard post={post} onDoubleTap={() => post.myVote !== 1 && void vote(1)} />
-                  </div>
-                ) : (
-                  <FeedMedia media={post.media} fill withSound onDoubleTap={() => post.myVote !== 1 && void vote(1)} />
-                )}
-              </ExplicitCover>
-            </div>
-          )}
-          <div className={cx("flex min-h-0 min-w-0 flex-1 flex-col border-line", style !== "long" && "lg:max-w-[26rem] lg:border-l")}>
-            <header className="flex items-center gap-3 border-b border-line px-4 py-3 pr-14">
-              <ProfileTrigger handle={post.author.handle} className="shrink-0 rounded-full">
-                <Avatar name={post.author.displayName} src={post.author.avatarUrl} frame={post.author.avatarFrame} size={34} />
-              </ProfileTrigger>
-              <div className="min-w-0 leading-tight">
-                <ProfileTrigger handle={post.author.handle} className="block truncate text-[14px] font-semibold hover:underline">
-                  <UserName name={post.author.displayName} effect={post.author.nameEffect} />
-                </ProfileTrigger>
-                <p className="truncate text-[12px] text-ink-muted">
-                  {post.community.name} · {now ? relativeStamp(post.createdAt, now) : ""}
-                </p>
-              </div>
-            </header>
-            <PostComments
-              pinned
-              post={post}
-              focus={focusComment}
-              onCount={(n) => onChange({ ...post, commentCount: n })}
-              top={
-                <div className="space-y-3 border-b border-line pb-4">
-                  {style === "long" ? (
-                    <ExplicitCover explicit={post.explicit}>
-                      <LongPost post={post} />
-                    </ExplicitCover>
-                  ) : style === null && post.caption && <p className="text-[15px] leading-snug font-semibold break-words whitespace-pre-wrap">{post.caption}</p>}
-                  <div className="flex flex-wrap items-center gap-2">
-                    <VoteControl post={post} onChange={onChange} />
-                    <span className="inline-flex h-9 items-center gap-1.5 rounded-full bg-raised/70 px-3.5 text-[13px] font-semibold text-ink-muted" aria-label={`${post.commentCount} comments`}>
-                      <Icon name="message" size={17} />
-                      <span className="font-mono tabular-nums">{compactCount(post.commentCount)}</span>
-                    </span>
-                    <ShareButton path={postHref(post)} text={post.title || post.caption ? `${(post.title || post.caption).slice(0, 80)} · ${post.community.name}` : `A post in ${post.community.name}`} variant="pill" size="sm" />
-                  </div>
-                </div>
-              }
-            />
-          </div>
-        </div>
-      )}
+      {post && <PostView post={post} onChange={onChange} onClose={onClose} focusComment={focusComment} />}
     </dialog>
   );
+}
+
+/**
+ * The post itself, as the viewer shows it: in the pop-up over a feed, or as the whole of its own page (/p/[id]),
+ * where there's nothing to close (`onClose` left out).
+ */
+export function PostView({ post, onChange, onClose, focusComment }: { post: FeedPostDTO; onChange: (p: FeedPostDTO) => void; onClose?: () => void; focusComment?: string | null }) {
+  const now = useNow();
+  const vote = useVote(post, onChange);
+  const style = textStyleOf(post);
+  return (
+    <div className="relative flex h-full flex-col lg:flex-row">
+      {onClose && (
+        <button type="button" onClick={onClose} aria-label="Close" className="absolute top-2.5 right-2.5 z-10 inline-flex size-9 items-center justify-center rounded-full bg-surface/80 text-ink-muted backdrop-blur hover:bg-raised hover:text-ink">
+          <Icon name="x" size={18} />
+        </button>
+      )}
+      {style !== "long" && (
+        <div className="flex shrink-0 items-center justify-center bg-black lg:min-w-0 lg:flex-[1.4]">
+          <ExplicitCover key={post.id} explicit={post.explicit}>
+            {style === "card" ? (
+              <div className="w-full max-w-[26rem] p-4 lg:p-6">
+                <TextCard post={post} onDoubleTap={() => post.myVote !== 1 && void vote(1)} />
+              </div>
+            ) : (
+              <FeedMedia media={post.media} fill withSound onDoubleTap={() => post.myVote !== 1 && void vote(1)} />
+            )}
+          </ExplicitCover>
+        </div>
+      )}
+      <div className={cx("flex min-h-0 min-w-0 flex-1 flex-col border-line", style !== "long" && "lg:max-w-[26rem] lg:border-l")}>
+        <header className="flex items-center gap-3 border-b border-line px-4 py-3 pr-14">
+          <ProfileTrigger handle={post.author.handle} className="shrink-0 rounded-full">
+            <Avatar name={post.author.displayName} src={post.author.avatarUrl} frame={post.author.avatarFrame} size={34} />
+          </ProfileTrigger>
+          <div className="min-w-0 leading-tight">
+            <ProfileTrigger handle={post.author.handle} className="block truncate text-[14px] font-semibold hover:underline">
+              <UserName name={post.author.displayName} effect={post.author.nameEffect} />
+            </ProfileTrigger>
+            <p className="truncate text-[12px] text-ink-muted">
+              {post.community.name} · {now ? relativeStamp(post.createdAt, now) : ""}
+            </p>
+          </div>
+        </header>
+        <PostComments
+          pinned
+          post={post}
+          focus={focusComment}
+          onCount={(n) => onChange({ ...post, commentCount: n })}
+          top={
+            <div className="space-y-3 border-b border-line pb-4">
+              {style === "long" ? (
+                <ExplicitCover explicit={post.explicit}>
+                  <LongPost post={post} />
+                </ExplicitCover>
+              ) : style === null && post.caption && <p className="text-[15px] leading-snug font-semibold break-words whitespace-pre-wrap">{post.caption}</p>}
+              <div className="flex flex-wrap items-center gap-2">
+                <VoteControl post={post} onChange={onChange} />
+                <span className="inline-flex h-9 items-center gap-1.5 rounded-full bg-raised/70 px-3.5 text-[13px] font-semibold text-ink-muted" aria-label={`${post.commentCount} comments`}>
+                  <Icon name="message" size={17} />
+                  <span className="font-mono tabular-nums">{compactCount(post.commentCount)}</span>
+                </span>
+                <ShareButton path={postHref(post)} text={post.title || post.caption ? `${(post.title || post.caption).slice(0, 80)} · ${post.community.name}` : `A post in ${post.community.name}`} variant="pill" size="sm" />
+              </div>
+            </div>
+          }
+        />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * A post opened over a feed, Instagram style: the address becomes the post's own link (/p/[id]) while the feed stays
+ * put underneath (scroll and all), and Back, Esc or ✕ closes it and brings the feed's address back. Refreshing or
+ * sharing that address opens the post on its own page.
+ */
+export function usePostOverlay() {
+  const [opened, setOpened] = useState<FeedPostDTO | null>(null);
+  // whether the address was changed for the open post (so closing goes back to the feed's address)
+  const pushed = useRef(false);
+  useEffect(() => {
+    const onPop = () => {
+      if (window.location.pathname.startsWith("/p/")) return;
+      pushed.current = false;
+      setPathUnderneath(null);
+      setOpened(null);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => {
+      window.removeEventListener("popstate", onPop);
+      setPathUnderneath(null);
+    };
+  }, []);
+  const open = (p: FeedPostDTO) => {
+    setOpened(p);
+    if (!pushed.current) setPathUnderneath(window.location.pathname);
+    softNavigate(postHref(p), { replace: pushed.current });
+    pushed.current = true;
+  };
+  const close = () => {
+    setOpened(null);
+    if (!pushed.current) return;
+    pushed.current = false;
+    window.history.back();
+  };
+  return { opened, setOpened, open, close };
 }

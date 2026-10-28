@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Contact, LegalDoc, Section } from "@/components/domain/legal/Legal";
+import { Contact, LegalDoc, ReportEmail, Section } from "@/components/domain/legal/Legal";
+import { REPORT_EMAIL } from "@/lib/constants";
 
 export const metadata: Metadata = { title: "Privacy Policy", description: "What klique collects, why, and your rights." };
 
@@ -53,7 +54,7 @@ export default function PrivacyPage() {
           <li>Expo and browser push services (notifications);</li>
           <li>our email provider (account emails) and Google (if you use Google sign-in).</li>
         </ul>
-        <p>Some of these providers store data outside Nigeria, for example in the EU or the United States. Where that happens we rely on the safeguards the NDPA allows, such as contractual protections. We may also disclose data when the law requires it, or to protect people from harm.</p>
+        <p>Some of these providers store data outside Nigeria, for example in the EU or the United States. Where that happens we rely on the safeguards the NDPA allows, such as contractual protections. We may also disclose data when the law requires it, or to protect people from harm.{REPORT_EMAIL && <> Law enforcement requests go to <ReportEmail />.</>}</p>
       </Section>
 
       <Section n={5} title="How long we keep it">
@@ -65,7 +66,7 @@ export default function PrivacyPage() {
       </Section>
 
       <Section n={7} title="Children">
-        <p>klique is for people aged 13 and over. If you believe a child under 13 has an account, tell us and we&apos;ll delete it.</p>
+        <p>klique is for people aged 13 and over. If you believe a child under 13 has an account, tell us{REPORT_EMAIL && <> at <ReportEmail /></>} and we&apos;ll delete it.</p>
       </Section>
 
       <Section n={8} title="Security">

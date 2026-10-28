@@ -28,7 +28,7 @@ function AdsContent() {
   const { data, loading, error, reload, setData } = useApi(authed ? () => CampaignService.mine() : null, [authed], { key: "my-ads" });
 
   useEffect(() => {
-    if (status === "anon") requireAuth();
+    if (status === "anon") requireAuth({ redirect: true });
   }, [status, requireAuth]);
   // an admin approved it, it started, it ended…: the list follows
   useRealtimeEvent(() => void reload(), { filter: (e) => e.type === "notify" && e.category === "ads", debounceMs: 300 });

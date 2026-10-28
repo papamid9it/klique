@@ -9,6 +9,7 @@ import { NotificationService } from "@/app/services/NotificationService";
 import { ProfileService } from "@/app/services/ProfileService";
 import type { UserMe } from "@/lib/types";
 import { setApiCacheScope } from "@/lib/hooks/useApi";
+import { SignInPrompt } from "@/components/domain/SignInPrompt";
 
 type Status = "loading" | "authed" | "anon";
 
@@ -21,8 +22,12 @@ interface AuthCtx {
   setUser: (user: UserMe) => void;
   signOut: () => Promise<void>;
   refresh: () => Promise<void>;
-  /** For actions that need an account: returns true when signed in, otherwise sends them to /login and returns false. */
-  requireAuth: () => boolean;
+  /**
+   * For actions that need an account: returns true when signed in. Otherwise it asks them to log in or sign up (a
+   * pop-up that brings them back here after) and returns false; `redirect`: straight to /login instead (pages that
+   * only make sense signed in).
+   */
+  requireAuth: (opts?: { redirect?: boolean }) => boolean;
 }
 
 const Ctx = createContext<AuthCtx | null>(null);
@@ -89,18 +94,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [router]);
 
-  const requireAuth = useCallback(() => {
-    if (status === "authed") return true;
-    const next = typeof window !== "undefined" ? window.location.pathname + window.location.search : "/";
-    router.push(`/login?next=${encodeURIComponent(next)}`);
-    return false;
-  }, [status, router]);
+  // where the "log in or sign up" pop-up sends them back to (null: closed)
+  const [asking, setAsking] = useState<string | null>(null);
+  const requireAuth = useCallback(
+    (opts?: { redirect?: boolean }) => {
+      if (status === "authed") return true;
+      const next = typeof window !== "undefined" ? window.location.pathname + window.location.search : "/";
+      if (opts?.redirect) router.push(`/login?next=${encodeURIComponent(next)}`);
+      else setAsking(next);
+      return false;
+    },
+    [status, router],
+  );
 
   const value = useMemo<AuthCtx>(
     () => ({ user, status, setSession, setUser: setUserState, signOut, refresh, requireAuth }),
     [user, status, setSession, signOut, refresh, requireAuth],
   );
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+  return (
+    <Ctx.Provider value={value}>
+      {children}
+      <SignInPrompt next={asking} onClose={() => setAsking(null)} />
+    </Ctx.Provider>
+  );
 }
 
 /**

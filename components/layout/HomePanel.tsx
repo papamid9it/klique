@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePagePath } from "@/lib/nav";
 import { CommunityService } from "@/app/services/CommunityService";
 import { ScopeButton } from "@/components/domain/places/ScopeButton";
 import { useAuth } from "@/components/providers/AuthProvider";
@@ -32,7 +32,7 @@ const SCROLL = "min-h-0 flex-1 overflow-y-auto px-5 py-3 [mask-image:linear-grad
  * Inside a community the icon rail and the community's own panel take over.
  */
 export function HomePanel() {
-  const pathname = usePathname();
+  const pathname = usePagePath();
   const { user, status } = useAuth();
   const card = useProfileCard();
   const own = hasPagePanel(pathname);

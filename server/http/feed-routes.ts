@@ -1,6 +1,6 @@
 import { feedCaptionSchema, feedCommentEditSchema, feedCommentSchema, feedPostSchema, feedReactSchema, feedVoteSchema, homeFeedQuery } from "../validators/schemas";
 import { resolveSpaceFor } from "../services/spaces.service";
-import { addComment, createPost, deleteComment, deletePost, editCaption, editComment, feedSidebar, getPost, homeFeed, listComments, listPosts, reactToComment, setPostExplicit, vote } from "../services/feed.service";
+import { addComment, createPost, deleteComment, deletePost, editCaption, editComment, feedSidebar, getPost, homeFeed, postCommunitySlug, listComments, listPosts, reactToComment, setPostExplicit, vote } from "../services/feed.service";
 import { created, readJson, readQuery, withApi } from "./api";
 
 /** Handlers for a community's Posts section (`/api/communities/[slug]/feed/…`) and the home feed. Authorization lives in the service. */
@@ -29,6 +29,12 @@ export const feedCreate = withApi<Slug, "required">({ auth: "required" }, async 
 export const feedGet = withApi<Post>({ auth: "optional" }, async ({ params, viewer }) => {
   const { space, access } = await resolveSpaceFor(viewer, params.slug);
   return getPost(viewer, space, access, params.postId);
+});
+
+/** A post by its own link (/p/[id]): the same rules as from inside its community (private, 18+, blocked). */
+export const postById = withApi<{ id: string }>({ auth: "optional", limit: { name: "post-view", max: 120, windowMs: 60_000 } }, async ({ params, viewer }) => {
+  const { space, access } = await resolveSpaceFor(viewer, await postCommunitySlug(params.id));
+  return getPost(viewer, space, access, params.id);
 });
 
 export const feedEdit = withApi<Post, "required">({ auth: "required" }, async ({ req, params, viewer }) => {

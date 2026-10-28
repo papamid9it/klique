@@ -171,6 +171,15 @@ async function loadPost(space: Space, postId: string): Promise<IFeedPost> {
   return p;
 }
 
+/** The community a post lives in, for its own link (/p/[id]); not found when the post is gone or hidden. */
+export async function postCommunitySlug(postId: string): Promise<string> {
+  if (!Types.ObjectId.isValid(postId)) throw notFound("That post is gone.");
+  const p = await FeedPost.findOne({ _id: postId, hiddenAt: null }).select("communityId").lean<Pick<IFeedPost, "communityId">>();
+  const c = p && (await Community.findById(p.communityId).select("slug").lean<Pick<ICommunity, "slug">>());
+  if (!c) throw notFound("That post is gone.");
+  return c.slug;
+}
+
 export async function getPost(viewer: IUser | null, space: Space, access: SpaceAccess, postId: string): Promise<FeedPostDTO> {
   assertFeed(space);
   assertCanView(access, "this post");
@@ -284,7 +293,7 @@ export async function addComment(viewer: IUser, space: Space, access: SpaceAcces
   const said = previewOf({ body: input.body, sticker, stickerUrl }).slice(0, 140);
   // the post's author and the person answered hear about it (never yourself), bundled per post
   // &c: the post opens at this comment, its thread open
-  const href = `/communities/${space.community.slug}?view=posts&p=${sid(p._id)}&c=${sid(doc._id)}`;
+  const href = `/p/${sid(p._id)}?c=${sid(doc._id)}`;
   const me = sid(viewer._id);
   const told = new Set<string>([me]);
   if (parent && !parent.deletedAt && !told.has(sid(parent.authorId))) {

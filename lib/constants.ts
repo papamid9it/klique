@@ -9,6 +9,12 @@ export const KLIQUE_SLUG = "klique";
 
 /** Where people can reach you about their data or the rules (shown on /terms and /privacy). Set NEXT_PUBLIC_SUPPORT_EMAIL. */
 export const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL?.trim() || "";
+/**
+ * Where to report abuse and safety problems (anything involving a minor, content shared without consent, law
+ * enforcement requests): on /terms, /privacy and the Report dialog. Set NEXT_PUBLIC_REPORT_EMAIL (e.g.
+ * report@getklique.app); without it, the support address.
+ */
+export const REPORT_EMAIL = process.env.NEXT_PUBLIC_REPORT_EMAIL?.trim() || SUPPORT_EMAIL;
 
 /** City slugs are open now (see lib/places.ts); kept as an alias so signatures read well. */
 export type CityId = string;

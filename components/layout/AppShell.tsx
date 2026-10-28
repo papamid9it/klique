@@ -10,6 +10,7 @@ import { VerifyBanner } from "./VerifyBanner";
 import { CommunityPreloader } from "./CommunityPreloader";
 import { Sidebar } from "./Sidebar";
 import { HomePanel } from "./HomePanel";
+import { usePagePath } from "@/lib/nav";
 
 /** /communities/<slug> (not /communities/new) is the chat workspace and owns its own panes; so does a crew (its chat). */
 const isWorkspace = (p: string) => /^\/communities\/(?!new$)[^/]+\/?$/.test(p) || /^\/crews\/[^/]+\/?$/.test(p) || p === "/messages" || p.startsWith("/messages/");
@@ -43,7 +44,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 }
 
 function Shell({ children }: { children: ReactNode }) {
-  const pathname = usePathname();
+  // the page on screen (under an open post's /p/[id] link, the feed it was opened from)
+  const pathname = usePagePath();
 
   // Settings is a full-screen surface of its own (categories · page), like Discord's.
   if (pathname === "/settings" || pathname === "/settings/") return <>{children}</>;

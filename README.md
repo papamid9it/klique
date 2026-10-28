@@ -58,7 +58,7 @@ components/        ui kit, domain components, providers, layout
 A mobile or desktop app reuses `app/ApiCore.ts`, `app/services/*` and `lib/types.ts`:
 
 ```ts
-ApiClient.configure({ baseUrl: "https://api.klique.ng", native: true, getToken: () => storedToken });
+ApiClient.configure({ baseUrl: "https://api.getklique.app", native: true, getToken: () => storedToken });
 const { data } = await AuthService.login(email, password);   // data.token when native
 ```
 Native clients send `Authorization: Bearer <token>`; the web app uses an httpOnly cookie and never receives the token in JSON. Set `NEXT_PUBLIC_API_URL` and `ALLOWED_ORIGINS` (see `.env.example`) for a separately hosted client; `proxy.ts` answers CORS for listed origins only.

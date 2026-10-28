@@ -69,7 +69,7 @@ function NewAdForm() {
   const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (status === "anon") requireAuth();
+    if (status === "anon") requireAuth({ redirect: true });
   }, [status, requireAuth]);
 
   // editing or running again: start from that ad

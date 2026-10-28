@@ -13,7 +13,7 @@ export default function NewCommunityPage() {
   const { status, requireAuth } = useAuth();
 
   useEffect(() => {
-    if (status === "anon") requireAuth();
+    if (status === "anon") requireAuth({ redirect: true });
   }, [status, requireAuth]);
 
   if (status !== "authed") {

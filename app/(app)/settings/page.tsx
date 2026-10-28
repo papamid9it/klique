@@ -340,7 +340,8 @@ function Row({ label, value, action }: { label: string; value: string; action?: 
 function AccountTab({ me, go, onSignOut, onEverywhere, busy }: { me: UserMe; go: (t: Tab) => void; onSignOut: () => void; onEverywhere: () => void; busy: "out" | "all" | null }) {
   return (
     <div className="space-y-8">
-      <div className="overflow-hidden rounded-card border border-line bg-surface">
+      {/* your card: your name style, frame and moving pictures keep playing here (globals.css kq-live) */}
+      <div className="kq-live overflow-hidden rounded-card border border-line bg-surface">
         <ProfileBanner handle={me.handle} bannerUrl={me.bannerUrl} bannerColor={me.bannerColor} className="h-24" />
         <div className="px-5 pb-5">
           <div className="-mt-10 flex items-end gap-4">
@@ -414,7 +415,8 @@ function ProfilePreview({ me, draft }: { me: UserMe; draft: PreviewDraft }) {
   return (
     <aside aria-label="Preview" className="lg:sticky lg:top-14 lg:self-start">
       <p className="eyebrow mb-2">Preview</p>
-      <div className="relative overflow-hidden rounded-card border border-line bg-surface shadow-lg" style={themeStyle(themeOf(draft.profileTheme))}>
+      {/* always moving, like your profile popout (globals.css kq-live; still for Animations off / data saver) */}
+      <div className="kq-live relative overflow-hidden rounded-card border border-line bg-surface shadow-lg" style={themeStyle(themeOf(draft.profileTheme))}>
         <ProfileEffect id={draft.profileEffect} />
         <ProfileBanner handle={me.handle} bannerUrl={draft.bannerUrl} bannerColor={draft.bannerColor} className="relative h-16" />
         <div className="relative px-4 pb-4">

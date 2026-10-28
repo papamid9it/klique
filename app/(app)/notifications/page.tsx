@@ -49,7 +49,7 @@ function NotificationsContent() {
   const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
-    if (status === "anon") requireAuth();
+    if (status === "anon") requireAuth({ redirect: true });
   }, [status, requireAuth]);
   useEffect(() => setMore([]), [filter]);
   // something new arrived, or was read in another tab: show it

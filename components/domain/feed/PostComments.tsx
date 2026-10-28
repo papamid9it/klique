@@ -347,7 +347,15 @@ export function PostComments({ post, onCount, pinned, top, focus }: { post: Feed
       </button>
     </div>
   );
-  const box = canWrite ? <Composer body={body} setBody={typed} inputRef={input} above={strip} placeholder={replyTo ? `Reply to @${replyTo.handle}…` : "Add a comment…"} onSend={add} /> : <p className="rounded-control border border-line bg-raised/50 px-3 py-2.5 text-[13px] text-ink-muted">Join {post.community.name} to comment.</p>;
+  const box = canWrite ? (
+    <Composer body={body} setBody={typed} inputRef={input} above={strip} placeholder={replyTo ? `Reply to @${replyTo.handle}…` : "Add a comment…"} onSend={add} />
+  ) : !user ? (
+    // signed out: the comments are there to read; writing asks them to log in or sign up
+    <button type="button" onClick={() => requireAuth()} className="flex h-10 w-full items-center rounded-control border border-line bg-raised/50 px-3 text-left text-[13px] text-ink-muted transition hover:text-ink">
+      <span className="flex-1">Log in to comment…</span>
+      <span className="font-semibold text-ink">Log in</span>
+    </button>
+  ) : <p className="rounded-control border border-line bg-raised/50 px-3 py-2.5 text-[13px] text-ink-muted">Join {post.community.name} to comment.</p>;
   const thread = loading ? <RowSkeleton rows={3} /> : all.length ? <ul className="space-y-4">{all.map(threadOf)}</ul> : <p className="py-6 text-center text-sm text-ink-muted">No comments yet.</p>;
 
   if (pinned) {

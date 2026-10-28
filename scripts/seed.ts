@@ -136,7 +136,7 @@ const CHATTER = [
   "Can someone share the location pin again?",
   "Pinned it in announcements.",
   "That was a clean run, well done.",
-  "Anyone going to the event on Friday? https://klique.ng/events",
+  "Anyone going to the event on Friday? https://getklique.app/events",
   "Thanks for the tips yesterday, really helped.",
   "I'll be 15 minutes late, start without me.",
   "New here, where do beginners start?",

@@ -6,7 +6,7 @@ import { FeedService } from "@/app/services/FeedService";
 import { JoinButton } from "@/components/domain/JoinButton";
 import { SponsoredCard, useAds } from "@/components/domain/ads/Sponsored";
 import { PostCard } from "@/components/domain/feed/PostCard";
-import { PostDialog } from "@/components/domain/feed/PostDialog";
+import { PostDialog, usePostOverlay } from "@/components/domain/feed/PostDialog";
 import { FeedFooter, FindMore, useInfiniteFeed } from "@/components/domain/feed/useInfiniteFeed";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { Button } from "@/components/ui/Button";
@@ -193,7 +193,8 @@ export function HomeFeed({ moreEvents, communities, onEvent, onCommunity }: { mo
     authed,
   );
   const ads = useAds("home-feed", { count: 3 }, authed);
-  const [opened, setOpened] = useState<FeedPostDTO | null>(null);
+  // a post opens over the feed at its own link (/p/[id])
+  const { opened, setOpened, open, close } = usePostOverlay();
 
   const patch = (p: FeedPostDTO) => {
     setItems((list) => list.map((x) => (x.post.id === p.id ? { ...x, post: p } : x)));
@@ -240,7 +241,7 @@ export function HomeFeed({ moreEvents, communities, onEvent, onCommunity }: { mo
           return (
             <Fragment key={it.post.id}>
               <li>
-                <PostCard post={it.post} trending={it.trending} showCommunity onChange={patch} onRemoved={() => drop(it.post.id)} onOpenComments={() => setOpened(it.post)} />
+                <PostCard post={it.post} trending={it.trending} showCommunity onChange={patch} onRemoved={() => drop(it.post.id)} onOpenComments={() => open(it.post)} />
               </li>
               {ad && (
                 <li>
@@ -270,7 +271,7 @@ export function HomeFeed({ moreEvents, communities, onEvent, onCommunity }: { mo
         })}
       </ul>
       <FeedFooter hasMore={hasMore} error={error} onRetry={() => void load(false)} sentinel={sentinel} end={<>That&apos;s every new post from your communities. <FindMore /></>} />
-      <PostDialog post={opened} onChange={patch} onClose={() => setOpened(null)} />
+      <PostDialog post={opened} onChange={patch} onClose={close} />
     </section>
   );
 }

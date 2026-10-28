@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePagePath } from "@/lib/nav";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useProfileCard } from "@/components/providers/ProfileCardProvider";
 import { Icon } from "@/components/ui/Icon";
@@ -11,7 +11,7 @@ import { cx } from "@/components/ui/cx";
 const TAB = "flex h-12 min-w-14 items-center justify-center rounded-control px-3 transition active:bg-raised";
 
 export function MobileNav() {
-  const pathname = usePathname();
+  const pathname = usePagePath();
   const { user, status } = useAuth();
 
   const card = useProfileCard();

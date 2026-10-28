@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { SUPPORT_EMAIL } from "@/lib/constants";
+import { REPORT_EMAIL, SUPPORT_EMAIL } from "@/lib/constants";
 
 /** Layout pieces for /terms and /privacy: readable prose, numbered sections. */
 export function LegalDoc({ title, updated, intro, children }: { title: string; updated: string; intro: ReactNode; children: ReactNode }) {
@@ -38,4 +38,13 @@ export function Contact() {
   ) : (
     <>contact us through the Report option in the app</>
   );
+}
+
+/** The safety address as a link (abuse, minors, non-consent, law enforcement); nothing when none is set. */
+export function ReportEmail() {
+  return REPORT_EMAIL ? (
+    <a href={`mailto:${REPORT_EMAIL}`} className="font-medium text-accent-text underline">
+      {REPORT_EMAIL}
+    </a>
+  ) : null;
 }

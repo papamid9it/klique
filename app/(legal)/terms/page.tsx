@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Contact, LegalDoc, Section } from "@/components/domain/legal/Legal";
+import { Contact, LegalDoc, ReportEmail, Section } from "@/components/domain/legal/Legal";
+import { REPORT_EMAIL } from "@/lib/constants";
 
 export const metadata: Metadata = { title: "Terms of Service", description: "The rules for using klique." };
 
@@ -38,7 +39,9 @@ export default function TermsPage() {
           <li>promote illegal activity, or post content that infringes someone else&apos;s copyright or trademark;</li>
           <li>attack, overload, scrape or reverse-engineer the service, or access accounts that aren&apos;t yours.</li>
         </ul>
-        <p>You can report anything that breaks these rules with the Report option. We review reports and may remove content, cancel events, or suspend or close accounts that break these terms, with or without notice.</p>
+        <p>
+          You can report anything that breaks these rules with the Report option{REPORT_EMAIL && <>, or by emailing <ReportEmail /></>}. We review reports and may remove content, cancel events, or suspend or close accounts that break these terms, with or without notice.
+        </p>
       </Section>
 
       <Section n={4} title="Communities and their owners">
@@ -51,7 +54,9 @@ export default function TermsPage() {
           <li>An 18+ community can also <strong>allow explicit content</strong>. Members must be 18 or older and switch on Show explicit content in Settings, agreeing to see it. Explicit posts are blurred until tapped. These communities can&apos;t take donations, contributions or payouts, and never carry ads.</li>
           <li>Explicit content is allowed <strong>only</strong> in communities marked to allow it. Owners and admins must moderate their community and remove anything that breaks these terms.</li>
           <li><strong>Zero tolerance</strong>, anywhere on klique: anything involving a minor; intimate images shared without the consent of everyone in them; non-consensual content; offering or asking for sexual services; and illegal content. We remove it immediately, close the accounts involved and, where the law requires, report it to the authorities.</li>
-          <li>Report anything like this with Report → &ldquo;Involves a minor, or shared without consent&rdquo;: it&apos;s hidden at once while we review it.</li>
+          <li>
+            Report anything like this with Report → &ldquo;Involves a minor, or shared without consent&rdquo;: it&apos;s hidden at once while we review it.{REPORT_EMAIL && <> For anything urgent, email <ReportEmail /> too.</>}
+          </li>
           <li>Your date of birth can be set once. Giving a false date of birth to get into an 18+ community breaks these terms.</li>
         </ul>
       </Section>
@@ -81,6 +86,11 @@ export default function TermsPage() {
         <p>
           Questions about these terms? <Contact />.
         </p>
+        {REPORT_EMAIL && (
+          <p>
+            Abuse, safety concerns and requests from law enforcement: <ReportEmail />.
+          </p>
+        )}
       </Section>
     </LegalDoc>
   );

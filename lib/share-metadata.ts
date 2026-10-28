@@ -18,3 +18,4 @@ function withImage(s: Share, image: string, alt: string): Metadata {
 export const crewMetadata = (id: string, s: Share) => withImage(s, `/og/crew/${id}`, "A crew on klique.");
 export const topicMetadata = (slug: string, id: string, s: Share) => withImage(s, `/og/topic/${slug}/${id}`, "A topic on klique.");
 export const communityMetadata = (slug: string, s: Share) => withImage(s, `/og/community/${slug}`, "A community on klique.");
+export const postMetadata = (id: string, s: Share) => withImage(s, `/og/post/${id}`, "A post on klique.");

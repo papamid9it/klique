@@ -7,7 +7,7 @@ import { useToast } from "@/components/providers/ToastProvider";
 import { Button } from "@/components/ui/Button";
 import { TextArea } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
-import { LIMITS, REPORT_REASONS, type ReportReason } from "@/lib/constants";
+import { LIMITS, REPORT_EMAIL, REPORT_REASONS, type ReportReason } from "@/lib/constants";
 import type { ReportTargetType } from "@/lib/types";
 
 /** Report a user, post, event, community, group or message. The server checks you're allowed to see it. */
@@ -70,6 +70,15 @@ export function ReportDialog({
         {error && (
           <p role="alert" className="text-sm font-medium text-danger">
             {error}
+          </p>
+        )}
+        {REPORT_EMAIL && (
+          <p className="text-xs text-ink-muted">
+            Urgent, or someone&apos;s in danger? Email{" "}
+            <a href={`mailto:${REPORT_EMAIL}`} className="font-medium text-accent-text underline">
+              {REPORT_EMAIL}
+            </a>
+            .
           </p>
         )}
         <div className="flex justify-end gap-2">

@@ -69,7 +69,7 @@ async function describeTarget(r: IReport, briefs: Map<string, UserBrief>): Promi
       if (!p) return none;
       const c = await Community.findById(p.communityId).select("slug name").lean<Pick<ICommunity, "slug" | "name">>();
       const author = (await loadBriefs([p.authorId])).get(sid(p.authorId)) ?? null;
-      return { title: `Post in ${c?.name ?? "a community"}`, body: p.title ? `${p.title}\n\n${p.caption}` : p.caption, images: p.media.map((m) => (m.kind === "video" ? (m.poster ?? m.url) : m.url)), author, href: c ? `/communities/${c.slug}?view=posts&p=${sid(p._id)}` : null, gone: false, removable: true };
+      return { title: `Post in ${c?.name ?? "a community"}`, body: p.title ? `${p.title}\n\n${p.caption}` : p.caption, images: p.media.map((m) => (m.kind === "video" ? (m.poster ?? m.url) : m.url)), author, href: c ? `/p/${sid(p._id)}` : null, gone: false, removable: true };
     }
     case "post": {
       const p = await Post.findById(r.targetId).lean<IPost>();
@@ -626,6 +626,7 @@ export function systemStatus(): SystemStatusDTO {
       { id: "voice", label: "Voice channels", ok: VOICE_ENABLED && !!livekitConfig(), detail: !VOICE_ENABLED ? "Coming soon: switched off in lib/constants.ts (VOICE_ENABLED)." : livekitConfig() ? "LiveKit is connected." : "LiveKit isn't set up, so voice channels are off.", optional: true },
       { id: "cache", label: "Shared cache & rate limits", ok: redis, detail: redis ? "Upstash Redis is connected." : "No Redis: rate limits are per server instance.", optional: true },
       { id: "webpush", label: "Browser notifications", ok: !!webPushConfig(), detail: webPushConfig() ? "Desktop and web-app notifications are on." : "VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY aren't set, so desktop and browser notifications are off." },
+      { id: "report", label: "Report email", ok: !!(process.env.NEXT_PUBLIC_REPORT_EMAIL?.trim() || process.env.NEXT_PUBLIC_SUPPORT_EMAIL?.trim()), detail: process.env.NEXT_PUBLIC_REPORT_EMAIL?.trim() ? `Shown for abuse and safety reports: ${process.env.NEXT_PUBLIC_REPORT_EMAIL.trim()}` : "NEXT_PUBLIC_REPORT_EMAIL isn't set, so abuse and safety reports point to the support email.", optional: true },
       { id: "support", label: "Support email", ok: !!process.env.NEXT_PUBLIC_SUPPORT_EMAIL?.trim(), detail: process.env.NEXT_PUBLIC_SUPPORT_EMAIL?.trim() ? `Shown on Terms and Privacy: ${process.env.NEXT_PUBLIC_SUPPORT_EMAIL.trim()}` : "NEXT_PUBLIC_SUPPORT_EMAIL isn't set, so Terms and Privacy have no contact address." },
       { id: "paystack", label: "Paid promotions (Paystack)", ok: !!paystackConfig(), detail: paystackConfig() ? `Hosts can pay to promote events (₦${promotionPricePerDay().toLocaleString()}/day for a city${promotionReview() ? ", approved by you first" : ""}).` : "PAYSTACK_SECRET_KEY isn't set, so hosts can't buy promotions. You can still create promoted events yourself in Ads.", optional: true },
       { id: "cron", label: "Scheduled jobs", ok: !!cronSecret(), detail: cronSecret() ? "CRON_SECRET is set: reminders, cleanup and the nightly event finder can run." : "CRON_SECRET isn't set, so reminders, cleanup and the nightly event finder won't run." },

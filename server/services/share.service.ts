@@ -8,6 +8,7 @@ import { getCrew } from "./crews.service";
 import { getEvent } from "./events.service";
 import { resolveSpaceFor } from "./spaces.service";
 import { getTopic } from "./topics.service";
+import { getPost, postCommunitySlug } from "./feed.service";
 import { getProfile } from "./users.service";
 
 /**
@@ -56,6 +57,34 @@ export async function communityShare(slug: string): Promise<ShareInfo | null> {
       eyebrow: getInterest(c.interest)?.name ?? "Community",
       lines: [placeLabel(c), c.memberCount === null ? "" : `${c.memberCount.toLocaleString("en-US")} ${c.memberCount === 1 ? "member" : "members"}`],
       image: c.coverImage,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A post: who posted it where, and its first picture. Anything a signed-out visitor can't see (a private or 18+
+ * community, an explicit post) gets a plain card that says nothing about it.
+ */
+export async function postShare(id: string): Promise<ShareInfo | null> {
+  await connectDb();
+  const plain: ShareInfo = { title: "Klique", description: "A post on Klique.", eyebrow: "Post", lines: [], image: null };
+  try {
+    const slug = await postCommunitySlug(id);
+    const { space, access } = await resolveSpaceFor(null, slug).catch(() => ({ space: null, access: null }));
+    if (!space || !access || space.community.adult) return plain;
+    const p = await getPost(null, space, access, id).catch(() => null);
+    if (!p) return { ...plain, description: `A post in ${space.community.name}, a private community on Klique.` };
+    if (p.explicit) return plain;
+    const first = p.media[0];
+    const text = (p.title || p.caption).trim();
+    return {
+      title: `${p.author.displayName} in ${p.community.name}`,
+      description: text.slice(0, 200) || `A post in ${p.community.name}.`,
+      eyebrow: "Post",
+      lines: [p.title ? p.title.slice(0, 80) : p.caption.slice(0, 80)].filter(Boolean),
+      image: first ? (first.kind === "video" ? (first.poster ?? null) : first.url) : null,
     };
   } catch {
     return null;

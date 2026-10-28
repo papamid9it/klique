@@ -18,6 +18,8 @@ export const FeedService = {
   remove: (slug: string, postId: string) => api.delete<Envelope<{ deleted: boolean }>>(`${base(slug)}/${postId}`),
   /** 1 up, -1 down, 0 take it back */
   vote: (slug: string, postId: string, value: 1 | -1 | 0) => api.post<Envelope<Pick<FeedPostDTO, "upCount" | "downCount" | "myVote">>>(`${base(slug)}/${postId}/vote`, { value }),
+  /** a post by its own link (/p/[id]), wherever it lives */
+  byId: (id: string) => api.get<Envelope<FeedPostDTO>>(`/api/posts/${id}`),
   comments: (slug: string, postId: string) => api.get<Envelope<FeedCommentDTO[]>>(`${base(slug)}/${postId}/comments`),
   /** text, a sticker (built-in or saved), or both */
   comment: (slug: string, postId: string, input: { body: string; sticker?: string; stickerUrl?: string; parentId?: string }) => api.post<Envelope<FeedCommentDTO>>(`${base(slug)}/${postId}/comments`, input),

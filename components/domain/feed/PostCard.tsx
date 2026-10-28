@@ -26,7 +26,8 @@ import { useNow } from "@/lib/hooks/useApi";
 import { textStyleOf } from "@/lib/feedText";
 import type { FeedPostDTO } from "@/lib/types";
 
-export const postHref = (p: Pick<FeedPostDTO, "id" | "community">) => `/communities/${p.community.slug}?view=posts&p=${p.id}`;
+/** A post's own link: it opens over the feed you're on, and on its own page when opened directly. */
+export const postHref = (p: Pick<FeedPostDTO, "id">) => `/p/${p.id}`;
 
 /** Up · score · down, Reddit style. Flips at once; the server's counts follow (rolled back if it fails). */
 /** Voting on a post: up, down, or the same again to take it back. Shows at once, then settles on the server's counts. */

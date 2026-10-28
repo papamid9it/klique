@@ -68,7 +68,7 @@ function NewEventForm() {
   const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (status === "anon") requireAuth();
+    if (status === "anon") requireAuth({ redirect: true });
   }, [status, requireAuth]);
 
   // Events are posted from inside a community by its owner and admins (a group's by the group's), for that

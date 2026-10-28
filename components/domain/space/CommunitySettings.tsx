@@ -13,13 +13,13 @@ import type { CommunityDTO, GroupPolicy } from "@/lib/types";
 import { CommunityForm } from "./CommunityForm";
 import { InvitesPanel } from "./InvitesPanel";
 import { MembersPanel } from "./MembersPanel";
-import { MinPointsForm } from "./MinPoints";
+import { MinPointField } from "./MinPoints";
 import { DonationsSettings, PayoutsSettings } from "@/components/domain/money/CommunityMoney";
 import { RequestsPanel } from "./RequestsPanel";
 import { ConfirmModal } from "./parts";
 
-export type CommunityTab = "overview" | "groups" | "posts" | "points" | "donations" | "payouts" | "members" | "requests" | "invites" | "privacy" | "delete";
-const TITLES: Record<CommunityTab, string> = { overview: "Overview", groups: "Groups & events", posts: "Posts", points: "Points needed", donations: "Donations", payouts: "Payouts", members: "Members", requests: "Join requests", invites: "Invite links", privacy: "Privacy", delete: "Delete community" };
+export type CommunityTab = "overview" | "groups" | "posts" | "donations" | "payouts" | "members" | "requests" | "invites" | "privacy" | "delete";
+const TITLES: Record<CommunityTab, string> = { overview: "Overview", groups: "Groups & events", posts: "Posts", donations: "Donations", payouts: "Payouts", members: "Members", requests: "Join requests", invites: "Invite links", privacy: "Privacy", delete: "Delete community" };
 
 /** Discord-style full-screen community settings. Owners and admins only; the server re-checks every change. */
 export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: CommunityDTO; tab: string; onTab: (t: CommunityTab) => void; onClose: () => void; onChanged: () => Promise<void> | void }) {
@@ -82,8 +82,6 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
         { id: "overview", label: "Overview", icon: "sliders" },
         { id: "groups", label: "Groups", icon: "folder" },
         { id: "posts", label: "Posts", icon: "image" },
-        // the Klique community never asks for points
-        { id: "points", label: "Points needed", icon: "asterisk", hidden: c.official },
         { id: "privacy", label: "Privacy", icon: "lock", hidden: !isOwner },
       ],
     },
@@ -126,6 +124,19 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
             }}
             onSave={() => (document.getElementById("community-form") as HTMLFormElement | null)?.requestSubmit()}
           />
+          {!c.official && (
+            <SettingsBlock title="Points to join" intro="Points are earned from other people (upvotes, good reactions, showing up to events) and can't be bought. Ask for a minimum to keep out brand-new or spammy accounts.">
+              <MinPointField
+                label="Minimum points to join"
+                hint="0 means anyone. Shown on its card and page. People already in stay in, and owners and admins never need any."
+                value={c.minPointsJoin}
+                onSave={async (minPointsJoin) => {
+                  await CommunityService.update(c.slug, { minPointsJoin });
+                  await onChanged();
+                }}
+              />
+            </SettingsBlock>
+          )}
         </>
       )}
 
@@ -157,19 +168,19 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
             <option value="admins">Only owners and admins</option>
             <option value="members">Any member</option>
           </SelectField>
+          {/* the Klique community never asks for points */}
+          {!c.official && c.feedPolicy !== "off" && (
+            <MinPointField
+              label="Minimum points to post"
+              hint="Points are earned from other people (upvotes, good reactions, showing up to events) and can't be bought. 0 means any member. Below it, members can still chat, use boards, comment, vote and react. Owners and admins never need any."
+              value={c.minPointsPost}
+              onSave={async (minPointsPost) => {
+                await CommunityService.update(c.slug, { minPointsPost });
+                await onChanged();
+              }}
+            />
+          )}
         </SettingsBlock>
-      )}
-
-      {active === "points" && !c.official && (
-        <MinPointsForm
-          what="community"
-          join={c.minPointsJoin}
-          post={c.minPointsPost}
-          onSave={async (v) => {
-            await CommunityService.update(c.slug, v);
-            await onChanged();
-          }}
-        />
       )}
 
       {active === "donations" && !c.official && <DonationsSettings slug={c.slug} />}
