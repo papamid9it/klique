@@ -1,5 +1,5 @@
 import type { ReactionKind } from "@/lib/reactions";
-import type { ChannelMessageDTO, ChatPage, Envelope, RealtimeEvent, ReactionDTO, UserBrief } from "@/lib/types";
+import type { ChannelMessageDTO, ChatPage, Envelope, RealtimeEvent, ReactionDTO, TypingTarget, UserBrief } from "@/lib/types";
 import { ChannelService, type SendInput, type SpaceRef } from "./ChannelService";
 import { CrewService } from "./CrewService";
 
@@ -23,6 +23,8 @@ export interface ChatSource {
   pins?(): Promise<Envelope<ChannelMessageDTO[]>>;
   /** this live ping means something changed in this chat */
   isLive(e: RealtimeEvent): boolean;
+  /** this chat for "X is typing…" */
+  typing?: TypingTarget;
 }
 
 export function channelSource(space: SpaceRef, channelSlug: string, channelId?: string): ChatSource {
@@ -39,6 +41,7 @@ export function channelSource(space: SpaceRef, channelSlug: string, channelId?: 
     pin: (id, pinned) => ChannelService.pin(space, channelSlug, id, pinned),
     pins: () => ChannelService.pins(space, channelSlug),
     isLive: (e) => e.type === "channel" && (!channelId || e.channelId === channelId),
+    typing: { kind: "channel", slug: space.slug, sub: space.sub ?? null, channel: channelSlug },
   };
 }
 
@@ -54,5 +57,6 @@ export function crewSource(crewId: string): ChatSource {
     markRead: () => CrewService.markRead(crewId),
     mentionable: (q) => CrewService.mentionable(crewId, q),
     isLive: (e) => e.type === "crew" && e.crewId === crewId && !!e.chat,
+    typing: { kind: "crew", id: crewId },
   };
 }

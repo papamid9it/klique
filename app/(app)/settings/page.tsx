@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { SelectField, Switch, TextArea, TextField } from "@/components/ui/Field";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { SettingsShellSkeleton } from "@/components/ui/SettingsShell";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { cx } from "@/components/ui/cx";
 import { PlaceFields } from "@/components/domain/places/PlaceFields";
@@ -613,14 +614,7 @@ export default function SettingsPage() {
     return () => document.removeEventListener("keydown", onKey);
   }, [close]);
 
-  if (status === "loading") {
-    return (
-      <div className="space-y-4 p-8" aria-busy="true">
-        <Skeleton className="h-10 w-48" />
-        <Skeleton className="h-72 w-full rounded-card" />
-      </div>
-    );
-  }
+  if (status === "loading") return <SettingsShellSkeleton />;
   if (status === "anon" || !user) {
     return (
       <div className="mx-auto max-w-xl px-4 py-16">

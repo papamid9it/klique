@@ -1050,7 +1050,18 @@ export type RealtimeEvent =
   /** your saved stickers changed (on another device, or this one) */
   | { type: "stickers" }
   /** the connection came back after a gap: refetch whatever is on screen */
-  | { type: "resync" };
+  | { type: "resync" }
+  /** someone started (`on`) or stopped typing in a chat (`where`: see TypingDTO) */
+  | { type: "typing"; where: string; user: { id: Id; name: string }; on: boolean };
+
+/** A chat to type in: a community or group channel, a DM conversation, or a crew's chat. */
+export type TypingTarget = { kind: "channel"; slug: string; sub?: string | null; channel: string } | { kind: "dm"; id: Id } | { kind: "crew"; id: Id };
+
+/** Who's typing in a chat right now (never you). `where` names the chat in "typing" live events. */
+export interface TypingDTO {
+  where: string;
+  typing: { id: Id; name: string }[];
+}
 
 export interface RealtimeTokenDTO {
   /** pass to Ably's auth callback as-is */

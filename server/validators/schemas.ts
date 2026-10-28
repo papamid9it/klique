@@ -796,3 +796,12 @@ export const categoriesListSchema = z.object({
 
 /** Onboarding step 1: what you're into (at least 3). */
 export const onboardingInterestsSchema = z.object({ interests: z.array(interestId).min(3, "Pick at least 3.").max(20) });
+
+/* "is typing…" (server/services/typing.service): which chat, and whether they're typing or stopped */
+const slugPart = z.string().trim().min(1).max(80);
+export const typingTargetSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("channel"), slug: slugPart, sub: slugPart.nullish(), channel: slugPart }),
+  z.object({ kind: z.literal("dm"), id: objectId }),
+  z.object({ kind: z.literal("crew"), id: objectId }),
+]);
+export const typingSchema = z.object({ target: typingTargetSchema, on: z.boolean() });

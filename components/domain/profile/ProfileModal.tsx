@@ -12,7 +12,7 @@ import { InterestChip } from "@/components/ui/Chip";
 import { cx } from "@/components/ui/cx";
 import { Cover } from "@/components/ui/Cover";
 import { Icon } from "@/components/ui/Icon";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { ProfileSkeleton } from "@/components/ui/Skeleton";
 import { getInterest } from "@/lib/constants";
 import { compactCount, dateChip } from "@/lib/format";
 import { useApi } from "@/lib/hooks/useApi";
@@ -90,15 +90,7 @@ function ProfileBody({ handle, onClose, onOpenPerson, tryOn }: { handle: string;
   // your own friends (for others, the mutual ones come with the profile)
   const myFriends = useApi(view?.isSelf ? () => FriendService.list() : null, [view?.isSelf]);
 
-  if (loading) {
-    return (
-      <div className="space-y-4 p-6" aria-busy="true">
-        <Skeleton className="h-28 rounded-card" />
-        <Skeleton className="h-6 w-1/3" />
-        <Skeleton className="h-40" />
-      </div>
-    );
-  }
+  if (loading) return <ProfileSkeleton />;
   if (!view) {
     return (
       <div className="p-10 text-center">

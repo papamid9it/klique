@@ -19,7 +19,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { Modal } from "@/components/ui/Modal";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { ChatSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { cx } from "@/components/ui/cx";
 import { LIMITS } from "@/lib/constants";
@@ -38,6 +38,8 @@ import { applyReaction, type ReactionKind } from "@/lib/reactions";
 import type { ConversationDetailDTO, MessageDTO, ReactionDTO } from "@/lib/types";
 import { sendReaction } from "@/lib/reactQueue";
 import { UserName } from "@/components/ui/UserName";
+import { TypingLine } from "@/components/domain/chat/TypingLine";
+import { useTyping } from "@/lib/hooks/useTyping";
 
 type Local = MessageDTO & { pending?: boolean; failed?: boolean };
 type Snapshot = { detail: ConversationDetailDTO; messages: Local[]; hasMore: boolean };
@@ -73,6 +75,8 @@ export default function ConversationPage() {
   const [blockBusy, setBlockBusy] = useState(false);
   const [stickerOpen, setStickerOpen] = useState(false);
   const [sticker, setSticker] = useState<StickerChoice | null>(null);
+  // "X is typing…" in this conversation
+  const typing = useTyping(detail?.canSend ? { kind: "dm", id } : null);
   const [infoOpen, setInfoOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteMsg, setDeleteMsg] = useState<Local | null>(null);
@@ -248,6 +252,7 @@ export default function ConversationPage() {
     setSendError(null);
     if (!retry) {
       setDraft("");
+      typing.stopped();
       attach.clear();
       setSticker(null);
       setReplyTo(null);
@@ -279,7 +284,7 @@ export default function ConversationPage() {
     }
   }
 
-  if (status === "loading") return <div className="p-6"><Skeleton className="h-96 w-full rounded-card" /></div>;
+  if (status === "loading") return <ChatSkeleton />;
   if (!authed) {
     return (
       <div className="p-6">
@@ -296,14 +301,7 @@ export default function ConversationPage() {
       </div>
     );
   }
-  if (loading) {
-    return (
-      <div className="space-y-4 p-6" aria-busy="true">
-        <Skeleton className="h-14 w-full rounded-card" />
-        <Skeleton className="h-64 w-full rounded-card" />
-      </div>
-    );
-  }
+  if (loading) return <ChatSkeleton />;
   if (loadError && !detail) return <div className="p-6"><ErrorState message={loadError} onRetry={() => void load()} /></div>;
   if (!detail) return null;
 
@@ -402,7 +400,9 @@ export default function ConversationPage() {
         <div ref={bottomRef} />
       </div>
 
-      <div className="border-t border-line bg-canvas px-4 py-3 sm:px-6">
+      <div className="relative border-t border-line bg-canvas px-4 py-3 sm:px-6">
+        {/* over the chat's bottom edge, so nothing moves when they start or stop typing */}
+        {detail.canSend && <TypingLine names={typing.names} className="pointer-events-none absolute right-4 bottom-full left-4 bg-gradient-to-t from-canvas to-transparent pt-2 sm:right-6 sm:left-6" />}
         {detail.canSend ? (
           <form
             onSubmit={(e) => {
@@ -424,7 +424,12 @@ export default function ConversationPage() {
             )}
             <textarea
               value={draft}
-              onChange={(e) => setDraft(e.target.value)}
+              onChange={(e) => {
+                setDraft(e.target.value);
+                if (e.target.value.trim()) typing.typed();
+                else typing.stopped();
+              }}
+              onBlur={typing.stopped}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                   e.preventDefault();

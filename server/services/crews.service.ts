@@ -563,6 +563,13 @@ const declined = (crew: Pick<ICrew, "area" | "eventId">, event: Pick<IEvent, "ti
 /* Chat                                                                */
 /* ------------------------------------------------------------------ */
 
+/** The people in a crew someone is in (for the "is typing…" line); refuses anyone outside it. */
+export async function typingCrew(viewer: IUser, crewId: string): Promise<{ id: Types.ObjectId; members: Types.ObjectId[] }> {
+  const { crew } = await assertInCrew(viewer, crewId);
+  const rows = await CrewMember.find({ crewId: crew._id, status: "active" }).select("userId").lean<{ userId: Types.ObjectId }[]>();
+  return { id: crew._id, members: rows.map((r) => r.userId) };
+}
+
 async function assertInCrew(viewer: IUser, crewId: string) {
   const { crew, event } = await visibleCrew(viewer, crewId);
   const me = await CrewMember.findOne({ crewId: crew._id, userId: viewer._id, status: "active" }).select("_id").lean();

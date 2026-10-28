@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import ApiClient, { errorMessage } from "@/app/ApiCore";
 import { OnboardingService } from "@/app/services/OnboardingService";
 import { CommunityCard } from "@/components/domain/CommunityCard";
@@ -32,6 +32,8 @@ export default function WelcomePage() {
   // the "join at least N" note, drawn to the eye when someone tries to go on too early
   const [nudge, setNudge] = useState(0);
 
+  // where finishing takes them (home, or the community they clicked): the "already done" redirect goes there too
+  const goingTo = useRef("/");
   // sent back here from another page before finishing: say so, once
   const [sentBack, setSentBack] = useState(false);
   useEffect(() => {
@@ -42,7 +44,7 @@ export default function WelcomePage() {
 
   useEffect(() => {
     if (status === "anon") router.replace("/login");
-    else if (user?.onboarded) router.replace("/");
+    else if (user?.onboarded) router.replace(goingTo.current);
   }, [status, user?.onboarded, router]);
 
   if (status !== "authed" || loading || (!data && !error)) {
@@ -74,6 +76,7 @@ export default function WelcomePage() {
   /** Done: into Klique (or straight to the community they clicked). */
   async function finish(to = "/") {
     setBusy(true);
+    goingTo.current = to;
     try {
       await OnboardingService.complete();
       ApiClient.clearCache(); // the homepage asks fresh: their new communities' events are there straight away

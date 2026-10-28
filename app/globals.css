@@ -181,7 +181,12 @@ body {
   );
   background-size: 200% 100%;
   animation: var(--animate-shimmer);
-  border-radius: 0.75rem;
+}
+/* the default corners, in a layer so a placeholder's own rounded-full / rounded-none (utilities) wins */
+@layer components {
+  .skeleton {
+    border-radius: 0.75rem;
+  }
 }
 
 /* Scrollbars stay out of sight: a clear track, and a thin thumb that only shows (dim, tinted from the ink colour, so

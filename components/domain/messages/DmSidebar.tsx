@@ -9,7 +9,7 @@ import { useAuth } from "@/components/providers/AuthProvider";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { Icon, type IconName } from "@/components/ui/Icon";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { ConversationListSkeleton, Skeleton } from "@/components/ui/Skeleton";
 import { cx } from "@/components/ui/cx";
 import { relativeStamp } from "@/lib/format";
 import { useRealtime, useRealtimeEvent } from "@/components/providers/RealtimeProvider";
@@ -68,12 +68,13 @@ export function DmSidebar({ onNavigate }: { onNavigate?: () => void }) {
 
   if (status === "loading") {
     return (
-      <div className="space-y-3 p-3" aria-busy="true">
-        <Skeleton className="h-9" />
-        <Skeleton className="h-9" />
-        <Skeleton className="h-9" />
-        <Skeleton className="h-12" />
-        <Skeleton className="h-12" />
+      <div aria-busy="true">
+        <div className="space-y-2 p-3 pb-1">
+          <Skeleton className="h-9" />
+          <Skeleton className="h-8 opacity-70" />
+          <Skeleton className="h-8 opacity-70" />
+        </div>
+        <ConversationListSkeleton rows={5} />
       </div>
     );
   }

@@ -279,6 +279,13 @@ async function loadChannel(viewer: IUser | null, space: Space, access: SpaceAcce
   return { channel, invited };
 }
 
+/** The channel someone may type in (they could post there): for the "is typing…" line. */
+export async function typingChannel(viewer: IUser, space: Space, access: SpaceAccess, channelSlug: string): Promise<IChannel> {
+  const { channel, invited } = await loadChannel(viewer, space, access, channelSlug);
+  if (!canPostInChannel(channel, access, invited)) throw forbidden("You can't post here.");
+  return channel;
+}
+
 async function uniqueChannelSlug(space: Space, name: string, ignore?: Types.ObjectId) {
   const base = slugify(name);
   for (let i = 0; i < 25; i++) {

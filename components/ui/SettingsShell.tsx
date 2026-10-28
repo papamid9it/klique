@@ -177,3 +177,57 @@ export function SaveBar({ dirty, busy, onReset, onSave, disabled }: { dirty: boo
     </div>
   );
 }
+
+/**
+ * Settings while they load: the same two columns as SettingsShell (the menu on its side panel, the page's title
+ * and a few sections), so nothing jumps when the real thing arrives. Phones get the page side only.
+ */
+export function SettingsShellSkeleton() {
+  const line = "skeleton rounded-[6px]";
+  return (
+    <div aria-busy="true" aria-label="Loading settings" className="fixed inset-0 z-[120] overflow-hidden bg-canvas md:flex">
+      <div className="hidden bg-surface md:flex md:flex-1 md:justify-end">
+        <div className="w-[17.5rem] space-y-6 px-3 pt-14">
+          <div className={cx(line, "mx-2.5 h-3 w-24")} />
+          {[5, 3].map((n, g) => (
+            <div key={g} className="space-y-2.5">
+              <div className={cx(line, "mx-2.5 h-2.5 w-20 opacity-70")} />
+              {Array.from({ length: n }, (_, i) => (
+                <div key={i} className="flex items-center gap-3 px-2.5 py-1.5">
+                  <div className={cx(line, "size-4 shrink-0")} />
+                  <div className={cx(line, "h-3.5")} style={{ width: `${55 + ((i * 23) % 35)}%` }} />
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="min-w-0 md:flex-[2.1]">
+        <div className="px-4 pt-5 md:px-10 md:pt-14">
+          <div className="md:max-w-[46rem]">
+            <div className={cx(line, "mb-8 h-6 w-40")} />
+            <div className="overflow-hidden rounded-card border border-line bg-surface">
+              <div className="skeleton h-24 rounded-none" />
+              <div className="flex items-end gap-4 px-5 pb-5">
+                <div className="-mt-10 rounded-full bg-surface p-1.5">
+                  <div className="skeleton size-20 rounded-full" />
+                </div>
+                <div className="flex-1 space-y-2 pb-1">
+                  <div className={cx(line, "h-5 w-40")} />
+                  <div className={cx(line, "h-3 w-24")} />
+                </div>
+              </div>
+            </div>
+            {[0, 1].map((i) => (
+              <div key={i} className="mt-8 space-y-3 border-t border-line pt-6">
+                <div className={cx(line, "h-2.5 w-28 opacity-70")} />
+                <div className={cx(line, "h-3.5 w-3/4")} />
+                <div className="skeleton h-11 w-full rounded-control" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

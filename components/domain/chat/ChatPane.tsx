@@ -27,6 +27,8 @@ import { Message } from "./Message";
 import { ReplyingTo } from "./ReplyQuote";
 import { AttachedSticker, StickerPicker, type StickerChoice } from "./Reactions";
 import { PollComposer } from "./Polls";
+import { TypingLine } from "./TypingLine";
+import { useTyping } from "@/lib/hooks/useTyping";
 
 const GROUP_GAP_MS = 5 * 60 * 1000;
 const dayKey = (iso: string) => new Date(iso).toLocaleDateString("en-CA", { timeZone: "Africa/Lagos" });
@@ -391,6 +393,8 @@ function Composer({
   const toast = useToast();
   const [text, setText] = useState("");
   const area = useRef<HTMLTextAreaElement>(null);
+  // "X is typing…": only where you could type yourself
+  const typing = useTyping(status === "authed" && isMember && channel.canPost ? (source.typing ?? null) : null);
   const [stickers, setStickers] = useState(false);
   const [sticker, setSticker] = useState<StickerChoice | null>(null);
   const [polling, setPolling] = useState(false);
@@ -451,6 +455,7 @@ function Composer({
     if ((!body && !images.length && !chosen) || !user || attach.uploading || slow.left > 0) return;
     const reply = replyTo ? { id: replyTo.id, authorName: replyTo.author.displayName, snippet: replyTo.body.slice(0, 120) || (replyTo.sticker || replyTo.stickerUrl ? "Sticker" : replyTo.images.length ? "Photo" : "Message"), deleted: false } : null;
     setText("");
+    typing.stopped();
     attach.clear();
     setSticker(null);
     onClearReply();
@@ -523,6 +528,8 @@ function Composer({
         void submit();
       }}
     >
+      {/* over the chat's bottom edge, so nothing moves when someone starts or stops typing */}
+      {!open && <TypingLine names={typing.names} className="pointer-events-none absolute right-4 bottom-full left-4 bg-gradient-to-t from-canvas to-transparent pt-2 sm:right-6 sm:left-6" />}
       {open && (
         <ul id="mention-list" role="listbox" aria-label="Tag someone" className="absolute right-4 bottom-full left-4 z-20 mb-1 max-h-64 overflow-y-auto rounded-card border border-line bg-surface p-1.5 shadow-2xl sm:right-6 sm:left-6">
           {options.map((o, i) => (
@@ -593,6 +600,8 @@ function Composer({
           placeholder={placeholder ?? `Message #${channel.name}`}
           onChange={(e) => {
             setText(e.target.value);
+            if (e.target.value.trim()) typing.typed();
+            else typing.stopped();
             trackMention(e.target.value, e.target.selectionStart ?? e.target.value.length);
             resize();
           }}
@@ -604,7 +613,10 @@ function Composer({
             }
           }}
           onClick={(e) => trackMention(e.currentTarget.value, e.currentTarget.selectionStart ?? 0)}
-          onBlur={() => setTimeout(() => setMention(null), 120)}
+          onBlur={() => {
+            typing.stopped();
+            setTimeout(() => setMention(null), 120);
+          }}
           onKeyDown={(e) => {
             if (open) {
               if (e.key === "ArrowDown" || e.key === "ArrowUp") {

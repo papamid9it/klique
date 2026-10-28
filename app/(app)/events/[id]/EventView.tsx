@@ -26,7 +26,7 @@ import { SelectField, TextArea, TextField } from "@/components/ui/Field";
 import { Icon } from "@/components/ui/Icon";
 import { InterestChip } from "@/components/ui/Chip";
 import { Modal } from "@/components/ui/Modal";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { EventPageSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { PlaceFields } from "@/components/domain/places/PlaceFields";
 import { LIMITS, isInterestId, type InterestId } from "@/lib/constants";
@@ -523,15 +523,7 @@ export function EventPageView() {
   const { id } = useParams<{ id: string }>();
   const { data, loading, error, status, reload, setData } = useApi(() => EventService.get(id), [id], { key: `event:${id}` });
 
-  if (loading) {
-    return (
-      <div className="space-y-4">
-        <Skeleton className="aspect-[16/8] w-full" />
-        <Skeleton className="h-10 w-2/3" />
-        <Skeleton className="h-24 w-full" />
-      </div>
-    );
-  }
+  if (loading) return <EventPageSkeleton />;
   if (status === 404 || status === 403 || status === 400) {
     return (
       <EmptyState icon="lock" title="Event not found" action={<Button href="/events">Browse events</Button>}>
