@@ -29,6 +29,16 @@ export default function WelcomePage() {
   const [step, setStep] = useState<1 | 2>(1);
   const [picked, setPicked] = useState<string[] | null>(null);
   const [busy, setBusy] = useState(false);
+  // the "join at least N" note, drawn to the eye when someone tries to go on too early
+  const [nudge, setNudge] = useState(0);
+
+  // sent back here from another page before finishing: say so, once
+  const [sentBack, setSentBack] = useState(false);
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("why") !== "finish") return;
+    setSentBack(true);
+    window.history.replaceState(null, "", "/welcome");
+  }, []);
 
   useEffect(() => {
     if (status === "anon") router.replace("/login");
@@ -61,13 +71,14 @@ export default function WelcomePage() {
     }
   }
 
-  async function finish() {
+  /** Done: into Klique (or straight to the community they clicked). */
+  async function finish(to = "/") {
     setBusy(true);
     try {
       await OnboardingService.complete();
       ApiClient.clearCache(); // the homepage asks fresh: their new communities' events are there straight away
       await refresh();
-      router.replace("/");
+      router.replace(to);
     } catch (e) {
       toast(errorMessage(e), "error");
       setBusy(false);
@@ -75,9 +86,30 @@ export default function WelcomePage() {
   }
 
   const left = Math.max(0, data.needed - data.joined);
+  const tooEarly = (msg: string) => {
+    toast(msg);
+    setNudge((n) => n + 1);
+  };
+  // a community card links to the community, but the app sends anyone who hasn't finished back here: say why
+  // instead of bouncing them, and once they've joined enough, finish and take them there
+  const onLink = (e: React.MouseEvent) => {
+    const a = (e.target as HTMLElement).closest("a");
+    if (!a || a.target === "_blank" || e.metaKey || e.ctrlKey) return;
+    e.preventDefault();
+    if (left > 0) tooEarly(`Join at least ${data.needed} communities first (${left} more to go). You can open them once you're in.`);
+    else void finish(a.getAttribute("href") || "/");
+  };
 
   return (
     <Frame onSignOut={() => void signOut()}>
+      {sentBack && (
+        <p role="status" className="mb-5 flex items-start gap-2 rounded-card border border-accent-text/40 bg-accent/10 px-4 py-3 text-sm">
+          <Icon name="info" size={16} className="mt-0.5 shrink-0" />
+          <span>
+            <span className="font-semibold">Almost there.</span> Finish these two steps first: pick at least {data.minInterests} interests, then join at least {data.needed} communities. Then everything opens up.
+          </span>
+        </p>
+      )}
       <p className="eyebrow">Step {step} of 2</p>
       {step === 1 ? (
         <>
@@ -104,7 +136,7 @@ export default function WelcomePage() {
           </ul>
           <Bar>
             <p className="mr-auto text-sm text-ink-muted">{chosen.length < data.minInterests ? `${data.minInterests - chosen.length} more to go` : `${chosen.length} picked`}</p>
-            <Button variant="primary" size="lg" onClick={next} loading={busy} disabled={chosen.length < data.minInterests}>
+            <Button variant="primary" size="lg" onClick={() => (chosen.length < data.minInterests ? tooEarly(`Pick at least ${data.minInterests} to continue (${data.minInterests - chosen.length} more).`) : void next())} loading={busy} className={cx(chosen.length < data.minInterests && "opacity-60")}>
               Continue <Icon name="arrow-left" size={16} className="rotate-180" />
             </Button>
           </Bar>
@@ -116,8 +148,13 @@ export default function WelcomePage() {
             Join at least {data.needed}. Their events and chats are what fill your homepage, along with Klique&apos;s own events. You&apos;re already in Klique.
             {data.widened && " There aren't many in your categories yet, so here are some others too."}
           </p>
+          {/* the rule, plainly, where they're looking (it pulses when they try to go on too early) */}
+          <p key={nudge} role="status" className={cx("mt-5 inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-medium", left ? "border-accent-text/50 bg-accent/10 text-ink" : "border-line text-ink-muted", nudge > 0 && left > 0 && "animate-pop")}>
+            <Icon name={left ? "info" : "check"} size={15} />
+            {left ? `Join at least ${data.needed} communities to continue: ${data.joined} of ${data.needed} joined.` : `${data.joined} joined. You're ready. Tap Go to Klique, or open one of them.`}
+          </p>
           {data.suggestions.length ? (
-            <div className="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3" onClickCapture={onLink}>
               {data.suggestions.map((c) => (
                 <CommunityCard key={c.id} community={c} onChange={() => void reload()} />
               ))}
@@ -130,7 +167,7 @@ export default function WelcomePage() {
               <Icon name="arrow-left" size={16} /> Back
             </Button>
             <p className="mr-auto ml-1 text-sm text-ink-muted">{left ? `Join ${left} more` : `${data.joined} joined`}</p>
-            <Button variant="primary" size="lg" onClick={finish} loading={busy} disabled={left > 0}>
+            <Button variant="primary" size="lg" onClick={() => (left > 0 ? tooEarly(`Join at least ${data.needed} communities to continue (${left} more to go).`) : void finish())} loading={busy} className={cx(left > 0 && "opacity-60")}>
               Go to Klique <Icon name="arrow-left" size={16} className="rotate-180" />
             </Button>
           </Bar>

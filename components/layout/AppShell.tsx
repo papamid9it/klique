@@ -30,7 +30,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   // Not finished joining (new, or an older account that never did it): /welcome first, once.
   const mustOnboard = status === "authed" && !!user && !user.onboarded && pathname !== "/welcome";
   useEffect(() => {
-    if (mustOnboard) router.replace("/welcome");
+    // ?why=finish: the welcome page says why they're back there instead of silently bouncing them
+    if (mustOnboard) router.replace("/welcome?why=finish");
   }, [mustOnboard, router]);
   if (mustOnboard) return null;
   // /welcome is a full-screen flow of its own

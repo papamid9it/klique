@@ -46,6 +46,15 @@ function loadLottie(): Promise<LottiePlayer> {
   return lottie;
 }
 
+const MEDIA = (process.env.NEXT_PUBLIC_MEDIA_URL ?? "").replace(/\/$/, "");
+/**
+ * Where the player reads an effect file from. Our uploads live on the R2 address, another site, and the browser only
+ * lets the player read a file from another site when it sends CORS headers (a picture needs none, which is why
+ * frames and GIFs show either way). So ours come through our own address (/api/effects/file); anything else is
+ * read where it is.
+ */
+const playable = (url: string) => (MEDIA && url.startsWith(`${MEDIA}/klique/effects/`) ? `/api/effects/file?src=${encodeURIComponent(url)}` : url);
+
 type LottieJson = { assets?: { u?: string; p?: string; e?: number }[] };
 const dotLotties = new Map<string, Promise<LottieJson>>();
 
@@ -173,7 +182,7 @@ export function ProfileEffect({ id, spec, paused, className }: { id?: string | n
   return (
     <span aria-hidden="true" className={`pointer-events-none absolute inset-0 z-10 overflow-hidden ${className ?? ""}`}>
       {e.kind === "lottie" ? (
-        <LottieLayer path={e.fileUrl} play={!still} frame={e.posterFrame ?? 0.5} className={`${cover} [&>svg]:!size-full`} />
+        <LottieLayer path={playable(e.fileUrl)} play={!still} frame={e.posterFrame ?? 0.5} className={`${cover} [&>svg]:!size-full`} />
       ) : still ? (
         <FirstFrame src={e.fileUrl} className={`${cover} object-cover`} />
       ) : (
