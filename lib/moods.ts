@@ -328,7 +328,12 @@ export function moodToCss(mood: Mood): string {
 
 /** Full stylesheet: one `[data-theme="id"]` block per mood. */
 export function allMoodsCss(): string {
-  return MOODS.map(
-    (m) => `[data-theme="${m.id}"]{color-scheme:${m.scheme};${moodToCss(m)}}`,
-  ).join("\n");
+  const light = MOODS.filter((m) => m.scheme === "light").map((m) => `[data-theme="${m.id}"]`);
+  const names = ["c0", "c1", "c2", "g", "grad", "rise"];
+  return [
+    ...MOODS.map((m) => `[data-theme="${m.id}"]{color-scheme:${m.scheme};${moodToCss(m)}}`),
+    // name effects (components/ui/UserName): their own colours, and on light moods their deeper set where they have one
+    `.kq-name{${names.map((n) => `--${n}:var(--d${n});`).join("")}}`,
+    `:is(${light.join(",")}) .kq-name{${names.map((n) => `--${n}:var(--l${n},var(--d${n}));`).join("")}}`,
+  ].join("\n");
 }

@@ -233,7 +233,7 @@ export interface PickerProps {
 
 /** Name effects: every one animates in its tile and on the card. */
 export function NameEffectModal({ look, ...p }: PickerProps) {
-  const options: Option[] = [{ value: "", label: "None", tile: <span className="max-w-full truncate text-base font-semibold">{look.name}</span> }, ...NAME_EFFECTS.map((e) => ({ value: e.id, label: e.name, key: `name:${e.id}` as StyleKey, tile: <span className="max-w-full truncate text-base font-semibold"><UserName name={look.name} effect={e.id} /></span> }))];
+  const options: Option[] = [{ value: "", label: "None", tile: <span className="max-w-full truncate text-base font-semibold">{look.name}</span> }, ...NAME_EFFECTS.filter((e) => !e.retired || e.id === look.nameEffect).map((e) => ({ value: e.id, label: e.name, key: `name:${e.id}` as StyleKey, tile: <span className="max-w-full truncate text-base font-semibold"><UserName name={look.name} effect={e.id} /></span> }))];
   return <PickModal title="Name effect" options={options} current={look.nameEffect} lookWith={(v) => ({ ...look, nameEffect: v })} {...p} />;
 }
 

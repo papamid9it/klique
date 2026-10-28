@@ -53,7 +53,8 @@ export const FRAMES: FrameSpec[] = [
 
 export type NameEffectId =
   | "gold-shimmer" | "rainbow-flow" | "fire" | "ice" | "glitch" | "neon-pink" | "neon-cyan" | "aurora" | "sunset" | "ocean"
-  | "toxic" | "galaxy" | "lava" | "matrix" | "royal" | "vapor" | "electric" | "blossom" | "chrome" | "heartbeat";
+  | "toxic" | "galaxy" | "lava" | "matrix" | "royal" | "vapor" | "electric" | "blossom" | "chrome" | "heartbeat"
+  | "ink" | "midnight" | "berry" | "forest";
 
 export type NameMode =
   /** colours slide along the letters */
@@ -80,29 +81,38 @@ export interface NameEffectSpec {
   glow?: string;
   /** ms for one cycle */
   ms: number;
+  /** deeper colours for light moods (pale ones vanish on a light page); without it the same colours everywhere */
+  light?: { colors: string[]; glow?: string };
+  /** no longer offered (it can't be read on light moods); anyone wearing or owning it keeps it */
+  retired?: true;
 }
 
 export const NAME_EFFECTS: NameEffectSpec[] = [
-  { id: "gold-shimmer", name: "Gold Shimmer", mode: "shimmer", colors: ["#d4a017", "#fff4b8"], glow: "#f5c542", ms: 2600 },
-  { id: "rainbow-flow", name: "Rainbow Flow", mode: "flow", colors: ["#ff4d4d", "#ffb347", "#f6ff4d", "#4dff88", "#4dbbff", "#b04dff", "#ff4d4d"], ms: 3200 },
-  { id: "fire", name: "Fire", mode: "rise", colors: ["#ff3d00", "#ffb300", "#ffe066", "#ff7a00", "#ff3d00"], glow: "#ff6a00", ms: 1600 },
-  { id: "ice", name: "Ice", mode: "shimmer", colors: ["#7dd3fc", "#ffffff"], glow: "#38bdf8", ms: 3400 },
+  { id: "gold-shimmer", name: "Gold Shimmer", mode: "shimmer", colors: ["#d4a017", "#fff4b8"], glow: "#f5c542", ms: 2600, light: { colors: ["#8a6100", "#d4a017"], glow: "#b8860b" } },
+  { id: "rainbow-flow", name: "Rainbow Flow", mode: "flow", colors: ["#ff4d4d", "#ffb347", "#f6ff4d", "#4dff88", "#4dbbff", "#b04dff", "#ff4d4d"], ms: 3200, light: { colors: ["#d62828", "#e76f00", "#b08900", "#1f9d55", "#1d6fd1", "#7b2cbf", "#d62828"] } },
+  { id: "fire", name: "Fire", mode: "rise", colors: ["#ff3d00", "#ffb300", "#ffe066", "#ff7a00", "#ff3d00"], glow: "#ff6a00", ms: 1600, light: { colors: ["#b91c1c", "#e85d04", "#f48c06", "#dc2f02", "#b91c1c"], glow: "#e85d04" } },
   { id: "glitch", name: "Glitch", mode: "glitch", colors: ["#ffffff", "#00fff0", "#ff2bd6"], ms: 1800 },
-  { id: "neon-pink", name: "Neon Pink", mode: "flicker", colors: ["#ff7ae9"], glow: "#ff2bd6", ms: 2600 },
-  { id: "neon-cyan", name: "Neon Cyan", mode: "flicker", colors: ["#8ffbff"], glow: "#22f2ff", ms: 3000 },
-  { id: "aurora", name: "Aurora", mode: "flow", colors: ["#34d399", "#22d3ee", "#a78bfa", "#34d399"], ms: 4200 },
-  { id: "sunset", name: "Sunset", mode: "flow", colors: ["#ff7e5f", "#feb47b", "#ff5ea8", "#a06bff", "#ff7e5f"], ms: 4000 },
-  { id: "ocean", name: "Ocean", mode: "flow", colors: ["#38bdf8", "#2563eb", "#22d3ee", "#38bdf8"], ms: 5000 },
-  { id: "toxic", name: "Toxic", mode: "pulse", colors: ["#b6ff2e"], glow: "#a3ff12", ms: 1400 },
-  { id: "galaxy", name: "Galaxy", mode: "flow", colors: ["#a78bfa", "#60a5fa", "#f0abfc", "#a78bfa"], glow: "#7c3aed", ms: 5200 },
-  { id: "lava", name: "Lava", mode: "rise", colors: ["#7f1d1d", "#ef4444", "#fb923c", "#ffd08a", "#ef4444"], glow: "#ef4444", ms: 1700 },
-  { id: "matrix", name: "Matrix", mode: "glitch", colors: ["#00ff66", "#00ff66", "#007a33"], ms: 2200 },
-  { id: "royal", name: "Royal", mode: "flow", colors: ["#a78bfa", "#f5c542", "#a78bfa"], ms: 3600 },
-  { id: "vapor", name: "Vapor", mode: "flow", colors: ["#ff71ce", "#01cdfe", "#b967ff", "#ff71ce"], ms: 3400 },
-  { id: "electric", name: "Electric", mode: "flicker", colors: ["#fff36b"], glow: "#ffe600", ms: 900 },
-  { id: "blossom", name: "Blossom", mode: "pulse", colors: ["#ffb3d1"], glow: "#ff8fb8", ms: 2800 },
-  { id: "chrome", name: "Chrome", mode: "shimmer", colors: ["#9aa4b2", "#ffffff"], ms: 2800 },
-  { id: "heartbeat", name: "Heartbeat", mode: "beat", colors: ["#ff5c7a"], glow: "#ff3b5c", ms: 900 },
+  { id: "ink", name: "Ink", mode: "shimmer", colors: ["#d4d4d8", "#ffffff"], ms: 3000, light: { colors: ["#18181b", "#71717a"] } },
+  { id: "midnight", name: "Midnight", mode: "shimmer", colors: ["#93c5fd", "#e0e7ff"], ms: 3200, light: { colors: ["#1e3a8a", "#6366f1"] } },
+  { id: "berry", name: "Berry", mode: "flow", colors: ["#f472b6", "#c084fc", "#fb7185", "#f472b6"], ms: 3800, light: { colors: ["#9d174d", "#6b21a8", "#be123c", "#9d174d"] } },
+  { id: "forest", name: "Forest", mode: "flow", colors: ["#4ade80", "#a3e635", "#2dd4bf", "#4ade80"], ms: 4200, light: { colors: ["#166534", "#4d7c0f", "#0f766e", "#166534"] } },
+  { id: "neon-pink", name: "Neon Pink", mode: "flicker", colors: ["#ff7ae9"], glow: "#ff2bd6", ms: 2600, light: { colors: ["#c2189f"], glow: "#ff2bd6" } },
+  { id: "aurora", name: "Aurora", mode: "flow", colors: ["#34d399", "#22d3ee", "#a78bfa", "#34d399"], ms: 4200, light: { colors: ["#059669", "#0e7490", "#7c3aed", "#059669"] } },
+  { id: "sunset", name: "Sunset", mode: "flow", colors: ["#ff7e5f", "#feb47b", "#ff5ea8", "#a06bff", "#ff7e5f"], ms: 4000, light: { colors: ["#dc4a2f", "#d97706", "#d6336c", "#7c3aed", "#dc4a2f"] } },
+  { id: "ocean", name: "Ocean", mode: "flow", colors: ["#38bdf8", "#2563eb", "#22d3ee", "#38bdf8"], ms: 5000, light: { colors: ["#0369a1", "#1d4ed8", "#0e7490", "#0369a1"] } },
+  { id: "toxic", name: "Toxic", mode: "pulse", colors: ["#b6ff2e"], glow: "#a3ff12", ms: 1400, light: { colors: ["#4d7c0f"], glow: "#65a30d" } },
+  { id: "galaxy", name: "Galaxy", mode: "flow", colors: ["#a78bfa", "#60a5fa", "#f0abfc", "#a78bfa"], glow: "#7c3aed", ms: 5200, light: { colors: ["#6d28d9", "#2563eb", "#c026d3", "#6d28d9"], glow: "#4c1d95" } },
+  { id: "lava", name: "Lava", mode: "rise", colors: ["#7f1d1d", "#ef4444", "#fb923c", "#ffd08a", "#ef4444"], glow: "#ef4444", ms: 1700, light: { colors: ["#7f1d1d", "#b91c1c", "#ea580c", "#c2410c", "#b91c1c"], glow: "#dc2626" } },
+  { id: "matrix", name: "Matrix", mode: "glitch", colors: ["#00ff66", "#00ff66", "#007a33"], ms: 2200, light: { colors: ["#15803d", "#16a34a", "#064e3b"] } },
+  { id: "royal", name: "Royal", mode: "flow", colors: ["#a78bfa", "#f5c542", "#a78bfa"], ms: 3600, light: { colors: ["#6d28d9", "#b8860b", "#6d28d9"] } },
+  { id: "vapor", name: "Vapor", mode: "flow", colors: ["#ff71ce", "#01cdfe", "#b967ff", "#ff71ce"], ms: 3400, light: { colors: ["#c2185b", "#0284c7", "#7e22ce", "#c2185b"] } },
+  { id: "blossom", name: "Blossom", mode: "pulse", colors: ["#ffb3d1"], glow: "#ff8fb8", ms: 2800, light: { colors: ["#be185d"], glow: "#ec4899" } },
+  { id: "heartbeat", name: "Heartbeat", mode: "beat", colors: ["#ff5c7a"], glow: "#ff3b5c", ms: 900, light: { colors: ["#e11d48"], glow: "#be123c" } },
+  // retired: pale on light moods, replaced by Ink, Midnight, Berry and Forest (still drawn for anyone wearing them)
+  { id: "ice", name: "Ice", mode: "shimmer", colors: ["#7dd3fc", "#ffffff"], glow: "#38bdf8", ms: 3400, light: { colors: ["#0369a1", "#38bdf8"], glow: "#0284c7" }, retired: true },
+  { id: "neon-cyan", name: "Neon Cyan", mode: "flicker", colors: ["#8ffbff"], glow: "#22f2ff", ms: 3000, light: { colors: ["#0e7490"], glow: "#06b6d4" }, retired: true },
+  { id: "electric", name: "Electric", mode: "flicker", colors: ["#fff36b"], glow: "#ffe600", ms: 900, light: { colors: ["#a16207"], glow: "#ca8a04" }, retired: true },
+  { id: "chrome", name: "Chrome", mode: "shimmer", colors: ["#9aa4b2", "#ffffff"], ms: 2800, light: { colors: ["#334155", "#94a3b8"] }, retired: true },
 ];
 
 export const FRAME_IDS = FRAMES.map((f) => f.id) as FrameId[];
