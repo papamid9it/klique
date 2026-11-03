@@ -1,10 +1,10 @@
 import "server-only";
 import { z } from "zod";
-import { FALLBACK_RELEASE, type DesktopRelease } from "@/lib/desktop-release";
+import { DESKTOP_BASE, FALLBACK_RELEASE, type DesktopRelease } from "@/lib/desktop-release";
 
 /**
  * The desktop release manifest (lib/desktop-release): fetched from DESKTOP_RELEASES_URL (default
- * https://downloads.getklique.app/desktop/latest.json), kept for 5 minutes, checked; anything wrong or offline and
+ * <DESKTOP_BASE>/latest.json, the R2 bucket), kept for 5 minutes, checked; anything wrong or offline and
  * the built-in fallback is used, so /download and /api/app/version always answer.
  */
 const fileSchema = z.object({
@@ -24,7 +24,7 @@ const manifestSchema = z.object({
   files: z.array(fileSchema).max(40),
 });
 
-export const releasesUrl = () => (process.env.DESKTOP_RELEASES_URL?.trim() || "https://downloads.getklique.app/desktop/latest.json");
+export const releasesUrl = () => (process.env.DESKTOP_RELEASES_URL?.trim() || `${DESKTOP_BASE}/latest.json`);
 
 export async function desktopRelease(): Promise<DesktopRelease & { live: boolean }> {
   try {

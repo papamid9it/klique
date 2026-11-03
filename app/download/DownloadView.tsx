@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { Logo } from "@/components/layout/Logo";
 import { Icon } from "@/components/ui/Icon";
 import { cx } from "@/components/ui/cx";
-import { fileSize, type DesktopFile, type DesktopOs, type DesktopRelease } from "@/lib/desktop-release";
+import { fileSize, type DesktopFile, type DesktopKind, type DesktopOs, type DesktopRelease } from "@/lib/desktop-release";
 
 type Seen = DesktopOs | "phone" | null;
 type Chip = "arm64" | "x64";
@@ -63,6 +63,8 @@ export function DownloadView({ release }: { release: DesktopRelease & { live: bo
   const files = (o: DesktopOs) => release.files.filter((f) => f.os === o);
   const macFor = (c: Chip) => files("mac").find((f) => f.kind === "dmg" && f.arch === c) ?? null;
   const macReady = files("mac").length > 0;
+  // install steps, only for the kinds of file this release has (null: always)
+  const stepsFor = (o: DesktopOs, list: [DesktopKind | null, string][]) => list.filter(([k]) => !k || files(o).some((f) => f.kind === k)).map(([, t]) => t);
   const otherChip: Chip = chip === "arm64" ? "x64" : "arm64";
   const primary: DesktopFile | null =
     os === "windows" ? (files("windows").find((f) => f.kind === "installer") ?? files("windows")[0] ?? null) : os === "linux" ? (files("linux").find((f) => f.kind === "appimage") ?? files("linux")[0] ?? null) : os === "mac" ? (macFor(chip) ?? files("mac")[0] ?? null) : null;
@@ -174,7 +176,7 @@ export function DownloadView({ release }: { release: DesktopRelease & { live: bo
       {/* a moving band */}
       <div aria-hidden="true" className="border-y border-line bg-ink py-3 text-canvas">
         <div className="flex w-max gap-10 font-mono text-sm font-bold tracking-[0.2em] whitespace-nowrap uppercase motion-safe:animate-[kqmarquee_28s_linear_infinite]">
-          {Array.from({ length: 2 }).flatMap((_, k) => ["Windows", "Linux", "AppImage", ".deb", ".rpm", ".pkg.tar.xz", "Mac soon", "Your people", "Your desktop"].map((w) => <span key={`${k}-${w}`}>{w} ✦</span>))}
+          {Array.from({ length: 2 }).flatMap((_, k) => ["Windows", "Linux", "AppImage", ".deb", ".exe", "Mac soon", "Your people", "Your desktop"].map((w) => <span key={`${k}-${w}`}>{w} ✦</span>))}
         </div>
       </div>
 
@@ -183,12 +185,12 @@ export function DownloadView({ release }: { release: DesktopRelease & { live: bo
         <h2 className="text-[clamp(2rem,5vw,3.25rem)] leading-none font-black tracking-[-0.04em]">Every download.</h2>
         <p className="mt-3 max-w-2xl text-ink-muted">Version {release.version}, released {date(release.date)}. Check a file with its SHA-256 if you like: it&apos;s the same file we built.</p>
         <div className="mt-10 grid items-start gap-6 lg:grid-cols-3">
-          <OsCard os="windows" here={os === "windows"} files={files("windows")} steps={["Run Klique-Setup.exe and follow the steps.", "Windows SmartScreen may say it doesn't recognise the app at first: choose More info, then Run anyway.", "Portable .zip: unzip anywhere and open Klique.exe. Nothing gets installed."]} />
+          <OsCard os="windows" here={os === "windows"} files={files("windows")} steps={stepsFor("windows", [[null, "Run Klique-Setup.exe and follow the steps."], [null, "Windows SmartScreen may say it doesn't recognise the app at first: choose More info, then Run anyway."], ["portable", "Portable .zip: unzip anywhere and open Klique.exe. Nothing gets installed."]])} />
           <OsCard
             os="linux"
             here={os === "linux"}
             files={files("linux")}
-            steps={["AppImage, any distro: chmod +x Klique-*.AppImage, then run it.", "Ubuntu, Debian, Mint: sudo apt install ./klique_*_amd64.deb", "Arch, Manjaro: sudo pacman -U klique-*.pkg.tar.xz", "Fedora: sudo dnf install ./klique-*.rpm"]}
+            steps={stepsFor("linux", [["appimage", "AppImage, any distro: chmod +x Klique-*.AppImage, then run it."], ["deb", "Ubuntu, Debian, Mint: sudo apt install ./klique_*_amd64.deb"], ["pacman", "Arch, Manjaro: sudo pacman -U klique-*.pkg.tar.xz"], ["rpm", "Fedora: sudo dnf install ./klique-*.rpm"]])}
           />
           {macReady ? (
             <OsCard
@@ -226,7 +228,7 @@ export function DownloadView({ release }: { release: DesktopRelease & { live: bo
             ["How is it different from the website?", "Its own window and icon, notifications even when the browser is closed, and it can start with your computer. Everything you do syncs with the web and your phone."],
             ["Does it update by itself?", "It checks for new versions and lets you know. Very old versions are asked to update before they sign in."],
             ...(macReady ? [["Which Mac file should I pick?", "Macs from late 2020 on (M1, M2, M3, M4…) take Apple Silicon; older ones take Intel. The big button picks for you."]] : []),
-            ["Which Linux file should I pick?", "Not sure? Take the AppImage: it runs on almost any distro. Use .deb on Ubuntu, Debian or Mint, .pkg.tar.xz on Arch or Manjaro, and .rpm on Fedora."],
+            ["Which Linux file should I pick?", "Not sure? Take the AppImage: it runs on almost any distro. On Ubuntu, Debian or Mint you can use the .deb instead."],
             ["Windows warned me about the app. Is it safe?", "New apps aren't known to Windows SmartScreen yet. Download only from this page, check the SHA-256 if you want to be sure, then choose More info → Run anyway."],
           ].map(([q, a]) => (
             <details key={q} className="group py-5">
