@@ -23,6 +23,8 @@ import { sendReaction } from "@/lib/reactQueue";
 import { PlanBadge } from "@/components/domain/account/PlanTab";
 import { RichText } from "./RichText";
 import { useTagSuggest } from "./TagSuggest";
+import { useConfirm } from "@/components/providers/ConfirmProvider";
+import { shiftHeld } from "@/lib/shiftKey";
 
 /** Replies shown each time you open a thread a bit further. */
 const BATCH = 3;
@@ -159,6 +161,7 @@ function Composer({ body, setBody, onSend, placeholder, inputRef, above }: { bod
 export function PostComments({ post, onCount, pinned, top, focus }: { post: FeedPostDTO; onCount: (n: number) => void; pinned?: boolean; top?: React.ReactNode; focus?: string | null }) {
   const { user, requireAuth } = useAuth();
   const toast = useToast();
+  const confirm = useConfirm();
   const now = useNow();
   const slug = post.community.slug;
   const { data, loading, setData } = useApi(() => FeedService.comments(slug, post.id), [slug, post.id]);
@@ -245,6 +248,8 @@ export function PostComments({ post, onCount, pinned, top, focus }: { post: Feed
 
   /** Gone at once ("Comment deleted"); the server is told behind, and it comes back with a note if that fails. */
   async function remove(c: FeedCommentDTO) {
+    // Shift+click skips the question (like Discord)
+    if (!shiftHeld() && !(await confirm({ title: "Delete comment?" }))) return;
     setData((d) => (d ?? []).map((x) => (x.id === c.id ? { ...x, body: "", sticker: null, stickerUrl: null, deleted: true, reactions: [], canDelete: false } : x)));
     onCount(Math.max(0, post.commentCount - 1));
     try {

@@ -42,6 +42,7 @@ import { TypingLine } from "@/components/domain/chat/TypingLine";
 import { useTyping } from "@/lib/hooks/useTyping";
 import { RequestActions, useAfterRequest } from "@/components/domain/messages/RequestActions";
 import { EmojiText } from "@/components/ui/CustomEmoji";
+import { shiftHeld } from "@/lib/shiftKey";
 
 type Local = MessageDTO & { pending?: boolean; failed?: boolean };
 type Snapshot = { detail: ConversationDetailDTO; messages: Local[]; hasMore: boolean };
@@ -98,9 +99,17 @@ export default function ConversationPage() {
     ...(detail?.canSend ? [{ label: "Reply", icon: "reply" as const, onSelect: () => setReplyTo(m) }] : []),
     ...(m.mine && !(m.sticker || m.stickerUrl) ? [{ label: "Edit message", icon: "edit" as const, onSelect: () => setEditingId(m.id) }] : []),
     ...saveItem(m),
-    ...(m.mine ? [{ label: "Delete message", icon: "trash" as const, danger: true, onSelect: () => setDeleteMsg(m) }] : [{ label: "Report message", icon: "flag" as const, danger: true, onSelect: () => setReportMsg(m.id) }]),
+    ...(m.mine ? [{ label: "Delete message", icon: "trash" as const, danger: true, onSelect: () => (shiftHeld() ? deleteNow(m) : setDeleteMsg(m)) }] : [{ label: "Report message", icon: "flag" as const, danger: true, onSelect: () => setReportMsg(m.id) }]),
   ];
   const [sheetFor, setSheetFor] = useState<Local | null>(null);
+  /** gone at once; the server is told behind (put back with a note if that fails) */
+  const deleteNow = (before: Local) => {
+    setMessages((prev) => prev.map((x) => (x.id === before.id ? { ...x, body: "", sticker: null, stickerUrl: null, images: [], replyTo: null, deleted: true } : x)));
+    void MessageService.remove(id, before.id).catch((e) => {
+      setMessages((prev) => prev.map((x) => (x.id === before.id ? before : x)));
+      toast(errorMessage(e), "error");
+    });
+  };
 
   const jump = (mid: string) => {
     const el = document.getElementById(`msg-${mid}`);
@@ -522,12 +531,7 @@ export default function ConversationPage() {
         onConfirm={async () => {
           if (!deleteMsg) return;
           // gone at once; the server is told behind (put back with a note if that fails)
-          const before = deleteMsg;
-          setMessages((prev) => prev.map((x) => (x.id === before.id ? { ...x, body: "", sticker: null, stickerUrl: null, images: [], replyTo: null, deleted: true } : x)));
-          void MessageService.remove(id, before.id).catch((e) => {
-            setMessages((prev) => prev.map((x) => (x.id === before.id ? before : x)));
-            toast(errorMessage(e), "error");
-          });
+          deleteNow(deleteMsg);
         }}
       />
       <ReportDialog open={reportUser} onClose={() => setReportUser(false)} targetType="user" targetId={other.id} subject={`@${other.handle}`} />

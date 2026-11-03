@@ -14,6 +14,7 @@ import { stickerThumb, useStickers } from "@/lib/hooks/useStickers";
 import { useUploadStatus } from "@/lib/hooks/useUploads";
 import type { ReactionDTO } from "@/lib/types";
 import { checkFile } from "@/lib/uploads";
+import { useConfirm } from "@/components/providers/ConfirmProvider";
 
 export const MAX_STICKERS = 200;
 
@@ -235,6 +236,7 @@ export function StickerPicker({ onPick, onClose, className }: { onPick: (s: Stic
   const keep = useKeepOnScreen(ref);
   const saved = useStickers();
   const toast = useToast();
+  const confirm = useConfirm();
   const uploads = useUploadStatus();
   const [tab, setTab] = useState<"saved" | "emoji">(() => (saved.list.length ? "saved" : "emoji"));
   const [editing, setEditing] = useState(false);
@@ -358,7 +360,7 @@ export function StickerPicker({ onPick, onClose, className }: { onPick: (s: Stic
                 </button>
                 {editing && (
                   <>
-                    <button type="button" onClick={() => void saved.remove(s.id).then((err) => err && toast(err, "error"))} aria-label={`Remove sticker ${i + 1}`} className="absolute -top-1 -right-1 inline-flex size-6 items-center justify-center rounded-full bg-danger text-white shadow">
+                    <button type="button" onClick={async () => (await confirm({ title: "Remove this sticker?", body: "It comes out of your saved stickers.", confirmLabel: "Remove" })) && void saved.remove(s.id).then((err) => err && toast(err, "error"))} aria-label={`Remove sticker ${i + 1}`} className="absolute -top-1 -right-1 inline-flex size-6 items-center justify-center rounded-full bg-danger text-white shadow">
                       <Icon name="x" size={12} />
                     </button>
                     <span className="absolute inset-x-0 bottom-0 flex justify-between">

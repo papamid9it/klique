@@ -16,6 +16,7 @@ import { SLOW_MODE_STEPS, VOICE_ENABLED, slowModeLabel } from "@/lib/constants";
 import { useDebounced } from "@/lib/hooks/useApi";
 import type { ChannelCategoryDTO, ChannelDTO, ChannelType, ChannelVisibility, UserBrief, RoleOverrideDTO } from "@/lib/types";
 import { RoleOverrides } from "@/components/domain/space/RoleOverrides";
+import { useConfirm } from "@/components/providers/ConfirmProvider";
 
 const TYPE_CARDS: { id: ChannelType; icon: "hash" | "megaphone" | "mic"; title: string; hint: string; soon?: boolean }[] = [
   { id: "text", icon: "hash", title: "Text", hint: "Everyone who can see it can post: chat, photos, links." },
@@ -174,6 +175,7 @@ export function ChannelSettings({
   onDeleted: () => void;
 }) {
   const toast = useToast();
+  const confirm = useConfirm();
   const inGroup = !!space.sub;
   const [tab, setTab] = useState<string>(initialTab);
   const [name, setName] = useState(channel.name);
@@ -215,6 +217,7 @@ export function ChannelSettings({
     setGuests((g) => [...g, u]);
   }
   async function removeGuest(u: UserBrief) {
+    if (!(await confirm({ title: `Remove ${u.displayName}?`, body: "They won't see this private channel any more.", confirmLabel: "Remove" }))) return;
     if (channel.visibility === "invite") {
       try {
         await ChannelService.removeGuest(space, channel.slug, u.id);

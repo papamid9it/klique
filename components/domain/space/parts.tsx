@@ -129,11 +129,23 @@ export function ConfirmModal({
 
   return (
     <Modal open={open} onClose={onClose} title={title} description={description} size="sm">
-      <form onSubmit={go} className="space-y-4">
+      <form
+        onSubmit={go}
+        className="space-y-4"
+        onKeyDown={(e) => {
+          // Enter confirms, even with Cancel focused (a typed confirmation still has to match)
+          if (e.key === "Enter" && (e.target as HTMLElement).tagName === "BUTTON") {
+            e.preventDefault();
+            e.currentTarget.requestSubmit();
+          }
+        }}
+      >
         {children}
         {requireText && <TextField label={`Type "${requireText}" to confirm`} value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" />}
         <div className="flex justify-end gap-2">
-          <Button onClick={onClose}>Cancel</Button>
+          <Button onClick={onClose} autoFocus={!requireText}>
+            Cancel
+          </Button>
           <Button type="submit" variant={danger ? "danger" : "primary"} loading={busy} disabled={!ok}>
             {confirmLabel}
           </Button>

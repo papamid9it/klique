@@ -16,6 +16,7 @@ import { relativeStamp } from "@/lib/format";
 import { useApi, useNow } from "@/lib/hooks/useApi";
 import type { Envelope, UserBrief } from "@/lib/types";
 import { ConfirmModal } from "./parts";
+import { useConfirm } from "@/components/providers/ConfirmProvider";
 
 const api = new ApiClient();
 
@@ -45,6 +46,7 @@ interface Hooks {
  */
 export function WebhooksPanel({ slug }: { slug: string }) {
   const toast = useToast();
+  const confirm = useConfirm();
   const now = useNow();
   const { data, loading, error, reload } = useApi(() => api.get<Envelope<Hooks>>(`/api/communities/${slug}/webhooks`), [slug], { key: `webhooks:${slug}` });
   const [making, setMaking] = useState(false);
@@ -52,6 +54,7 @@ export function WebhooksPanel({ slug }: { slug: string }) {
   const [removing, setRemoving] = useState<Hook | null>(null);
 
   async function renew(h: Hook) {
+    if (!(await confirm({ title: "Make a new link?", body: "The old link stops working straight away; anything using it must get the new one.", confirmLabel: "New link" }))) return;
     try {
       const res = await api.patch<Envelope<{ webhook: Hook; url: string | null }>>(`/api/communities/${slug}/webhooks/${h.id}`, { regenerate: true });
       if (res.data.url) setShown({ name: h.name, url: res.data.url });

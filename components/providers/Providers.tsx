@@ -14,6 +14,7 @@ import { RealtimeProvider } from "./RealtimeProvider";
 import { ProfileCardProvider } from "./ProfileCardProvider";
 import { ThemeProvider } from "./ThemeProvider";
 import { ToastProvider } from "./ToastProvider";
+import { ConfirmProvider } from "./ConfirmProvider";
 
 /** The admin's category list: the built-in defaults show until it arrives (they're the usual answer anyway). */
 function useLoadCategories() {
@@ -66,6 +67,7 @@ export function Providers({ children }: { children: ReactNode }) {
           <ThemeProvider>
             <PlaceProvider>
               {/* the media viewer goes outside the profile card: the card's own pop-ups (gallery photos) open it too */}
+              <ConfirmProvider>
               <MediaViewerProvider>
                 <ProfileCardProvider>
                   <LeaveProvider>
@@ -73,6 +75,7 @@ export function Providers({ children }: { children: ReactNode }) {
                   </LeaveProvider>
                 </ProfileCardProvider>
               </MediaViewerProvider>
+              </ConfirmProvider>
             </PlaceProvider>
           </ThemeProvider>
         </RealtimeProvider>

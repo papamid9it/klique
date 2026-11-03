@@ -14,6 +14,7 @@ import { EmptyState, ErrorState } from "@/components/ui/States";
 import { useApi, mutateApi } from "@/lib/hooks/useApi";
 import { useUploadStatus } from "@/lib/hooks/useUploads";
 import type { ProfileEffectDTO } from "@/lib/types";
+import { useConfirm } from "@/components/providers/ConfirmProvider";
 
 const kb = (n: number) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 
@@ -175,6 +176,7 @@ function EffectCard({ e, onEdit, onRemove }: { e: ProfileEffectDTO; onEdit: () =
 /** Admin → Profile effects: the animations people can unlock with Hype to play over their profile card. */
 export function EffectsAdmin() {
   const toast = useToast();
+  const confirm = useConfirm();
   const { data, loading, error, reload } = useApi(() => EffectService.adminList(), [], { key: "admin-effects" });
   const [editing, setEditing] = useState<ProfileEffectDTO | "new" | null>(null);
   const done = () => {
@@ -185,6 +187,7 @@ export function EffectsAdmin() {
   };
 
   async function remove(e: ProfileEffectDTO) {
+    if (!(await confirm({ title: "Delete this effect?", body: "People using it lose it. This can't be undone." }))) return;
     try {
       await EffectService.remove(e.id);
       toast("Removed", "success");

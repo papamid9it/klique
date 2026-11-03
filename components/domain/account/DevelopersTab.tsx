@@ -15,6 +15,7 @@ import { ErrorState } from "@/components/ui/States";
 import { useApi } from "@/lib/hooks/useApi";
 import { PERMISSIONS } from "@/lib/roles";
 import type { Envelope, UserBrief } from "@/lib/types";
+import { useConfirm } from "@/components/providers/ConfirmProvider";
 
 const api = new ApiClient();
 
@@ -49,6 +50,7 @@ const copy = async (text: string, toast: ReturnType<typeof useToast>, what: stri
  */
 export function DevelopersTab() {
   const toast = useToast();
+  const confirm = useConfirm();
   const { data, loading, error, reload } = useApi(() => api.get<Envelope<{ items: Bot[]; canCreate: boolean; reason: string | null }>>("/api/me/bots"), [], { key: "my-bots" });
   const [editing, setEditing] = useState<Bot | "new" | null>(null);
   const [token, setToken] = useState<{ name: string; token: string } | null>(null);
@@ -130,6 +132,7 @@ export function DevelopersTab() {
             <Button
               size="sm"
               onClick={async () => {
+                if (!(await confirm({ title: "Make a new token?", body: "The old token stops working straight away; update your bot with the new one.", confirmLabel: "New token" }))) return;
                 try {
                   const res = await api.post<Envelope<{ token: string }>>(`/api/me/bots/${b.id}/token`, {});
                   setToken({ name: b.name, token: res.data.token });

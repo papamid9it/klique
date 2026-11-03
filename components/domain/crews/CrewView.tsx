@@ -33,6 +33,7 @@ import { useApi, useNow } from "@/lib/hooks/useApi";
 import type { ChannelDTO, CrewDTO, CrewJoinMode } from "@/lib/types";
 import { Faces, StandingTag, crewHref, fromLagos, lagosInputs } from "./parts";
 import { AudienceFields, audienceInput, audienceTag, checkAudience, type AudienceValue } from "./AudienceFields";
+import { useConfirm } from "@/components/providers/ConfirmProvider";
 
 /**
  * One klique: its cover and hook line, where and when to meet (members only), who's in, join / ask / leave, the
@@ -118,6 +119,7 @@ function Page({ children }: { children: ReactNode }) {
 function Crew({ crew, tab, embedded, onChange, onGone, onRead, onMenu, reload }: { crew: CrewDTO; tab: string | null; embedded: boolean; onChange: (c: CrewDTO) => void; onGone?: () => void; onRead?: () => void; onMenu?: () => void; reload: () => Promise<void> }) {
   const router = useRouter();
   const toast = useToast();
+  const confirm = useConfirm();
   const { requireAuth } = useAuth();
   const [busy, setBusy] = useState<string | null>(null);
   const [asking, setAsking] = useState(false);
@@ -269,7 +271,7 @@ function Crew({ crew, tab, embedded, onChange, onGone, onRead, onMenu, reload }:
                 </Button>
               </>
             ) : v.standing === "member" ? (
-              <Button size="sm" onClick={() => void act("leave", () => CrewService.leave(crew.id), "You left the klique")} loading={busy === "leave"}>
+              <Button size="sm" onClick={async () => (await confirm({ title: "Leave this klique?", body: "You can ask to join again later if there's room.", confirmLabel: "Leave" })) && void act("leave", () => CrewService.leave(crew.id), "You left the klique")} loading={busy === "leave"}>
                 Leave klique
               </Button>
             ) : v.standing === "pending" ? (
@@ -345,7 +347,7 @@ function Crew({ crew, tab, embedded, onChange, onGone, onRead, onMenu, reload }:
                     type="button"
                     aria-label={`Remove ${m.displayName}`}
                     title="Remove from klique"
-                    onClick={() => void act(`rm:${m.id}`, () => CrewService.removeMember(crew.id, m.id), `${m.displayName} was removed`)}
+                    onClick={async () => (await confirm({ title: `Remove ${m.displayName}?`, body: "They leave the klique and its chat.", confirmLabel: "Remove" })) && void act(`rm:${m.id}`, () => CrewService.removeMember(crew.id, m.id), `${m.displayName} was removed`)}
                     className="inline-flex size-7 items-center justify-center rounded-full text-ink-muted hover:bg-raised hover:text-ink"
                   >
                     <Icon name="x" size={14} />

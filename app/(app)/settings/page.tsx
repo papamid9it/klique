@@ -40,7 +40,6 @@ import { StylePicker, themeOf, type StyleDraft } from "@/components/domain/accou
 import { UnlockDialog, styleAccess, useHypeWallet } from "@/components/domain/account/Points";
 import { PlanTab } from "@/components/domain/account/PlanTab";
 import { ProfileMediaEditor } from "@/components/domain/account/ProfileMediaEditor";
-import { FeedMedia } from "@/components/domain/feed/FeedMedia";
 import { AgeSettings } from "@/components/domain/account/AgeSettings";
 import type { StyleKey } from "@/lib/wallet";
 import { UserName } from "@/components/ui/UserName";
@@ -51,7 +50,6 @@ import { DM_POLICIES, LIMITS, PROFILE_DESIGNS_ENABLED, PROFILE_VISIBILITY, type 
 import { useApi } from "@/lib/hooks/useApi";
 import { MOODS, type MoodId } from "@/lib/moods";
 import type { UserMe } from "@/lib/types";
-import { useMediaViewer } from "@/components/providers/MediaViewerProvider";
 import { DevelopersTab } from "@/components/domain/account/DevelopersTab";
 
 type Tab = "account" | "profile" | "gallery" | "style" | "plan" | "developers" | "privacy" | "blocked" | "notifications" | "appearance";
@@ -439,7 +437,6 @@ const aboutOf = (me: UserMe): ProfileDraft => ({ displayName: me.displayName, bi
 
 /** The little profile card beside the Profile and Profile style forms, updating as you edit. */
 function ProfilePreview({ me, draft }: { me: UserMe; draft: PreviewDraft }) {
-  const viewMedia = useMediaViewer();
   return (
     <aside aria-label="Preview" className="lg:sticky lg:top-14 lg:self-start">
       <p className="eyebrow mb-2">Preview</p>
@@ -453,8 +450,7 @@ function ProfilePreview({ me, draft }: { me: UserMe; draft: PreviewDraft }) {
           </span>
           <p className="mt-2 truncate text-lg font-semibold tracking-[-0.02em]"><UserName name={draft.displayName || me.displayName} effect={draft.nameEffect} /></p>
           <p className="font-mono text-xs text-ink-muted">@{me.handle}</p>
-          {/* your photos and videos, as they show on your profile card */}
-          {(me.media?.length ?? 0) > 0 && <FeedMedia media={me.media} className="mt-3 overflow-hidden rounded-card" openLabel="View bigger" zoomHint onOpen={(i) => viewMedia(me.media, i)} />}
+          {/* (your gallery shows in your full profile, not on this card) */}
           <div className="mt-3 space-y-2.5 rounded-control border border-line bg-raised/50 p-3 text-[13px]">
             {draft.bio && <p className="whitespace-pre-wrap">{draft.bio}</p>}
             <p className="inline-flex items-center gap-1 text-ink-muted"><Icon name="pin" size={12} /> {[draft.neighborhood, placeLabel(draft.place)].filter(Boolean).join(", ")}</p>

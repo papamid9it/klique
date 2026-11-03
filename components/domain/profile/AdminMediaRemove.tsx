@@ -8,6 +8,7 @@ import { FeedMedia } from "@/components/domain/feed/FeedMedia";
 import { useMediaViewer } from "@/components/providers/MediaViewerProvider";
 import { cdn } from "@/lib/cdn";
 import type { TopicMediaDTO } from "@/lib/types";
+import { useConfirm } from "@/components/providers/ConfirmProvider";
 
 const api = new ApiClient();
 
@@ -18,6 +19,7 @@ const api = new ApiClient();
 export function AdminMediaRemove({ userId, media, onRemoved }: { userId: string; media: TopicMediaDTO[]; onRemoved: (url: string) => void }) {
   const { user } = useAuth();
   const toast = useToast();
+  const confirm = useConfirm();
   const [busy, setBusy] = useState<string | null>(null);
   if (!user?.isAdmin || user.id === userId || !media.length) return null;
   return (
@@ -29,7 +31,7 @@ export function AdminMediaRemove({ userId, media, onRemoved }: { userId: string;
           type="button"
           disabled={busy !== null}
           onClick={async () => {
-            if (!window.confirm(`Delete ${m.kind === "video" ? "video" : "photo"} ${i + 1} from this profile? It's removed for good and logged.`)) return;
+            if (!(await confirm({ title: `Delete ${m.kind === "video" ? "video" : "photo"} ${i + 1}?`, body: "It's removed from this profile for good, and logged." }))) return;
             setBusy(m.url);
             try {
               await api.delete(`/api/admin/users/${userId}/media?url=${encodeURIComponent(m.url)}`);

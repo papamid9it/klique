@@ -27,6 +27,7 @@ import { Modal } from "@/components/ui/Modal";
 import { useApi } from "@/lib/hooks/useApi";
 import { PRESENCES, type Presence } from "@/lib/constants";
 import type { CommunityCardDTO, FriendStatusDTO, ProfileView } from "@/lib/types";
+import { useConfirm } from "@/components/providers/ConfirmProvider";
 
 function hash(s: string) {
   let h = 0;
@@ -154,6 +155,7 @@ export function ProfileActions({
 }) {
   const router = useRouter();
   const toast = useToast();
+  const confirm = useConfirm();
   const [busy, setBusy] = useState<"msg" | "block" | null>(null);
   const [blockOpen, setBlockOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
@@ -204,7 +206,8 @@ export function ProfileActions({
           label: "Remove friend",
           icon: "x" as const,
           danger: true,
-          onSelect: () => {
+          onSelect: async () => {
+            if (!(await confirm({ title: "Remove friend?", body: "You can add each other again any time.", confirmLabel: "Remove" }))) return;
             FriendService.remove(p.handle).then(
               () => { onFriendship({ state: "none" }); toast("Removed from your friends", "success"); },
               (e) => toast(errorMessage(e), "error"),

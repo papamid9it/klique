@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { cx } from "@/components/ui/cx";
 import type { FriendStatusDTO } from "@/lib/types";
+import { useConfirm } from "@/components/providers/ConfirmProvider";
 
 /**
  * The one button for a person: Add friend → Request sent (tap to withdraw) → Accept / Decline → Friends.
@@ -18,6 +19,7 @@ import type { FriendStatusDTO } from "@/lib/types";
 export function FriendButton({ handle, status, onChange, size = "md", noMenu, iconOnly }: { handle: string; status: FriendStatusDTO; onChange: (s: FriendStatusDTO) => void; size?: "sm" | "md"; /** hide the "Remove friend" menu (the caller offers it elsewhere) */ noMenu?: boolean; /** small round icon buttons (the profile popout) */ iconOnly?: boolean }) {
   const { requireAuth } = useAuth();
   const toast = useToast();
+  const confirm = useConfirm();
   const [busy, setBusy] = useState(false);
 
   async function run(fn: () => Promise<FriendStatusDTO | null>, done?: string) {
@@ -55,7 +57,7 @@ export function FriendButton({ handle, status, onChange, size = "md", noMenu, ic
         <Button size={size} disabled className="!opacity-100">
           <Icon name="check" size={14} /> Friends
         </Button>
-        {!noMenu && <OverflowMenu label="Friend options" items={[{ label: "Remove friend", icon: "x", danger: true, onSelect: () => void run(async () => (await FriendService.remove(handle), { state: "none" as const }), "Removed from your friends") }]} />}
+        {!noMenu && <OverflowMenu label="Friend options" items={[{ label: "Remove friend", icon: "x", danger: true, onSelect: async () => (await confirm({ title: "Remove friend?", body: "You can add each other again any time.", confirmLabel: "Remove" })) && void run(async () => (await FriendService.remove(handle), { state: "none" as const }), "Removed from your friends") }]} />}
       </div>
     );
   }

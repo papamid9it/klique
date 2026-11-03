@@ -23,6 +23,7 @@ import { useApi } from "@/lib/hooks/useApi";
 import type { FriendStatusDTO, UserBrief } from "@/lib/types";
 import { UserName } from "@/components/ui/UserName";
 import { useRealtimeEvent } from "@/components/providers/RealtimeProvider";
+import { useConfirm } from "@/components/providers/ConfirmProvider";
 
 type Tab = "all" | "pending" | "add";
 
@@ -34,6 +35,7 @@ export default function FriendsPage() {
   const card = useProfileCard();
   const sp = useSearchParams();
   const toast = useToast();
+  const confirm = useConfirm();
   const tab: Tab = sp.get("tab") === "pending" ? "pending" : sp.get("tab") === "add" ? "add" : "all";
 
   const friends = useApi(authed ? () => FriendService.list() : null, [authed], { key: "friends" });
@@ -179,6 +181,7 @@ export default function FriendsPage() {
                                 icon: "x",
                                 danger: true,
                                 onSelect: async () => {
+                                  if (!(await confirm({ title: `Remove ${f.user.displayName}?`, body: "You can add each other again any time.", confirmLabel: "Remove" }))) return;
                                   try {
                                     await FriendService.remove(f.user.handle);
                                     toast("Removed from your friends", "success");

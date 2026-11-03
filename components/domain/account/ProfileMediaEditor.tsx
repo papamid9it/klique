@@ -15,6 +15,7 @@ import { cdn } from "@/lib/cdn";
 import { useApi } from "@/lib/hooks/useApi";
 import { PLAN_NAMES } from "@/lib/plans";
 import type { TopicMediaDTO, UserMe } from "@/lib/types";
+import { useConfirm } from "@/components/providers/ConfirmProvider";
 
 /** how long a profile video may be */
 export const PROFILE_VIDEO_SECONDS = 30;
@@ -42,6 +43,7 @@ export function ProfileMediaEditor({ me }: { me: UserMe }) {
   const { setUser } = useAuth();
   const view = useMediaViewer();
   const toast = useToast();
+  const confirm = useConfirm();
   const plan = useApi(() => SubscriptionService.mine(), [], { key: "my-plan" });
   const [items, setItems] = useState<TopicMediaDTO[]>(me.media ?? []);
   const [busy, setBusy] = useState<number | null>(null);
@@ -188,7 +190,7 @@ export function ProfileMediaEditor({ me }: { me: UserMe }) {
                         ...(i < items.length - 1 ? [{ label: "Move later", icon: "chevron-right" as const, onSelect: () => reorder(i, i + 1) }] : []),
                         ...(over ? [] : [{ label: "Replace", icon: "image" as const, onSelect: () => choose(i) }]),
                         { type: "sep" as const },
-                        { label: "Remove", icon: "trash" as const, danger: true, onSelect: () => void save(items.filter((_, j) => j !== i)) },
+                        { label: "Remove", icon: "trash" as const, danger: true, onSelect: async () => (await confirm({ title: `Remove this ${m.kind === "video" ? "video" : "photo"}?`, body: "It's deleted from your gallery for good.", confirmLabel: "Remove" })) && void save(items.filter((_, j) => j !== i)) },
                       ]}
                       trigger={({ props }) => (
                         <button {...props} aria-label="Photo options" className="inline-flex size-8 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur transition hover:bg-black/80">

@@ -13,6 +13,7 @@ import { cdn } from "@/lib/cdn";
 import { useApi } from "@/lib/hooks/useApi";
 import { PLAN_NAMES, type PlanId } from "@/lib/plans";
 import type { Envelope } from "@/lib/types";
+import { useConfirm } from "@/components/providers/ConfirmProvider";
 
 const api = new ApiClient();
 type E = { id: string; name: string; url: string; animated: boolean };
@@ -26,6 +27,7 @@ const nameFrom = (file: string) => file.replace(/\.[^.]+$/, "").toLowerCase().re
  */
 export function EmojiPanel({ slug }: { slug: string }) {
   const toast = useToast();
+  const confirm = useConfirm();
   const { data, loading, error, reload } = useApi(() => api.get<Envelope<List>>(`/api/communities/${slug}/emoji`), [slug], { key: `emoji:${slug}` });
   const file = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -59,6 +61,7 @@ export function EmojiPanel({ slug }: { slug: string }) {
     }
   }
   async function remove(e: E) {
+    if (!(await confirm({ title: `Delete :${e.name}:?`, body: "Messages that used it show :" + e.name + ": instead. This can't be undone." }))) return;
     try {
       await api.delete(`/api/communities/${slug}/emoji/${e.id}`);
       toast(`:${e.name}: deleted`, "success");
