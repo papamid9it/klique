@@ -47,6 +47,8 @@ import { purgeCommunity } from "./communities.service";
 import { purgeEvent } from "./events.service";
 import { deleteUploads } from "./media.service";
 import { AdCampaign } from "../models/AdCampaign";
+import { Crew, type ICrew } from "../models/Crew";
+import { purgeCrews } from "./crews.service";
 
 /** Everything here is for site admins only (ADMIN_EMAILS). */
 export function assertAdmin(viewer: IUser) {
@@ -102,6 +104,12 @@ async function describeTarget(r: IReport, briefs: Map<string, UserBrief>): Promi
       const [ch, c] = await Promise.all([Channel.findById(m.channelId).select("slug name topicId").lean<Pick<IChannel, "slug" | "name" | "topicId">>(), Community.findById(m.communityId).select("slug name").lean<Pick<ICommunity, "slug" | "name">>()]);
       const author = (await loadBriefs([m.authorId])).get(sid(m.authorId)) ?? null;
       return { title: ch?.topicId ? `Reply to the post "${ch.name}" in ${c?.name ?? "a community"}` : `Message in ${c?.name ?? "a community"} #${ch?.name ?? "channel"}`, body: m.deletedAt ? "" : m.body, images: m.deletedAt ? [] : [...(m.images ?? []), ...(m.stickerUrl ? [m.stickerUrl] : [])], author, href: c && ch ? (ch.topicId ? `/communities/${c.slug}?view=topics&t=${sid(ch.topicId)}` : `/communities/${c.slug}?c=${ch.slug}`) : null, gone: !!m.deletedAt, removable: !m.deletedAt };
+    }
+    case "klique": {
+      const k = await Crew.findById(r.targetId).lean<ICrew>();
+      if (!k) return none;
+      const author = (await loadBriefs([k.hostId])).get(sid(k.hostId)) ?? null;
+      return { title: `Klique: ${k.title}${k.womenOnly ? " · women only" : ""}`, body: [`From ${k.area}`, k.note].filter(Boolean).join("\n\n"), images: k.coverImage ? [k.coverImage] : [], author, href: `/kliques/${sid(k._id)}`, gone: false, removable: true };
     }
     case "ad": {
       const a = await Ad.findById(r.targetId).lean<IAd>();
@@ -200,6 +208,10 @@ async function removeTarget(r: IReport, admin: IUser) {
       deleteUploads(p.media.flatMap((m) => [m.url, m.poster]), { force: true });
       return;
     }
+    case "klique": {
+      await purgeCrews({ _id: r.targetId });
+      return;
+    }
     case "ad":
       // reported ads are paused, not deleted, so the advertiser's record and numbers survive
       await Ad.updateOne({ _id: r.targetId }, { status: "paused" });
@@ -229,6 +241,8 @@ async function authorOf(r: IReport): Promise<Types.ObjectId | null> {
       return (await Message.findById(r.targetId).select("senderId").lean<Pick<IMessage, "senderId">>())?.senderId ?? null;
     case "feedPost":
       return (await FeedPost.findById(r.targetId).select("authorId").lean<Pick<IFeedPost, "authorId">>())?.authorId ?? null;
+    case "klique":
+      return (await Crew.findById(r.targetId).select("hostId").lean<Pick<ICrew, "hostId">>())?.hostId ?? null;
     case "ad":
       return null;
   }
@@ -478,6 +492,8 @@ export async function listAdminCommunities(q: { q: string; sort: "members" | "ne
       createdAt: c.createdAt.toISOString(),
       adult: !!c.adult,
       explicit: !!c.explicit,
+      verified: !!c.verified || !!c.official,
+      official: !!c.official,
     })),
     page: q.page,
     hasMore: rows.length > size,
@@ -485,9 +501,16 @@ export async function listAdminCommunities(q: { q: string; sort: "members" | "ne
 }
 
 /** Take a community's 18+ flag off (which also ends explicit content), or just its explicit flag. */
-export async function adminCommunityFlags(admin: IUser, id: string, input: { adult?: false; explicit?: false; note?: string }) {
-  const c = await Community.findById(id).lean<ICommunity>();
+export async function adminCommunityFlags(admin: IUser, id: string, input: { adult?: false; explicit?: false; verified?: boolean; note?: string }) {
+  const c = await (Types.ObjectId.isValid(id) ? Community.findById(id) : Community.findOne({ slug: id.toLowerCase() })).lean<ICommunity>();
   if (!c) throw notFound("That community is gone.");
+  // the "Verified" check: only site admins give or take it (Klique HQ always keeps it)
+  if (input.verified !== undefined) {
+    if (c.official && !input.verified) throw badRequest("Klique HQ is always verified.");
+    await Community.updateOne({ _id: c._id }, { $set: { verified: input.verified } });
+    await logAction(admin, input.verified ? "community.verify" : "community.unverify", "community", c._id, c.name, input.note || "", `/communities/${c.slug}`);
+    return { verified: input.verified };
+  }
   const set = input.adult === false ? { adult: false, explicit: false } : input.explicit === false ? { explicit: false } : null;
   if (!set) throw badRequest("Nothing to change.");
   await Community.updateOne({ _id: c._id }, { $set: set });

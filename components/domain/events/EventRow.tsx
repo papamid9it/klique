@@ -45,7 +45,7 @@ export function EventRow({ event, onChange }: { event: EventDTO; onChange: (e: E
           </span>
           {!event.online && !event.isPast && (
             <SoftLink href={crewsHref(event)} scroll={false} className="inline-flex items-center gap-1 font-medium text-accent-text hover:underline">
-              <Icon name="users" size={12} /> {event.crewCount ? `${event.crewCount} ${event.crewCount === 1 ? "crew" : "crews"} going` : "Find a crew"}
+              <Icon name="users" size={12} /> {event.crewCount ? `${event.crewCount} ${event.crewCount === 1 ? "klique" : "kliques"} going` : "Find a klique"}
             </SoftLink>
           )}
         </p>

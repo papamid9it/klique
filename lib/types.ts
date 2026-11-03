@@ -28,6 +28,8 @@ export interface UserBrief {
   id: Id;
   handle: string;
   displayName: string;
+  /** a Lite or Pro badge by their name */
+  badge?: "lite" | "pro" | null;
   avatarUrl: string | null;
   /** animated ring around the picture (lib/cosmetics FrameId), if chosen */
   avatarFrame?: string | null;
@@ -36,6 +38,8 @@ export interface UserBrief {
   /** ISO country code, e.g. "NG" */
   country: string;
   city: CityId;
+  /** a bot's account (BOT tag) */
+  bot?: boolean;
 }
 
 export interface UserPrivacy {
@@ -60,6 +64,8 @@ export interface UserProfile extends UserBrief {
   /** two colours tinting their profile card, and an animated layer over it (Hype designs) */
   profileTheme: { primary: string; accent: string } | null;
   profileEffect: string | null;
+  /** photos and short videos on their profile, in order (as many as their plan shows) */
+  media: TopicMediaDTO[];
 }
 
 /** The signed-in user's own account. */
@@ -99,6 +105,8 @@ export interface UserMe extends UserProfile {
   /** date of birth ("YYYY-MM-DD"), set once (then only Klique can change it), and what it allows (policies/adult) */
   dob: string | null;
   dobLocked: boolean;
+  /** optional; only used for "Women only" kliques */
+  gender: "woman" | "man" | "unspecified";
   isAdult: boolean;
   /** said "I'm 18 or older" (before first entering an 18+ community) */
   adultConfirmed: boolean;
@@ -162,6 +170,8 @@ export interface FriendsSummaryDTO {
 
 export interface MessagingEligibility {
   allowed: boolean;
+  /** allowed, but only as a message request (one text message, waiting for them to accept) */
+  request?: boolean;
   reason?: "self" | "blocked" | "unavailable" | "policy_nobody" | "policy_shared" | "signed_out";
   message?: string;
 }
@@ -186,6 +196,14 @@ export interface ViewerAccess {
   canModerate?: boolean;
   /** a member who can't post yet: the points this space asks for (they have fewer) */
   pointsToPost?: number;
+  /** timed out in this community until then (they can read, not post or react) */
+  timedOutUntil?: ISODate | null;
+  /** they must accept the community's rules before posting (welcome screen) */
+  needsRules?: boolean;
+  /** show them the welcome screen */
+  welcomePending?: boolean;
+  /** what their community roles let them do (lib/roles): moderators who aren't admins see the matching tools */
+  perms?: import("./roles").Permission[];
 }
 
 export interface CommunityCardDTO {
@@ -194,6 +212,10 @@ export interface CommunityCardDTO {
   name: string;
   /** made by Klique; the default "Klique" community everyone is in */
   official: boolean;
+  /** a "Verified" check by its name (site admins give it) */
+  verified: boolean;
+  /** joining means answering its entry questions first */
+  screening?: boolean;
   /** short preview. For a locked private community this is empty. */
   description: string;
   interest: InterestId;
@@ -231,6 +253,10 @@ export interface CommunityDTO extends CommunityCardDTO {
   canHostEvents: boolean;
   /** members may send events in for approval */
   memberEvents: boolean;
+  /** members may use @everyone / @here (owners and admins always can) */
+  membersMassMention?: boolean;
+  /** you've muted @everyone and @here in this community */
+  suppressEveryone?: boolean;
   /** the viewer is a member who can send an event in for the owner or an admin to approve */
   canSubmitEvents: boolean;
   /** the Posts section: "off", or who may post ("admins" or "members") */
@@ -267,7 +293,10 @@ export interface SubcommunityDTO {
 /** A post in a community's Posts section (Instagram style). */
 export interface FeedPostDTO {
   id: Id;
-  community: { id: Id; slug: string; name: string; interest: InterestId; coverImage: string | null; privacy: CommunityPrivacy; explicit?: boolean };
+  /** #tags in the caption, and the @people and @communities it names */
+  tags?: string[];
+  refs?: TextRefsDTO;
+  community: { id: Id; slug: string; name: string; interest: InterestId; coverImage: string | null; privacy: CommunityPrivacy; explicit?: boolean; verified?: boolean };
   author: UserBrief;
   caption: string;
   /** a text-only post's title ("" otherwise; lib/feedText) */
@@ -293,6 +322,8 @@ export interface FeedPostDTO {
 
 export interface FeedCommentDTO {
   id: Id;
+  /** the @people and @communities it names */
+  refs?: TextRefsDTO;
   postId: Id;
   parentId: Id | null;
   /** empty when deleted */
@@ -327,12 +358,57 @@ export interface PostDTO {
   canDelete: boolean;
 }
 
+/** A custom role in a community (lib/roles). */
+export interface RoleDTO {
+  id: Id;
+  name: string;
+  color: string | null;
+  icon: string | null;
+  /** higher = higher up */
+  position: number;
+  permissions: import("./roles").Permission[];
+  selfAssignable: boolean;
+  /** "admin": the built-in Admin role (what "admin" means; its permissions are fixed) */
+  builtin: "admin" | null;
+  memberCount?: number;
+}
+
 export interface MemberDTO {
   user: UserBrief;
   role: Role;
   joinedAt: ISODate;
   canChangeRole: boolean;
   canRemove: boolean;
+  /** their custom roles, top first */
+  roles?: Pick<RoleDTO, "id" | "name" | "color" | "icon">[];
+  /** you can change their roles */
+  canEditRoles?: boolean;
+  /** owners and admins above them may time them out (or lift it) */
+  canTimeout?: boolean;
+  /** timed out until then (owners and admins see it) */
+  timedOutUntil?: ISODate | null;
+  timeoutReason?: string | null;
+  /** their answers to the entry questions when they joined (owners and admins only) */
+  answers?: EntryAnswer[];
+}
+
+/** Entry questions (membership screening): asked before someone joins a community. */
+export interface ScreeningQuestion {
+  id: string;
+  /** a short answer, one of `options`, or an "I agree" box */
+  kind: "text" | "choice" | "agree";
+  prompt: string;
+  options: string[];
+  required: boolean;
+}
+export interface ScreeningDTO {
+  enabled: boolean;
+  questions: ScreeningQuestion[];
+}
+/** One answer, with what the question said when it was answered. */
+export interface EntryAnswer {
+  prompt: string;
+  answer: string;
 }
 
 export type RequestStatus = "pending" | "approved" | "rejected";
@@ -340,6 +416,8 @@ export interface MembershipRequestDTO {
   id: Id;
   user: UserBrief;
   message: string;
+  /** their answers to the entry questions */
+  answers?: EntryAnswer[];
   status: RequestStatus;
   createdAt: ISODate;
 }
@@ -411,7 +489,7 @@ export interface EventDTO {
   /** an event found elsewhere and approved by Klique: who really runs it, and where its tickets are */
   organizer: { name: string; url: string | null } | null;
   /** `official`: it's in Klique, the default community everyone's in (so everyone sees it) */
-  community: { slug: string; name: string; privacy: CommunityPrivacy; official?: boolean; adult?: boolean } | null;
+  community: { slug: string; name: string; privacy: CommunityPrivacy; official?: boolean; adult?: boolean; verified?: boolean } | null;
   subcommunity: { slug: string; name: string } | null;
   audience: EventAudience;
   goingCount: number;
@@ -428,16 +506,34 @@ export interface EventDTO {
   contribution: EventContributionDTO | null;
 }
 
-/* ------------------------------ crews ------------------------------- */
+/* ------------------------------ kliques ------------------------------ */
+/* (called crews before Nov 2026: the code keeps the Crew names; people only ever see "klique") */
 
 export type CrewJoinMode = "open" | "approval";
-/** where the viewer stands with a crew */
+/** where the viewer stands with a klique */
 export type CrewStanding = "host" | "member" | "pending" | null;
 
-/** A crew in a list: enough to decide whether to join. The exact meetup point stays hidden until you're in. */
+/** A klique in a list: enough to decide whether to join. The exact meetup point stays hidden until you're in. */
 export interface CrewCardDTO {
   id: Id;
-  eventId: Id;
+  /** going to this event together; null for a community klique */
+  eventId: Id | null;
+  /** the hook line: "Who wants to watch Dune at Filmhouse Lekki on Saturday?" */
+  title: string;
+  interest: InterestId;
+  coverImage: string | null;
+  womenOnly: boolean;
+  /** who can join (mixed: `womenSpots` for women, `menSpots` for men, the rest anyone) */
+  audience: "everyone" | "women" | "men" | "mixed";
+  womenSpots: number;
+  menSpots: number;
+  /** spots still open, by who can take them (mixed kliques; otherwise all in `any`) */
+  left: { women: number; men: number; any: number };
+  /** the event it's for (null for a community klique) */
+  event: { id: Id; title: string; startsAt: ISODate } | null;
+  /** the community it belongs to (the event's, for an event klique), if any */
+  community: { slug: string; name: string; verified?: boolean } | null;
+  city: CityId;
   area: string;
   note: string;
   meetupAt: ISODate;
@@ -455,12 +551,13 @@ export interface CrewCardDTO {
   viewer: { standing: CrewStanding };
 }
 
-/** A crew you're in (or asked to join), for the community's left panel. */
+/** A klique you're in (or asked to join), for the community's left panel. */
 export interface MyCrewDTO {
   id: Id;
+  title: string;
   area: string;
-  eventId: Id;
-  eventTitle: string;
+  eventId: Id | null;
+  eventTitle: string | null;
   meetupAt: ISODate;
   memberCount: number;
   standing: Exclude<CrewStanding, null>;
@@ -473,7 +570,7 @@ export interface MyCrewDTO {
 export interface CrewDTO extends CrewCardDTO {
   /** null unless you're in the crew */
   meetupPoint: string | null;
-  event: { id: Id; title: string; startsAt: ISODate; endsAt: ISODate | null; venue: string; online: boolean; coverImage: string | null; city: CityId; country: string };
+  event: { id: Id; title: string; startsAt: ISODate; endsAt: ISODate | null; venue: string; online: boolean; coverImage: string | null; city: CityId; country: string } | null;
   members: UserBrief[];
   /** join requests waiting (host only) */
   requests: { user: UserBrief; message: string; createdAt: ISODate }[];
@@ -488,6 +585,92 @@ export interface CrewDTO extends CrewCardDTO {
     /** join this community (sub = null) or group first; `ask`: it takes a request; `requested`: one is waiting */
     joinSpace: { slug: string; sub: string | null; name: string; ask: boolean; requested: boolean } | null;
   };
+}
+
+/** One line of a community's moderation log: who removed whose what, and when. */
+export interface ModLogEntryDTO {
+  id: Id;
+  action: string;
+  /** feedPost, topic, channelMessage, event, klique, kliqueMessage */
+  targetType: string;
+  label: string;
+  actor: UserBrief | null;
+  author: UserBrief | null;
+  createdAt: ISODate;
+}
+
+/** Who and what a post's or comment's text names (@people, @communities), resolved when it was written. */
+export interface TextRefsDTO {
+  users: MentionDTO[];
+  communities: { slug: string; name: string; verified: boolean }[];
+}
+
+/** Search inside a community: what kind of thing a result is. */
+export type SearchKind = "message" | "topic" | "post" | "event" | "klique" | "member";
+export interface SearchHitDTO {
+  kind: SearchKind;
+  id: Id;
+  /** the channel ("#general"), the board post's or event's title, the person's name */
+  title: string;
+  /** the text around the match */
+  snippet: string;
+  author: UserBrief | null;
+  at: ISODate | "";
+  /** where "Jump" goes (a chat message opens its channel at that message) */
+  href: string;
+  image?: string | null;
+  pinned?: boolean;
+}
+export interface CommunitySearchDTO {
+  /** the free text searched (filters taken out) */
+  query: string;
+  /** the filters understood, as chips: "from:@tobi", "has:image"… */
+  filters: string[];
+  counts: Record<SearchKind, number>;
+  /** a few of each kind, or a page of one kind (`type`) */
+  hits: SearchHitDTO[];
+  hasMore: boolean;
+  page: number;
+  type: SearchKind | null;
+  sort: "relevance" | "newest";
+}
+
+/** Your plan (lib/plans): Free, Lite or Pro, and how much of its limits you've used. */
+export interface SubscriptionDTO {
+  plan: "free" | "lite" | "pro";
+  /** a paid plan's last day (null on Free) */
+  until: ISODate | null;
+  /** "active" renews; "non_renewing" was cancelled (lasts to `until`); "attention": a renewal failed */
+  status: "active" | "non_renewing" | "attention" | "ended" | null;
+  /** paid on Paystack, or free time (leftover Hype, an admin's gift) */
+  source: "paystack" | "hype" | "grant" | null;
+  /** it renews by itself next month (so it can be cancelled) */
+  renews: boolean;
+  /** site admins have everything free */
+  siteAdmin: boolean;
+  /** Paystack is set up, so plans can be bought */
+  canBuy: boolean;
+  config: import("./plans").PlanConfig;
+  /** kliques started this month, and kliques you're in now (not hosting) */
+  usage: { started: number; inNow: number };
+}
+
+/** Kliques to join: "Kliques for you" on Home, and /kliques (with filters). */
+export interface KliqueListDTO {
+  items: CrewCardDTO[];
+  hasMore: boolean;
+}
+
+/** What starting a klique needs to know: where you may start one, and the form's options. */
+export interface KliqueStartDTO {
+  /** you may offer "Women only" (your profile says woman) */
+  canWomenOnly: boolean;
+  /** you may offer "Men only" (your profile says man) */
+  canMenOnly: boolean;
+  /** why you can't start one at all (age, email, plan limit…), in words */
+  blockedReason: string | null;
+  /** communities you're in, for a community klique */
+  communities: { slug: string; name: string; interest: InterestId }[];
 }
 
 export interface EventCrewsDTO {
@@ -606,6 +789,8 @@ export interface ConversationDTO {
   updatedAt: ISODate;
   /** true when the viewer blocked the other person (never reveals the reverse) */
   blockedByMe: boolean;
+  /** a message request waiting to be accepted: sent by you (`fromMe`) or to you */
+  request?: { fromMe: boolean } | null;
 }
 
 export interface ConversationDetailDTO {
@@ -618,7 +803,7 @@ export interface ConversationDetailDTO {
 
 /* ------------------------------ safety ------------------------------ */
 
-export type ReportTargetType = "user" | "post" | "event" | "community" | "subcommunity" | "message" | "channelMessage" | "ad" | "feedPost";
+export type ReportTargetType = "user" | "post" | "event" | "community" | "subcommunity" | "message" | "channelMessage" | "ad" | "feedPost" | "klique";
 
 export interface ReportInput {
   targetType: ReportTargetType;
@@ -638,10 +823,34 @@ export interface BlockedUserDTO {
 export type ChannelType = "text" | "announcement" | "voice";
 export type ChannelVisibility = "all" | "managers" | "invite";
 
+/** a role's allow / deny on a channel or category (custom roles; null = as usual) */
+export interface RoleOverrideDTO {
+  roleId: Id;
+  view: "allow" | "deny" | null;
+  post: "allow" | "deny" | null;
+}
+
+/** A thread in a channel's thread list. */
+export interface ThreadDTO {
+  slug: string;
+  name: string;
+  count: number;
+  lastAt: ISODate | null;
+  createdAt: ISODate;
+  /** no replies for 7 days (a new reply opens it again) */
+  archived: boolean;
+  startedBy: UserBrief | null;
+  /** the message it hangs off, and who replied last */
+  startMessageId: Id;
+  lastBy: string | null;
+}
+
 export interface ChannelCategoryDTO {
   id: Id;
   name: string;
   position: number;
+  /** role overrides for its channels (people who manage channels see them) */
+  overrides?: RoleOverrideDTO[];
 }
 
 export interface ChannelDTO {
@@ -660,6 +869,14 @@ export interface ChannelDTO {
   unreadCount: number;
   /** the signed-in viewer may post here (server-computed; never trust the UI alone) */
   canPost: boolean;
+  /** you're timed out in this community until then (you can read, not post) */
+  timedOutUntil?: ISODate | null;
+  /** role overrides on this channel (people who manage channels see them) */
+  overrides?: RoleOverrideDTO[];
+  /** they must accept the community's rules before they can post */
+  needsRules?: boolean;
+  /** this is a thread off a message in another channel */
+  thread?: { parentSlug: string; parentName: string; startMessageId: Id; archived: boolean };
   /** unread messages that tag the viewer (capped at 99) */
   mentions: number;
   /** guest-list size, for private channels (owners/admins only) */
@@ -668,6 +885,10 @@ export interface ChannelDTO {
   slowModeSec: number;
   /** the viewer doesn't wait (owners, admins, site admins) */
   slowModeExempt: boolean;
+  /** may use @everyone / @here here (Discord's "Mention @everyone, @here and all roles") */
+  canMassMention?: boolean;
+  /** about how many people can see it (for "This will notify N people") */
+  audience?: number;
 }
 
 /** A group the viewer belongs to, with the channels they can see in it. */
@@ -708,6 +929,8 @@ export interface MyCommunityDTO {
   interest: InterestId;
   coverImage: string | null;
   privacy: CommunityPrivacy;
+  /** a "Verified" check by its name */
+  verified?: boolean;
   role: Role;
   unread: boolean;
   /** unread messages across its channels you can see, and your crews' chats there (capped at 99) */
@@ -752,8 +975,16 @@ export interface ChannelMessageDTO {
   /** people tagged with @handle */
   mentions: MentionDTO[];
   mentionsMe: boolean;
+  /** pinged @everyone or @here (it highlights for everyone who could see it) */
+  massMention?: "everyone" | "here" | null;
   /** a poll posted with this message (load it with PollService) */
   pollId?: Id | null;
+  /** posted by a channel webhook (a bot): `author` is its name and picture, with no profile behind it */
+  bot?: boolean;
+  /** the author's name colour here (their highest coloured role) */
+  color?: string | null;
+  /** a thread started from this message */
+  thread?: { slug: string; name: string; count: number; lastAt: ISODate | null; lastBy?: string | null };
   /** only on optimistic client-side rows */
   pending?: boolean;
 }
@@ -1017,7 +1248,7 @@ export interface UploadStatusDTO {
 
 /** Short-lived permission to put one upload (and its small copy or still frame) straight into storage. */
 export interface UploadSignatureDTO {
-  kind: "avatar" | "photo" | "video" | "effect";
+  kind: "avatar" | "photo" | "video" | "effect" | "emoji";
   resource: "image" | "video" | "file";
   items: { variant: "main" | "sm" | "poster"; uploadUrl: string; headers: Record<string, string>; url: string }[];
 }
@@ -1324,6 +1555,9 @@ export interface AdminCommunityRow {
   /** 18+, and allowing explicit content */
   adult: boolean;
   explicit: boolean;
+  /** has the "Verified" check (Klique HQ always) */
+  verified: boolean;
+  official: boolean;
 }
 
 export interface SystemStatusDTO {

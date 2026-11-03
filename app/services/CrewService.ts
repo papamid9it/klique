@@ -1,11 +1,19 @@
 import ApiClient from "@/app/ApiCore";
 import type { ReactionKind } from "@/lib/reactions";
-import type { ChannelMessageDTO, ChatPage, CrewDTO, CrewJoinMode, Envelope, EventCrewsDTO, MyCrewDTO, ReactionDTO, UserBrief } from "@/lib/types";
+import type { ChannelMessageDTO, ChatPage, CrewDTO, CrewJoinMode, Envelope, EventCrewsDTO, KliqueListDTO, KliqueStartDTO, MyCrewDTO, ReactionDTO, UserBrief } from "@/lib/types";
 import type { SendInput } from "./ChannelService";
 
 const api = new ApiClient();
 
 export interface CrewInput {
+  title: string;
+  interest: string;
+  coverImage: string;
+  womenOnly: boolean;
+  /** who can join; mixed: `womenSpots` for women, `menSpots` for men, the rest anyone */
+  audience?: "everyone" | "women" | "men" | "mixed";
+  womenSpots?: number;
+  menSpots?: number;
   area: string;
   meetupPoint: string;
   /** ISO date-time */
@@ -15,8 +23,31 @@ export interface CrewInput {
   maxMembers: number;
 }
 
-/** Crews: people going to an event together. */
+export interface KliqueFilters {
+  interest?: string;
+  when?: "today" | "weekend" | "week";
+  q?: string;
+  /** one community's kliques */
+  community?: string;
+  /** only kliques in your communities */
+  mine?: boolean;
+  /** a place scope ("city:NG:lagos", "country:GH", "world") */
+  where?: string;
+  page?: number;
+  limit?: number;
+}
+const filterQuery = (f: KliqueFilters) => Object.fromEntries(Object.entries(f).filter(([, v]) => v !== undefined && v !== "").map(([k, v]) => [k, String(v)]));
+
+/** Kliques (the API still says "crews" for one klique's own routes): people doing something together. */
 export const CrewService = {
+  /** kliques to join near you, with filters (/kliques) */
+  list: (f: KliqueFilters = {}) => api.get<Envelope<KliqueListDTO>>(`/api/kliques`, filterQuery(f)),
+  /** "Kliques for you" on Home: not yours, not full, best for you first */
+  forYou: (f: KliqueFilters = {}) => api.get<Envelope<KliqueListDTO>>(`/api/kliques/for-you`, filterQuery(f)),
+  /** before the Start form: can you, Women only, your communities */
+  startInfo: () => api.get<Envelope<KliqueStartDTO>>(`/api/kliques/start`),
+  /** start a community's klique */
+  createInCommunity: (community: string, input: CrewInput) => api.post<Envelope<CrewDTO>>(`/api/kliques`, { ...input, community }),
   /** `q`: crews coming from an area ("yaba"); `limit`: how many (grows with "Load more") */
   forEvent: (eventId: string, opts: { q?: string; limit?: number } = {}) => api.get<Envelope<EventCrewsDTO>>(`/api/events/${eventId}/crews`, { ...(opts.q ? { q: opts.q } : {}), ...(opts.limit ? { limit: String(opts.limit) } : {}) }),
   create: (eventId: string, input: CrewInput) => api.post<Envelope<CrewDTO>>(`/api/events/${eventId}/crews`, input),

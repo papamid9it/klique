@@ -1,5 +1,5 @@
 import type { ReactionKind } from "@/lib/reactions";
-import type { ChannelMessageDTO, ChatPage, Envelope, RealtimeEvent, ReactionDTO, TypingTarget, UserBrief } from "@/lib/types";
+import type { ChannelMessageDTO, ChatPage, Envelope, RealtimeEvent, ReactionDTO, TypingTarget, UserBrief, ThreadDTO } from "@/lib/types";
 import { ChannelService, type SendInput, type SpaceRef } from "./ChannelService";
 import { CrewService } from "./CrewService";
 
@@ -21,6 +21,8 @@ export interface ChatSource {
   mentionable(q: string): Promise<Envelope<UserBrief[]>>;
   pin?(messageId: string, pinned: boolean): Promise<Envelope<ChannelMessageDTO>>;
   pins?(): Promise<Envelope<ChannelMessageDTO[]>>;
+  /** the channel's threads (to keep "N replies" on their messages up to date, however old the message) */
+  threads?(): Promise<Envelope<ThreadDTO[]>>;
   /** this live ping means something changed in this chat */
   isLive(e: RealtimeEvent): boolean;
   /** this chat for "X is typing…" */
@@ -40,6 +42,8 @@ export function channelSource(space: SpaceRef, channelSlug: string, channelId?: 
     mentionable: (q) => ChannelService.mentionable(space, channelSlug, q),
     pin: (id, pinned) => ChannelService.pin(space, channelSlug, id, pinned),
     pins: () => ChannelService.pins(space, channelSlug),
+    // a group's channels and threads themselves have no thread list
+    ...(space.sub || channelSlug.startsWith("t-") ? {} : { threads: () => ChannelService.threads(space, channelSlug) }),
     isLive: (e) => e.type === "channel" && (!channelId || e.channelId === channelId),
     typing: { kind: "channel", slug: space.slug, sub: space.sub ?? null, channel: channelSlug },
   };

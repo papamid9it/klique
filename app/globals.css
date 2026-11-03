@@ -498,3 +498,12 @@ html[data-motion="off"] .donate-btn:hover, html[data-motion="off"] .donate-btn:f
 }
 
 
+
+/* Phones: text boxes at 16px, so iPhones don't zoom the page when one is tapped (they do below 16px). */
+@media (max-width: 639px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]),
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}

@@ -18,6 +18,7 @@ import { startOfLagosDay } from "../lib/dates";
 import type { CityId, InterestId } from "../lib/constants";
 import { currencyOf, getCityEntry } from "../lib/places";
 import { hashPassword } from "../server/auth/password";
+import { assertSafeSeedTarget } from "./seed-guard";
 import { Channel, ChannelCategory, ChannelMember, ChannelMessage, ChannelRead, ensureChannelIndexes } from "../server/models/Channel";
 import { Friendship, pairKeyOf } from "../server/models/Friendship";
 import { Reaction } from "../server/models/Reaction";
@@ -25,6 +26,7 @@ import { LinkPreview } from "../server/models/LinkPreview";
 import { Community } from "../server/models/Community";
 import { Conversation, participantKey } from "../server/models/Conversation";
 import { Event } from "../server/models/Event";
+import { Crew, CrewMember, CrewMessage } from "../server/models/Crew";
 import { Invitation } from "../server/models/Invitation";
 import { Membership } from "../server/models/Membership";
 import { MembershipRequest } from "../server/models/MembershipRequest";
@@ -37,6 +39,7 @@ import { Subcommunity } from "../server/models/Subcommunity";
 import { User } from "../server/models/User";
 import { ensureDefaultChannels, ensureDefaultGroupChannels } from "../server/services/channels.service";
 import { recountMembers, recountRsvps } from "../server/services/helpers";
+import { ensureKlique, joinKlique } from "../server/services/klique.service";
 
 /** country + state + city for a seed row (the state comes from the gazetteer). */
 const placeOf = (country: string | undefined, city: string) => {
@@ -68,6 +71,10 @@ interface SeedUser {
   profileVisibility?: "public" | "members" | "private";
   dmPolicy?: "everyone" | "shared" | "nobody";
 }
+
+const PLANS: Record<string, "lite" | "pro"> = { sade: "pro", kunle: "pro", amara: "lite" };
+const WOMEN = new Set(["amara", "zainab", "folake", "ngozi", "sade", "ife", "efua", "wanjiru", "lerato", "zara"]);
+const MEN = new Set(["tobi", "kunle", "chidi", "emeka", "kwame", "otieno", "thabo"]); // yusuf and dami say nothing
 
 const USERS: SeedUser[] = [
   { handle: "tobi", name: "Tobi Adeyemi", city: "lagos", hood: "Yaba", bio: "Skates Freedom Park on Sundays. Shoots film. Always late.", interests: ["skate", "photography", "music"], dmPolicy: "everyone" },
@@ -431,13 +438,14 @@ async function main() {
     process.exit(1);
   }
   const reset = process.argv.includes("--reset");
+  assertSafeSeedTarget(uri, { reset });
 
   await mongoose.connect(uri, { serverSelectionTimeoutMS: 8000 });
   console.log(`Connected to ${mongoose.connection.name}`);
 
   if (reset) {
     await Promise.all(
-      [User, Community, Subcommunity, Membership, MembershipRequest, Invitation, Post, Board, Topic, TopicComment, TopicLike, Channel, ChannelCategory, ChannelMember, ChannelMessage, ChannelRead, LinkPreview, Reaction, Friendship, Event, Rsvp, SavedEvent, Conversation, Message, Block, Report].map((m) => (m as typeof User).deleteMany({})),
+      [User, Community, Subcommunity, Membership, MembershipRequest, Invitation, Post, Board, Topic, TopicComment, TopicLike, Channel, ChannelCategory, ChannelMember, ChannelMessage, ChannelRead, LinkPreview, Reaction, Friendship, Event, Rsvp, SavedEvent, Conversation, Message, Block, Report, Crew, CrewMember, CrewMessage].map((m) => (m as typeof User).deleteMany({})),
     );
     await ensureChannelIndexes(); // the channel slug index is per space now
     console.log("Cleared existing data.");
@@ -464,6 +472,12 @@ async function main() {
       attendancePublic: u.attendancePublic ?? true,
       profileVisibility: u.profileVisibility ?? "public",
       dmPolicy: u.dmPolicy ?? "shared",
+      // all grown-ups (kliques are 18+); a few say woman, for women-only kliques
+      dob: new Date(Date.UTC(1990 + (USERS.indexOf(u) % 12), USERS.indexOf(u) % 12, 1 + (USERS.indexOf(u) % 27))),
+      dobSetAt: new Date(),
+      gender: WOMEN.has(u.handle) ? "woman" : MEN.has(u.handle) ? "man" : "unspecified",
+      // a few on paid plans, so the Lite and Pro badges show (a year, as a gift: nothing is charged)
+      ...(PLANS[u.handle] ? { plan: PLANS[u.handle], planUntil: new Date(Date.now() + 365 * DAY) } : {}),
       isDemo: true,
     });
     users.set(u.handle, doc._id);
@@ -473,6 +487,14 @@ async function main() {
     if (!id) throw new Error(`Unknown seed user: ${h}`);
     return id;
   };
+
+  // Klique: the default community everyone is in (normally made when the first ADMIN_EMAILS account signs
+  // up). A fresh dev database has no such account, so a demo account owns it until then; every demo
+  // account joins, as signup would have done. Admin rights come from ADMIN_EMAILS, not from ownership.
+  const klique = await ensureKlique(uid(USERS[0].handle));
+  if (!klique) throw new Error("Couldn't create the Klique community.");
+  for (const u of USERS) await joinKlique(uid(u.handle));
+  console.log("Klique community ready, all demo accounts joined.");
 
   // Communities, groups, memberships, posts
   const communities = new Map<string, Types.ObjectId>();
@@ -499,6 +521,8 @@ async function main() {
       coverImage: `https://picsum.photos/seed/klique-${c.key}/960/540`,
       ownerId: uid(c.owner),
       groupPolicy: "admins",
+      // one verified community, so the check shows (site admins give it)
+      verified: c.key === "waf",
       createdAt,
     });
     communities.set(c.key, doc._id);
@@ -697,6 +721,58 @@ async function main() {
   // Saved events for the main demo user
   for (const i of [1, 6, 7]) await SavedEvent.create({ eventId: eventIds[i], userId: uid("tobi") });
 
+  // Kliques: plans to do something together, in communities and for events, with people already in
+  const kliqueAt = (days: number, hour: number) => {
+    const d = new Date(Date.now() + days * DAY);
+    d.setUTCHours(hour - 1, 0, 0, 0); // Lagos time
+    return d;
+  };
+  const KLIQUES: { title: string; community?: string; event?: number; host: string; interest: string; area: string; point: string; at: Date; max: number; open?: boolean; womenOnly?: boolean; members: string[]; pending?: string[]; note?: string; chat?: [string, string][] }[] = [
+    { title: "Who wants to watch Dune 3 at Filmhouse Lekki on Saturday?", community: "film-lagos", host: "dami", interest: "film", area: "Lekki Phase 1", point: "Filmhouse Lekki, by the ticket desk", at: kliqueAt(4, 18), max: 8, members: ["folake", "tobi"], pending: ["kunle"], note: "Buying tickets at 5:30. Suya after if people are up for it.", chat: [["dami", "Tickets are ₦6,500 each, I'll grab a row"], ["folake", "I'm in! Bringing a jacket, that cinema is always cold"], ["tobi", "Running 10 mins late probably 😅"]] },
+    { title: "Sunday sunset skate at Freedom Park, beginners welcome", community: "waf", host: "kunle", interest: "skate", area: "Lagos Island", point: "Freedom Park main gate", at: kliqueAt(5, 16), max: 15, open: true, members: ["tobi", "amara", "dami"], note: "Spare boards and pads. Nobody laughs at falls." },
+    { title: "Girls' thrift run around Yaba market, then brunch", community: "yaba-thrift", host: "amara", interest: "streetwear", area: "Yaba", point: "Tejuosho market, Shoprite entrance", at: kliqueAt(3, 11), max: 6, womenOnly: true, members: ["sade", "folake"], note: "Bring cash, the good stuff goes fast." },
+    { title: "5K easy run + smoothies on the Lekki–Ikoyi bridge", community: "run", host: "chidi", interest: "running", area: "Ikoyi", point: "Lekki–Ikoyi link bridge, Ikoyi side", at: kliqueAt(2, 7), max: 20, open: true, members: ["ife", "tobi"] },
+    { title: "Golden hour photo walk around Wuse 2", community: "abuja-photo", host: "zainab", interest: "photography", area: "Wuse 2", point: "Jabi Lake Mall, front steps", at: kliqueAt(6, 17), max: 10, members: ["emeka"] },
+    { title: "Going from Yaba together, sharing a Bolt", event: 0, host: "tobi", interest: "music", area: "Yaba", point: "Yaba bus stop, by the Shoprite", at: kliqueAt(1, 17), max: 6, members: ["kunle"], pending: ["chidi"] },
+  ];
+  const communityPlace = new Map(COMMUNITIES.map((c) => [c.key, placeOf(c.country, c.city)]));
+  let kliqueCount = 0;
+  for (const [i, k] of KLIQUES.entries()) {
+    const ev = k.event !== undefined ? await Event.findById(eventIds[k.event]).lean<{ _id: Types.ObjectId; startsAt: Date; endsAt: Date | null; communityId: Types.ObjectId | null; subcommunityId: Types.ObjectId | null; country: string; city: string; online?: boolean }>() : null;
+    if (k.event !== undefined && (!ev || ev.online)) continue;
+    const communityId = ev ? ev.communityId : (communities.get(k.community!) ?? null);
+    if (!ev && !communityId) continue;
+    const place = ev ? { country: ev.country, city: ev.city } : (communityPlace.get(k.community!) ?? { country: "NG", city: "lagos" });
+    const meetupAt = ev ? new Date(Math.max(Date.now() + HOUR, +ev.startsAt - HOUR)) : k.at;
+    const expiresAt = ev ? new Date(+(ev.endsAt ?? new Date(+ev.startsAt + 3 * HOUR)) + DAY) : new Date(+meetupAt + 3 * HOUR + DAY);
+    const people = [k.host, ...k.members];
+    const crew = await Crew.create({
+      eventId: ev?._id ?? null,
+      hostId: uid(k.host),
+      title: k.title,
+      interest: k.interest,
+      coverImage: `https://picsum.photos/seed/klique-k${i}-${k.interest}/960/540`,
+      womenOnly: !!k.womenOnly,
+      audience: k.womenOnly ? "women" : "everyone",
+      country: place.country,
+      city: place.city,
+      area: k.area,
+      meetupPoint: k.point,
+      meetupAt,
+      note: k.note ?? "",
+      joinMode: k.open ? "open" : "approval",
+      maxMembers: k.max,
+      memberCount: people.length,
+      communityId,
+      subcommunityId: ev?.subcommunityId ?? null,
+      expiresAt,
+    });
+    for (const [j, h] of people.entries()) await CrewMember.create({ crewId: crew._id, eventId: ev?._id ?? null, userId: uid(h), role: j === 0 ? "host" : "member", status: "active", expiresAt });
+    for (const h of k.pending ?? []) await CrewMember.create({ crewId: crew._id, eventId: ev?._id ?? null, userId: uid(h), role: "member", status: "pending", message: "Hey! Can I come along?", expiresAt });
+    for (const [j, [h, body]] of (k.chat ?? []).entries()) await CrewMessage.create({ crewId: crew._id, userId: uid(h), body, expiresAt, createdAt: new Date(Date.now() - (60 - j * 15) * 60_000) });
+    kliqueCount++;
+  }
+
   // A conversation with an unread message, so the inbox isn't empty.
   const tobi = uid("tobi");
   const amara = uid("amara");
@@ -715,7 +791,7 @@ async function main() {
   await Conversation.updateOne({ _id: convo._id }, { lastMessage: last, lastMessageAt: last!.createdAt, [`unread.${String(tobi)}`]: 1 });
 
   console.log("\nSeeded:");
-  console.log(`  ${USERS.length} people · ${COMMUNITIES.length} communities · ${groups.size} groups · ${EVENTS.length} events`);
+  console.log(`  ${USERS.length} people · ${COMMUNITIES.length} communities · ${groups.size} groups · ${EVENTS.length} events · ${kliqueCount} kliques`);
   console.log("\nSign in with any demo account, e.g.");
   console.log(`  tobi@demo.klique.ng / ${DEMO_PASSWORD}   (community admin, has an unread message)`);
   console.log(`  ngozi@demo.klique.ng / ${DEMO_PASSWORD}  (owns the private community, has a pending join request)`);

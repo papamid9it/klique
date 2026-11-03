@@ -14,6 +14,8 @@ import type {
   VoiceJoinDTO,
   StaffDTO,
   UserBrief,
+  RoleOverrideDTO,
+  ThreadDTO,
 } from "@/lib/types";
 
 const api = new ApiClient();
@@ -48,11 +50,18 @@ export interface ChannelInput {
   slowModeSec?: number;
   /** guest list for a private channel (create only) */
   memberIds?: string[];
+  /** custom roles' allow / deny on this channel */
+  overrides?: RoleOverrideDTO[];
 }
 
 /** Chat for communities and groups: channels, categories, guest lists and messages. Same service for web, mobile and desktop. */
 export const ChannelService = {
   list: (s: SpaceRef) => api.get<Envelope<ChannelsDTO>>(`${base(s)}/channels`),
+  /** a channel's threads (active first, then archived) */
+  threads: (s: SpaceRef, channelSlug: string) => api.get<Envelope<ThreadDTO[]>>(`${base(s)}/channels/${channelSlug}/threads`),
+  /** start a thread off a message (or open the one it has) */
+  /** start a thread off a message, with its first reply (a thread is never made empty) */
+  startThread: (s: SpaceRef, channelSlug: string, messageId: string, body: string, name?: string) => api.post<Envelope<ChannelDTO>>(`${base(s)}/channels/${channelSlug}/messages/${messageId}/thread`, { body, ...(name ? { name } : {}) }),
   create: (s: SpaceRef, input: ChannelInput) => api.post<Envelope<ChannelDTO>>(`${base(s)}/channels`, input),
   update: (s: SpaceRef, channelSlug: string, patch: Partial<Omit<ChannelInput, "memberIds">>) => api.patch<Envelope<ChannelDTO>>(`${base(s)}/channels/${channelSlug}`, patch),
   editMessage: (s: SpaceRef, channelSlug: string, messageId: string, body: string) => api.patch<Envelope<ChannelMessageDTO>>(`${base(s)}/channels/${channelSlug}/messages/${messageId}`, { body }),
@@ -60,7 +69,7 @@ export const ChannelService = {
 
   /** categories exist on communities only */
   createCategory: (slug: string, name: string) => api.post<Envelope<ChannelCategoryDTO>>(`/api/communities/${slug}/categories`, { name }),
-  renameCategory: (slug: string, categoryId: string, name: string) => api.patch<Envelope<ChannelCategoryDTO>>(`/api/communities/${slug}/categories/${categoryId}`, { name }),
+  renameCategory: (slug: string, categoryId: string, name: string, overrides?: RoleOverrideDTO[]) => api.patch<Envelope<ChannelCategoryDTO>>(`/api/communities/${slug}/categories/${categoryId}`, { name, ...(overrides ? { overrides } : {}) }),
   removeCategory: (slug: string, categoryId: string) => api.delete<Envelope<{ deleted: boolean }>>(`/api/communities/${slug}/categories/${categoryId}`),
 
   /** Newest page (no cursor), older page (`before` = oldest id on screen) or new messages (`after` = newest id). */

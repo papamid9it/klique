@@ -5,6 +5,7 @@ import { cdn } from "@/lib/cdn";
 import { focalStyle, splitFocal } from "@/lib/focal";
 import { initials } from "@/lib/format";
 import { isAnimatedPicture } from "@/lib/cosmetics";
+import { PROFILE_DESIGNS_ENABLED } from "@/lib/constants";
 import { useCalm } from "@/lib/hooks/useCalm";
 import { AvatarFrame } from "./AvatarFrame";
 import { StillImage } from "./StillImage";
@@ -25,7 +26,8 @@ const TINTS = [
 ];
 
 export function Avatar({ name, src, size = 40, className, frame }: { name: string; src?: string | null; size?: number; className?: string; frame?: string | null }) {
-  if (frame) return <AvatarFrame frame={frame} size={size} render={(inner) => <AvatarPic name={name} src={src} size={inner} className={className} />} />;
+  // frames are a profile design: off for now (lib/constants PROFILE_DESIGNS_ENABLED)
+  if (frame && PROFILE_DESIGNS_ENABLED) return <AvatarFrame frame={frame} size={size} render={(inner) => <AvatarPic name={name} src={src} size={inner} className={className} />} />;
   return <AvatarPic name={name} src={src} size={size} className={className} />;
 }
 
@@ -48,7 +50,8 @@ function AvatarPic({ name, src, size, className }: { name: string; src?: string 
     );
     // a GIF also waits on its first frame in crowded places, and plays where it's the focus or its row is pointed at
     // (globals.css: kq-gif / kq-gif-still)
-    const img = calm && animated ? (
+    // (animated pictures are a profile design: while designs are off, they hold still)
+    const img = (calm || !PROFILE_DESIGNS_ENABLED) && animated ? (
       still()
     ) : (
       // eslint-disable-next-line @next/next/no-img-element

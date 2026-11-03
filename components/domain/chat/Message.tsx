@@ -17,11 +17,14 @@ import { ReactButton, ReactionBar, StickerView } from "./Reactions";
 import { MessageSheet, useMessageSheet } from "./MessageSheet";
 import { PollCard } from "./Polls";
 import { UserName } from "@/components/ui/UserName";
+import { MASS_WORDS } from "@/lib/mentions";
+import { BotTag } from "@/components/domain/space/WebhooksPanel";
+import { EmojiText } from "@/components/ui/CustomEmoji";
 
 const TOKEN_RX = /(https?:\/\/[^\s<]+)|(?<![\w@])@([a-zA-Z0-9_]{3,20})(?![\w])/g;
 
 /** Plain text with clickable links and @mention chips. Never injects HTML. */
-function Body({ text, mentions, meId }: { text: string; mentions: MentionDTO[]; meId: string | null }) {
+function Body({ text, mentions, meId, mass }: { text: string; mentions: MentionDTO[]; meId: string | null; mass?: "everyone" | "here" | null }) {
   const byHandle = new Map(mentions.map((m) => [m.handle.toLowerCase(), m]));
   const out: ReactNode[] = [];
   let last = 0;
@@ -38,9 +41,17 @@ function Body({ text, mentions, meId }: { text: string; mentions: MentionDTO[]; 
       out.push(m[1].slice(url.length));
     } else {
       const who = byHandle.get(m[2].toLowerCase());
-      if (who) {
+      const word = m[2].toLowerCase();
+      // a mass mention that pinged (@everyone/@all, @here/@channel): highlighted like Discord's
+      if (mass && (MASS_WORDS[word] === "everyone" || (MASS_WORDS[word] === "here" && mass === "here"))) {
         out.push(
-          <ProfileTrigger key={at} handle={who.handle} title={who.displayName} className={cx("rounded-md px-1 py-px font-semibold no-underline transition", who.id === meId ? "bg-accent text-accent-ink" : "bg-accent/15 text-accent-text hover:bg-accent/25")}>
+          <span key={at} className="rounded-md bg-accent/15 px-1 py-px font-semibold text-accent-text">
+            @{m[2]}
+          </span>,
+        );
+      } else if (who) {
+        out.push(
+          <ProfileTrigger key={at} handle={who.handle} className={cx("rounded-md px-1 py-px font-semibold no-underline transition", who.id === meId ? "bg-accent text-accent-ink" : "bg-accent/15 text-accent-text hover:bg-accent/25")}>
             @{who.handle}
           </ProfileTrigger>,
         );
@@ -49,7 +60,7 @@ function Body({ text, mentions, meId }: { text: string; mentions: MentionDTO[]; 
     last = at + m[0].length;
   }
   if (last < text.length) out.push(text.slice(last));
-  return <>{out.map((n, i) => (typeof n === "string" ? <Fragment key={`t${i}`}>{n}</Fragment> : n))}</>;
+  return <>{out.map((n, i) => (typeof n === "string" ? <EmojiText key={`t${i}`} text={n} /> : n))}</>;
 }
 
 export const Message = memo(function Message({
@@ -66,6 +77,8 @@ export const Message = memo(function Message({
   onJump,
   canReact,
   onSaveSticker,
+  onThread,
+  onOpenThread,
 }: {
   m: ChannelMessageDTO;
   /** first message of a run by the same person: show avatar, name and time */
@@ -85,13 +98,19 @@ export const Message = memo(function Message({
   canReact?: boolean;
   /** save a picture from this message to your stickers */
   onSaveSticker?: (url: string) => void;
+  /** start a thread off this message (or open its thread) */
+  onThread?: (m: ChannelMessageDTO) => void;
+  /** open a thread by its slug */
+  onOpenThread?: (slug: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const sheet = useMessageSheet();
-  const saveable = !m.deleted && !m.pending ? (m.stickerUrl ?? (m.images.length === 1 ? m.images[0] : null)) : null;
+  // a sticker someone sent can be saved (stickers are for sharing); a picture only becomes a sticker if it's yours
+  const saveable = !m.deleted && !m.pending ? (m.stickerUrl ?? (mine && m.images.length === 1 ? m.images[0] : null)) : null;
   const items: OverflowItem[] = [
     ...(saveable && onSaveSticker ? [{ label: m.stickerUrl ? "Save sticker" : "Save as sticker", icon: "sticker" as const, onSelect: () => onSaveSticker(saveable) }] : []),
     ...(onReply && !m.deleted && !m.pending ? [{ label: "Reply", icon: "reply" as const, onSelect: () => onReply(m) }] : []),
+    ...(onThread && !m.deleted && !m.pending ? [{ label: m.thread ? "Open thread" : "Start thread", icon: "message" as const, onSelect: () => onThread(m) }] : []),
     ...(m.canPin && onPin ? [{ label: m.pinned ? "Unpin message" : "Pin message", icon: "pushpin" as const, onSelect: () => onPin(m, !m.pinned) }] : []),
     ...(m.canEdit && onEdit ? [{ label: "Edit message", icon: "edit" as const, onSelect: () => setEditing(true) }] : []),
     ...(m.canDelete ? [{ label: "Delete message", icon: "trash" as const, danger: true, onSelect: () => onDelete(m) }] : []),
@@ -103,9 +122,13 @@ export const Message = memo(function Message({
     <li id={`msg-${m.id}`} tabIndex={-1} {...(!m.pending && !m.deleted && !editing ? sheet.press : {})} className={cx("group relative flex gap-3 px-4 outline-none hover:bg-raised/40 focus-within:bg-raised/40 sm:px-6", showHead ? "mt-4 pt-0.5" : "", m.mentionsMe && "border-l-2 border-accent bg-accent/10 hover:bg-accent/15", m.pending && "opacity-60")}>
       <div className="w-10 shrink-0 pt-0.5">
         {showHead ? (
-          <ProfileTrigger handle={m.author.handle} aria-label={`${m.author.displayName}'s profile`}>
-            <Avatar name={m.author.displayName} src={m.author.avatarUrl} frame={m.author.avatarFrame} size={40} />
-          </ProfileTrigger>
+          m.bot ? (
+            <Avatar name={m.author.displayName} src={m.author.avatarUrl} size={40} />
+          ) : (
+            <ProfileTrigger handle={m.author.handle} aria-label={`${m.author.displayName}'s profile`}>
+              <Avatar name={m.author.displayName} src={m.author.avatarUrl} frame={m.author.avatarFrame} size={40} />
+            </ProfileTrigger>
+          )
         ) : (
           <span className="invisible block pt-1 text-center font-mono text-[10px] text-ink-muted group-hover:visible" aria-hidden="true">
             {formatTime(m.createdAt).replace(/ (AM|PM)/, "")}
@@ -115,9 +138,18 @@ export const Message = memo(function Message({
       <div className="min-w-0 flex-1 pb-0.5">
         {showHead && (
           <p className="flex items-baseline gap-2">
-            <ProfileTrigger handle={m.author.handle} className="truncate text-[15px] font-semibold text-ink hover:underline">
-              <UserName name={m.author.displayName} effect={m.author.nameEffect} />
-            </ProfileTrigger>
+            {m.bot ? (
+              // a webhook (bot): its name and a BOT tag, no profile behind it
+              <span className="inline-flex min-w-0 items-center gap-1.5 self-center">
+                <span className="truncate text-[15px] font-semibold text-ink">{m.author.displayName}</span>
+                <BotTag />
+              </span>
+            ) : (
+              <ProfileTrigger handle={m.author.handle} className="truncate text-[15px] font-semibold text-ink hover:underline" style={m.color ? { color: m.color } : undefined}>
+                <UserName name={m.author.displayName} effect={m.author.nameEffect} />
+              </ProfileTrigger>
+            )}
+            {!m.bot && m.author.bot && <BotTag />}
             <time dateTime={m.createdAt} className="font-mono text-[11px] text-ink-muted">
               {formatTime(m.createdAt)}
             </time>
@@ -156,15 +188,25 @@ export const Message = memo(function Message({
                   <p className="text-sm text-ink-muted italic">Sticker unavailable</p>
                 ) : (
                   m.body && <p className="text-[15px] leading-relaxed break-words whitespace-pre-wrap text-ink">
-                    <Body text={m.body} mentions={m.mentions} meId={meId} />
+                    <Body text={m.body} mentions={m.mentions} meId={meId} mass={m.massMention} />
                     <EditedTag at={m.editedAt} />
                   </p>
                 )}
-                <ChatImages images={m.images} />
+                <ChatImages images={m.images} mine={mine} />
                 {!m.pending && <Embeds body={m.body} />}
               </>
             )}
             {!m.pending && <ReactionBar reactions={m.reactions} canReact={!!canReact && !!onReact} onToggle={(k) => onReact?.(m, k)} />}
+            {m.thread && !m.deleted && (
+              <button type="button" onClick={() => onOpenThread?.(m.thread!.slug)} className="mt-1 inline-flex max-w-full items-center gap-1.5 rounded-control border border-line bg-raised/60 px-2.5 py-1 text-[13px] text-ink-muted hover:border-ink-muted/50 hover:text-ink">
+                <Icon name="message" size={13} />
+                <span className="font-semibold text-accent-text">
+                  {m.thread.count} {m.thread.count === 1 ? "reply" : "replies"}
+                </span>
+                <span className="truncate">{m.thread.name}</span>
+                {m.thread.lastBy && <span className="hidden shrink-0 text-[12px] sm:inline">· last from {m.thread.lastBy.split(" ")[0]}</span>}
+              </button>
+            )}
           </>
         )}
       </div>

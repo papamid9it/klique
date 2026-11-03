@@ -6,5 +6,5 @@ export const size = SHARE_SIZE;
 export const contentType = "image/png";
 
 export default function Image() {
-  return new ImageResponse(<ShareCard eyebrow="Communities · chat · events" title="Find your people." lines={["Real-life events and communities near you."]} />, size);
+  return new ImageResponse(<ShareCard eyebrow="Communities · chat · events" title="Find your klique." lines={["Real-life events and communities near you."]} />, size);
 }

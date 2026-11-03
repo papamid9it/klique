@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
 import { PointsService } from "@/app/services/PointsService";
-import { Badge, Panel, Segmented, StatCard } from "@/components/domain/admin/AdminParts";
+import { Badge, Panel, StatCard } from "@/components/domain/admin/AdminParts";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import { Avatar } from "@/components/ui/Avatar";
@@ -188,7 +188,8 @@ export function PointsPeople({ initial }: { initial?: string }) {
   const [finding, setFinding] = useState(false);
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
-  const [currency, setCurrency] = useState<"hype" | "points">("hype");
+  // Hype is gone (it became Lite days): only points are given or taken now
+  const [currency] = useState<"hype" | "points">("points");
   const [busy, setBusy] = useState<"give" | "take" | null>(null);
   // opened from the audit log (?who=handle): show them straight away
   const opened = useRef(false);
@@ -295,15 +296,6 @@ export function PointsPeople({ initial }: { initial?: string }) {
             </Panel>
             <Panel title="Give or take">
               <div className="space-y-3 p-4">
-                <Segmented
-                  label="What"
-                  value={currency}
-                  onChange={setCurrency}
-                  options={[
-                    { id: "hype", label: "Hype" },
-                    { id: "points", label: "Points" },
-                  ]}
-                />
                 <TextField label={currency === "hype" ? "Hype" : "Points"} type="number" min={1} inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value)} />
                 <TextField label="Note (they'll see it)" placeholder="e.g. Winner of the Lagos skate jam" maxLength={200} value={note} onChange={(e) => setNote(e.target.value)} />
                 <div className="flex gap-2">

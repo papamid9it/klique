@@ -21,6 +21,11 @@ import { purgeReactions, summarizeReactions, toggleReaction } from "./reactions"
 import { previewOf } from "./replies";
 import { TEXT_CARD_MAX, textStyleOf } from "@/lib/feedText";
 import { assertStickerUrl, noteStickerUse } from "./stickers.service";
+import { isSiteAdmin } from "../policies/hosting";
+import { logModDelete } from "./admin-audit";
+import { refsFor, resolveText, whoCanSee } from "./tags.service";
+import { assertNotTimedOut } from "../policies/access";
+import { checkAutoMod } from "./automod.service";
 
 const PAGE = 10;
 const COMMENT_CAP = 500;
@@ -46,11 +51,13 @@ function canPostIn(c: Pick<ICommunity, "feedPolicy">, access: SpaceAccess) {
 
 /** Posts → DTOs in a few batched queries; works across communities (the home feed), with the viewer's real role in each. */
 async function toPosts(rows: IFeedPost[], viewer: IUser | null): Promise<FeedPostDTO[]> {
+  const refOf = await refsFor(rows);
+  const siteAdmin = !!viewer && isSiteAdmin(viewer);
   if (!rows.length) return [];
   const communityIds = [...new Set(rows.map((r) => sid(r.communityId)))];
   const [authors, communities, votes, roles, authorRoles] = await Promise.all([
     loadBriefs(rows.map((r) => r.authorId)),
-    Community.find({ _id: { $in: communityIds } }).select("slug name interest coverImage privacy explicit").lean<Pick<ICommunity, "_id" | "slug" | "name" | "interest" | "coverImage" | "privacy" | "explicit">[]>(),
+    Community.find({ _id: { $in: communityIds } }).select("slug name interest coverImage privacy explicit verified official").lean<Pick<ICommunity, "_id" | "slug" | "name" | "interest" | "coverImage" | "privacy" | "explicit" | "verified" | "official">[]>(),
     viewer ? FeedVote.find({ userId: viewer._id, postId: { $in: rows.map((r) => r._id) } }).select("postId value").lean<{ postId: Types.ObjectId; value: 1 | -1 }[]>() : [],
     viewer ? Membership.find({ userId: viewer._id, communityId: { $in: communityIds }, subcommunityId: null, status: "active" }).select("communityId role").lean<Pick<IMembership, "communityId" | "role">[]>() : [],
     Membership.find({ communityId: { $in: communityIds }, subcommunityId: null, status: "active", userId: { $in: rows.map((r) => r.authorId) } }).select("communityId userId role").lean<Pick<IMembership, "communityId" | "userId" | "role">[]>(),
@@ -70,9 +77,11 @@ async function toPosts(rows: IFeedPost[], viewer: IUser | null): Promise<FeedPos
     return [
       {
         id: sid(p._id),
-        community: { id: sid(c._id), slug: c.slug, name: c.name, interest: c.interest, coverImage: c.coverImage ?? null, privacy: c.privacy, explicit: !!c.explicit },
+        community: { id: sid(c._id), slug: c.slug, name: c.name, interest: c.interest, coverImage: c.coverImage ?? null, privacy: c.privacy, explicit: !!c.explicit, verified: !!c.verified || !!c.official },
         author,
         caption: p.caption,
+        tags: p.tags ?? [],
+        refs: refOf(p),
         title: p.title ?? "",
         explicit: !!p.explicit,
         textBg: p.media.length ? null : (p.textBg ?? null),
@@ -85,8 +94,8 @@ async function toPosts(rows: IFeedPost[], viewer: IUser | null): Promise<FeedPos
         editedAt: p.editedAt ? p.editedAt.toISOString() : null,
         isMember: role !== undefined,
         canEdit: mine && role !== undefined,
-        // owners/admins remove anyone they outrank
-        canDelete: mine || (isManager(role) && (target === undefined || outranks(role ?? null, target))),
+        // owners/admins remove anyone they outrank; site admins remove anything
+        canDelete: mine || siteAdmin || (isManager(role) && (target === undefined || outranks(role ?? null, target))),
       },
     ];
   });
@@ -94,6 +103,7 @@ async function toPosts(rows: IFeedPost[], viewer: IUser | null): Promise<FeedPos
 
 async function toComments(rows: IFeedComment[], viewer: IUser | null, managerRole: Role | null): Promise<FeedCommentDTO[]> {
   if (!rows.length) return [];
+  const refOf = await refsFor(rows);
   const [authors, reactions, authorRoles] = await Promise.all([
     loadBriefs(rows.map((r) => r.authorId)),
     summarizeReactions("feedComment", rows.map((r) => r._id), viewer?._id ?? null),
@@ -110,6 +120,7 @@ async function toComments(rows: IFeedComment[], viewer: IUser | null, managerRol
       {
         id: sid(c._id),
         postId: sid(c.postId),
+        refs: gone ? { users: [], communities: [] } : refOf(c),
         parentId: c.parentId ? sid(c.parentId) : null,
         body: gone ? "" : c.body,
         sticker: gone ? null : (c.sticker ?? null),
@@ -120,7 +131,7 @@ async function toComments(rows: IFeedComment[], viewer: IUser | null, managerRol
         author,
         reactions: gone ? [] : (reactions.get(sid(c._id)) ?? []),
         canEdit: !gone && sid(c.authorId) === me,
-        canDelete: !gone && (sid(c.authorId) === me || (isManager(managerRole) && (target === undefined || outranks(managerRole, target)))),
+        canDelete: !gone && (sid(c.authorId) === me || (!!viewer && isSiteAdmin(viewer)) || (isManager(managerRole) && (target === undefined || outranks(managerRole, target)))),
       },
     ];
   });
@@ -145,22 +156,36 @@ export async function listPosts(viewer: IUser | null, space: Space, access: Spac
 }
 
 export async function createPost(viewer: IUser, space: Space, access: SpaceAccess, input: z.infer<typeof feedPostSchema>): Promise<FeedPostDTO> {
+  assertNotTimedOut(access);
   assertFeed(space);
   if (!canPostIn(space.community, access)) throw forbidden(space.community.feedPolicy === "admins" ? "Only owners and admins post here." : access.pointsToPost ? `You need ${access.pointsToPost.toLocaleString("en-NG")} points to post here.` : "Join this community to post.");
   rateLimit(`feed-post:${sid(viewer._id)}`, 15, 60 * 60_000);
+  await checkAutoMod(space, viewer, access, { text: `${input.title ?? ""} ${input.caption}`.trim(), where: "Posts" });
   // a title and a card colour only mean something on a post without pictures or a video
   const style = textStyleOf(input);
+  const refs = await resolveText(viewer, `${input.title ?? ""} ${input.caption}`);
   const doc = await FeedPost.create({
     communityId: space.community._id,
     authorId: viewer._id,
     caption: input.caption,
+    tags: refs.tags,
+    mentionIds: refs.userIds,
+    communityRefIds: refs.communityIds,
     title: input.media.length ? "" : input.title,
     textBg: style === "card" ? (input.textBg ?? "sunset") : null,
     // only a community that allows explicit content takes explicit posts
     explicit: !!space.community.explicit && input.explicit,
     media: input.media.map((m) => ({ kind: m.kind, url: m.url, poster: m.poster ?? null })),
   });
+  await tellTagged(viewer, space, refs.userIds, `/p/${sid(doc._id)}`, input.caption, "post");
   return (await toPosts([doc.toObject() as IFeedPost], viewer))[0];
+}
+
+/** "X tagged you in a post/comment" to the people tagged who can see it (never the author). */
+async function tellTagged(viewer: IUser, space: Space, userIds: Types.ObjectId[], href: string, text: string, what: "post" | "comment") {
+  const to = (await whoCanSee(space.community, userIds)).filter((id) => sid(id) !== sid(viewer._id));
+  if (!to.length) return;
+  notify(to, { title: `${viewer.displayName} tagged you in a ${what}`, body: `${text.slice(0, 120)} · ${space.community.name}`, data: { href } }, { actorId: viewer._id, category: "mentions", groupKey: `feed-tag:${href}`, many: (n) => `${n} people tagged you`, ref: `feed-tag:${href}` });
 }
 
 async function loadPost(space: Space, postId: string): Promise<IFeedPost> {
@@ -195,7 +220,11 @@ export async function editCaption(viewer: IUser, space: Space, access: SpaceAcce
   // a text post keeps some text, and long text keeps a title (lib/feedText)
   if (!p.media.length && !caption) throw badRequest("A post without pictures or a video needs some text.");
   if (!p.media.length && caption.length > TEXT_CARD_MAX && !p.title) throw badRequest(`Keep it under ${TEXT_CARD_MAX} characters: longer posts need a title.`);
-  await FeedPost.updateOne({ _id: p._id }, { $set: { caption, editedAt: new Date() } });
+  const refs = await resolveText(viewer, `${p.title ?? ""} ${caption}`);
+  await FeedPost.updateOne({ _id: p._id }, { $set: { caption, tags: refs.tags, mentionIds: refs.userIds, communityRefIds: refs.communityIds, editedAt: new Date() } });
+  // only people newly tagged hear about it
+  const before = new Set((p.mentionIds ?? []).map((id) => sid(id)));
+  await tellTagged(viewer, space, refs.userIds.filter((id) => !before.has(sid(id))), `/p/${sid(p._id)}`, caption, "post");
   return getPost(viewer, space, access, postId);
 }
 
@@ -212,7 +241,8 @@ export async function setPostExplicit(viewer: IUser, space: Space, access: Space
 export async function deletePost(viewer: IUser, space: Space, access: SpaceAccess, postId: string) {
   assertFeed(space);
   const p = await loadPost(space, postId);
-  if (sid(p.authorId) !== sid(viewer._id)) {
+  const asAdmin = sid(p.authorId) !== sid(viewer._id) && isSiteAdmin(viewer);
+  if (sid(p.authorId) !== sid(viewer._id) && !asAdmin) {
     if (!access.canManage) throw forbidden("You can only delete your own posts.");
     const authorM = await Membership.findOne({ communityId: p.communityId, subcommunityId: null, userId: p.authorId, status: "active" }).select("role").lean<Pick<IMembership, "role">>();
     if (authorM && !outranks(access.role, authorM.role)) throw forbidden("You can't remove a post from someone of equal or higher rank.");
@@ -220,11 +250,13 @@ export async function deletePost(viewer: IUser, space: Space, access: SpaceAcces
   const comments = await FeedComment.find({ postId: p._id }).select("_id").lean<{ _id: Types.ObjectId }[]>();
   await Promise.all([purgeReactions("feedComment", comments.map((c) => c._id)), FeedComment.deleteMany({ postId: p._id }), FeedVote.deleteMany({ postId: p._id }), FeedPost.deleteOne({ _id: p._id })]);
   deleteUploads(fileUrls(p));
+  if (sid(p.authorId) !== sid(viewer._id)) await logModDelete(viewer, { communityId: p.communityId, authorId: p.authorId }, "feedPost", p._id, `Post in ${space.community.name}: ${(p.title || p.caption).slice(0, 80)}`);
   return { deleted: true };
 }
 
 /** Vote up (1), down (-1) or take your vote back (0). Members only. Returns the post's fresh counts. */
 export async function vote(viewer: IUser, space: Space, access: SpaceAccess, postId: string, value: 1 | -1 | 0): Promise<Pick<FeedPostDTO, "upCount" | "downCount" | "myVote">> {
+  assertNotTimedOut(access);
   assertFeed(space);
   // anyone signed in may vote on a public community's posts (suggested posts in the home feed); private ones need you in
   if (access.banned || (!access.isMember && space.community.privacy !== "public")) throw forbidden("Join this community to vote.");
@@ -276,9 +308,11 @@ export async function listComments(viewer: IUser | null, space: Space, access: S
 }
 
 export async function addComment(viewer: IUser, space: Space, access: SpaceAccess, postId: string, input: z.infer<typeof feedCommentSchema>): Promise<FeedCommentDTO> {
+  assertNotTimedOut(access);
   assertFeed(space);
   if (!access.isMember || access.banned) throw forbidden("Join this community to comment.");
   rateLimit(`feed-comment:${sid(viewer._id)}`, 30, 5 * 60_000);
+  await checkAutoMod(space, viewer, access, { text: input.body ?? "", where: "a post's comments" });
   const sticker = input.sticker ?? null;
   const stickerUrl = input.stickerUrl && !sticker ? assertStickerUrl(input.stickerUrl) : null;
   const p = await loadPost(space, postId);
@@ -287,7 +321,8 @@ export async function addComment(viewer: IUser, space: Space, access: SpaceAcces
     parent = await FeedComment.findOne({ _id: input.parentId, postId: p._id }).select("_id authorId deletedAt").lean<Pick<IFeedComment, "_id" | "authorId" | "deletedAt">>();
     if (!parent) throw badRequest("The comment you're replying to is gone.");
   }
-  const doc = await FeedComment.create({ postId: p._id, communityId: p.communityId, authorId: viewer._id, parentId: parent?._id ?? null, body: input.body, sticker, stickerUrl });
+  const refs = await resolveText(viewer, input.body);
+  const doc = await FeedComment.create({ postId: p._id, communityId: p.communityId, authorId: viewer._id, parentId: parent?._id ?? null, body: input.body, sticker, stickerUrl, mentionIds: refs.userIds, communityRefIds: refs.communityIds, tags: refs.tags });
   await FeedPost.updateOne({ _id: p._id }, { $inc: { commentCount: 1 } });
   noteStickerUse(viewer._id, stickerUrl);
   const said = previewOf({ body: input.body, sticker, stickerUrl }).slice(0, 140);
@@ -300,6 +335,8 @@ export async function addComment(viewer: IUser, space: Space, access: SpaceAcces
     told.add(sid(parent.authorId));
     notify([parent.authorId], { title: `${viewer.displayName} replied to your comment`, body: said, data: { href } }, { actorId: viewer._id, category: "replies", groupKey: `feed:${sid(p._id)}`, many: (n) => `${n} new replies on your post`, ref: `feed:${sid(p._id)}` });
   }
+  // people tagged in it (once each; not the people already told above)
+  await tellTagged(viewer, space, refs.userIds.filter((id) => !told.has(sid(id)) && sid(id) !== sid(p.authorId)), href, input.body, "comment");
   if (!told.has(sid(p.authorId))) {
     notify([p.authorId], { title: `${viewer.displayName} commented on your post`, body: said, data: { href } }, { actorId: viewer._id, category: "replies", groupKey: `feed:${sid(p._id)}`, many: (n) => `${n} new comments on your post`, ref: `feed:${sid(p._id)}` });
   }
@@ -320,26 +357,32 @@ export async function editComment(viewer: IUser, space: Space, access: SpaceAcce
   const c = await loadComment(sid(p._id), commentId);
   if (sid(c.authorId) !== sid(viewer._id) || !access.isMember) throw forbidden("You can only edit your own comments.");
   if (!body && !c.sticker && !c.stickerUrl) throw badRequest("Write something, or delete the comment.");
-  await FeedComment.updateOne({ _id: c._id }, { $set: { body, editedAt: new Date() } });
-  return (await toComments([{ ...c, body, editedAt: new Date() }], viewer, access.role))[0];
+  const refs = await resolveText(viewer, body);
+  await FeedComment.updateOne({ _id: c._id }, { $set: { body, mentionIds: refs.userIds, communityRefIds: refs.communityIds, tags: refs.tags, editedAt: new Date() } });
+  const before = new Set((c.mentionIds ?? []).map((id) => sid(id)));
+  await tellTagged(viewer, space, refs.userIds.filter((id) => !before.has(sid(id))), `/p/${sid(p._id)}?c=${sid(c._id)}`, body, "comment");
+  return (await toComments([{ ...c, body, mentionIds: refs.userIds, communityRefIds: refs.communityIds, editedAt: new Date() }], viewer, access.role))[0];
 }
 
 export async function deleteComment(viewer: IUser, space: Space, access: SpaceAccess, postId: string, commentId: string) {
   assertFeed(space);
   const p = await loadPost(space, postId);
   const c = await loadComment(sid(p._id), commentId);
-  if (sid(c.authorId) !== sid(viewer._id)) {
+  const asAdmin = sid(c.authorId) !== sid(viewer._id) && isSiteAdmin(viewer);
+  if (sid(c.authorId) !== sid(viewer._id) && !asAdmin) {
     if (!access.canManage) throw forbidden("You can only delete your own comments.");
     const authorM = await Membership.findOne({ communityId: p.communityId, subcommunityId: null, userId: c.authorId, status: "active" }).select("role").lean<Pick<IMembership, "role">>();
     if (authorM && !outranks(access.role, authorM.role)) throw forbidden("You can't remove a comment from someone of equal or higher rank.");
   }
   // the row stays as "deleted" so the replies under it keep their place
   await Promise.all([FeedComment.updateOne({ _id: c._id }, { $set: { body: "", sticker: null, stickerUrl: null, deletedAt: new Date() } }), FeedPost.updateOne({ _id: p._id, commentCount: { $gt: 0 } }, { $inc: { commentCount: -1 } }), purgeReactions("feedComment", [c._id])]);
+  if (sid(c.authorId) !== sid(viewer._id)) await logModDelete(viewer, { communityId: p.communityId, authorId: c.authorId }, "feedPost", p._id, `Comment on a post in ${space.community.name}: ${c.body.slice(0, 80)}`, `/p/${sid(p._id)}`);
   return { deleted: true };
 }
 
 /** An emoji reaction on a comment (one per person; the same one again takes it back). */
 export async function reactToComment(viewer: IUser, space: Space, access: SpaceAccess, postId: string, commentId: string, kind: ReactionKind): Promise<ReactionDTO[]> {
+  assertNotTimedOut(access);
   assertFeed(space);
   if (!access.isMember || access.banned) throw forbidden("Join this community to react.");
   rateLimit(`react:${sid(viewer._id)}`, 60, 30_000);
@@ -429,3 +472,6 @@ export async function homeFeed(viewer: IUser, page: number, at?: number): Promis
   const items: HomeFeedItem[] = slice.flatMap((x) => (byId.has(sid(x.post._id)) ? [{ post: byId.get(sid(x.post._id))!, trending: x.trending }] : []));
   return { items, page, hasMore: merged.length > page * PAGE, at: now };
 }
+
+/** Post cards for any list of posts (the tag pages use it). */
+export const feedCards = (rows: IFeedPost[], viewer: IUser | null) => toPosts(rows, viewer);

@@ -25,6 +25,9 @@ import { compactCount, relativeStamp } from "@/lib/format";
 import { useNow } from "@/lib/hooks/useApi";
 import { textStyleOf } from "@/lib/feedText";
 import type { FeedPostDTO } from "@/lib/types";
+import { VerifiedCheck } from "@/components/ui/VerifiedCheck";
+import { PlanBadge } from "@/components/domain/account/PlanTab";
+import { RichText } from "./RichText";
 
 /** A post's own link: it opens over the feed you're on, and on its own page when opened directly. */
 export const postHref = (p: Pick<FeedPostDTO, "id">) => `/p/${p.id}`;
@@ -136,13 +139,15 @@ export function PostCard({ post: p, onChange, onRemoved, onOpenComments, showCom
         )}
         <div className="min-w-0 flex-1 leading-tight">
           {showCommunity && (
-            <Link href={`/communities/${p.community.slug}?view=posts`} className="block truncate text-[13.5px] font-semibold hover:underline">
-              {p.community.name}
+            <Link href={`/communities/${p.community.slug}?view=posts`} className="flex min-w-0 items-center gap-1 text-[13.5px] font-semibold hover:underline">
+              <span className="truncate">{p.community.name}</span>
+              <VerifiedCheck on={p.community.verified} size={13} />
             </Link>
           )}
           <p className={cx("flex min-w-0 items-center gap-1.5 text-ink-muted", showCommunity ? "text-[12px]" : "text-[13.5px]")}>
             <ProfileTrigger handle={p.author.handle} className={cx("truncate hover:underline", !showCommunity && "font-semibold text-ink")}>
               <UserName name={p.author.displayName} effect={p.author.nameEffect} />
+              {p.author.badge && <PlanBadge plan={p.author.badge} size={13} className="ml-1" />}
             </ProfileTrigger>
             <span aria-hidden="true">·</span>
             <time dateTime={p.createdAt} className="shrink-0 text-[12px]">
@@ -161,7 +166,9 @@ export function PostCard({ post: p, onChange, onRemoved, onOpenComments, showCom
       {/* the caption leads, like a Reddit title */}
       {!style && p.caption && (
         <>
-          <p className={cx("mt-2.5 text-[16px] leading-snug font-semibold break-words whitespace-pre-wrap text-ink", !more && long && "line-clamp-3")}>{p.caption}</p>
+          <p className={cx("mt-2.5 text-[16px] leading-snug font-semibold break-words whitespace-pre-wrap text-ink", !more && long && "line-clamp-3")}>
+            <RichText text={p.caption} refs={p.refs} />
+          </p>
           {long && !more && (
             <button type="button" onClick={() => setMore(true)} className="mt-0.5 text-[13px] font-medium text-ink-muted hover:text-ink">
               more

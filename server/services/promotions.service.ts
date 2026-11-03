@@ -222,9 +222,21 @@ export async function handlePaystackWebhook(rawBody: string, signature: string |
   const b = Buffer.from(signature);
   if (a.length !== b.length || !timingSafeEqual(a, b)) return false;
   const evt = JSON.parse(rawBody) as { event?: string; data?: { reference?: string } };
+  const plans = () => import("./subscriptions.service");
+  // Lite/Pro subscriptions: Paystack's codes, cancellations and failed renewals
+  if (evt.event === "subscription.create" || evt.event === "subscription.disable" || evt.event === "subscription.not_renew" || evt.event === "invoice.payment_failed") {
+    await (await plans()).handleSubscriptionEvent(evt as never);
+    return true;
+  }
   if (evt.event === "charge.success" && evt.data?.reference) {
     // re-check with Paystack rather than trusting the payload's numbers
-    const data = await paystack<{ status: string; amount: number; currency: string; channel?: string; paid_at?: string }>(`/transaction/verify/${encodeURIComponent(evt.data.reference)}`);
+    const data = await paystack<{ status: string; amount: number; currency: string; channel?: string; paid_at?: string; customer?: { customer_code?: string; email?: string } }>(`/transaction/verify/${encodeURIComponent(evt.data.reference)}`);
+    // a plan's first payment (ksb_…); a monthly renewal is a charge for one of our plans with Paystack's own reference
+    if (evt.data.reference.startsWith("ksb_")) {
+      await (await plans()).fulfilCheckout(evt.data.reference, data);
+      return true;
+    }
+    if (data.status === "success" && (await (await plans()).handleRenewal({ ...evt, data: { ...(evt.data as object), ...(data as object) } } as never))) return true;
     // ad requests (kad_…) start their run; event promotions (klq_…) as before
     if (evt.data.reference.startsWith("kad_")) await (await import("./ad-campaigns.service")).fulfilCampaign(evt.data.reference, data);
     // Hype packs (kpt_…)

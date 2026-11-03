@@ -21,6 +21,8 @@ import { purgeEvent } from "./events.service";
 import { removeUserFromCrews } from "./crews.service";
 import { recountMembers, recountRsvps } from "./helpers";
 import { deleteUploads } from "./media.service";
+import { Subscription, type ISubscription } from "../models/Subscription";
+import { cancelSubscription } from "./subscriptions.service";
 
 /**
  * "Delete my account". Removes the person and everything that's only theirs: memberships, RSVPs, saves,
@@ -48,6 +50,17 @@ export async function deleteAccount(viewer: IUser, input: { password?: string; c
   const owned = await ownedCommunities(user._id);
   if (owned.length) {
     throw conflict(`You own ${owned.map((c) => c.name).join(", ")}. Make someone else the owner (Members → Make owner) or delete ${owned.length === 1 ? "it" : "them"} first.`);
+  }
+
+  // A Lite/Pro plan that renews is stopped first, so Paystack never charges a deleted account. If Paystack can't be
+  // reached, nothing is deleted yet: better to ask them to try again than to leave the card being charged.
+  const sub = await Subscription.findOne({ userId: user._id }).select("source status").lean<Pick<ISubscription, "source" | "status">>();
+  if (sub?.source === "paystack" && (sub.status === "active" || sub.status === "attention")) {
+    try {
+      await cancelSubscription(user);
+    } catch {
+      throw conflict("We couldn't stop your Lite or Pro subscription just now. Cancel it in Settings → Plan & points, then delete your account.");
+    }
   }
 
   // Groups they run in other people's communities go to that community's owner.
@@ -93,6 +106,6 @@ export async function deleteAccount(viewer: IUser, input: { password?: string; c
   await Promise.all([...new Set(rsvps.map((r) => String(r.eventId)))].map((id) => recountRsvps(rsvps.find((r) => String(r.eventId) === id)!.eventId)));
 
   await User.deleteOne({ _id: user._id });
-  deleteUploads([user.avatarUrl, user.bannerUrl]);
+  deleteUploads([user.avatarUrl, user.bannerUrl, ...(user.media ?? []).flatMap((m) => [m.url, m.poster])]);
   return { deleted: true };
 }

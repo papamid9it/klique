@@ -23,6 +23,7 @@ import {
   publishedEvents,
   canReviewEvent,
   assertCanPost,
+  can,
   spaceAccess,
   type Space,
 } from "../policies/access";
@@ -35,6 +36,7 @@ import { resolveSpaceFor } from "./spaces.service";
 import { purgeCrews, syncCrewExpiry } from "./crews.service";
 import { ensureKlique, isKlique } from "./klique.service";
 import { Membership } from "../models/Membership";
+import { logModDelete } from "./admin-audit";
 
 /** Events stay "upcoming" until 3 hours after they start (when no end time is set). */
 const LINGER_MS = 3 * 60 * 60 * 1000;
@@ -285,7 +287,10 @@ export async function createEvent(viewer: IUser, input: z.infer<typeof eventCrea
   await recountRsvps(doc._id);
 
   if (submitted && space) await askReviewers(doc, space, viewer);
-  else if (space) await announceEvent(doc, space, viewer._id);
+  else if (space) {
+    await announceEvent(doc, space, viewer._id);
+    void import("./bots.service").then((b) => b.emitBotEvent(space.community._id, "event.create", { event: { id: sid(doc._id), title: doc.title, startsAt: doc.startsAt, venue: doc.venue } }));
+  }
   return getEvent(viewer, sid(doc._id));
 }
 
@@ -441,6 +446,9 @@ export async function updateEvent(viewer: IUser, id: string, patch: z.infer<type
 export async function deleteEvent(viewer: IUser, id: string) {
   const event = await loadVisibleEvent(viewer, id);
   let allowed = sid(event.hostId) === sid(viewer._id);
+  // site admins may delete any event (logged)
+  const asAdmin = !allowed && isSiteAdmin(viewer);
+  allowed ||= asAdmin;
 
   // Admins of the space the event lives in may remove it too (moderation).
   if (!allowed && event.communityId) {
@@ -448,7 +456,7 @@ export async function deleteEvent(viewer: IUser, id: string) {
       Community.findById(event.communityId).lean<ICommunity>(),
       event.subcommunityId ? Subcommunity.findById(event.subcommunityId).lean<ISubcommunity>() : null,
     ]);
-    if (community) allowed = (await spaceAccess({ community, sub }, viewer)).canManage;
+    if (community) allowed = can(await spaceAccess({ community, sub }, viewer), "manageEvents");
   }
   if (!allowed) throw forbidden("Only the host or a community admin can delete this event.");
 
@@ -456,6 +464,7 @@ export async function deleteEvent(viewer: IUser, id: string) {
   const going = event.cancelled || +event.startsAt < Date.now() ? [] : await Rsvp.find({ eventId: event._id, status: "going", userId: { $ne: viewer._id } }).select("userId").lean<{ userId: Types.ObjectId }[]>();
   await purgeEvent(event);
   if (going.length) notify(going.map((g) => g.userId), { title: "Event removed", body: `${event.title} was taken down, so it's off.`, data: { href: "/events" } }, { category: "events", ref: `event:${sid(event._id)}` });
+  if (sid(event.hostId) !== sid(viewer._id)) await logModDelete(viewer, { communityId: event.communityId, authorId: event.hostId }, "event", event._id, `Event: ${event.title}`);
   return { deleted: true };
 }
 

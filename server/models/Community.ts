@@ -32,6 +32,39 @@ export interface ICommunity {
   memberEvents?: boolean;
   /** 18+ (private only), and of those, allowing explicit content: who may see them, policies/adult */
   adult?: boolean;
+  /**
+   * "Mention @everyone, @here and all roles" (Discord's permission): owners and admins always may; members only when
+   * this is on (off by default). Without it the words still send, they just don't ping anyone.
+   */
+  membersMassMention?: boolean;
+  /** AutoMod settings (lib/automod AutoModConfig; read through automodOf, which fills in defaults) */
+  automod?: unknown;
+  /** raid protection tripped: until then joining is paused, or goes through approval (`raidMode`) */
+  raidUntil?: Date | null;
+  raidMode?: "pause" | "approval" | null;
+  /** bots added to it (BotApp ids), for sending them events */
+  bots?: Types.ObjectId[];
+  /**
+   * The welcome screen, shown once to each new member: a message, rules (which they may have to accept before
+   * posting), roles they can pick themselves, up to 5 channels to start in, and an optional greeting posted in a
+   * channel when someone joins ("Welcome {user}!").
+   */
+  welcome?: {
+    enabled: boolean;
+    message: string;
+    rules: string[];
+    requireAccept: boolean;
+    channels: { channelId: Types.ObjectId; note: string }[];
+    greetChannelId: Types.ObjectId | null;
+    greetText: string;
+  } | null;
+  /** a "Verified" check by its name: given (and taken away) only by site admins; Klique HQ always has it */
+  verified?: boolean;
+  /**
+   * Entry questions (like a membership screening): when on, anyone joining answers them first (public: joins right
+   * after; private: the answers go with the request). Up to 5. Owners and admins set them in settings.
+   */
+  screening?: { enabled: boolean; questions: { id: string; kind: "text" | "choice" | "agree"; prompt: string; options: string[]; required: boolean }[] };
   explicit?: boolean;
   /** where payouts go, saved from the owner's last request (only the owner and admins see it) */
   payoutBank?: { bankCode: string; bankName: string; accountNumber: string; accountName: string } | null;
@@ -60,6 +93,34 @@ const CommunitySchema = new Schema<ICommunity>(
     minPointsPost: { type: Number, default: 0, min: 0, max: 1_000_000 },
     memberEvents: { type: Boolean, default: true },
     adult: { type: Boolean, default: false },
+    verified: { type: Boolean, default: false },
+    membersMassMention: { type: Boolean, default: false },
+    automod: { type: Schema.Types.Mixed, default: null },
+    raidUntil: { type: Date, default: null },
+    raidMode: { type: String, enum: ["pause", "approval", null], default: null },
+    bots: { type: [Schema.Types.ObjectId], default: [] },
+    welcome: {
+      type: new Schema(
+        {
+          enabled: { type: Boolean, default: false },
+          message: { type: String, default: "", maxlength: 1000 },
+          rules: { type: [String], default: [] },
+          requireAccept: { type: Boolean, default: true },
+          channels: { type: [new Schema({ channelId: { type: Schema.Types.ObjectId, required: true }, note: { type: String, default: "", maxlength: 120 } }, { _id: false })], default: [] },
+          greetChannelId: { type: Schema.Types.ObjectId, default: null },
+          greetText: { type: String, default: "", maxlength: 300 },
+        },
+        { _id: false },
+      ),
+      default: null,
+    },
+    screening: {
+      enabled: { type: Boolean, default: false },
+      questions: {
+        type: [{ _id: false, id: { type: String, required: true }, kind: { type: String, enum: ["text", "choice", "agree"], required: true }, prompt: { type: String, required: true, maxlength: 200 }, options: { type: [String], default: [] }, required: { type: Boolean, default: true } }],
+        default: [],
+      },
+    },
     explicit: { type: Boolean, default: false },
     payoutBank: { type: Schema.Types.Mixed, default: null },
     official: { type: Boolean, default: false },

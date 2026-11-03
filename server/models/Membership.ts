@@ -12,6 +12,23 @@ export interface IMembership {
   subcommunityId: Types.ObjectId | null;
   role: "owner" | "admin" | "member";
   status: "active" | "banned";
+  /** "Suppress @everyone and @here" in this community (their notification setting) */
+  suppressEveryone?: boolean;
+  /** their answers to the community's entry questions when they joined (what each question said, then) */
+  answers?: { prompt: string; answer: string }[];
+  /**
+   * Timed out (community rows only) until then: they can read, but not post, react, vote, or start events or kliques
+   * in the community or its groups. Set by an owner or admin above them; cleared early with "Remove timeout".
+   */
+  timeoutUntil?: Date | null;
+  timeoutReason?: string | null;
+  timeoutById?: Types.ObjectId | null;
+  /** custom roles they hold (community rows; models/CommunityRole) */
+  roleIds?: Types.ObjectId[];
+  /** they accepted the community's rules (welcome screen) */
+  rulesAcceptedAt?: Date | null;
+  /** they've seen the welcome screen */
+  welcomedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -23,6 +40,14 @@ const MembershipSchema = new Schema<IMembership>(
     subcommunityId: { type: Schema.Types.ObjectId, ref: "Subcommunity", default: null },
     role: { type: String, enum: ["owner", "admin", "member"], default: "member" },
     status: { type: String, enum: ["active", "banned"], default: "active" },
+    suppressEveryone: { type: Boolean, default: false },
+    answers: { type: [{ _id: false, prompt: { type: String, maxlength: 200 }, answer: { type: String, maxlength: 500 } }], default: [] },
+    timeoutUntil: { type: Date, default: null },
+    timeoutReason: { type: String, default: null, maxlength: 300 },
+    timeoutById: { type: Schema.Types.ObjectId, default: null },
+    roleIds: { type: [Schema.Types.ObjectId], default: [] },
+    rulesAcceptedAt: { type: Date, default: null },
+    welcomedAt: { type: Date, default: null },
   },
   { timestamps: true },
 );

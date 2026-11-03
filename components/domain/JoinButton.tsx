@@ -12,6 +12,8 @@ import { TextArea } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
 import { LIMITS } from "@/lib/constants";
 import type { CommunityCardDTO } from "@/lib/types";
+import { usePlanLimit } from "@/components/domain/account/PlanTab";
+import { EntryQuestionsModal } from "@/components/domain/space/EntryQuestions";
 
 /**
  * Join / request / cancel-request for a COMMUNITY card.
@@ -35,17 +37,22 @@ export function JoinButton({
 }) {
   const { requireAuth, user } = useAuth();
   const toast = useToast();
+  // a plan limit (communities you can be in) opens the upgrade prompt instead of an error
+  const limit = usePlanLimit();
   const [busy, setBusy] = useState(false);
   const [asking, setAsking] = useState(false);
+  // entry questions to answer before joining (public or private)
+  const [screening, setScreening] = useState(false);
   const [short, setShort] = useState(false);
   const [note, setNote] = useState("");
   const v = community.viewer;
 
-  async function join(message?: string) {
+  async function join(message?: string, answers?: Record<string, string | boolean>) {
     if (!requireAuth()) return;
     setBusy(true);
     try {
-      const res = (await SpaceService.join(community.slug, undefined, message ? { message } : {})).data;
+      const res = (await SpaceService.join(community.slug, undefined, { ...(message ? { message } : {}), ...(answers ? { answers } : {}) })).data;
+      setScreening(false);
       const joined = res.status === "joined" || res.status === "already_member";
       onChange({
         ...community,
@@ -57,7 +64,7 @@ export function JoinButton({
       setAsking(false);
       setNote("");
     } catch (e) {
-      toast(errorMessage(e), "error");
+      if (!limit.handled(e)) toast(errorMessage(e), "error");
     } finally {
       setBusy(false);
     }
@@ -120,7 +127,7 @@ export function JoinButton({
   }
 
   const isPrivate = community.privacy === "private";
-  const click = () => (isPrivate ? (requireAuth() ? setAsking(true) : undefined) : join());
+  const click = () => (!requireAuth() ? undefined : community.screening ? setScreening(true) : isPrivate ? setAsking(true) : join());
 
   return (
     <>
@@ -142,6 +149,8 @@ export function JoinButton({
         </Button>
       )}
 
+      {limit.prompt}
+      {screening && <EntryQuestionsModal slug={community.slug} name={community.name} isPrivate={isPrivate} busy={busy} onClose={() => setScreening(false)} onSubmit={(answers, message) => void join(message, answers)} />}
       <Modal open={asking} onClose={() => setAsking(false)} title={`Request to join ${community.name}`} description="This community is private. An admin will review your request.">
         <form
           onSubmit={(e) => {
@@ -192,13 +201,13 @@ export function PointsLocked({ open, onClose, need, have, what }: { open: boolea
           <ul className="space-y-1 text-[13px] text-ink-muted">
             <li>· Upvotes on your posts and board posts</li>
             <li>· Good reactions to your messages in community and group chats</li>
-            <li>· Going to events (the host ticks you off), with a crew for a bit more</li>
+            <li>· Going to events (the host ticks you off), with a klique for a bit more</li>
             <li>· People coming to events you host</li>
           </ul>
           <p className="mt-2 text-[12px] text-ink-muted">They can&apos;t be bought.</p>
         </div>
         <div className="flex justify-end gap-2">
-          <Button href="/settings?tab=hype">Your points</Button>
+          <Button href="/settings?tab=plan">Your points</Button>
           <Button variant="primary" onClick={onClose}>
             Got it
           </Button>

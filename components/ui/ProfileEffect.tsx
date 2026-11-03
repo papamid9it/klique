@@ -1,5 +1,6 @@
 "use client";
 
+import { PROFILE_DESIGNS_ENABLED } from "@/lib/constants";
 import { useEffect, useRef } from "react";
 import { EffectService } from "@/app/services/EffectService";
 import { useApi } from "@/lib/hooks/useApi";
@@ -176,7 +177,8 @@ export function ProfileEffect({ id, spec, paused, className }: { id?: string | n
   const saver = useDataSaver().on;
   const calm = reduce || saver;
   const e = spec ?? (id ? (data ?? []).find((x) => x.id === id) : null);
-  if (!e) return null;
+  // profile effects are a profile design: off for now (lib/constants PROFILE_DESIGNS_ENABLED); a preview (`spec`) still shows
+  if (!e || (!PROFILE_DESIGNS_ENABLED && !spec)) return null;
   const still = paused || calm;
   const cover = "absolute inset-0 size-full";
   return (

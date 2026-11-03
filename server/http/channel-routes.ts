@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { readJson, readQuery, created, withApi } from "./api";
 import { resolveSpaceFor } from "../services/spaces.service";
 import {
@@ -24,8 +25,11 @@ import {
   renameCategory,
   searchSpaceMembers,
   updateChannel,
+  getThread,
+  listThreads,
+  startThread,
 } from "../services/channels.service";
-import { categorySchema, channelCreateSchema, channelMemberSchema, channelUpdateSchema, chatBodySchema, chatListQuery, editMessageSchema, memberSearchQuery, pinSchema, reactSchema, reactionIdsQuery } from "../validators/schemas";
+import { categorySchema, categoryUpdateSchema, channelCreateSchema, channelMemberSchema, channelUpdateSchema, chatBodySchema, chatListQuery, editMessageSchema, memberSearchQuery, pinSchema, reactSchema, reactionIdsQuery } from "../validators/schemas";
 
 /**
  * Handlers for chat channels of a community (`/api/communities/[slug]/…`) and of its groups
@@ -110,7 +114,7 @@ export const categoryCreate = withApi<Slug, "required">({ auth: "required" }, as
 });
 
 export const categoryRename = withApi<Cat, "required">({ auth: "required" }, async ({ req, params, viewer }) => {
-  const input = await readJson(req, categorySchema);
+  const input = await readJson(req, categoryUpdateSchema);
   const { space, access } = await resolveSpaceFor(viewer, params.slug, params.subSlug);
   return renameCategory(space, access, params.categoryId, input);
 });
@@ -165,4 +169,27 @@ export const reactionsGet = withApi<Chan>({ auth: "optional", limit: { name: "ch
   const { ids } = readQuery(req, reactionIdsQuery);
   const { space, access } = await resolveSpaceFor(viewer, params.slug, params.subSlug);
   return reactionsFor(viewer, space, access, params.channelSlug, ids);
+});
+
+/* ------------------------------ threads ------------------------------ */
+
+const threadStart = z.object({ name: z.string().trim().max(40).optional(), body: z.string().max(2000).default("") });
+
+/** Start a thread off a message, with its first reply (`body`); with a thread already there, the reply goes in it. */
+export const threadCreate = withApi<Msg, "required">({ auth: "required" }, async ({ req, params, viewer }) => {
+  const { name, body } = await readJson(req, threadStart);
+  const { space, access } = await resolveSpaceFor(viewer, params.slug, params.subSlug);
+  return startThread(viewer, space, access, params.channelSlug, params.messageId, name, body);
+});
+
+/** A channel's threads (active first, then archived). */
+export const threadsList = withApi<Chan>({ auth: "optional" }, async ({ params, viewer }) => {
+  const { space, access } = await resolveSpaceFor(viewer, params.slug, params.subSlug);
+  return listThreads(viewer, space, access, params.channelSlug);
+});
+
+/** One thread, as a channel (with the channel it hangs off). */
+export const threadGet = withApi<Slug & { threadSlug: string }>({ auth: "optional" }, async ({ params, viewer }) => {
+  const { space, access } = await resolveSpaceFor(viewer, params.slug, params.subSlug);
+  return getThread(viewer, space, access, params.threadSlug);
 });

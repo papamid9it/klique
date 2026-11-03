@@ -9,6 +9,7 @@ import { getInterest } from "@/lib/constants";
 import { compactCount } from "@/lib/format";
 import type { CommunityCardDTO } from "@/lib/types";
 import { JoinButton } from "./JoinButton";
+import { VerifiedCheck } from "@/components/ui/VerifiedCheck";
 
 export function InterestTile({ interest, size = 44, className }: { interest: CommunityCardDTO["interest"]; size?: number; className?: string }) {
   const i = getInterest(interest);
@@ -44,6 +45,7 @@ export function CommunityRow({ community, compact, onChange }: { community: Comm
         <span className="min-w-0">
           <span className="flex items-center gap-1.5 text-sm font-semibold text-ink">
             <span className="truncate">{c.name}</span>
+            <VerifiedCheck on={c.verified} size={13} />
             {c.privacy === "private" && <Icon name="lock" size={12} className="shrink-0 text-ink-muted" />}
           </span>
           <span className="eyebrow mt-0.5 block truncate">

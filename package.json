@@ -19,6 +19,7 @@
     "seed:feed": "tsx --conditions=react-server scripts/seed-feed.ts",
     "migrate:groups": "tsx scripts/migrate-private-groups.ts",
     "migrate:klique": "tsx --conditions=react-server scripts/migrate-klique.ts",
+    "db:indexes": "tsx --conditions=react-server scripts/ensure-indexes.ts",
     "migrate:currency": "tsx scripts/migrate-currency.ts",
     "check:unfurl": "tsx scripts/check-unfurl.ts"
   },

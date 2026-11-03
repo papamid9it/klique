@@ -13,6 +13,11 @@ export interface IConversation {
   lastMessageAt: Date;
   /** unread message count per participant, keyed by user id */
   unread: Record<string, number>;
+  /**
+   * A message request (Instagram style): someone who can't chat with them freely sent ONE text message; it waits in
+   * the other person's Requests until they accept (or reply), delete it (silently) or block. null: a normal chat.
+   */
+  request?: { fromId: Types.ObjectId; at: Date } | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -38,6 +43,7 @@ const ConversationSchema = new Schema<IConversation>(
     },
     lastMessageAt: { type: Date, default: () => new Date() },
     unread: { type: Schema.Types.Mixed, default: {} },
+    request: { type: new Schema({ fromId: { type: Schema.Types.ObjectId, ref: "User" }, at: Date }, { _id: false }), default: null },
   },
   { timestamps: true, minimize: false },
 );

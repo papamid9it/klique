@@ -23,10 +23,14 @@ import { compactCount } from "@/lib/format";
 import type { BoardDTO, ChannelCategoryDTO, ChannelDTO, ChannelGroupDTO, ChannelsDTO, CommunityDTO, MyCrewDTO } from "@/lib/types";
 import { CategoryModal, ChannelSettings, CreateChannelModal } from "./ChannelFormModal";
 
-export type WorkspaceView = "dashboard" | "topics" | "posts" | "events" | "crews" | "groups" | "members";
-export type GroupView = "updates" | "events" | "crews" | "members";
+export type WorkspaceView = "dashboard" | "topics" | "posts" | "events" | "kliques" | "search" | "groups" | "members";
+export type GroupView = "updates" | "events" | "kliques" | "members";
 
 import { orderChannels } from "./order";
+import { VerifiedCheck } from "@/components/ui/VerifiedCheck";
+import { useAuth } from "@/components/providers/AuthProvider";
+import ApiClient, { errorMessage } from "@/app/ApiCore";
+import { CommunityNotifyModal } from "@/components/domain/space/CommunityNotifySettings";
 export { orderChannels };
 
 async function copy(text: string, toast: (m: string, t?: "success" | "error") => void, done = "Link copied") {
@@ -77,7 +81,7 @@ export function ChannelList({
   onReport: () => void;
   /** open the community's (or the open group's) About: description, admins, what's coming up, share */
   onAbout: () => void;
-  /** crews you're in (or asked to join) for this community's events */
+  /** kliques you're in (or asked to join) in this community */
   crews?: MyCrewDTO[];
   /** id of the crew being viewed */
   activeCrew?: string | null;
@@ -86,6 +90,8 @@ export function ChannelList({
   const router = useRouter();
   const base = `/communities/${c.slug}`;
   const manage = c.viewer.canManage;
+  // channels and categories: admins, and roles with "Manage channels"
+  const chMgr = manage || !!c.viewer.perms?.includes("manageChannels");
   const sections = useMemo(() => orderChannels(data), [data]);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [creating, setCreating] = useState<{ categoryId: string | null; sub?: string | null } | null>(null);
@@ -95,6 +101,7 @@ export function ChannelList({
   const [categoryModal, setCategoryModal] = useState<{ category?: ChannelCategoryDTO } | null>(null);
   const [deletingCategory, setDeletingCategory] = useState<ChannelCategoryDTO | null>(null);
   const [newGroup, setNewGroup] = useState(false);
+  const [notifyOpen, setNotifyOpen] = useState(false);
   const [boardModal, setBoardModal] = useState<{ board?: BoardDTO } | null>(null);
   const [deletingBoard, setDeletingBoard] = useState<BoardDTO | null>(null);
 
@@ -113,20 +120,35 @@ export function ChannelList({
 
   const inviteCommunity = () => (c.privacy === "private" && manage ? go(`${base}?settings=invites`) : void copy(absoluteUrl(base), toast, "Community link copied"));
 
+  // site admins only: give or take the "Verified" check (logged in the audit log; Klique HQ keeps it)
+  const siteAdmin = !!useAuth().user?.isAdmin;
+  async function setVerified(on: boolean) {
+    try {
+      await new ApiClient().patch(`/api/admin/communities/${c.id}`, { verified: on });
+      toast(on ? `${c.name} is verified` : `${c.name} is no longer verified`, "success");
+      onChanged();
+    } catch (e) {
+      toast(errorMessage(e), "error");
+    }
+  }
+
   const headerMenu: MenuEntry[] = [
     // owners and admins: members and growth, events to approve, money
     ...(c.viewer.canManage ? ([{ label: "Dashboard", icon: "sliders", onSelect: () => go(`${base}?view=dashboard`) }] as MenuEntry[]) : []),
     { label: "About this community", icon: "info", onSelect: onAbout },
     { label: "Invite people", icon: "userplus", onSelect: inviteCommunity },
-    ...(manage ? ([{ label: "Community settings", icon: "sliders", onSelect: () => go(`${base}?settings=overview`) }] as MenuEntry[]) : []),
+    // your own notification settings here ("Suppress @everyone and @here", an on/off switch)
+    ...(c.viewer.isMember ? ([{ label: "Notification settings", icon: "bell", onSelect: () => setNotifyOpen(true) }] as MenuEntry[]) : []),
+    ...(manage ? ([{ label: "Community settings", icon: "sliders", onSelect: () => go(`${base}?settings=overview`) }] as MenuEntry[]) : (c.viewer.perms ?? []).some((p) => ["kick", "ban", "timeout", "manageRoles", "viewModLog", "manageWebhooks", "manageEmoji"].includes(p)) ? ([{ label: "Moderation", icon: "shield", onSelect: () => go(`${base}?settings=members`) }] as MenuEntry[]) : []),
     ...(manage || c.canCreateGroup ? ([{ type: "sep" }] as MenuEntry[]) : []),
     ...(manage ? ([{ label: "Create board", icon: "topics", onSelect: () => setBoardModal({}) }] as MenuEntry[]) : []),
-    ...(manage ? ([{ label: "Create channel", icon: "plus", onSelect: () => setCreating({ categoryId: null }) }, { label: "Create category", icon: "folder", onSelect: () => setCategoryModal({}) }] as MenuEntry[]) : []),
+    ...(chMgr ? ([{ label: "Create channel", icon: "plus", onSelect: () => setCreating({ categoryId: null }) }, { label: "Create category", icon: "folder", onSelect: () => setCategoryModal({}) }] as MenuEntry[]) : []),
     ...(c.canCreateGroup ? ([{ label: "Create group", icon: "users", onSelect: () => setNewGroup(true) }] as MenuEntry[]) : []),
     { type: "sep" },
     // nobody leaves Klique (the default community: announcements and Klique's own events live there)
     ...(c.viewer.isMember && c.viewer.role !== "owner" && !(c.official && c.slug === KLIQUE_SLUG) ? ([{ label: "Leave community", icon: "logout", danger: true, onSelect: onLeave }] as MenuEntry[]) : []),
     { label: "Report community", icon: "flag", danger: true, onSelect: onReport },
+    ...(siteAdmin && !c.official ? ([{ type: "sep" }, { label: c.verified ? "Remove Verified (admin)" : "Give Verified badge (admin)", icon: "check", onSelect: () => void setVerified(!c.verified) }] as MenuEntry[]) : []),
   ];
 
   // new messages in the groups you're in, for the Groups item
@@ -135,7 +157,7 @@ export function ChannelList({
     // the Posts section (pictures and videos), when the community has it turned on
     { id: "posts", label: "Posts", icon: "image", show: c.feedPolicy !== "off" },
     { id: "events", label: "Events", icon: "calendar", count: c.upcomingEventCount, show: true },
-    { id: "crews", label: "Crews", icon: "pin", show: true },
+    { id: "kliques", label: "Kliques", icon: "pin", show: true },
     // groups are private: the folder only appears once you're in one (the owner and site admins see them all)
     { id: "groups", label: "Groups", icon: "folder", count: c.subcommunityCount, show: (c.subcommunityCount ?? 0) > 0 },
     { id: "members", label: "Members", icon: "users", count: c.memberCount, show: c.viewer.isMember },
@@ -179,6 +201,7 @@ export function ChannelList({
           }}
         />
       )}
+      {notifyOpen && <CommunityNotifyModal c={c} open onClose={() => setNotifyOpen(false)} onChanged={onChanged} />}
       {categoryModal && (
         <CategoryModal
           slug={c.slug}
@@ -312,18 +335,18 @@ export function ChannelList({
     );
   };
 
-  /** "Your crews": the crews you're going with, one tap from their chat. */
+  /** "Your kliques": the ones you're in, one tap from their chat. */
   const crewSection = (list: MyCrewDTO[]) =>
     list.length > 0 && (
-      <section className="mt-3" aria-label="Your crews">
-        <p className="px-2 py-1 text-[11px] font-bold tracking-[0.08em] text-ink-muted uppercase">Your crews</p>
+      <section className="mt-3" aria-label="Your kliques">
+        <p className="px-2 py-1 text-[11px] font-bold tracking-[0.08em] text-ink-muted uppercase">Your kliques</p>
         <ul className="space-y-0.5">
           {list.map((x) => {
             const on = activeCrew === x.id;
             return (
               <li key={x.id}>
                 <SoftLink
-                  href={`${base}?${x.sub ? `g=${x.sub}&` : ""}crew=${x.id}`}
+                  href={`${base}?${x.sub ? `g=${x.sub}&` : ""}klique=${x.id}`}
                   scroll={false}
                   onClick={onNavigate}
                   aria-current={on ? "page" : undefined}
@@ -331,8 +354,8 @@ export function ChannelList({
                 >
                   <Icon name="pin" size={16} className="shrink-0" />
                   <span className="min-w-0 flex-1">
-                    <span className={cx("block truncate text-[14px]", x.unreadCount && !on ? "font-semibold text-ink" : "font-medium")}>From {x.area}</span>
-                    <span className="block truncate text-[11.5px] opacity-80">{x.standing === "pending" ? "Asked to join · " : ""}{x.eventTitle}</span>
+                    <span className={cx("block truncate text-[14px]", x.unreadCount && !on ? "font-semibold text-ink" : "font-medium")}>{x.title}</span>
+                    <span className="block truncate text-[11.5px] opacity-80">{x.standing === "pending" ? "Asked to join · " : ""}{x.eventTitle ?? `From ${x.area}`}</span>
                   </span>
                   {!on && <CountBadge n={x.unreadCount ?? 0} />}
                 </SoftLink>
@@ -344,7 +367,7 @@ export function ChannelList({
     );
 
   /** Discord's server header: the name is the menu button. */
-  const headerButton = (name: string, locked: boolean, menu: MenuEntry[], label: string, adult = false) => (
+  const headerButton = (name: string, locked: boolean, menu: MenuEntry[], label: string, adult = false, verified = false) => (
     <Dropdown
       items={menu}
       label={label}
@@ -354,6 +377,7 @@ export function ChannelList({
         <button {...props} aria-label={label} className={cx("flex h-11 w-full items-center gap-2 rounded-control px-2.5 text-left transition hover:bg-raised", open && "bg-raised")}>
           <span className="flex min-w-0 flex-1 items-center gap-1.5 text-[17px] font-semibold tracking-[-0.02em]">
             <span className="truncate">{name}</span>
+            <VerifiedCheck on={verified} size={15} />
             {locked && <Icon name="lock" size={13} className="shrink-0 text-ink-muted" />}
             {adult && <span className="shrink-0 rounded-full border border-line px-1.5 py-px font-mono text-[10px] font-bold text-ink-muted" title="For people 18 and over">18+</span>}
           </span>
@@ -382,7 +406,7 @@ export function ChannelList({
     ];
     const gNav: { id: GroupView; label: string; icon: IconName; show: boolean }[] = [
       { id: "events", label: "Events", icon: "calendar", show: true },
-      { id: "crews", label: "Crews", icon: "pin", show: true },
+      { id: "kliques", label: "Kliques", icon: "pin", show: true },
       { id: "members", label: "Members", icon: "users", show: g.role !== null },
     ];
     return (
@@ -430,7 +454,7 @@ export function ChannelList({
         <SoftLink href="/communities" onClick={onNavigate} className="eyebrow mb-0.5 inline-flex items-center gap-1 px-2.5 hover:text-ink">
           <Icon name="arrow-left" size={11} /> Communities
         </SoftLink>
-        {headerButton(c.name, c.privacy === "private", headerMenu, "Community menu", c.adult)}
+        {headerButton(c.name, c.privacy === "private", headerMenu, "Community menu", c.adult, c.verified)}
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-2 py-3">
@@ -503,7 +527,7 @@ export function ChannelList({
 
         {sections.length === 0 && (
           <div className="px-2.5 py-2 text-sm text-ink-muted">
-            {manage ? (
+            {chMgr ? (
               <button type="button" onClick={() => setCreating({ categoryId: null })} className="inline-flex items-center gap-1.5 font-semibold text-accent-text hover:underline">
                 <Icon name="plus" size={14} /> Create the first channel
               </button>
@@ -533,7 +557,7 @@ export function ChannelList({
                 ) : (
                   <p className="flex-1 px-2 py-1 text-[11px] font-bold tracking-[0.08em] text-ink-muted uppercase">Channels</p>
                 )}
-                {manage && (
+                {chMgr && (
                   <>
                     <Dropdown
                       items={addMenu(category?.id ?? null)}
@@ -550,7 +574,7 @@ export function ChannelList({
                         label={`${category.name} options`}
                         align="right"
                         items={[
-                          { label: "Rename category", icon: "edit", onSelect: () => setCategoryModal({ category }) },
+                          { label: "Edit category", icon: "edit", onSelect: () => setCategoryModal({ category }) },
                           { label: "Create channel", icon: "hash", onSelect: () => setCreating({ categoryId: category.id }) },
                           { type: "sep" },
                           { label: "Delete category", icon: "trash", danger: true, onSelect: () => setDeletingCategory(category) },
@@ -567,7 +591,7 @@ export function ChannelList({
               </div>
               <ul className="space-y-0.5">
                 {shown.map((ch) => (
-                  <ChannelRow key={ch.id} ch={ch} href={`${base}?c=${ch.slug}`} active={!view && ch.slug === activeChannel} menu={manage ? channelMenu(ch, null, `${base}?c=${ch.slug}`) : null} onNavigate={onNavigate} />
+                  <ChannelRow key={ch.id} ch={ch} href={`${base}?c=${ch.slug}`} active={!view && ch.slug === activeChannel} menu={chMgr ? channelMenu(ch, null, `${base}?c=${ch.slug}`) : null} onNavigate={onNavigate} />
                 ))}
               </ul>
             </section>

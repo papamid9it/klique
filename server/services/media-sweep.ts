@@ -1,6 +1,6 @@
 import { Ad } from "../models/Ad";
 import { Community } from "../models/Community";
-import { CrewMessage } from "../models/Crew";
+import { Crew, CrewMessage } from "../models/Crew";
 import { SavedSticker } from "../models/SavedSticker";
 import { EventDraft } from "../models/EventDraft";
 import { ChannelMessage } from "../models/Channel";
@@ -13,6 +13,8 @@ import { User } from "../models/User";
 import { parseUpload, uploadBase } from "./media.service";
 import { deleteObject, listObjects } from "./r2";
 import { r2Config } from "../env";
+import { CommunityEmoji } from "../models/CommunityEmoji";
+import { Webhook } from "../models/Webhook";
 
 /**
  * The nightly sweep for orphaned uploads. A file reaches R2 the moment someone picks it, so
@@ -51,8 +53,14 @@ async function referencedKeys(): Promise<Set<string>> {
     add(u.avatarUrl);
     add(u.bannerUrl);
   }
+  // profile photos and videos (and videos' still frames)
+  for await (const u of User.find({ "media.0": { $exists: true } }).select("media").lean().cursor()) for (const m of u.media ?? []) {
+    add(m.url);
+    add(m.poster);
+  }
   for await (const c of Community.find({ coverImage: has }).select("coverImage").lean().cursor()) add(c.coverImage);
   for await (const e of Event.find({ coverImage: has }).select("coverImage").lean().cursor()) add(e.coverImage);
+  for await (const k of Crew.find({ coverImage: has }).select("coverImage").lean().cursor()) add(k.coverImage);
   for await (const p of Post.find({ imageUrl: has }).select("imageUrl").lean().cursor()) add(p.imageUrl);
   for await (const t of Topic.find({ $or: [{ imageUrl: has }, { "media.0": { $exists: true } }] }).select("imageUrl media").lean().cursor()) {
     add(t.imageUrl);
@@ -79,6 +87,9 @@ async function referencedKeys(): Promise<Set<string>> {
   for await (const m of CrewMessage.find({ "images.0": { $exists: true } }).select("images").lean().cursor()) (m.images ?? []).forEach(add);
   for await (const a of Ad.find({ imageUrl: has }).select("imageUrl").lean().cursor()) add(a.imageUrl);
   for await (const d of EventDraft.find({ coverImage: has }).select("coverImage").lean().cursor()) add(d.coverImage);
+  // communities' custom emoji, and webhooks' pictures
+  for await (const e of CommunityEmoji.find().select("url").lean().cursor()) add(e.url);
+  for await (const w of Webhook.find({ avatarUrl: has }).select("avatarUrl").lean().cursor()) add(w.avatarUrl);
   return out;
 }
 

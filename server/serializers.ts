@@ -1,3 +1,4 @@
+import { activePlan } from "@/lib/plans";
 import type { Types } from "mongoose";
 import { isAdult } from "./policies/adult";
 import { Payment } from "./models/Money";
@@ -38,21 +39,33 @@ export function viewerAccess(a: SpaceAccess): ViewerAccess {
     canPost: a.canPost,
     ...(a.canModerate ? { canModerate: true } : {}),
     ...(a.pointsToPost ? { pointsToPost: a.pointsToPost } : {}),
+    ...(a.timedOutUntil ? { timedOutUntil: a.timedOutUntil } : {}),
+    ...(a.perms?.length ? { perms: a.perms } : {}),
+    ...(a.needsRules ? { needsRules: true } : {}),
+    ...(a.welcomePending ? { welcomePending: true } : {}),
   };
 }
 
 /* ------------------------------- users ------------------------------ */
 
-export const toBrief = (u: Pick<IUser, "_id" | "handle" | "displayName" | "avatarUrl" | "country" | "city"> & Partial<Pick<IUser, "avatarFrame" | "nameEffect">>): UserBrief => ({
+export const toBrief = (u: Pick<IUser, "_id" | "handle" | "displayName" | "avatarUrl" | "country" | "city"> & Partial<Pick<IUser, "avatarFrame" | "nameEffect" | "plan" | "planUntil" | "bot">>): UserBrief => ({
   id: sid(u._id),
   handle: u.handle,
   displayName: u.displayName,
   avatarUrl: u.avatarUrl ?? null,
   avatarFrame: u.avatarFrame ?? null,
   nameEffect: u.nameEffect ?? null,
+  badge: badgeOf(u),
   country: u.country ?? "NG",
   city: u.city,
+  ...(u.bot ? { bot: true } : {}),
 });
+
+/** "lite" or "pro" while they're on that plan (lib/plans). */
+const badgeOf = (u: Partial<Pick<IUser, "plan" | "planUntil">>): UserBrief["badge"] => {
+  const p = activePlan(u);
+  return p === "free" ? null : p;
+};
 
 export const toProfile = (u: IUser): UserProfile => ({
   ...toBrief(u),
@@ -68,6 +81,7 @@ export const toProfile = (u: IUser): UserProfile => ({
   presence: u.presence ?? "online",
   profileTheme: u.profileTheme ?? null,
   profileEffect: u.profileEffect ?? null,
+  media: (u.media ?? []).map((m) => ({ kind: m.kind, url: m.url, poster: m.poster ?? null })),
 });
 
 export const toMe = (u: IUser, unreadMessages = 0, unreadNotifications = 0): UserMe => ({
@@ -86,12 +100,13 @@ export const toMe = (u: IUser, unreadMessages = 0, unreadNotifications = 0): Use
   isAdmin: isSiteAdmin(u),
   dob: u.dob ? u.dob.toISOString().slice(0, 10) : null,
   dobLocked: !!u.dobSetAt,
+  gender: u.gender ?? "unspecified",
   isAdult: isAdult(u),
   adultConfirmed: !!u.adultConfirmedAt,
   explicitOnAt: u.explicitOptInAt ? u.explicitOptInAt.toISOString() : null,
 });
 
-const BRIEF_FIELDS = "handle displayName avatarUrl avatarFrame nameEffect country city";
+const BRIEF_FIELDS = "handle displayName avatarUrl avatarFrame nameEffect plan planUntil country city bot";
 
 export async function loadBriefs(ids: (Types.ObjectId | string)[]): Promise<Map<string, UserBrief>> {
   const unique = [...new Set(ids.map(sid))];
@@ -148,6 +163,8 @@ export function communityCard(c: ICommunity, access: SpaceAccess): CommunityCard
     slug: c.slug,
     name: c.name,
     official: !!c.official,
+    verified: !!c.verified || isKlique(c),
+    screening: !!c.screening?.enabled && (c.screening.questions?.length ?? 0) > 0,
     description: locked ? "" : c.description,
     interest: c.interest,
     country: c.country ?? "NG",
@@ -186,6 +203,7 @@ export async function toCommunityDetail(
     // Klique: only site admins post its events (its owner here; the others from Admin → Events)
     canHostEvents: isKlique(c) ? access.role === "owner" : canHostInSpace(access),
     memberEvents: c.memberEvents !== false,
+    membersMassMention: !!c.membersMassMention,
     canSubmitEvents: !isKlique(c) && !canHostInSpace(access) && access.isMember && !access.banned && c.memberEvents !== false,
     owner,
     subcommunityCount: card.locked ? null : extra.subcommunityCount,
@@ -257,8 +275,8 @@ export async function toEvents(events: IEvent[], viewer: IUser | null): Promise<
     loadBriefs(hostIds),
     communityIds.length
       ? Community.find({ _id: { $in: communityIds } })
-          .select("slug name privacy official adult")
-          .lean<Pick<ICommunity, "_id" | "slug" | "name" | "privacy" | "official" | "adult">[]>()
+          .select("slug name privacy official adult verified")
+          .lean<Pick<ICommunity, "_id" | "slug" | "name" | "privacy" | "official" | "adult" | "verified">[]>()
       : [],
     subIds.length
       ? Subcommunity.find({ _id: { $in: subIds } })
@@ -325,7 +343,7 @@ export async function toEvents(events: IEvent[], viewer: IUser | null): Promise<
       host: hosts.get(sid(e.hostId)) ?? GHOST,
       // an event found elsewhere: who runs it, and its own page ("More info / tickets")
       organizer: e.organizerName || e.sourceUrl ? { name: e.organizerName ?? "", url: e.sourceUrl ?? null } : null,
-      community: c ? { slug: c.slug, name: c.name, privacy: c.privacy, official: isKlique(c), adult: !!c.adult } : null,
+      community: c ? { slug: c.slug, name: c.name, privacy: c.privacy, official: isKlique(c), adult: !!c.adult, verified: !!c.verified || isKlique(c) } : null,
       subcommunity: s ? { slug: s.slug, name: s.name } : null,
       audience: e.audience,
       goingCount: e.goingCount,

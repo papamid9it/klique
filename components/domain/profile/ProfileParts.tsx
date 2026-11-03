@@ -3,6 +3,7 @@
 import { StatusPicker } from "./StatusPicker";
 import { StillImage } from "@/components/ui/StillImage";
 import { isAnimatedPicture } from "@/lib/cosmetics";
+import { PROFILE_DESIGNS_ENABLED } from "@/lib/constants";
 import { useCalm } from "@/lib/hooks/useCalm";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -36,9 +37,10 @@ function hash(s: string) {
 /** A profile picture that opens full size when tapped (when there is one). */
 export function ZoomAvatar({ url, name, children }: { url?: string | null; name: string; children: React.ReactNode }) {
   const view = useMediaViewer();
+  const { user } = useAuth();
   if (!url) return <>{children}</>;
   return (
-    <button type="button" onClick={() => view([url])} aria-label={`View ${name}'s picture full screen`} className="shrink-0 cursor-zoom-in rounded-full">
+    <button type="button" onClick={() => view([url], 0, { mine: url === user?.avatarUrl })} aria-label={`View ${name}'s picture full screen`} className="shrink-0 cursor-zoom-in rounded-full">
       {children}
     </button>
   );
@@ -48,19 +50,20 @@ export function ZoomAvatar({ url, name, children }: { url?: string | null; name:
 export function ProfileBanner({ handle, className, bannerUrl, bannerColor, zoomable }: { handle: string; className?: string; bannerUrl?: string | null; bannerColor?: string | null; zoomable?: boolean }) {
   const angle = 100 + (hash(handle) % 160);
   const view = useMediaViewer();
+  const { user } = useAuth();
   const calm = useCalm();
   if (bannerUrl) {
     // shown as the person positioned it (lib/focal); tapping opens the whole picture when `zoomable`. An animated
     // (GIF) banner holds still for people who turn motion down or use data saver.
     const pic =
-      calm && isAnimatedPicture(bannerUrl) ? (
+      (calm || !PROFILE_DESIGNS_ENABLED) && isAnimatedPicture(bannerUrl) ? (
         <StillImage src={cdn(bannerUrl, { w: 1200 })} style={focalStyle(splitFocal(bannerUrl).focal)} className="size-full object-cover" />
       ) : (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={cdn(bannerUrl, { w: 1200 })} alt="" aria-hidden="true" loading="lazy" style={focalStyle(splitFocal(bannerUrl).focal)} className="size-full object-cover" />
       );
     return zoomable ? (
-      <button type="button" onClick={() => view([bannerUrl])} aria-label="View banner full screen" className={cx("block w-full cursor-zoom-in overflow-hidden", className)}>
+      <button type="button" onClick={() => view([bannerUrl], 0, { mine: bannerUrl === user?.bannerUrl })} aria-label="View banner full screen" className={cx("block w-full cursor-zoom-in overflow-hidden", className)}>
         {pic}
       </button>
     ) : (

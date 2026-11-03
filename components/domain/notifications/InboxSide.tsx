@@ -110,11 +110,11 @@ export function InboxSide() {
           {pending.loading && !p ? (
             <Skeleton className="h-16" />
           ) : !asks ? (
-            <p className="text-[13px] text-ink-muted">Nothing waiting on you. Requests to join your crews and communities show up here.</p>
+            <p className="text-[13px] text-ink-muted">Nothing waiting on you. Requests to join your kliques and communities show up here.</p>
           ) : (
             <ul className="divide-y divide-line">
               {p!.crewRequests.map((r) => (
-                <Ask key={`c${r.crewId}${r.user.id}`} user={r.user} line={`wants to join your crew from ${r.area}${r.eventTitle ? ` to ${r.eventTitle}` : ""}`} message={r.message} onYes={() => CrewService.decide(r.crewId, r.user.id, true)} onNo={() => CrewService.decide(r.crewId, r.user.id, false)} />
+                <Ask key={`c${r.crewId}${r.user.id}`} user={r.user} line={`wants to join your klique “${r.eventTitle}”`} message={r.message} onYes={() => CrewService.decide(r.crewId, r.user.id, true)} onNo={() => CrewService.decide(r.crewId, r.user.id, false)} />
               ))}
               {p!.communityRequests.map((r) => (
                 <Ask key={`m${r.requestId}`} user={r.user} line={`wants to join ${r.communityName}`} message={r.message} onYes={() => SpaceService.decideRequest(r.slug, r.requestId, "approve")} onNo={() => SpaceService.decideRequest(r.slug, r.requestId, "reject")} />

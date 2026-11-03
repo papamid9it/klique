@@ -4,7 +4,7 @@ import { isDataSaver } from "@/lib/data-saver";
 import { ProfileTrigger } from "@/components/providers/ProfileCardProvider";
 import { useRealtime } from "@/components/providers/RealtimeProvider";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { errorMessage, isApiError } from "@/app/ApiCore";
 import { MessageService } from "@/app/services/MessageService";
@@ -40,6 +40,8 @@ import { sendReaction } from "@/lib/reactQueue";
 import { UserName } from "@/components/ui/UserName";
 import { TypingLine } from "@/components/domain/chat/TypingLine";
 import { useTyping } from "@/lib/hooks/useTyping";
+import { RequestActions, useAfterRequest } from "@/components/domain/messages/RequestActions";
+import { EmojiText } from "@/components/ui/CustomEmoji";
 
 type Local = MessageDTO & { pending?: boolean; failed?: boolean };
 type Snapshot = { detail: ConversationDetailDTO; messages: Local[]; hasMore: boolean };
@@ -76,6 +78,7 @@ export default function ConversationPage() {
   const [stickerOpen, setStickerOpen] = useState(false);
   const [sticker, setSticker] = useState<StickerChoice | null>(null);
   // "X is typing…" in this conversation
+  const afterRequest = useAfterRequest(id);
   const typing = useTyping(detail?.canSend ? { kind: "dm", id } : null);
   const [infoOpen, setInfoOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -86,7 +89,8 @@ export default function ConversationPage() {
   const stickers = useStickers();
   /** "Save as sticker" for a sticker or a single picture */
   const saveItem = (m: Local) => {
-    const url = m.stickerUrl ?? (m.images?.length === 1 ? m.images[0] : null);
+    // someone else's picture can't be made a sticker (a sticker they sent can be saved)
+    const url = m.stickerUrl ?? (m.mine && m.images?.length === 1 ? m.images[0] : null);
     return url ? [{ label: m.stickerUrl ? "Save sticker" : "Save as sticker", icon: "sticker" as const, onSelect: () => void stickers.save(url).then((err) => toast(err ?? "Saved to your stickers.", err ? "error" : "success")) }] : [];
   };
   /** a message's actions: the ⋯ menu (mouse) and the press-and-hold sheet (touch) */
@@ -105,6 +109,16 @@ export default function ConversationPage() {
     el.classList.add("bg-accent/15");
     setTimeout(() => el.classList.remove("bg-accent/15"), 1400);
   };
+
+  // ?m=<message id> (from message search): jump to it once it's on screen
+  const focusId = useSearchParams().get("m");
+  const jumped = useRef<string | null>(null);
+  useEffect(() => {
+    if (!focusId || jumped.current === focusId || !messages.some((x) => x.id === focusId)) return;
+    jumped.current = focusId;
+    const t = setTimeout(() => jump(focusId), 250);
+    return () => clearTimeout(t);
+  });
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const lastKey = useRef<string | null>(null);
@@ -370,9 +384,9 @@ export default function ConversationPage() {
                     )}
                     <div id={`msg-${m.id}`} className={cx("rounded-2xl px-3.5 py-2 text-[15px] break-words whitespace-pre-wrap transition-colors", m.mine ? "rounded-br-md bg-accent text-accent-ink" : "rounded-bl-md border border-line bg-surface text-ink", m.pending && "opacity-60")}>
                       {m.replyTo && <ReplyQuote reply={m.replyTo} onJump={jump} className={cx("whitespace-normal", m.mine ? "!text-accent-ink/80 [&_span]:!text-accent-ink/80" : "")} />}
-                      {m.body}
+                      <EmojiText text={m.body} />
                       {!m.body && !m.images?.length && <span className="italic opacity-70">Sticker unavailable</span>}
-                      <ChatImages images={m.images ?? []} className={m.body ? "mt-1.5" : ""} />
+                      <ChatImages images={m.images ?? []} mine={m.mine} className={m.body ? "mt-1.5" : ""} />
                       <span className={cx("mt-0.5 flex items-baseline justify-end gap-1.5 font-mono text-[10px]", m.mine ? "text-accent-ink/70" : "text-ink-muted")}>
                         {m.editedAt && <EditedTag at={m.editedAt} />}
                         {m.failed ? "Not sent" : m.pending ? "Sending…" : formatTime(m.createdAt)}
@@ -400,6 +414,15 @@ export default function ConversationPage() {
         <div ref={bottomRef} />
       </div>
 
+      {/* a message request for you: accept, delete or block (replying accepts it too) */}
+      {detail.conversation.request && !detail.conversation.request.fromMe && (
+        <div className="border-t border-line bg-surface px-4 py-3 sm:px-6">
+          <p className="mb-2 text-sm">
+            <span className="font-semibold">{detail.conversation.other.displayName}</span> wants to message you. Accept to chat, or delete it (they won&apos;t be told).
+          </p>
+          <RequestActions id={id} name={detail.conversation.other.displayName} onDone={(action) => (action === "accept" ? setDetail((d) => (d ? { ...d, conversation: { ...d.conversation, request: null } } : d)) : afterRequest(action))} />
+        </div>
+      )}
       <div className="relative border-t border-line bg-canvas px-4 py-3 sm:px-6">
         {/* over the chat's bottom edge, so nothing moves when they start or stop typing */}
         {detail.canSend && <TypingLine names={typing.names} className="pointer-events-none absolute right-4 bottom-full left-4 bg-gradient-to-t from-canvas to-transparent pt-2 sm:right-6 sm:left-6" />}

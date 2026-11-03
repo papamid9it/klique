@@ -21,7 +21,7 @@ export const looksLikeVideo = (url: string) => /\.(mp4|webm|mov|m4v)(\?|#|$)/i.t
  * Reddit-style media block: one picture, a swipeable gallery, or a video player.
  * `tall` allows more height on the full topic page than in lists.
  */
-export function TopicMedia({ media, tall, className }: { media: TopicMediaDTO[]; tall?: boolean; className?: string }) {
+export function TopicMedia({ media, tall, className, mine }: { media: TopicMediaDTO[]; tall?: boolean; className?: string; /** your own post (you can download its media) */ mine?: boolean }) {
   const [i, setI] = useState(0);
   const [broken, setBroken] = useState<Set<number>>(new Set());
   // a long board of videos only asks for each one's data as it comes near the screen
@@ -40,7 +40,7 @@ export function TopicMedia({ media, tall, className }: { media: TopicMediaDTO[];
   return (
     <div ref={box} className={cx("relative overflow-hidden rounded-control border border-line bg-black/60", className)}>
       {cur.kind === "video" ? (
-        <video key={cur.url} ref={vid} src={videoSrc(cur.url)} poster={cur.poster ?? videoPoster(cur.url) ?? undefined} controls playsInline preload={near && !saver ? "metadata" : "none"} className={cx("mx-auto block w-full bg-black object-contain", max)} aria-label="Video">
+        <video key={cur.url} ref={vid} src={videoSrc(cur.url)} poster={cur.poster ?? videoPoster(cur.url) ?? undefined} controls controlsList={mine ? undefined : "nodownload"} onContextMenu={mine ? undefined : (e) => e.preventDefault()} playsInline preload={near && !saver ? "metadata" : "none"} className={cx("mx-auto block w-full bg-black object-contain", max)} aria-label="Video">
           Your browser can&apos;t play this video.
         </video>
       ) : saver && isGif(cur.url) && !playing.has(i) ? (
@@ -54,7 +54,7 @@ export function TopicMedia({ media, tall, className }: { media: TopicMediaDTO[];
           {/* blurred copy fills the sides of tall or narrow pictures */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={cdn(cur.url, { w: 200 })} alt="" aria-hidden="true" loading="lazy" decoding="async" className="absolute inset-0 size-full scale-110 object-cover opacity-40 blur-2xl" />
-          <button type="button" onClick={() => view(media, i)} aria-label={`Open picture ${i + 1} of ${media.length} full screen`} className="relative block w-full cursor-zoom-in">
+          <button type="button" onClick={() => view(media, i, { mine })} aria-label={`Open picture ${i + 1} of ${media.length} full screen`} className="relative block w-full cursor-zoom-in">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={cdn(cur.url, { w: 1280 })} alt={`Picture ${i + 1} of ${media.length}`} loading="lazy" decoding="async" onError={() => setBroken((b) => new Set(b).add(i))} className={cx("relative mx-auto block w-full object-contain", max)} />
           </button>

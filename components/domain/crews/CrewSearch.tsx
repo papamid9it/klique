@@ -50,14 +50,14 @@ export function CrewResults({ crews: c, empty, onStart }: { crews: EventCrews; e
   return (
     <div className="space-y-3">
       <label className="relative block">
-        <span className="sr-only">Search crews by area</span>
+        <span className="sr-only">Search kliques</span>
         <Icon name="search" size={16} className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-ink-muted" />
         <input
           type="search"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           maxLength={40}
-          placeholder="Search by area: Yaba, Oshodi, Lekki…"
+          placeholder="Search by plan or area: Yaba, Oshodi, Lekki…"
           className="h-11 w-full rounded-control border border-line bg-raised pr-10 pl-10 text-[15px] text-ink placeholder:text-ink-muted/70 focus:border-accent-text focus:outline-none"
         />
         {busy && (
@@ -68,14 +68,14 @@ export function CrewResults({ crews: c, empty, onStart }: { crews: EventCrews; e
       </label>
       {query && (
         <p className="text-xs text-ink-muted" aria-live="polite">
-          {data.total ? `${data.total} ${data.total === 1 ? "crew" : "crews"} from “${query}”` : ""}
+          {data.total ? `${data.total} ${data.total === 1 ? "klique" : "kliques"} for “${query}”` : ""}
         </p>
       )}
 
       {error && <ErrorState message={error} onRetry={reload} />}
       {!list.length ? (
         <div className="rounded-card border border-dashed border-line p-6 text-center">
-          <p className="text-sm font-medium">No crews from {query || "there"} yet</p>
+          <p className="text-sm font-medium">No kliques for {query || "that"} yet</p>
           {onStart ? (
             <Button variant="primary" size="sm" className="mt-3" onClick={onStart}>
               <Icon name="plus" size={14} /> Start one

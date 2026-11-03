@@ -12,15 +12,19 @@ import { Message, type IMessage } from "../models/Message";
 import { Block } from "../models/Safety";
 import { User, type IUser } from "../models/User";
 import { loadBriefs, toBrief } from "../serializers";
-import { blockedByMe, blockedEitherWay, shareCommunity } from "./blocks";
+import { blockedByMe, blockedEitherWay, hiddenUserIds } from "./blocks";
+import { CrewMember } from "../models/Crew";
+import { Membership } from "../models/Membership";
+import { ADULT_AGE, ageOn } from "../policies/adult";
 import { sid } from "./helpers";
 import { areFriends } from "./friends.service";
-import { summarizeReactions, toggleReaction } from "./reactions";
+import { purgeReactions, summarizeReactions, toggleReaction } from "./reactions";
 import { type ReactionKind } from "@/lib/reactions";
 import { notify } from "./push.service";
 import { previewOf, toReplyRef } from "./replies";
 import type { ReactionDTO, ReplyRefDTO } from "@/lib/types";
 import { emitDm } from "./realtime";
+import { normalizeEmoji } from "./emoji.service";
 
 const PAGE = 40;
 
@@ -37,6 +41,8 @@ const PAGE = 40;
 export async function messagingEligibility(viewer: IUser | null, target: IUser): Promise<MessagingEligibility> {
   if (!viewer) return { allowed: false, reason: "signed_out", message: "Sign in to send a message." };
   if (sid(viewer._id) === sid(target._id)) return { allowed: false, reason: "self", message: "That's you." };
+  // bots don't do DMs (either way)
+  if (target.bot || viewer.bot) return { allowed: false, reason: "unavailable", message: "Bots don't take direct messages." };
 
   if (await blockedByMe(viewer._id, target._id)) {
     return { allowed: false, reason: "blocked", message: `You blocked @${target.handle}. Unblock them to send a message.` };
@@ -46,18 +52,38 @@ export async function messagingEligibility(viewer: IUser | null, target: IUser):
   }
   // Friends can always message each other, whatever the privacy setting says.
   if (await areFriends(viewer._id, target._id)) return { allowed: true };
+  // under-18s: only friends (an adult and a minor never start a chat otherwise)
+  if (isMinorUser(viewer) || isMinorUser(target)) return { allowed: false, reason: "unavailable", message: "You can't message this person." };
   if (target.dmPolicy === "nobody") {
-    return { allowed: false, reason: "policy_nobody", message: `@${target.handle} isn't accepting new messages.` };
+    return { allowed: false, reason: "policy_nobody", message: `@${target.handle} only takes messages from friends.` };
   }
-  if (target.dmPolicy === "shared" && !(await shareCommunity(viewer._id, target._id))) {
-    return {
-      allowed: false,
-      reason: "policy_shared",
-      message: `@${target.handle} only accepts messages from people in their communities. Join one of theirs first.`,
-    };
+  // klique mates and fellow community admins chat freely
+  if (await chatsFreely(viewer._id, target._id)) return { allowed: true };
+  if (target.dmPolicy === "shared") {
+    return { allowed: false, reason: "policy_shared", message: `@${target.handle} only takes messages from friends and klique mates. Add them as a friend first.` };
   }
-  return { allowed: true };
+  // anyone else: one message, as a request
+  return { allowed: true, request: true };
 }
+
+const isMinorUser = (u: Pick<IUser, "dob">) => {
+  const age = ageOn(u.dob);
+  return age !== null && age < ADULT_AGE;
+};
+
+/**
+ * Who chats freely besides friends (no request needed): people in the same klique right now, and owners or admins
+ * of the same community.
+ */
+async function chatsFreely(a: Types.ObjectId, b: Types.ObjectId): Promise<boolean> {
+  const mine = await CrewMember.find({ userId: a, status: "active", expiresAt: { $gt: new Date() } }).distinct("crewId");
+  if (mine.length && (await CrewMember.exists({ userId: b, status: "active", crewId: { $in: mine } }))) return true;
+  const runs = await Membership.find({ userId: a, subcommunityId: null, status: "active", role: { $in: ["owner", "admin"] } }).distinct("communityId");
+  return runs.length > 0 && !!(await Membership.exists({ userId: b, subcommunityId: null, status: "active", role: { $in: ["owner", "admin"] }, communityId: { $in: runs } }));
+}
+
+/** A pending request's first (and only) message may only be text, without links: no pictures, stickers or polls. */
+const REQUEST_LINK = /(https?:\/\/|www\.|\b[a-z0-9-]+\.(com|ng|net|org|io|co|app|me|link|ly)\b)/i;
 
 /* ------------------------------------------------------------------ */
 /* Serialisation                                                       */
@@ -111,6 +137,7 @@ async function toConversations(rows: IConversation[], viewer: IUser): Promise<Co
       unreadCount: Number(c.unread?.[sid(viewer._id)] ?? 0),
       updatedAt: c.lastMessageAt.toISOString(),
       blockedByMe: blocked.has(otherId),
+      request: c.request ? { fromMe: sid(c.request.fromId) === sid(viewer._id) } : null,
     };
   });
 }
@@ -127,7 +154,8 @@ async function loadMyConversation(viewer: IUser, id: string): Promise<IConversat
 /* ------------------------------------------------------------------ */
 
 export async function listConversations(viewer: IUser): Promise<ConversationDTO[]> {
-  const rows = await Conversation.find({ participants: viewer._id, lastMessage: { $ne: null } })
+  // requests sent TO you wait in Requests, not here
+  const rows = await Conversation.find({ participants: viewer._id, lastMessage: { $ne: null }, $or: [{ request: null }, { request: { $exists: false } }, { "request.fromId": viewer._id }] })
     .sort({ lastMessageAt: -1 })
     .limit(60)
     .lean<IConversation[]>();
@@ -163,6 +191,12 @@ async function detail(viewer: IUser, convo: IConversation, messages: IMessage[],
 
   let cannotSendReason: string | undefined;
   if (blocked) cannotSendReason = dto.blockedByMe ? `You blocked @${dto.other.handle}. Unblock them to send a message.` : "You can't message this person.";
+  // a request you sent: one message, then wait
+  let requestWait = false;
+  if (!blocked && convo.request && sid(convo.request.fromId) === sid(viewer._id) && (await Message.exists({ conversationId: convo._id, senderId: viewer._id }))) {
+    requestWait = true;
+    cannotSendReason = `Message request sent. You can send more once @${dto.other.handle} accepts.`;
+  }
 
   const reactionMap = await summarizeReactions("dm", messages.map((m) => m._id), viewer._id);
   const replies = await replyRefs(messages);
@@ -170,7 +204,7 @@ async function detail(viewer: IUser, convo: IConversation, messages: IMessage[],
     conversation: dto,
     messages: messages.map((m) => toMessage(m, viewer._id, reactionMap.get(sid(m._id)) ?? [], m.replyToId ? (replies.get(sid(m.replyToId)) ?? null) : null)),
     hasMore,
-    canSend: !blocked,
+    canSend: !blocked && !requestWait,
     ...(cannotSendReason ? { cannotSendReason } : {}),
   };
 }
@@ -218,6 +252,8 @@ export async function startConversation(viewer: IUser, handle: string, firstMess
         participants: [viewer._id, target._id],
         participantKey: key,
         unread: { [sid(viewer._id)]: 0, [sid(target._id)]: 0 },
+        // not someone they chat with freely: it starts as a message request
+        request: eligibility.request ? { fromId: viewer._id, at: new Date() } : null,
       });
       convo = created.toObject() as IConversation;
     } catch (err) {
@@ -233,7 +269,9 @@ export async function startConversation(viewer: IUser, handle: string, firstMess
 }
 
 export async function sendMessage(viewer: IUser, id: string, input: string | { body: string; sticker?: string; stickerUrl?: string; images?: string[]; replyToId?: string; poll?: z.infer<typeof pollInput> }): Promise<MessageDTO> {
-  const { body, sticker, images = [], replyToId } = typeof input === "string" ? { body: input, sticker: undefined, images: [], replyToId: undefined } : input;
+  const { body: raw, sticker, images = [], replyToId } = typeof input === "string" ? { body: input, sticker: undefined, images: [], replyToId: undefined } : input;
+  // custom emoji in DMs: Pro members' (from communities they're in)
+  const body = await normalizeEmoji(viewer, null, raw);
   const stickerUrl = typeof input !== "string" && input.stickerUrl && !sticker ? assertStickerUrl(input.stickerUrl) : null;
   rateLimit(`dm:${sid(viewer._id)}`, 40, 60_000);
   const convo = await loadMyConversation(viewer, id);
@@ -241,6 +279,20 @@ export async function sendMessage(viewer: IUser, id: string, input: string | { b
 
   if (await blockedEitherWay(viewer._id, otherId)) {
     throw forbidden((await blockedByMe(viewer._id, otherId)) ? "You blocked this person. Unblock them to send a message." : "You can't message this person.");
+  }
+
+  // a message request: the sender gets one text message (no pictures, stickers, polls or links) until it's accepted;
+  // the person it's for accepts it by replying
+  let pendingRequest = !!convo.request;
+  if (convo.request) {
+    if (sid(convo.request.fromId) === sid(viewer._id)) {
+      if (await Message.exists({ conversationId: convo._id, senderId: viewer._id })) throw forbidden("Your message request is waiting. You can send more once they accept it.");
+      if (images.length || sticker || stickerUrl || (typeof input !== "string" && input.poll)) throw badRequest("A message request is text only. You can send pictures once they accept.");
+      if (REQUEST_LINK.test(body)) throw badRequest("A message request can't have links. You can share them once they accept.");
+    } else {
+      await Conversation.updateOne({ _id: convo._id }, { $set: { request: null } });
+      pendingRequest = false;
+    }
   }
 
   // you can only answer a message that is in this same conversation
@@ -262,11 +314,13 @@ export async function sendMessage(viewer: IUser, id: string, input: string | { b
         lastMessageAt: msg.createdAt,
         [`unread.${sid(viewer._id)}`]: 0,
       },
-      $inc: { [`unread.${sid(otherId)}`]: 1 },
+      // a request isn't counted as unread (it shows as a small count on Requests instead)
+      ...(pendingRequest ? {} : { $inc: { [`unread.${sid(otherId)}`]: 1 } }),
     },
   );
   emitDm([viewer._id, otherId], convo._id);
-  notify([otherId], { title: viewer.displayName, body: preview, data: { type: "dm", conversationId: sid(convo._id) } }, { actorId: viewer._id, category: "messages", ref: `dm:${sid(convo._id)}` });
+  // no buzz for a request: it waits quietly in their Requests
+  if (!pendingRequest) notify([otherId], { title: viewer.displayName, body: preview, data: { type: "dm", conversationId: sid(convo._id) } }, { actorId: viewer._id, category: "messages", ref: `dm:${sid(convo._id)}` });
   const row = msg.toObject() as IMessage;
   const replies = await replyRefs([row]);
   return toMessage(row, viewer._id, [], row.replyToId ? (replies.get(sid(row.replyToId)) ?? null) : null);
@@ -321,7 +375,7 @@ export async function editMessage(viewer: IUser, id: string, messageId: string, 
   if (msg.sticker || msg.stickerUrl) throw forbidden("Stickers can't be edited. Delete it and send another.");
   if (msg.pollId) throw forbidden("Polls can't be edited. Delete it and start another.");
   if (await blockedEitherWay(viewer._id, otherParticipant(convo, viewer._id))) throw forbidden("You can't change messages in this conversation.");
-  const next = body.trim();
+  const next = (await normalizeEmoji(viewer, null, body)).trim();
   const replies = await replyRefs([msg]);
   const reply = msg.replyToId ? (replies.get(sid(msg.replyToId)) ?? null) : null;
   if (next === msg.body) return toMessage(msg, viewer._id, (await summarizeReactions("dm", [msg._id], viewer._id)).get(sid(msg._id)) ?? [], reply);
@@ -341,4 +395,40 @@ export async function deleteMessage(viewer: IUser, id: string, messageId: string
   await refreshPreview(convo, msg, "Message deleted");
   emitDm(convo.participants, convo._id);
   return { deleted: true };
+}
+
+/* ------------------------------------------------------------------ */
+/* Message requests                                                    */
+/* ------------------------------------------------------------------ */
+
+/** Message requests sent to you, newest first (accept, delete or block each). */
+export async function listRequests(viewer: IUser): Promise<ConversationDTO[]> {
+  const rows = await Conversation.find({ participants: viewer._id, "request.fromId": { $ne: viewer._id, $exists: true }, lastMessage: { $ne: null } }).sort({ lastMessageAt: -1 }).limit(60).lean<IConversation[]>();
+  const hidden = new Set((await hiddenUserIds(viewer._id)).map(sid));
+  return toConversations(rows.filter((c) => !hidden.has(sid(otherParticipant(c, viewer._id)))), viewer);
+}
+
+/** How many message requests are waiting for you (a small count on Requests, not the unread badge). */
+export async function requestCount(viewer: IUser): Promise<number> {
+  return Conversation.countDocuments({ participants: viewer._id, "request.fromId": { $ne: viewer._id, $exists: true }, lastMessage: { $ne: null } });
+}
+
+/**
+ * Answer a message request: accept (it becomes a normal chat), delete (gone for both; the sender isn't told), or block
+ * (blocks them and deletes it).
+ */
+export async function decideMessageRequest(viewer: IUser, id: string, action: "accept" | "delete" | "block") {
+  const convo = await loadMyConversation(viewer, id);
+  if (!convo.request || sid(convo.request.fromId) === sid(viewer._id)) throw badRequest("That isn't a request for you.");
+  const otherId = otherParticipant(convo, viewer._id);
+  if (action === "accept") {
+    const unread = await Message.countDocuments({ conversationId: convo._id, senderId: otherId });
+    await Conversation.updateOne({ _id: convo._id }, { $set: { request: null, [`unread.${sid(viewer._id)}`]: unread } });
+    emitDm([viewer._id, otherId], convo._id);
+    return { accepted: true };
+  }
+  if (action === "block") await Block.updateOne({ blockerId: viewer._id, blockedId: otherId }, {}, { upsert: true });
+  const msgs = await Message.find({ conversationId: convo._id }).select("_id images").lean<Pick<IMessage, "_id" | "images">[]>();
+  await Promise.all([Message.deleteMany({ conversationId: convo._id }), purgeReactions("dm", msgs.map((m) => m._id)), Conversation.deleteOne({ _id: convo._id })]);
+  return { deleted: true, blocked: action === "block" };
 }

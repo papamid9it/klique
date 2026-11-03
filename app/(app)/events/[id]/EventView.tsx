@@ -18,7 +18,6 @@ import { ReminderPrompt } from "@/components/domain/events/ReminderPrompt";
 import { SponsoredBox, useAds } from "@/components/domain/ads/Sponsored";
 import { useToast } from "@/components/providers/ToastProvider";
 import { ImageField } from "@/components/ui/ImageField";
-import { useMediaViewer } from "@/components/providers/MediaViewerProvider";
 import { Button, buttonClass } from "@/components/ui/Button";
 import { eventPhoto } from "@/lib/fake";
 import { Cover } from "@/components/ui/Cover";
@@ -39,6 +38,7 @@ import type { EventDTO } from "@/lib/types";
 import { EventCrewsRow } from "@/components/domain/crews/EventCrews";
 import { EventPanel } from "@/components/domain/events/EventPanel";
 import { crewsHref } from "@/components/domain/crews/parts";
+import { useAuth } from "@/components/providers/AuthProvider";
 
 /** Lagos (UTC+1) wall-clock parts for form inputs. */
 function lagosInputs(iso: string) {
@@ -230,7 +230,6 @@ function HostMenu({ event, onEdit, onCancel, onDelete }: { event: EventDTO; onEd
 }
 
 function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDTO) => void }) {
-  const view = useMediaViewer();
   const router = useRouter();
   const toast = useToast();
   const { busy, rsvp, toggleSave } = useEventActions(event, onChange);
@@ -238,6 +237,8 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  // site admins may delete anything (logged in the admin audit log)
+  const siteAdmin = !!useAuth().user?.isAdmin;
   const [reporting, setReporting] = useState(false);
   const [working, setWorking] = useState(false);
   const [checkingIn, setCheckingIn] = useState(false);
@@ -287,7 +288,6 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
         <Icon name="arrow-left" size={15} /> All events
       </Link>
       <Cover src={eventPhoto(event.id, event.coverImage)} seed={event.id} interest={event.interest} className="aspect-[16/8] w-full rounded-card border border-line">
-        {event.coverImage && <button type="button" onClick={() => view([event.coverImage!])} aria-label="View the cover picture full screen" className="absolute inset-0 cursor-zoom-in" />}
         <div className="absolute top-4 left-4">
           <DateChip iso={event.startsAt} />
         </div>
@@ -464,11 +464,11 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
             <div className="space-y-2 rounded-card border border-line bg-surface p-4">
               <p className="flex items-center gap-2 text-sm font-semibold">
                 <Icon name="pin" size={16} className="text-accent-text" />
-                {event.crewCount ? `${event.crewCount} ${event.crewCount === 1 ? "crew" : "crews"} going together` : "Going alone?"}
+                {event.crewCount ? `${event.crewCount} ${event.crewCount === 1 ? "klique" : "kliques"} going together` : "Going alone?"}
               </p>
-              <p className="text-xs text-ink-muted">{event.crewCount ? "Join people heading there from near you." : "Start a crew from your area and meet up first."}</p>
+              <p className="text-xs text-ink-muted">{event.crewCount ? "Join people heading there from near you." : "Start a klique from your area and meet up first."}</p>
               <Button href={crewsHref(event)} variant="secondary" className="w-full">
-                <Icon name="users" size={15} /> {event.crewCount ? "Find crews" : "Find or start a crew"}
+                <Icon name="users" size={15} /> {event.crewCount ? "Find kliques" : "Find or start a klique"}
               </Button>
             </div>
           )}
@@ -488,9 +488,16 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
             {event.viewer.canEdit || isHost ? (
               <HostMenu event={event} onEdit={() => setEditing(true)} onCancel={() => setCancelling(true)} onDelete={() => setDeleting(true)} />
             ) : (
-              <Button variant="ghost" onClick={() => setReporting(true)}>
-                <Icon name="flag" /> Report
-              </Button>
+              <>
+                <Button variant="ghost" onClick={() => setReporting(true)}>
+                  <Icon name="flag" /> Report
+                </Button>
+                {siteAdmin && (
+                  <Button variant="danger" onClick={() => setDeleting(true)}>
+                    <Icon name="trash" size={15} /> Delete (admin)
+                  </Button>
+                )}
+              </>
             )}
           </div>
         </aside>

@@ -80,7 +80,8 @@ export async function friendsSummary(viewer: IUser): Promise<FriendsSummaryDTO> 
 
 export async function sendRequest(viewer: IUser, handle: string): Promise<FriendStatusDTO> {
   rateLimit(`friend-req:${sid(viewer._id)}`, 20, 60 * 60_000);
-  const target = await User.findOne({ handle: handle.toLowerCase() }).select("_id handle").lean<{ _id: Types.ObjectId; handle: string }>();
+  const target = await User.findOne({ handle: handle.toLowerCase() }).select("_id handle bot").lean<{ _id: Types.ObjectId; handle: string; bot?: unknown }>();
+  if (target?.bot || viewer.bot) throw badRequest("Bots can't be added as friends.");
   // Same answer whether the person doesn't exist or has blocked you.
   if (!target || (await blockedEitherWay(viewer._id, target._id))) throw notFound("We couldn't find anyone with that handle.");
   if (sid(target._id) === sid(viewer._id)) throw badRequest("You can't add yourself.");

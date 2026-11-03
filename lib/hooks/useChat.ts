@@ -151,8 +151,21 @@ export function useChat(source: ChatSource) {
           commit((prev) =>
             prev.map((m) => {
               const f = byId.get(m.id);
-              if (!f || (f.editedAt === m.editedAt && f.deleted === m.deleted && f.pinned === m.pinned)) return m;
-              return { ...m, body: f.body, mentions: f.mentions, mentionsMe: f.mentionsMe, editedAt: f.editedAt, deleted: f.deleted, pinned: f.pinned, canEdit: f.canEdit, canDelete: f.canDelete, canPin: f.canPin };
+              // edits, deletions, pins, and a thread's reply count and last reply
+              if (!f || (f.editedAt === m.editedAt && f.deleted === m.deleted && f.pinned === m.pinned && JSON.stringify(f.thread ?? null) === JSON.stringify(m.thread ?? null))) return m;
+              return { ...m, body: f.body, mentions: f.mentions, mentionsMe: f.mentionsMe, editedAt: f.editedAt, deleted: f.deleted, pinned: f.pinned, canEdit: f.canEdit, canDelete: f.canDelete, canPin: f.canPin, thread: f.thread };
+            }),
+          );
+        }
+        // threads: a new one or a reply anywhere in the channel updates its message's "N replies", however old
+        if (n === 1 && src.threads) {
+          const th = await src.threads();
+          if (stopped || mine !== ticket.current) return;
+          const byStart = new Map(th.data.map((t) => [t.startMessageId, { slug: t.slug, name: t.name, count: t.count, lastAt: t.lastAt, lastBy: t.lastBy }]));
+          commit((prev) =>
+            prev.map((m) => {
+              const t = byStart.get(m.id);
+              return t && JSON.stringify(t) !== JSON.stringify(m.thread ?? null) ? { ...m, thread: t } : m;
             }),
           );
         }

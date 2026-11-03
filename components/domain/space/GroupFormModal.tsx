@@ -9,10 +9,12 @@ import { TextArea, TextField } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
 import { LIMITS } from "@/lib/constants";
 import { Icon } from "@/components/ui/Icon";
+import { usePlanLimit } from "@/components/domain/account/PlanTab";
 
 /** Create a group inside a community. Shared by the groups page and the community dropdown. */
 export function GroupFormModal({ slug, communityName, onClose, onCreated }: { slug: string; communityName: string; onClose: () => void; onCreated: (groupSlug: string) => void }) {
   const toast = useToast();
+  const limit = usePlanLimit();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [busy, setBusy] = useState(false);
@@ -28,13 +30,15 @@ export function GroupFormModal({ slug, communityName, onClose, onCreated }: { sl
       onCreated(res.data.slug);
     } catch (err) {
       setErrs((err as { errors?: Record<string, string> }).errors ?? {});
-      toast(errorMessage(err), "error");
+      if (!limit.handled(err)) toast(errorMessage(err), "error");
     } finally {
       setBusy(false);
     }
   }
 
   return (
+    <>
+    {limit.prompt}
     <Modal open onClose={onClose} title="Create group" description={`A smaller, private space inside ${communityName}, with its own channels and events.`}>
       <form onSubmit={create} className="space-y-4">
         <TextField label="Group name" value={name} onChange={(e) => setName(e.target.value)} maxLength={LIMITS.communityName} required autoFocus error={errs.name} />
@@ -53,5 +57,6 @@ export function GroupFormModal({ slug, communityName, onClose, onCreated }: { sl
         </div>
       </form>
     </Modal>
+    </>
   );
 }

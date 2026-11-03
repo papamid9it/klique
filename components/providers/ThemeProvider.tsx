@@ -11,7 +11,10 @@ export const MOOD_STORAGE_KEY = "klique.mood";
  * Runs in <head> before first paint so a returning visitor never sees a flash of the wrong mood.
  * (Kept as a plain string: it must not depend on React or the bundle.)
  */
-export const MOOD_BOOT_SCRIPT = `(function(){try{var m=localStorage.getItem("${MOOD_STORAGE_KEY}");if(m&&/^[a-z-]{3,20}$/.test(m))document.documentElement.setAttribute("data-theme",m)}catch(e){}})()`;
+// "monochrome" was the old default and got saved for everyone, chosen or not: without the "picked" marker it's
+// treated as never picked, so the default (Paper Mono, painted by moods.css) shows with no dark flash
+export const MOOD_PICKED_KEY = "klique.mood.picked";
+export const MOOD_BOOT_SCRIPT = `(function(){try{var m=localStorage.getItem("${MOOD_STORAGE_KEY}");if(m==="monochrome"&&!localStorage.getItem("${MOOD_PICKED_KEY}"))return;if(m&&/^[a-z-]{3,20}$/.test(m))document.documentElement.setAttribute("data-theme",m)}catch(e){}})()`;
 
 function apply(id: MoodId) {
   document.documentElement.setAttribute("data-theme", id);
@@ -38,7 +41,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       const stored = localStorage.getItem(MOOD_STORAGE_KEY);
-      if (isMoodId(stored)) setMoodState(stored);
+      if (isMoodId(stored) && !(stored === "monochrome" && !localStorage.getItem(MOOD_PICKED_KEY))) setMoodState(stored);
     } catch {
       /* ignore */
     }
@@ -58,6 +61,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       setMoodState(id); // instant
       apply(id);
       remember(id);
+      try {
+        localStorage.setItem(MOOD_PICKED_KEY, "1"); // they chose it (see MOOD_BOOT_SCRIPT)
+      } catch {
+        /* ignore */
+      }
       if (status === "authed") void ProfileService.updateMe({ mood: id }).catch(() => {}); // best-effort sync
     },
     [status],

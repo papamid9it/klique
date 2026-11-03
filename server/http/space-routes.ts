@@ -23,6 +23,7 @@ import {
   resolveSpaceFor,
   revokeInvite,
   transferOwnership,
+  setTimeout_,
 } from "../services/spaces.service";
 import { created, readJson, readQuery, withApi } from "./api";
 
@@ -66,6 +67,15 @@ export const memberRemove = withApi<WithUser, "required">({ auth: "required" }, 
   const { ban } = readQuery(req, banQuery);
   const { space, access } = await resolveSpaceFor(viewer, params.slug, params.subSlug);
   return removeMember(viewer, space, access, params.userId, ban);
+});
+
+const timeoutSchema = z.object({ seconds: z.number().int().min(0).max(604_800), reason: z.string().trim().max(300).optional().default("") });
+
+/** Time a member out (or `seconds: 0` to lift it): community only. */
+export const memberTimeout = withApi<WithUser, "required">({ auth: "required" }, async ({ req, params, viewer }) => {
+  const { seconds, reason } = await readJson(req, timeoutSchema);
+  const { space, access } = await resolveSpaceFor(viewer, params.slug, params.subSlug);
+  return setTimeout_(viewer, space, access, params.userId, seconds, reason);
 });
 
 export const memberTransfer = withApi<WithUser, "required">({ auth: "required" }, async ({ params, viewer }) => {

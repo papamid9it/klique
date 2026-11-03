@@ -9,6 +9,7 @@ import { Rsvp } from "../models/Rsvp";
 import { User, type IUser } from "../models/User";
 import { isAdult } from "../policies/adult";
 import { toBrief, toCommunityCards, toMe, toProfile } from "../serializers";
+import { shownMedia } from "./profile-media.service";
 import { deleteUploads } from "./media.service";
 import { sameFile } from "@/lib/focal";
 import type { peopleQuery, profileUpdateSchema } from "../validators/schemas";
@@ -31,6 +32,7 @@ export async function updateMe(viewer: IUser, patch: z.infer<typeof profileUpdat
   if (patch.displayName !== undefined) set.displayName = patch.displayName;
   if (patch.bio !== undefined) set.bio = patch.bio;
   if (patch.pronouns !== undefined) set.pronouns = patch.pronouns;
+  if (patch.gender !== undefined) set.gender = patch.gender;
   if (patch.presence !== undefined) set.presence = patch.presence as IUser["presence"];
   assertPlace(patch, false);
   if (patch.country !== undefined) set.country = patch.country;
@@ -111,7 +113,7 @@ export async function getProfile(viewer: IUser | null, handle: string): Promise<
   if (!visible) {
     return {
       // a hidden profile still wears its banner and name style; only the details stay private
-      profile: { ...toBrief(user), bannerUrl: user.bannerUrl ?? null, bannerColor: user.bannerColor ?? null, bio: "", region: "", neighborhood: "", interests: [], joinedAt: user.createdAt.toISOString(), points: user.points ?? 0, pronouns: user.pronouns ?? "", presence: user.presence ?? "online", profileTheme: null, profileEffect: null },
+      profile: { ...toBrief(user), bannerUrl: user.bannerUrl ?? null, bannerColor: user.bannerColor ?? null, bio: "", region: "", neighborhood: "", interests: [], joinedAt: user.createdAt.toISOString(), points: user.points ?? 0, pronouns: user.pronouns ?? "", presence: user.presence ?? "online", profileTheme: null, profileEffect: null, media: [] },
       isSelf,
       visible: false,
       hiddenReason,
@@ -146,7 +148,7 @@ export async function getProfile(viewer: IUser | null, handle: string): Promise<
   ]);
 
   return {
-    profile: toProfile(user),
+    profile: { ...toProfile(user), media: await shownMedia(user) },
     isSelf,
     visible: true,
     communities,

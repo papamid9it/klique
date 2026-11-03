@@ -16,6 +16,7 @@ import { notify } from "./push.service";
 import type { subCreateSchema, subUpdateSchema } from "../validators/schemas";
 import { escapeRegex, purgeSpaceData, recountMembers, sid, uniqueSubSlug } from "./helpers";
 import { resolveSpace, resolveSpaceFor } from "./spaces.service";
+import { assertCanCreateGroup } from "./space-limits";
 
 /**
  * The groups of `community` that `viewer` may see, with their access. Every group is private: you see the
@@ -66,6 +67,7 @@ export async function createSubcommunity(
   if (!canCreateGroup(space.community, access)) {
     throw forbidden(space.community.groupPolicy === "off" ? "This community doesn't use groups." : "Only the owners and admins of this community can start groups.");
   }
+  await assertCanCreateGroup(viewer, space.community._id);
   rateLimit(`sub-create:${sid(viewer._id)}`, 8, 24 * 60 * 60 * 1000);
 
   const subSlug = await uniqueSubSlug(space.community._id, input.name);

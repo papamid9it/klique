@@ -1,5 +1,7 @@
 "use client";
 
+import { ProfileGallery } from "./AdminMediaRemove";
+import { PlanBadge } from "@/components/domain/account/PlanTab";
 import { ProfileEffect } from "@/components/ui/ProfileEffect";
 import { themeStyle } from "@/components/ui/profileTheme";
 import { placeLabel } from "@/lib/places";
@@ -129,7 +131,7 @@ function ProfileBody({ handle, onClose, onOpenPerson, tryOn }: { handle: string;
             </ZoomAvatar>
             <PresenceDot presence={p.presence} self={view.isSelf} className="right-2 bottom-2 size-[22px]" />
           </span>
-          <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] break-words"><UserName name={p.displayName} effect={p.nameEffect} /></h2>
+          <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] break-words"><UserName name={p.displayName} effect={p.nameEffect} /> <PlanBadge plan={p.badge} size={20} className="ml-1" /></h2>
           <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[13px] text-ink-muted">
             <span className="font-mono">@{p.handle}</span>
             {p.pronouns && <span>· {p.pronouns}</span>}
@@ -142,6 +144,7 @@ function ProfileBody({ handle, onClose, onOpenPerson, tryOn }: { handle: string;
 
           {view.visible ? (
             <div className="mt-5 space-y-4 rounded-card border border-line bg-surface p-4">
+              {p.media?.length > 0 && <ProfileGallery userId={p.id} media={p.media} className="-mx-1 overflow-hidden rounded-card" />}
               {p.bio && (
                 <section>
                   <h3 className="eyebrow mb-1">About me</h3>

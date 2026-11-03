@@ -4,39 +4,70 @@ import { useState } from "react";
 import { errorMessage, isApiError } from "@/app/ApiCore";
 import { CrewService } from "@/app/services/CrewService";
 import { Button } from "@/components/ui/Button";
-import { TextArea, TextField } from "@/components/ui/Field";
+import { SelectField, TextArea, TextField } from "@/components/ui/Field";
 import { Icon } from "@/components/ui/Icon";
+import { ImageField } from "@/components/ui/ImageField";
 import { Modal } from "@/components/ui/Modal";
 import { cx } from "@/components/ui/cx";
+import { useApi } from "@/lib/hooks/useApi";
+import { useCategories } from "@/lib/hooks/useCategories";
 import type { CrewDTO, CrewJoinMode, EventDTO } from "@/lib/types";
 import { fromLagos, lagosInputs } from "./parts";
+import { AudienceFields, audienceInput, checkAudience, type AudienceValue } from "./AudienceFields";
+import { splitFocal } from "@/lib/focal";
+import { useAuth } from "@/components/providers/AuthProvider";
+
+type EventBits = Pick<EventDTO, "id" | "title" | "startsAt" | "neighborhood" | "interest" | "coverImage">;
+type CommunityBits = { slug: string; name: string; interest: string };
 
 /**
- * Start a crew for an event: where you're coming from, where and when to meet, how many, and whether people
- * join straight away or ask first. Starts out meeting an hour before the event, asking to join, 10 people.
+ * Start a klique: for an event (going together), or for a community (anything its members want to do; pick
+ * which, unless it's given). A cover picture and a hook line are what make people tap, so both are required.
+ * Starts out "Ask to join", 10 people; for an event, meeting an hour before it.
  */
-export function StartCrewModal({ event, open, onClose, onCreated }: { event: Pick<EventDTO, "id" | "title" | "startsAt" | "neighborhood">; open: boolean; onClose: () => void; onCreated: (c: CrewDTO) => void }) {
-  // an hour before the event (or half an hour from now, if that's sooner than that)
-  const [start] = useState(() => lagosInputs(new Date(Math.max(Date.now() + 30 * 60_000, new Date(event.startsAt).getTime() - 3600_000)).toISOString()));
+export function StartCrewModal({ event, community, open, onClose, onCreated }: { event?: EventBits; community?: CommunityBits; open: boolean; onClose: () => void; onCreated: (c: CrewDTO) => void }) {
+  const categories = useCategories();
+  const info = useApi(open ? () => CrewService.startInfo() : null, [open], { key: "klique-start" });
+  const [start] = useState(() =>
+    lagosInputs(new Date(event ? Math.max(Date.now() + 30 * 60_000, new Date(event.startsAt).getTime() - 3600_000) : Date.now() + 2 * 86_400_000).toISOString()),
+  );
+  const [communitySlug, setCommunitySlug] = useState(community?.slug ?? "");
+  const [title, setTitle] = useState("");
+  const { user } = useAuth();
+  // your profile picture to start with (change it to anything); without one it starts empty and a picture is required
+  const avatar = user?.avatarUrl ? splitFocal(user.avatarUrl).src : "";
+  const [coverImage, setCoverImage] = useState(avatar);
+  const [interest, setInterest] = useState(event?.interest ?? community?.interest ?? "");
   const [area, setArea] = useState("");
   const [meetupPoint, setMeetupPoint] = useState("");
   const [date, setDate] = useState(start.date);
-  const [time, setTime] = useState(start.time);
+  const [time, setTime] = useState(event ? start.time : "18:00");
   const [note, setNote] = useState("");
   const [joinMode, setJoinMode] = useState<CrewJoinMode>("approval");
-  const [maxMembers, setMaxMembers] = useState("10");
+  const [who, setWho] = useState<AudienceValue>({ spots: "9", audience: "everyone", womenSpots: "0", menSpots: "0" });
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
 
+  const choices = info.data?.communities ?? [];
+  const blocked = info.data?.blockedReason ?? null;
+  const pickCommunity = (slug: string) => {
+    setCommunitySlug(slug);
+    const c = choices.find((x) => x.slug === slug);
+    if (c && !interest) setInterest(c.interest);
+  };
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     const next: Record<string, string> = {};
-    if (area.trim().length < 2) next.area = "Where are you coming from? A neighbourhood or landmark.";
-    if (meetupPoint.trim().length < 2) next.meetupPoint = "Where should the crew meet?";
-    if (!date || !time) next.meetupAt = "Pick a meetup date and time.";
-    const max = Math.round(Number(maxMembers));
-    if (!Number.isFinite(max) || max < 2 || max > 100) next.maxMembers = "Between 2 and 100 people, you included.";
+    if (!event && !communitySlug) next.community = "Pick the community it's for.";
+    if (title.trim().length < 8) next.title = "Say what you're doing, e.g. “Who wants to watch Dune at Filmhouse Lekki on Saturday?”";
+    if (!coverImage) next.coverImage = "Add a cover picture. Kliques with a picture get far more people.";
+    if (!interest) next.interest = "Pick what it's about.";
+    if (area.trim().length < 2) next.area = "Which area? A neighbourhood or landmark.";
+    if (meetupPoint.trim().length < 2) next.meetupPoint = "Where should everyone meet?";
+    if (!date || !time) next.meetupAt = "Pick a date and time.";
+    Object.assign(next, checkAudience(who));
     if (Object.keys(next).length) {
       setErrors(next);
       return;
@@ -44,8 +75,9 @@ export function StartCrewModal({ event, open, onClose, onCreated }: { event: Pic
     setBusy(true);
     setErrors({});
     setFormError(null);
+    const input = { title: title.trim(), interest, coverImage, area: area.trim(), meetupPoint: meetupPoint.trim(), meetupAt: fromLagos(date, time), note: note.trim(), joinMode, ...audienceInput(who) };
     try {
-      const res = await CrewService.create(event.id, { area: area.trim(), meetupPoint: meetupPoint.trim(), meetupAt: fromLagos(date, time), note: note.trim(), joinMode, maxMembers: max });
+      const res = event ? await CrewService.create(event.id, input) : await CrewService.createInCommunity(communitySlug, input);
       onCreated(res.data);
     } catch (err) {
       if (isApiError(err) && err.errors) setErrors(err.errors);
@@ -55,52 +87,92 @@ export function StartCrewModal({ event, open, onClose, onCreated }: { event: Pic
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Start a crew" description={`Find people to go to ${event.title} with. One crew per person per event.`}>
-      <form onSubmit={submit} className="space-y-4" noValidate>
-        <TextField label="Coming from" value={area} onChange={(e) => setArea(e.target.value)} maxLength={40} placeholder={event.neighborhood ? `e.g. Yaba, Lekki Phase 1` : "e.g. Yaba"} error={errors.area} hint="Your area, so people near you find your crew." />
-        <TextField label="Meetup point" value={meetupPoint} onChange={(e) => setMeetupPoint(e.target.value)} maxLength={120} placeholder="e.g. Yaba bus stop, by the Shoprite entrance" error={errors.meetupPoint} hint="Somewhere public. Only people in the crew see it." />
-        <div className="grid gap-4 sm:grid-cols-2">
-          <TextField label="Meetup date" type="date" value={date} onChange={(e) => setDate(e.target.value)} error={errors.meetupAt} />
-          <TextField label="Meetup time" type="time" value={time} onChange={(e) => setTime(e.target.value)} hint="Lagos time (WAT)" />
-        </div>
-        <TextArea label="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} counter={300} placeholder="e.g. Sharing a Bolt from there. First time going, come say hi!" />
-
-        <fieldset className="space-y-2">
-          <legend className="mb-1.5 text-[13px] font-medium">Who can join</legend>
-          {(
-            [
-              ["approval", "Ask to join", "You accept each person first. Safer with people you don't know."],
-              ["open", "Open", "Anyone who can see the event joins straight away."],
-            ] as const
-          ).map(([id, title, hint]) => (
-            <label key={id} className={cx("flex cursor-pointer items-start gap-3 rounded-control border bg-raised p-3 transition", joinMode === id ? "border-accent-text" : "border-line")}>
-              <input type="radio" name="crew-join" checked={joinMode === id} onChange={() => setJoinMode(id)} className="mt-1 accent-[var(--accent-text)]" />
-              <span>
-                <span className="block text-sm font-semibold">{title}</span>
-                <span className="block text-xs text-ink-muted">{hint}</span>
-              </span>
-            </label>
-          ))}
-        </fieldset>
-
-        <TextField label="Crew size" type="number" inputMode="numeric" min={2} max={100} value={maxMembers} onChange={(e) => setMaxMembers(e.target.value)} error={errors.maxMembers} hint="Up to 100, you included." />
-
-        <p className="flex items-start gap-2 text-xs text-ink-muted">
-          <Icon name="clock" size={14} className="mt-0.5 shrink-0" />
-          The crew and its chat disappear a day after the event.
-        </p>
-        {formError && (
-          <p role="alert" className="text-sm font-medium text-danger">
-            {formError}
+    <Modal open={open} onClose={onClose} title="Start a klique" description={event ? `Find people to go to ${event.title} with.` : "Get people together to do something: a movie, a match, a run, a night out."}>
+      {blocked ? (
+        <div className="space-y-4">
+          <p className="flex items-start gap-2 rounded-control border border-line bg-raised p-3.5 text-sm">
+            <Icon name="lock" size={16} className="mt-0.5 shrink-0 text-ink-muted" />
+            {blocked}
           </p>
-        )}
-        <div className="flex justify-end gap-2">
-          <Button onClick={onClose}>Cancel</Button>
-          <Button type="submit" variant="primary" loading={busy}>
-            Start crew
-          </Button>
+          <div className="flex justify-end gap-2">
+            <Button onClick={onClose}>Close</Button>
+            {/plan|upgrade/i.test(blocked) && (
+              <Button variant="primary" href="/settings?tab=plan">
+                See plans
+              </Button>
+            )}
+          </div>
         </div>
-      </form>
+      ) : (
+        <form onSubmit={submit} className="space-y-4" noValidate>
+          {!event && !community && (
+            <SelectField label="Community" value={communitySlug} onChange={(e) => pickCommunity(e.target.value)} error={errors.community} hint={choices.length ? "Only its members can join. Going to an event? Start one from the event's page instead." : "Join a community first: kliques are for its members."}>
+              <option value="">Pick one…</option>
+              {choices.map((c) => (
+                <option key={c.slug} value={c.slug}>
+                  {c.name}
+                </option>
+              ))}
+            </SelectField>
+          )}
+          <ImageField kind="photo" label="Cover picture" value={coverImage} onChange={setCoverImage} error={errors.coverImage} hint={avatar && coverImage === avatar ? "Your profile picture for now. Tap Change to use the place, the movie poster, the vibe." : "Required. The place, the movie poster, the vibe. No explicit pictures."} reposition={{ aspect: 16 / 9 }} />
+          <TextField label="What's the plan?" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} placeholder={event ? `Who's going to ${event.title} from Yaba?` : "Who wants to watch a movie at the cinema on Saturday?"} error={errors.title} hint="Write it like a question to your friends." />
+          <SelectField label="What it's about" value={interest} onChange={(e) => setInterest(e.target.value)} error={errors.interest} hint="People into this see it first.">
+            <option value="">Pick one…</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </SelectField>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <TextField label="Date" type="date" value={date} onChange={(e) => setDate(e.target.value)} error={errors.meetupAt} />
+            <TextField label="Time" type="time" value={time} onChange={(e) => setTime(e.target.value)} hint="Lagos time (WAT)" />
+          </div>
+          <TextField label="Area" value={area} onChange={(e) => setArea(e.target.value)} maxLength={40} placeholder="e.g. Lekki Phase 1" error={errors.area} hint="Everyone sees this." />
+          <TextField label="Meetup point" value={meetupPoint} onChange={(e) => setMeetupPoint(e.target.value)} maxLength={120} placeholder="e.g. Filmhouse Lekki, by the ticket desk" error={errors.meetupPoint} hint="Only people in the klique see the exact spot." />
+          <TextArea label="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} counter={300} placeholder="e.g. Buying tickets at 6. Food after if people are up for it." />
+
+          <fieldset className="space-y-2">
+            <legend className="mb-1.5 text-[13px] font-medium">Who can join</legend>
+            {(
+              [
+                ["approval", "Ask to join", "You accept each person first. Safer with people you don't know."],
+                ["open", "Open", "Anyone who can see it joins straight away."],
+              ] as const
+            ).map(([id, label, hint]) => (
+              <label key={id} className={cx("flex cursor-pointer items-start gap-3 rounded-control border bg-raised p-3 transition", joinMode === id ? "border-accent-text" : "border-line")}>
+                <input type="radio" name="klique-join" checked={joinMode === id} onChange={() => setJoinMode(id)} className="mt-1 accent-[var(--accent-text)]" />
+                <span>
+                  <span className="block text-sm font-semibold">{label}</span>
+                  <span className="block text-xs text-ink-muted">{hint}</span>
+                </span>
+              </label>
+            ))}
+          </fieldset>
+          <AudienceFields value={who} onChange={setWho} canWomen={!!info.data?.canWomenOnly} canMen={!!info.data?.canMenOnly} errors={errors} />
+
+          <div className="space-y-1.5 rounded-control border border-line bg-raised p-3 text-xs text-ink-muted">
+            <p className="flex items-start gap-2">
+              <Icon name="shield" size={14} className="mt-0.5 shrink-0" /> Meet in a public place, and tell someone where you&apos;re going.
+            </p>
+            <p className="flex items-start gap-2">
+              <Icon name="clock" size={14} className="mt-0.5 shrink-0" /> The klique and its chat disappear a day after it happens.
+            </p>
+          </div>
+          {formError && (
+            <p role="alert" className="text-sm font-medium text-danger">
+              {formError}
+            </p>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button onClick={onClose}>Cancel</Button>
+            <Button type="submit" variant="primary" loading={busy}>
+              Start klique
+            </Button>
+          </div>
+        </form>
+      )}
     </Modal>
   );
 }

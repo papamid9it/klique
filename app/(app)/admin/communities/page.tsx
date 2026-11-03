@@ -88,6 +88,7 @@ function AdminCommunitiesPageContent() {
                     </Link>
                     <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
                       <InterestChip id={c.interest} short />
+                      {c.verified && <Badge>Verified</Badge>}
                       {c.privacy === "private" && <Badge>Private</Badge>}
                       {c.adult && <Badge tone="bad">18+</Badge>}
                       {c.explicit && <Badge tone="bad">Explicit</Badge>}
@@ -114,6 +115,19 @@ function AdminCommunitiesPageContent() {
                   <Button size="sm" href={`/communities/${c.slug}`}>
                     Open
                   </Button>
+                  {!c.official && (
+                    <Button
+                      size="sm"
+                      onClick={() =>
+                        void AdminService.communityFlags(c.id, { verified: !c.verified }).then(
+                          () => setItems((list) => list.map((x) => (x.id === c.id ? { ...x, verified: !c.verified } : x))),
+                          (e) => toast(errorMessage(e), "error"),
+                        )
+                      }
+                    >
+                      {c.verified ? "Unverify" : "Verify"}
+                    </Button>
+                  )}
                   {(c.adult || c.explicit) && (
                     <Button
                       size="sm"

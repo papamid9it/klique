@@ -12,11 +12,17 @@ import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { RowSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/States";
-import { useDebounced, usePaged } from "@/lib/hooks/useApi";
+import { useDebounced, useNow, usePaged } from "@/lib/hooks/useApi";
 import type { MemberDTO, Role } from "@/lib/types";
 import { ConfirmModal, RoleBadge } from "./parts";
 import { AddMembersModal } from "./AddMembersModal";
 import { LIMITS } from "@/lib/constants";
+import { EntryAnswers } from "./EntryQuestions";
+import { Modal } from "@/components/ui/Modal";
+import { TimeoutModal, timeLeft } from "./TimeoutModal";
+import { MemberRolesModal, RoleChip } from "./RolesPanel";
+
+const isTimedOut = (m: MemberDTO, now: Date | null) => !!now && !!m.timedOutUntil && +new Date(m.timedOutUntil) > +now;
 
 /** For a group: what the "Add members" button needs (shown to the group's owners and admins). */
 export interface GroupAdding {
@@ -35,9 +41,13 @@ export function MembersPanel({ slug, subSlug, group }: { slug: string; subSlug?:
   const { items, loading, loadingMore, error, hasMore, loadMore, reload, setItems } = usePaged<MemberDTO>((p) => SpaceService.members(slug, subSlug, p, dq || undefined), [slug, subSlug, dq], { keepPrevious: true, key: `members:${slug}:${subSlug ?? ""}:${dq}` });
   const [removing, setRemoving] = useState<{ m: MemberDTO; ban: boolean } | null>(null);
   const [reporting, setReporting] = useState<MemberDTO | null>(null);
+  const [answersOf, setAnswersOf] = useState<MemberDTO | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [handingOver, setHandingOver] = useState<MemberDTO | null>(null);
   const [adding, setAdding] = useState(false);
+  const now = useNow(30_000);
+  const [editingRoles, setEditingRoles] = useState<MemberDTO | null>(null);
+  const [timingOut, setTimingOut] = useState<{ m: MemberDTO; lifting: boolean } | null>(null);
   const iOwn = !!user && items.some((x) => x.user.id === user.id && x.role === "owner");
 
   async function changeRole(m: MemberDTO, role: Exclude<Role, "owner">) {
@@ -98,13 +108,30 @@ export function MembersPanel({ slug, subSlug, group }: { slug: string; subSlug?:
     <div className="space-y-2">
       {addBar}
       {search}
+      {answersOf && (
+        <Modal open onClose={() => setAnswersOf(null)} title={`${answersOf.user.displayName}'s answers`} description="What they answered to the entry questions when they joined." size="sm">
+          <EntryAnswers answers={answersOf.answers} />
+        </Modal>
+      )}
       {items.map((m) => (
         <PersonRow
           key={m.user.id}
           user={m.user}
           action={
             <div className="flex flex-wrap items-center justify-end gap-1.5">
+              {/* what they answered to the entry questions (owners and admins see this) */}
+              {m.answers?.length ? (
+                <Button size="sm" variant="ghost" onClick={() => setAnswersOf(m)}>
+                  Answers
+                </Button>
+              ) : null}
               <RoleBadge role={m.role} />
+              {m.roles?.filter((r) => r.name !== "Admin").slice(0, 3).map((r) => <RoleChip key={r.id} role={r} className="hidden sm:inline-flex" />)}
+              {isTimedOut(m, now) && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-danger/40 px-2 py-0.5 text-[11px] font-semibold text-danger" title={m.timeoutReason ?? undefined}>
+                  <Icon name="clock" size={11} /> Timed out · {timeLeft(m.timedOutUntil!, now!)}
+                </span>
+              )}
               {m.canChangeRole && m.role !== "owner" && (
                 <select
                   aria-label={`Role for ${m.user.displayName}`}
@@ -122,6 +149,16 @@ export function MembersPanel({ slug, subSlug, group }: { slug: string; subSlug?:
                 {iOwn && m.user.id !== user?.id && (
                   <Button size="sm" variant="ghost" onClick={() => setHandingOver(m)}>
                     Make owner
+                  </Button>
+                )}
+                {m.canEditRoles && (
+                  <Button size="sm" variant="ghost" onClick={() => setEditingRoles(m)}>
+                    Roles
+                  </Button>
+                )}
+                {m.canTimeout && (
+                  <Button size="sm" variant="ghost" onClick={() => setTimingOut({ m, lifting: isTimedOut(m, now) })}>
+                    {isTimedOut(m, now) ? "Lift timeout" : "Time out"}
                   </Button>
                 )}
                 {m.canRemove && (
@@ -145,6 +182,8 @@ export function MembersPanel({ slug, subSlug, group }: { slug: string; subSlug?:
                 label={`Options for ${m.user.displayName}`}
                 items={[
                   ...(iOwn && m.user.id !== user?.id ? [{ label: "Make owner", icon: "shield" as const, onSelect: () => setHandingOver(m) }] : []),
+                  ...(m.canEditRoles ? [{ label: "Roles", icon: "shield" as const, onSelect: () => setEditingRoles(m) }] : []),
+                  ...(m.canTimeout ? [{ label: isTimedOut(m, now) ? "Lift timeout" : "Time out", icon: "clock" as const, onSelect: () => setTimingOut({ m, lifting: isTimedOut(m, now) }) }] : []),
                   ...(m.canRemove ? [{ label: "Remove", icon: "logout" as const, onSelect: () => setRemoving({ m, ban: false }) }, { label: "Ban", icon: "ban" as const, danger: true, onSelect: () => setRemoving({ m, ban: true }) }] : []),
                   ...(user && m.user.id !== user.id ? [{ label: "Report", icon: "flag" as const, onSelect: () => setReporting(m) }] : []),
                 ]}
@@ -159,6 +198,34 @@ export function MembersPanel({ slug, subSlug, group }: { slug: string; subSlug?:
             Load more
           </Button>
         </div>
+      )}
+
+      {editingRoles && (
+        <MemberRolesModal
+          slug={slug}
+          user={editingRoles.user}
+          current={(editingRoles.roles ?? []).map((r) => r.id)}
+          onClose={() => setEditingRoles(null)}
+          onSaved={(roles) => {
+            const id = editingRoles.user.id;
+            const admin = roles.some((r) => r.builtin === "admin");
+            setItems((prev) => prev.map((x) => (x.user.id === id ? { ...x, roles, role: x.role === "owner" ? x.role : admin ? "admin" : "member" } : x)));
+            setEditingRoles(null);
+          }}
+        />
+      )}
+      {timingOut && (
+        <TimeoutModal
+          slug={slug}
+          user={timingOut.m.user}
+          lifting={timingOut.lifting}
+          onClose={() => setTimingOut(null)}
+          onDone={(until) => {
+            const id = timingOut.m.user.id;
+            setItems((prev) => prev.map((x) => (x.user.id === id ? { ...x, timedOutUntil: until } : x)));
+            setTimingOut(null);
+          }}
+        />
       )}
 
       <ConfirmModal

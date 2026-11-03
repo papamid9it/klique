@@ -18,6 +18,7 @@ import { LIMITS } from "@/lib/constants";
 import { useUploadStatus } from "@/lib/hooks/useUploads";
 import { checkFile } from "@/lib/uploads";
 import type { FeedPostDTO, TopicMediaDTO } from "@/lib/types";
+import { useTagSuggest } from "./TagSuggest";
 
 /**
  * Share a post: pictures (up to ten) or one video with a caption, or (the Text tab) text on its own: short text shows
@@ -28,6 +29,9 @@ export function PostComposer({ slug, communityName, explicitAllowed, onClose, on
   const status = useUploadStatus();
   const [mode, setMode] = useState<"media" | "text">("media");
   const [caption, setCaption] = useState("");
+  // @people, @communities and #tags as you type the caption
+  const captionRef = useRef<HTMLTextAreaElement | null>(null);
+  const suggest = useTagSuggest(captionRef, caption, setCaption);
   const [title, setTitle] = useState("");
   const [textBg, setTextBg] = useState<TextBackgroundId>("sunset");
   const [explicit, setExplicit] = useState(false);
@@ -92,7 +96,7 @@ export function PostComposer({ slug, communityName, explicitAllowed, onClose, on
           ))}
         </div>
         {mode === "text" ? (
-          <TextFields title={title} setTitle={setTitle} caption={caption} setCaption={setCaption} textBg={textBg} setTextBg={setTextBg} />
+          <TextFields title={title} setTitle={setTitle} caption={caption} setCaption={setCaption} textBg={textBg} setTextBg={setTextBg} captionRef={captionRef} suggest={suggest} />
         ) : (
         <>
         <fieldset>
@@ -163,7 +167,8 @@ export function PostComposer({ slug, communityName, explicitAllowed, onClose, on
             </Button>
           </div>
         </fieldset>
-        <TextArea label="Caption (optional)" value={caption} onChange={(e) => setCaption(e.target.value)} maxLength={LIMITS.feedCaption} counter={LIMITS.feedCaption} placeholder="Say something about it…" />
+        <TextArea ref={captionRef} label="Caption (optional)" value={caption} onChange={(e) => setCaption(e.target.value)} onKeyDown={(e) => suggest.onKeyDown(e)} maxLength={LIMITS.feedCaption} counter={LIMITS.feedCaption} placeholder="Say something about it… @someone #tag" />
+        {suggest.panel}
         </>
         )}
         {/* a community that allows explicit content: the poster says whether this post is (it's blurred until tapped) */}
@@ -190,14 +195,15 @@ export function PostComposer({ slug, communityName, explicitAllowed, onClose, on
 }
 
 /** The Text tab: a title (needed past the card limit), the text, and for a card its colour, with a live preview. */
-function TextFields({ title, setTitle, caption, setCaption, textBg, setTextBg }: { title: string; setTitle: (v: string) => void; caption: string; setCaption: (v: string) => void; textBg: TextBackgroundId; setTextBg: (v: TextBackgroundId) => void }) {
+function TextFields({ title, setTitle, caption, setCaption, textBg, setTextBg, captionRef, suggest }: { title: string; setTitle: (v: string) => void; caption: string; setCaption: (v: string) => void; textBg: TextBackgroundId; setTextBg: (v: TextBackgroundId) => void; captionRef: React.RefObject<HTMLTextAreaElement | null>; suggest: ReturnType<typeof useTagSuggest> }) {
   const text = caption.trim();
   const style = textStyleOf({ media: [], title, caption });
   const needsTitle = text.length > TEXT_CARD_MAX && !title.trim();
   return (
     <div className="space-y-4">
       <TextField label={text.length > TEXT_CARD_MAX ? "Title" : "Title (optional)"} value={title} onChange={(e) => setTitle(e.target.value)} maxLength={FEED_TITLE_MAX} placeholder="What's it about?" error={needsTitle ? "Longer posts need a title." : undefined} hint={text.length > TEXT_CARD_MAX ? undefined : `Short text with no title shows as a colour card. Add a title, or go past ${TEXT_CARD_MAX} characters, for a text post.`} />
-      <TextArea label="Text" value={caption} onChange={(e) => setCaption(e.target.value)} maxLength={LIMITS.feedCaption} counter={LIMITS.feedCaption} placeholder="Ask something, share a tip, start a conversation…" />
+      <TextArea ref={captionRef} label="Text" value={caption} onChange={(e) => setCaption(e.target.value)} onKeyDown={(e) => suggest.onKeyDown(e)} maxLength={LIMITS.feedCaption} counter={LIMITS.feedCaption} placeholder="Ask something, share a tip, start a conversation… @someone #tag" />
+      {suggest.panel}
       <div className="flex flex-wrap items-start gap-4 rounded-card border border-line bg-raised/40 p-3">
         <div className="w-36 shrink-0">
           {style === "card" ? (

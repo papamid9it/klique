@@ -27,7 +27,6 @@ import {
   assertSubVisibleOrHidden,
   canSetRole,
   gateOf,
-  outranks,
   pointsShort,
   spaceAccess,
   type Space,
@@ -38,6 +37,12 @@ import { escapeRegex, newInviteCode, recountMembers, sid } from "./helpers";
 import { rateLimit } from "../http/rate-limit";
 import { notify } from "./push.service";
 import { leaveSpaceCrews } from "./crews.service";
+import { assertCanJoinCommunity } from "./space-limits";
+import { checkAnswers } from "./screening.service";
+import { timeoutOf } from "../policies/access";
+import { ModAction } from "../models/ModAction";
+import { isSiteAdmin } from "../policies/hosting";
+import { ADMIN_RANK, can } from "../policies/access";
 
 /* ------------------------------------------------------------------ */
 /* Resolving a space from URL params                                   */
@@ -88,11 +93,17 @@ const spaceLabel = (space: Space) => (space.sub ? space.sub.name : space.communi
 /* ------------------------------------------------------------------ */
 
 async function addMember(space: Space, userId: Types.ObjectId, role: Role = "member") {
-  await Membership.updateOne(
+  const res = await Membership.updateOne(
     { userId, ...spaceFilter(space) },
     { $setOnInsert: { role }, $set: { status: "active" } },
     { upsert: true },
   );
+  // a new member of the community: the welcome greeting in its chosen channel; its bots hear about it
+  if (!space.sub && res.upsertedCount) {
+    void (await import("./welcome.service")).greetNewMember(space.community, userId);
+    const joiner = (await loadBriefs([userId])).get(sid(userId)) ?? { id: sid(userId) };
+    void import("./bots.service").then((b) => b.emitBotEvent(space.community._id, "member.join", { user: joiner }));
+  }
   await MembershipRequest.updateMany(
     { userId, ...spaceFilter(space), status: "pending" },
     { status: "approved", decidedAt: new Date() },
@@ -103,19 +114,27 @@ async function addMember(space: Space, userId: Types.ObjectId, role: Role = "mem
 export async function joinSpace(
   viewer: IUser,
   space: Space,
-  input: { message?: string; inviteCode?: string },
+  input: { message?: string; inviteCode?: string; answers?: Record<string, string | boolean> },
   access: SpaceAccess,
 ): Promise<JoinResult> {
   if (access.isMember) return { status: "already_member", message: `You're already in ${spaceLabel(space)}.` };
   // groups are private and nobody joins them: a group's owner or admins add people from the community
   if (space.sub) throw forbidden("Groups are private. Ask one of the group's admins to add you.");
   if (access.banned) throw forbidden("You can't join this one.");
+  // how many communities their plan lets them be in (asking to join counts too)
+  if (!space.community.official) await assertCanJoinCommunity(viewer, space.community._id);
+  // the community's entry questions, when it has them on: answered before anything else (invite links too)
+  const answers = checkAnswers(space.community, input.answers);
+  const keepAnswers = async () => {
+    if (answers.length) await Membership.updateOne({ userId: viewer._id, communityId: space.community._id, subcommunityId: null }, { $set: { answers } });
+  };
 
   // 1) Invite link — the one way into a private space without approval.
   if (input.inviteCode) {
     await requireParentSeat(viewer, space);
     await consumeInvite(input.inviteCode, space);
     await addMember(space, viewer._id);
+    await keepAnswers();
     return { status: "joined", message: `Welcome to ${spaceLabel(space)}.` };
   }
 
@@ -123,14 +142,21 @@ export async function joinSpace(
   const short = pointsShort(space.community.minPointsJoin, null, gateOf(viewer), !!space.community.official);
   if (short) throw forbidden(`${space.community.name} needs ${short.toLocaleString("en-NG")} points to join. You have ${(viewer.points ?? 0).toLocaleString("en-NG")}.`);
 
+  // raid protection (AutoMod) may have locked joining for a while: paused, or through approval
+  const { raidLock, noteJoin } = await import("./automod.service");
+  const lock = space.sub ? null : raidLock(space.community);
+  if (lock === "pause" && access.canJoinDirectly) throw forbidden(`Joining ${space.community.name} is paused for a little while. Try again later.`);
+
   // 2) Open to this person (public community, or a group open to its parent's members).
-  if (access.canJoinDirectly) {
+  if (access.canJoinDirectly && !lock) {
     await addMember(space, viewer._id);
+    await keepAnswers();
+    void noteJoin(space.community).catch((e) => console.warn("[automod] raid check:", (e as Error).message));
     return { status: "joined", message: `You joined ${spaceLabel(space)}.` };
   }
 
-  // 3) Private community: ask an admin.
-  if (!space.sub && space.community.privacy === "private") {
+  // 3) Private community (or a public one whose joins need approval during a raid): ask an admin.
+  if (!space.sub && (space.community.privacy === "private" || lock === "approval")) {
     if (access.pendingRequest) {
       return { status: "already_requested", message: "Your request is waiting for an admin." };
     }
@@ -139,6 +165,7 @@ export async function joinSpace(
       userId: viewer._id,
       ...spaceFilter(space),
       message: input.message ?? "",
+      answers,
     });
     // the people who decide hear about it, bundled: one line per community however many ask
     const staff = await Membership.find({ communityId: space.community._id, subcommunityId: null, status: "active", role: { $in: ["owner", "admin"] } }).select("userId").lean<{ userId: Types.ObjectId }[]>();
@@ -186,6 +213,7 @@ export async function leaveSpace(viewer: IUser, space: Space, access: SpaceAcces
   if (!space.sub) await dropParentOnlyGroups(space.community._id, [viewer._id]);
   // their crews here go with it (the leave button warned them)
   await leaveSpaceCrews(viewer._id, space.community._id, space.sub?._id ?? null);
+  if (!space.sub) void import("./bots.service").then((b) => b.emitBotEvent(space.community._id, "member.leave", { user: { id: sid(viewer._id), handle: viewer.handle }, reason: "left" }));
   return { left: true, cancelledRequest: false };
 }
 
@@ -239,18 +267,30 @@ export async function listMembers(
   const hasMore = rows.length > size;
   const ordered = [...managers.sort((a, b) => (a.role === b.role ? 0 : a.role === "owner" ? -1 : 1)), ...rows.slice(0, size)];
   const briefs = await loadBriefs(ordered.map((m) => m.userId));
+  // their roles and rank in the community: you act only on people below you, with the matching permission
+  const { standings } = await import("./roles.service");
+  const standing = await standings(space.community._id, ordered.map((m) => m.userId));
+  const myRank = access.rank ?? 0;
 
   const items: MemberDTO[] = ordered.flatMap((m) => {
     const user = briefs.get(sid(m.userId));
     if (!user) return [];
     const isSelf = sid(m.userId) === sid(viewer._id);
+    const st = standing.get(sid(m.userId));
+    const theirRank = space.sub ? Math.max(st?.rank ?? 0, m.role === "owner" ? 1e9 : m.role === "admin" ? ADMIN_RANK : 0) : (st?.rank ?? 0);
+    const below = !isSelf && m.role !== "owner" && theirRank < myRank;
     return [
       {
         user,
         role: m.role,
         joinedAt: m.createdAt.toISOString(),
         canChangeRole: !isSelf && canSetRole(access.role, m.role, m.role === "admin" ? "member" : "admin"),
-        canRemove: !isSelf && outranks(access.role, m.role),
+        canRemove: below && (can(access, "kick") || can(access, "ban")),
+        ...(!space.sub ? { roles: st?.roles ?? [], canEditRoles: can(access, "manageRoles") && (below || (isSelf && m.role !== "owner")) } : {}),
+        // timeouts are community-wide (set from the community, not a group)
+        ...(!space.sub && (can(access, "timeout") || access.canManage) ? { canTimeout: below && can(access, "timeout"), timedOutUntil: timeoutOf(m), timeoutReason: timeoutOf(m) ? (m.timeoutReason ?? null) : null } : {}),
+        // what they answered to the entry questions: for the owner and admins only
+        ...(access.canManage && m.answers?.length ? { answers: m.answers } : {}),
       },
     ];
   });
@@ -269,6 +309,8 @@ export async function changeRole(viewer: IUser, space: Space, access: SpaceAcces
   if (sid(target.userId) === sid(viewer._id)) throw forbidden("You can't change your own role.");
   if (!canSetRole(access.role, target.role, role)) throw forbidden("Only the owner can change roles.");
   await Membership.updateOne({ _id: target._id }, { role });
+  // the community's Admin role (custom roles) follows "admin"
+  if (!space.sub) await (await import("./roles.service")).syncAdminRole(space.community._id, target.userId, role === "admin");
   if (role !== target.role) {
     const href = space.sub ? `/communities/${space.community.slug}?g=${space.sub.slug}` : `/communities/${space.community.slug}`;
     notify(
@@ -294,19 +336,71 @@ export async function transferOwnership(viewer: IUser, space: Space, access: Spa
   return { ownerId: userId };
 }
 
+/** how long a timeout can be: 60 seconds, 5 or 10 minutes, an hour, a day, a week */
+export const TIMEOUT_SECONDS = [60, 300, 600, 3600, 86_400, 604_800] as const;
+
+/**
+ * Time someone out in the community (an owner or admin above them; site admins too): until it runs out they can read
+ * but not post, react, vote or start events or kliques there or in its groups. `seconds: 0` lifts it early. They're
+ * told, with the reason; it goes in the moderation log.
+ */
+export async function setTimeout_(viewer: IUser, space: Space, access: SpaceAccess, userId: string, seconds: number, reason: string) {
+  if (space.sub) throw badRequest("Time people out from the community, not a group.");
+  if (!can(access, "timeout") && !isSiteAdmin(viewer)) throw forbidden("You don't have permission to time people out.");
+  const target = await targetMembership(space, userId);
+  if (sid(target.userId) === sid(viewer._id)) throw forbidden("You can't time yourself out.");
+  if (!isSiteAdmin(viewer) && (await rankOf(space, target.userId)) >= (access.rank ?? 0)) throw forbidden("You can't time out someone at or above your own rank.");
+  if (target.role === "owner") throw forbidden("The owner can't be timed out.");
+  const lifting = seconds === 0;
+  if (!lifting && !(TIMEOUT_SECONDS as readonly number[]).includes(seconds)) throw badRequest("Pick how long.");
+  const until = lifting ? null : new Date(Date.now() + seconds * 1000);
+  await Membership.updateOne({ _id: target._id }, { $set: { timeoutUntil: until, timeoutReason: lifting ? null : reason.trim().slice(0, 300) || null, timeoutById: lifting ? null : viewer._id } });
+  const who = await User.findById(target.userId).select("displayName").lean<{ displayName: string }>();
+  await ModAction.create({ communityId: space.community._id, actorId: viewer._id, action: lifting ? "timeout.remove" : "timeout", targetType: "member", targetId: target.userId, label: lifting ? `${who?.displayName ?? "Someone"}` : `${who?.displayName ?? "Someone"} for ${durationLabel(seconds)}${reason.trim() ? `: ${reason.trim().slice(0, 150)}` : ""}`, authorId: target.userId }).catch(() => {});
+  const href = `/communities/${space.community.slug}`;
+  notify(
+    [target.userId],
+    lifting
+      ? { title: `Your timeout in ${space.community.name} was lifted`, body: "You can post and react again.", data: { href } }
+      : { title: `You're timed out in ${space.community.name} for ${durationLabel(seconds)}`, body: reason.trim() ? `Reason: ${reason.trim().slice(0, 150)}. You can still read.` : "You can still read, but not post or react until it ends.", data: { href } },
+    { category: "community", ref: `timeout:${sid(space.community._id)}` },
+  );
+  return { userId, timedOutUntil: until?.toISOString() ?? null };
+}
+
+/** "60 seconds", "5 minutes", "1 hour", "1 day", "1 week" */
+export function durationLabel(seconds: number): string {
+  if (seconds < 120) return `${seconds} seconds`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)} minutes`;
+  if (seconds < 86_400) return `${Math.round(seconds / 3600)} ${seconds === 3600 ? "hour" : "hours"}`;
+  if (seconds < 604_800) return `${Math.round(seconds / 86_400)} ${seconds === 86_400 ? "day" : "days"}`;
+  return "1 week";
+}
+
+/** Someone's rank in the community (their roles; owner highest), and in a group its own admins above its members. */
+async function rankOf(space: Space, userId: Types.ObjectId): Promise<number> {
+  const { standings } = await import("./roles.service");
+  const inCommunity = (await standings(space.community._id, [userId])).get(sid(userId))?.rank ?? 0;
+  if (!space.sub) return inCommunity;
+  const m = await Membership.findOne({ ...spaceFilter(space), userId, status: "active" }).select("role").lean<Pick<IMembership, "role">>();
+  return Math.max(inCommunity, m?.role === "owner" ? 1e9 : m?.role === "admin" ? ADMIN_RANK : 0);
+}
+
 export async function removeMember(viewer: IUser, space: Space, access: SpaceAccess, userId: string, ban: boolean) {
-  assertCanManage(access);
+  if (!can(access, ban ? "ban" : "kick")) throw forbidden(ban ? "You don't have permission to ban people." : "You don't have permission to remove people.");
   const target = await targetMembership(space, userId);
   if (sid(target.userId) === sid(viewer._id)) throw forbidden("Use “Leave” to remove yourself.");
-  if (!outranks(access.role, target.role)) throw forbidden("You can't remove someone at or above your own rank.");
+  if (target.role === "owner" || (await rankOf(space, target.userId)) >= (access.rank ?? 0)) throw forbidden("You can't remove someone at or above your own rank.");
 
-  if (ban) await Membership.updateOne({ _id: target._id }, { status: "banned", role: "member" });
+  void ModAction.create({ communityId: space.community._id, actorId: viewer._id, action: ban ? "ban" : "kick", targetType: "member", targetId: target.userId, label: (await User.findById(target.userId).select("displayName").lean<{ displayName: string }>())?.displayName ?? "Someone", authorId: target.userId }).catch(() => {});
+  if (ban) await Membership.updateOne({ _id: target._id }, { status: "banned", role: "member", roleIds: [] });
   else await Membership.deleteOne({ _id: target._id });
   await ChannelMember.deleteMany({ userId: target.userId, ...spaceFilter(space) });
 
   await recountMembers(space.community._id, space.sub?._id ?? null);
   if (!space.sub) await dropParentOnlyGroups(space.community._id, [target.userId]);
   await leaveSpaceCrews(target.userId, space.community._id, space.sub?._id ?? null);
+  if (!space.sub) void import("./bots.service").then((b) => b.emitBotEvent(space.community._id, "member.leave", { user: { id: sid(target.userId) }, reason: ban ? "banned" : "removed" }));
   return { userId, removed: true, banned: ban };
 }
 
@@ -316,7 +410,8 @@ export async function removeMember(viewer: IUser, space: Space, access: SpaceAcc
 
 export async function listRequests(space: Space, access: SpaceAccess): Promise<MembershipRequestDTO[]> {
   assertCanManage(access);
-  if (space.sub || space.community.privacy !== "private") return [];
+  // private communities, and public ones that asked for approval during a raid
+  if (space.sub) return [];
   const rows = await MembershipRequest.find({ ...spaceFilter(space), status: "pending" })
     .sort({ createdAt: 1 })
     .limit(100)
@@ -324,7 +419,7 @@ export async function listRequests(space: Space, access: SpaceAccess): Promise<M
   const briefs = await loadBriefs(rows.map((r) => r.userId));
   return rows.flatMap((r) => {
     const user = briefs.get(sid(r.userId));
-    return user ? [{ id: sid(r._id), user, message: r.message, status: r.status, createdAt: r.createdAt.toISOString() }] : [];
+    return user ? [{ id: sid(r._id), user, message: r.message, answers: r.answers ?? [], status: r.status, createdAt: r.createdAt.toISOString() }] : [];
   });
 }
 
@@ -343,6 +438,8 @@ export async function decideRequest(
     const existing = await Membership.findOne({ userId: req.userId, ...spaceFilter(space) }).lean<IMembership>();
     if (existing?.status === "banned") throw forbidden("That person is banned from here.");
     await addMember(space, req.userId); // also marks the request approved
+    // their answers to the entry questions go with them
+    if (req.answers?.length && !space.sub) await Membership.updateOne({ userId: req.userId, communityId: space.community._id, subcommunityId: null }, { $set: { answers: req.answers } });
     await MembershipRequest.updateOne({ _id: req._id }, { decidedBy: viewer._id });
     notify([req.userId], { title: `You're in ${spaceLabel(space)}`, body: "Your request to join was approved. Come say hi.", data: { href: `/communities/${space.community.slug}` } }, { category: "community", ref: `community:${sid(space.community._id)}` });
   } else {

@@ -5,7 +5,7 @@ import { Contact, LegalDoc, Section } from "@/components/domain/legal/Legal";
 import { DEFAULT_MONEY_CONFIG } from "@/lib/money";
 import { publicFees } from "@/server/services/share.service";
 
-export const metadata: Metadata = { title: "Payment terms", description: "How donations, event contributions, refunds, fees and payouts work on klique." };
+export const metadata: Metadata = { title: "Payment terms", description: "How Lite and Pro plans, donations, event contributions, refunds, fees and payouts work on klique." };
 
 async function fees() {
   "use cache";
@@ -19,14 +19,53 @@ export default async function PaymentTermsPage() {
   return (
     <LegalDoc
       title="Payment terms"
-      updated="27 October 2026"
+      updated="3 November 2026"
       intro={
         <p>
-          These terms cover money on klique: donations to communities and contributions toward events. They add to our <Link href="/terms" className="font-medium text-accent-text underline">Terms of Service</Link>. Payments are handled by Paystack; klique never sees or keeps your card details.
+          These terms cover money on klique: the Lite and Pro plans, donations to communities and contributions toward events. They add to our <Link href="/terms" className="font-medium text-accent-text underline">Terms of Service</Link>. Payments are handled by Paystack; klique never sees or keeps your card details.
         </p>
       }
     >
-      <Section n={1} title="Donations">
+      <Section n={1} title="Lite and Pro plans" id="plans">
+        <ul>
+          <li>klique is free to use. <strong>Lite</strong> and <strong>Pro</strong> are optional monthly plans with higher limits. What each plan includes and its price in naira are shown on the <Link href="/pricing" className="font-medium text-accent-text underline">Pricing</Link> page and before you pay.</li>
+          <li>
+            <strong>Your plan renews monthly until you cancel.</strong> When you subscribe, Paystack saves your card and charges the same amount again every month. Each payment gives you another month (30 days).
+          </li>
+          <li>
+            <strong>Cancelling:</strong> go to Settings → Plan &amp; points → Cancel subscription at any time. Nothing more is charged. You keep the plan until the end of the month you&apos;ve paid for, then you move to Free. Turning off the subscription from a Paystack email does the same.
+          </li>
+          <li>
+            <strong>No refunds for part of a month.</strong> If you cancel or switch plans, we don&apos;t refund the days left. If you were charged by mistake or twice, contact us (see section 7) and we&apos;ll put it right.
+          </li>
+          <li>
+            <strong>Switching plans:</strong> moving to another plan starts a new month on that plan from the day you pay, and your old plan stops renewing. Days left on the old plan aren&apos;t carried over.
+          </li>
+          <li>
+            <strong>If a renewal fails</strong> (for example an expired card), we&apos;ll let you know and Paystack will try again. If no payment goes through, your plan ends a day after the month you paid for, and you move to Free.
+          </li>
+          <li>
+            <strong>Price changes:</strong> if we change a plan&apos;s price, the new price is for new subscriptions. Your subscription keeps renewing at the price you signed up at. A new price applies to you only if you subscribe again, and you&apos;ll see it before you pay.
+          </li>
+          <li>
+            <strong>Limits can change.</strong> We set each plan&apos;s limits (for example how many kliques you can start or be in, how many communities you can create or join, and profile photo and video slots), and we may change them. The current limits are always on the Pricing page.
+          </li>
+          <li>
+            <strong>Going back to Free takes nothing away.</strong> Communities, groups and kliques you already have keep working for everyone in them. You just can&apos;t create or join more until you&apos;re back under Free&apos;s limits. Your gallery photos and videos all stay on your profile, but you can&apos;t add or replace any until you&apos;re within your plan&apos;s slots (you can still remove or reorder them).
+          </li>
+          <li>Free time, such as days given by klique, doesn&apos;t renew and ends on the date shown in Settings.</li>
+        </ul>
+      </Section>
+
+      <Section n={2} title="Hype has ended" id="hype">
+        <ul>
+          <li>Hype, the in-app currency, has been replaced by the Lite and Pro plans and can no longer be bought or spent.</li>
+          <li>Any Hype left in an account was turned into days of Lite at the price it was sold for: 1,200 Hype (the ₦2,000 pack) became 30 days, or 40 Hype a day, rounded up. If you were already on a plan, the days were added on top of it.</li>
+          <li>Profile designs already unlocked with Hype last until their original end date. Hype has no cash value and isn&apos;t refunded.</li>
+        </ul>
+      </Section>
+
+      <Section n={3} title="Donations">
         <ul>
           <li>A donation goes to the community whose button you used. It&apos;s a gift: you get nothing in return, and it isn&apos;t a purchase.</li>
           <li>
@@ -36,7 +75,7 @@ export default async function PaymentTermsPage() {
         </ul>
       </Section>
 
-      <Section n={2} title="Event contributions">
+      <Section n={4} title="Event contributions">
         <ul>
           <li>Some events let you chip in toward them (for example equipment or food), at a set price per unit. The money goes to the community the event is in.</li>
           <li>The event&apos;s host or the community&apos;s owner or admins can refund a contribution until the community has asked for the money to be paid out. A refund is what you paid minus klique&apos;s fee, back to your card.</li>
@@ -44,13 +83,13 @@ export default async function PaymentTermsPage() {
         </ul>
       </Section>
 
-      <Section n={3} title="Klique's fee">
+      <Section n={5} title="Klique's fee">
         <p>
           Klique keeps <strong>{f.donationFeePercent}%</strong> of each donation and <strong>{f.contributionFeePercent}%</strong> of each contribution to run payments and the service. The fee is fixed when you pay, and isn&apos;t returned on a refund.
         </p>
       </Section>
 
-      <Section n={4} title="Payouts to communities">
+      <Section n={6} title="Payouts to communities">
         <ul>
           <li>What a community raises, after klique&apos;s fee, is paid to its owner&apos;s Nigerian bank account when the owner asks (at least {naira(f.minPayout)}).</li>
           <li>We check the account name with the bank, and may hold or refuse a payout we believe is fraudulent, or that breaks our Terms of Service or the law.</li>
@@ -58,7 +97,7 @@ export default async function PaymentTermsPage() {
         </ul>
       </Section>
 
-      <Section n={5} title="Problems">
+      <Section n={7} title="Problems">
         <p>If a payment went wrong (charged twice, or charged and nothing showed), contact us with the payment reference from your receipt notification and we&apos;ll sort it out with Paystack.</p>
         <Contact />
       </Section>

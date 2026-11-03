@@ -1,10 +1,12 @@
 import type { CSSProperties } from "react";
 import { getNameEffect } from "@/lib/cosmetics";
+import { PROFILE_DESIGNS_ENABLED } from "@/lib/constants";
 import { cx } from "./cx";
 
 /** A display name, drawn with the person's chosen effect (if any). Plain text otherwise. Animations stop with reduced motion or data saver (globals.css). */
 export function UserName({ name, effect, className }: { name: string; effect?: string | null; className?: string }) {
-  const spec = getNameEffect(effect);
+  // name effects are a profile design: off for now (lib/constants PROFILE_DESIGNS_ENABLED)
+  const spec = PROFILE_DESIGNS_ENABLED ? getNameEffect(effect) : null;
   if (!spec) return <span className={className}>{name}</span>;
   // the colours as variables, and (where the effect has them) deeper ones that light moods use (lib/moods.ts)
   const vars = (colors: string[], glow: string | undefined, p: string) => {

@@ -12,6 +12,11 @@ export interface IFeedPost {
   communityId: Types.ObjectId;
   authorId: Types.ObjectId;
   caption: string;
+  /** #tags in the caption, lower-cased (for /tags/<tag>) */
+  tags?: string[];
+  /** people and communities the caption names (@handle, @community) */
+  mentionIds?: Types.ObjectId[];
+  communityRefIds?: Types.ObjectId[];
   /** a text post's title (needed when its text is long: lib/feedText) */
   title: string;
   /** a short text post's card background (lib/feedText TEXT_BACKGROUNDS) */
@@ -34,6 +39,9 @@ const FeedPostSchema = new Schema<IFeedPost>(
     communityId: { type: Schema.Types.ObjectId, ref: "Community", required: true },
     authorId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     caption: { type: String, default: "", trim: true, maxlength: 2200 },
+    tags: { type: [String], default: [] },
+    mentionIds: { type: [Schema.Types.ObjectId], default: [] },
+    communityRefIds: { type: [Schema.Types.ObjectId], default: [] },
     title: { type: String, default: "", trim: true, maxlength: 120 },
     textBg: { type: String, default: null },
     explicit: { type: Boolean, default: false },
@@ -49,6 +57,7 @@ const FeedPostSchema = new Schema<IFeedPost>(
 FeedPostSchema.index({ communityId: 1, createdAt: -1 });
 FeedPostSchema.index({ createdAt: -1 });
 FeedPostSchema.index({ authorId: 1, createdAt: -1 });
+FeedPostSchema.index({ tags: 1, createdAt: -1 });
 
 export const FeedPost: Model<IFeedPost> = defineModel<IFeedPost>("FeedPost", FeedPostSchema);
 
@@ -84,6 +93,10 @@ export interface IFeedComment {
   /** a built-in sticker id, or a saved picture sticker's link (lib/reactions, SavedSticker) */
   sticker: string | null;
   stickerUrl: string | null;
+  /** people and communities the comment names (@handle, @community), and its #tags */
+  mentionIds?: Types.ObjectId[];
+  communityRefIds?: Types.ObjectId[];
+  tags?: string[];
   editedAt?: Date | null;
   deletedAt: Date | null;
   createdAt: Date;
@@ -98,6 +111,9 @@ const FeedCommentSchema = new Schema<IFeedComment>(
     body: { type: String, default: "", maxlength: 2000 },
     sticker: { type: String, default: null },
     stickerUrl: { type: String, default: null },
+    mentionIds: { type: [Schema.Types.ObjectId], default: [] },
+    communityRefIds: { type: [Schema.Types.ObjectId], default: [] },
+    tags: { type: [String], default: [] },
     editedAt: { type: Date, default: null },
     deletedAt: { type: Date, default: null },
   },

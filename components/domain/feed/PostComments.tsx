@@ -5,7 +5,6 @@ import { errorMessage } from "@/app/ApiCore";
 import { FeedService } from "@/app/services/FeedService";
 import { AttachedSticker, ReactButton, ReactionBar, StickerPicker, StickerView, type StickerChoice } from "@/components/domain/chat/Reactions";
 import { EditedTag, MessageEditor } from "@/components/domain/chat/MessageEditor";
-import { Linkified } from "@/components/domain/topics/parts";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { ProfileTrigger } from "@/components/providers/ProfileCardProvider";
 import { useToast } from "@/components/providers/ToastProvider";
@@ -21,6 +20,9 @@ import { useApi, useNow } from "@/lib/hooks/useApi";
 import { applyReaction, type ReactionKind } from "@/lib/reactions";
 import type { FeedCommentDTO, FeedPostDTO, ReactionDTO } from "@/lib/types";
 import { sendReaction } from "@/lib/reactQueue";
+import { PlanBadge } from "@/components/domain/account/PlanTab";
+import { RichText } from "./RichText";
+import { useTagSuggest } from "./TagSuggest";
 
 /** Replies shown each time you open a thread a bit further. */
 const BATCH = 3;
@@ -54,7 +56,7 @@ function threads(list: FeedCommentDTO[]): Thread[] {
 const MENTION = /^@([a-z0-9_]+)/i;
 
 /** A comment's text, its leading @mention (typed, or the person a reply answers) as a link to them. */
-function CommentText({ text, to }: { text: string; to: FeedCommentDTO["author"] | null }) {
+function CommentText({ text, to, refs }: { text: string; to: FeedCommentDTO["author"] | null; refs?: FeedCommentDTO["refs"] }) {
   const m = MENTION.exec(text);
   const at = (handle: string) => (
     <ProfileTrigger handle={handle} className="font-semibold text-accent-text hover:underline">
@@ -66,12 +68,12 @@ function CommentText({ text, to }: { text: string; to: FeedCommentDTO["author"] 
       {m ? (
         <>
           {at(m[1])}
-          <Linkified text={text.slice(m[0].length)} />
+          <RichText text={text.slice(m[0].length)} refs={refs} />
         </>
       ) : (
         <>
           {to && <>{at(to.handle)} </>}
-          <Linkified text={text} />
+          <RichText text={text} refs={refs} />
         </>
       )}
     </p>
@@ -85,6 +87,9 @@ type Draft = { body: string } & StickerChoice;
  * held outside so Reply can fill it with "@name "; `above` is the "Replying to" strip.
  */
 function Composer({ body, setBody, onSend, placeholder, inputRef, above }: { body: string; setBody: (v: string) => void; onSend: (draft: Draft) => Promise<boolean>; placeholder: string; inputRef?: React.Ref<HTMLTextAreaElement>; above?: React.ReactNode }) {
+  // @people, @communities and #tags as you type
+  const own = useRef<HTMLTextAreaElement | null>(null);
+  const suggest = useTagSuggest(own, body, setBody);
   const [sticker, setSticker] = useState<StickerChoice | null>(null);
   const [tray, setTray] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -109,12 +114,18 @@ function Composer({ body, setBody, onSend, placeholder, inputRef, above }: { bod
       <AttachedSticker choice={sticker} onRemove={() => setSticker(null)} />
       {/* in the flow, as wide as the box: a popover would be cut off by the scrolling comment list */}
       {tray && <StickerPicker onPick={setSticker} onClose={() => setTray(false)} className="mb-2 w-full! max-w-md!" />}
+      {suggest.panel}
       <div className="flex items-end gap-2">
         <textarea
-          ref={inputRef}
+          ref={(el) => {
+            own.current = el;
+            if (typeof inputRef === "function") inputRef(el);
+            else if (inputRef) (inputRef as React.MutableRefObject<HTMLTextAreaElement | null>).current = el;
+          }}
           value={body}
           onChange={(e) => setBody(e.target.value)}
           onKeyDown={(e) => {
+            if (suggest.onKeyDown(e)) return;
             if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();
               void send();
@@ -264,6 +275,7 @@ export function PostComments({ post, onCount, pinned, top, focus }: { post: Feed
         <p className="flex flex-wrap items-baseline gap-x-2 text-[12.5px] text-ink-muted">
           <ProfileTrigger handle={c.author.handle} className="font-semibold text-ink hover:underline">
             <UserName name={c.author.displayName} effect={c.author.nameEffect} />
+            {c.author.badge && <PlanBadge plan={c.author.badge} size={13} className="ml-1" />}
           </ProfileTrigger>
           <EditedTag at={c.editedAt} />
         </p>
@@ -273,7 +285,7 @@ export function PostComments({ post, onCount, pinned, top, focus }: { post: Feed
           <MessageEditor className="mt-1" initial={c.body} max={LIMITS.feedComment} onCancel={() => setEditing(null)} onSave={(body) => saveEdit(c, body)} />
         ) : (
           <>
-            {c.body && <CommentText text={c.body} to={to} />}
+            {c.body && <CommentText text={c.body} to={to} refs={c.refs} />}
             {(c.sticker || c.stickerUrl) && (
               <div className="mt-1">
                 <StickerView id={c.sticker} url={c.stickerUrl} size={52} />

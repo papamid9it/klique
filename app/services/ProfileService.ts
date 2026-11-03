@@ -1,7 +1,7 @@
 import ApiClient from "@/app/ApiCore";
 import type { CityId, DmPolicy, InterestId, Presence, ProfileVisibility } from "@/lib/constants";
 import type { MoodId } from "@/lib/moods";
-import type { Envelope, Paginated, ProfileView, UserBrief, UserMe } from "@/lib/types";
+import type { Envelope, Paginated, ProfileView, UserBrief, UserMe, TopicMediaDTO } from "@/lib/types";
 
 const api = new ApiClient();
 
@@ -11,6 +11,7 @@ export interface ProfileUpdate {
   displayName?: string;
   bio?: string;
   pronouns?: string;
+  gender?: "woman" | "man" | "unspecified";
   presence?: Presence;
   country?: string;
   region?: string;
@@ -33,6 +34,8 @@ export interface ProfileUpdate {
 export const ProfileService = {
   me: () => api.get<Envelope<UserMe>>("/api/me"),
   updateMe: (patch: ProfileUpdate) => api.patch<Envelope<UserMe>>("/api/me", patch),
+  /** your profile photos and videos, in order (the whole list) */
+  setMedia: (items: TopicMediaDTO[]) => api.put<Envelope<UserMe>>("/api/me/media", { items }),
   /** "I'm 18 or older", once, before first entering an 18+ community */
   confirmAdult: () => api.post<Envelope<UserMe>>("/api/me/adult"),
   /** Show explicit content: on needs `agree` (and an 18+ date of birth); the phone app can only turn it off */

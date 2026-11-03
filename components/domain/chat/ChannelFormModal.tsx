@@ -14,7 +14,8 @@ import { Modal } from "@/components/ui/Modal";
 import { SaveBar, SettingsBlock, SettingsShell, type SettingsGroup } from "@/components/ui/SettingsShell";
 import { SLOW_MODE_STEPS, VOICE_ENABLED, slowModeLabel } from "@/lib/constants";
 import { useDebounced } from "@/lib/hooks/useApi";
-import type { ChannelCategoryDTO, ChannelDTO, ChannelType, ChannelVisibility, UserBrief } from "@/lib/types";
+import type { ChannelCategoryDTO, ChannelDTO, ChannelType, ChannelVisibility, UserBrief, RoleOverrideDTO } from "@/lib/types";
+import { RoleOverrides } from "@/components/domain/space/RoleOverrides";
 
 const TYPE_CARDS: { id: ChannelType; icon: "hash" | "megaphone" | "mic"; title: string; hint: string; soon?: boolean }[] = [
   { id: "text", icon: "hash", title: "Text", hint: "Everyone who can see it can post: chat, photos, links." },
@@ -182,11 +183,12 @@ export function ChannelSettings({
   const [categoryId, setCategoryId] = useState<string>(channel.categoryId ?? "");
   const [slowModeSec, setSlowModeSec] = useState(channel.slowModeSec ?? 0);
   const [guests, setGuests] = useState<UserBrief[]>([]);
+  const [overrides, setOverrides] = useState<RoleOverrideDTO[]>(channel.overrides ?? []);
   const [busy, setBusy] = useState(false);
   const [errs, setErrs] = useState<Record<string, string>>({});
   const [deleting, setDeleting] = useState(false);
 
-  const dirty = name !== channel.name || topic !== (channel.topic ?? "") || type !== channel.type || visibility !== channel.visibility || categoryId !== (channel.categoryId ?? "") || slowModeSec !== (channel.slowModeSec ?? 0);
+  const dirty = name !== channel.name || topic !== (channel.topic ?? "") || type !== channel.type || visibility !== channel.visibility || categoryId !== (channel.categoryId ?? "") || slowModeSec !== (channel.slowModeSec ?? 0) || JSON.stringify(overrides) !== JSON.stringify(channel.overrides ?? []);
 
   useEffect(() => {
     if (channel.visibility !== "invite") return;
@@ -231,6 +233,7 @@ export function ChannelSettings({
     setVisibility(channel.visibility);
     setCategoryId(channel.categoryId ?? "");
     setSlowModeSec(channel.slowModeSec ?? 0);
+    setOverrides(channel.overrides ?? []);
     setErrs({});
   }
 
@@ -238,7 +241,7 @@ export function ChannelSettings({
     setBusy(true);
     setErrs({});
     try {
-      const res = await ChannelService.update(space, channel.slug, { name: name.trim(), topic: topic.trim(), type, visibility, categoryId: inGroup ? null : categoryId || null, slowModeSec });
+      const res = await ChannelService.update(space, channel.slug, { name: name.trim(), topic: topic.trim(), type, visibility, categoryId: inGroup ? null : categoryId || null, slowModeSec, ...(inGroup ? {} : { overrides }) });
       // Switching a channel to private: add whoever was picked.
       if (visibility === "invite" && channel.visibility !== "invite") {
         for (const g of guests) await ChannelService.addGuest(space, res.data.slug, g.id);
@@ -342,6 +345,11 @@ export function ChannelSettings({
           {visibility === "invite" && (
             <SettingsBlock title="Members of this channel">
               <GuestPicker space={space} guests={guests} onAdd={addGuest} onRemove={removeGuest} />
+            </SettingsBlock>
+          )}
+          {!inGroup && (
+            <SettingsBlock title="Roles">
+              <RoleOverrides slug={space.slug} value={overrides} onChange={setOverrides} />
             </SettingsBlock>
           )}
         </div>
@@ -448,6 +456,7 @@ function GuestPicker({ space, guests, onAdd, onRemove }: { space: SpaceRef; gues
 /** Name-only modal for creating / renaming a category. */
 export function CategoryModal({ slug, category, onClose, onSaved }: { slug: string; category?: ChannelCategoryDTO; onClose: () => void; onSaved: () => void }) {
   const [name, setName] = useState(category?.name ?? "");
+  const [overrides, setOverrides] = useState<RoleOverrideDTO[]>(category?.overrides ?? []);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string>();
 
@@ -456,7 +465,7 @@ export function CategoryModal({ slug, category, onClose, onSaved }: { slug: stri
     setBusy(true);
     setErr(undefined);
     try {
-      if (category) await ChannelService.renameCategory(slug, category.id, name.trim());
+      if (category) await ChannelService.renameCategory(slug, category.id, name.trim(), overrides);
       else await ChannelService.createCategory(slug, name.trim());
       onSaved();
     } catch (e2) {
@@ -466,9 +475,15 @@ export function CategoryModal({ slug, category, onClose, onSaved }: { slug: stri
     }
   }
   return (
-    <Modal open onClose={onClose} title={category ? "Rename category" : "New category"} size="sm">
+    <Modal open onClose={onClose} title={category ? "Edit category" : "New category"} size={category ? "md" : "sm"}>
       <form onSubmit={submit} className="space-y-4">
         <TextField label="Category name" value={name} onChange={(e) => setName(e.target.value)} maxLength={40} required autoFocus error={err} />
+        {category && (
+          <div>
+            <p className="mb-1.5 text-[13px] font-medium">Roles</p>
+            <RoleOverrides slug={slug} value={overrides} onChange={setOverrides} category />
+          </div>
+        )}
         <div className="flex justify-end gap-2">
           <Button onClick={onClose}>Cancel</Button>
           <Button type="submit" variant="primary" loading={busy} disabled={name.trim().length < 2}>

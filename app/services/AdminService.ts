@@ -48,7 +48,7 @@ export const AdminService = {
 
   communities: (params: { sort?: "members" | "new"; q?: string; page?: number; adult?: "1" }) => api.get<Envelope<Paginated<AdminCommunityRow>>>("/api/admin/communities", params),
   /** take a community's 18+ flag (and with it explicit content) or just its explicit flag off */
-  communityFlags: (id: string, input: { adult?: false; explicit?: false; note?: string }) => api.patch<Envelope<{ adult?: boolean; explicit?: boolean }>>(`/api/admin/communities/${id}`, input),
+  communityFlags: (id: string, input: { adult?: false; explicit?: false; verified?: boolean; note?: string }) => api.patch<Envelope<{ adult?: boolean; explicit?: boolean; verified?: boolean }>>(`/api/admin/communities/${id}`, input),
   deleteCommunity: (id: string, note = "") => api.delete<Envelope<{ deleted: boolean }>>(`/api/admin/communities/${id}`, { note }),
 
   drafts: (status: DraftStatus) => api.get<Envelope<DraftDTO[]>>("/api/admin/drafts", { status }),

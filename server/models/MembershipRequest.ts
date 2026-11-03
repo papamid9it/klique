@@ -6,6 +6,8 @@ export interface IMembershipRequest {
   communityId: Types.ObjectId;
   subcommunityId: Types.ObjectId | null;
   message: string;
+  /** their answers to the community's entry questions */
+  answers?: { prompt: string; answer: string }[];
   status: "pending" | "approved" | "rejected";
   decidedBy: Types.ObjectId | null;
   decidedAt: Date | null;
@@ -18,6 +20,7 @@ const MembershipRequestSchema = new Schema<IMembershipRequest>(
     communityId: { type: Schema.Types.ObjectId, ref: "Community", required: true },
     subcommunityId: { type: Schema.Types.ObjectId, ref: "Subcommunity", default: null },
     message: { type: String, default: "", maxlength: 300 },
+    answers: { type: [{ _id: false, prompt: { type: String, maxlength: 200 }, answer: { type: String, maxlength: 500 } }], default: [] },
     status: { type: String, enum: ["pending", "approved", "rejected"], default: "pending" },
     decidedBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
     decidedAt: { type: Date, default: null },

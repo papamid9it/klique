@@ -626,7 +626,7 @@ function ReviewQueue({ version, onChanged }: { version: number; onChanged: () =>
         <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter…" aria-label="Filter the queue" className="h-9 min-w-0 flex-1 rounded-control border border-line bg-raised px-3 text-sm sm:max-w-56" />
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <select value={target} onChange={(e) => setTarget(e.target.value)} aria-label="Post to" className="h-9 max-w-52 rounded-control border border-line bg-raised px-2 text-sm">
-            <option value="">Post to Klique (everyone)</option>
+            <option value="">Post to Klique HQ (everyone)</option>
             {targets.map((c) => (
               <option key={c.id} value={c.slug}>
                 Post to {c.name}

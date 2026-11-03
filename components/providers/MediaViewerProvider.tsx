@@ -6,7 +6,8 @@ import { useStickers } from "@/lib/hooks/useStickers";
 import { useAuth } from "./AuthProvider";
 import { useToast } from "./ToastProvider";
 
-type Open = (items: (ViewerItem | string)[], start?: number) => void;
+/** `mine`: the viewer's own uploads (they can download them, or make one a sticker); off by default */
+type Open = (items: (ViewerItem | string)[], start?: number, opts?: { mine?: boolean }) => void;
 const Ctx = createContext<Open>(() => {});
 
 /** Open pictures and videos fullscreen from anywhere: `useMediaViewer()(urls, index)`. */
@@ -18,8 +19,11 @@ export function MediaViewerProvider({ children }: { children: ReactNode }) {
   const stickers = useStickers();
   const toast = useToast();
 
-  const show = useCallback<Open>((items, start = 0) => {
-    const list = items.map((x) => (typeof x === "string" ? { kind: /\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(x) ? ("video" as const) : ("image" as const), url: x } : x)).filter((x) => !!x.url);
+  const show = useCallback<Open>((items, start = 0, opts) => {
+    const list = items
+      .map((x) => (typeof x === "string" ? { kind: /\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(x) ? ("video" as const) : ("image" as const), url: x } : x))
+      .map((x) => ({ ...x, mine: x.mine ?? !!opts?.mine }))
+      .filter((x) => !!x.url);
     if (list.length) setOpen({ items: list, start });
   }, []);
   const close = useCallback(() => setOpen(null), []);
@@ -33,7 +37,7 @@ export function MediaViewerProvider({ children }: { children: ReactNode }) {
           start={open.start}
           onClose={close}
           actions={(item) =>
-            user && item.kind === "image"
+            user && item.kind === "image" && item.mine
               ? [
                   {
                     label: stickers.has(item.url) ? "Saved" : "Save as sticker",

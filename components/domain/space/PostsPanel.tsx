@@ -97,7 +97,7 @@ export function PostsPanel({ slug, subSlug, canPost }: { slug: string; subSlug?:
                   </header>
                   <p className="mt-3 text-[15px] leading-relaxed break-words whitespace-pre-wrap">{p.body}</p>
                   {p.imageUrl && (
-                    <button type="button" onClick={() => view([p.imageUrl!])} aria-label="View picture full screen" className="mt-3 block w-full cursor-zoom-in">
+                    <button type="button" onClick={() => view([p.imageUrl!], 0, { mine: p.author.handle === user?.handle })} aria-label="View picture full screen" className="mt-3 block w-full cursor-zoom-in">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={p.imageUrl} alt="" loading="lazy" className="max-h-96 w-full rounded-control object-cover" />
                     </button>

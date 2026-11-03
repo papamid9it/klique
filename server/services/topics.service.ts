@@ -20,6 +20,9 @@ import { escapeRegex, sid, topicFileUrls } from "./helpers";
 import type { IUser } from "../models/User";
 import { awardPointsLater } from "./points.service";
 import { notify } from "./push.service";
+import { isSiteAdmin } from "../policies/hosting";
+import { logModDelete } from "./admin-audit";
+import { checkAutoMod } from "./automod.service";
 
 const PAGE = 10;
 type Role = IMembership["role"];
@@ -41,6 +44,7 @@ function assertCommunity(space: Space) {
  * the mixed home feed: the viewer's role is looked up per community, so permissions are always the real ones.
  */
 async function toTopics(rows: ITopic[], viewer: IUser | null): Promise<TopicDTO[]> {
+  const siteAdmin = !!viewer && isSiteAdmin(viewer);
   if (!rows.length) return [];
   const communityIds = [...new Set(rows.map((r) => sid(r.communityId)))];
   const boardIds = [...new Set(rows.flatMap((r) => (r.boardId ? [sid(r.boardId)] : [])))];
@@ -94,7 +98,7 @@ async function toTopics(rows: ITopic[], viewer: IUser | null): Promise<TopicDTO[
         community: { id: sid(c._id), slug: c.slug, name: c.name, interest: c.interest, coverImage: c.coverImage ?? null },
         // authors edit their own; owners/admins may also edit anyone they outrank
         canEdit: (mine && member) || (moderator && target !== undefined && outranks(role ?? null, target)),
-        canDelete: mine || (moderator && (target === undefined || outranks(role ?? null, target))),
+        canDelete: mine || siteAdmin || (moderator && (target === undefined || outranks(role ?? null, target))),
         canModerate: moderator,
         canLike: member,
         canComment: member && (!t.locked || moderator),
@@ -136,7 +140,7 @@ async function toComments(rows: ITopicComment[], viewer: IUser | null, topic: To
         author,
         canEdit: !gone && ((mine && topic.canComment) || (topic.canModerate && outranksAuthor(myRole, roleOf.get(sid(c.authorId))))),
         // owners/admins may edit and remove comments from anyone they outrank (the server re-checks rank)
-        canDelete: !gone && (mine || (topic.canModerate && outranksAuthor(myRole, roleOf.get(sid(c.authorId))))),
+        canDelete: !gone && (mine || (!!viewer && isSiteAdmin(viewer)) || (topic.canModerate && outranksAuthor(myRole, roleOf.get(sid(c.authorId))))),
       },
     ];
   });
@@ -263,6 +267,7 @@ export async function createTopic(viewer: IUser, space: Space, access: SpaceAcce
   assertCommunity(space);
   assertCanPost(access);
   const board = await resolveBoard(space, input.board);
+  await checkAutoMod(space, viewer, access, { text: `${input.title} ${input.body ?? ""}`.trim(), where: `the ${board.name} board` });
   if (!canPostIn(board, access)) throw forbidden(`Only owners and admins can post in ${board.name}.`);
   rateLimit(`topic:${sid(viewer._id)}`, 10, 10 * 60_000);
   const doc = await Topic.create({ communityId: space.community._id, boardId: board._id, authorId: viewer._id, title: input.title, body: input.body ?? "", media: (input.media ?? []).map((m) => ({ kind: m.kind, url: m.url, poster: m.poster ?? null })), tags: cleanTags(input.tags) });
@@ -321,13 +326,15 @@ export async function deleteTopic(viewer: IUser, space: Space, access: SpaceAcce
   assertCommunity(space);
   assertCanView(access, "this topic");
   const t = await loadTopic(space, topicId);
-  if (sid(t.authorId) !== sid(viewer._id)) {
+  const asAdmin = sid(t.authorId) !== sid(viewer._id) && isSiteAdmin(viewer);
+  if (sid(t.authorId) !== sid(viewer._id) && !asAdmin) {
     if (!access.canManage) throw forbidden("You can only delete your own topics.");
     const authorM = await Membership.findOne({ communityId: t.communityId, subcommunityId: null, userId: t.authorId, status: "active" }).select("role").lean<Pick<IMembership, "role">>();
     if (authorM && !outranks(access.role, authorM.role)) throw forbidden("You can't remove a topic from someone of equal or higher rank.");
   }
   await Promise.all([TopicComment.deleteMany({ topicId: t._id }), TopicLike.deleteMany({ topicId: t._id }), TopicFollow.deleteMany({ topicId: t._id }), deleteTopicThread(t._id), Topic.deleteOne({ _id: t._id })]);
   deleteUploads(topicFileUrls(t));
+  if (sid(t.authorId) !== sid(viewer._id)) await logModDelete(viewer, { communityId: t.communityId, authorId: t.authorId }, "topic", t._id, `Board post in ${space.community.name}: ${t.title.slice(0, 80)}`);
   return { deleted: true };
 }
 
@@ -346,6 +353,7 @@ export async function createComment(viewer: IUser, space: Space, access: SpaceAc
   assertCanPost(access);
   if (t.locked && !access.canManage) throw forbidden("This topic is locked.");
   rateLimit(`comment:${sid(viewer._id)}`, 30, 5 * 60_000);
+  await checkAutoMod(space, viewer, access, { text: input.body ?? "", where: `"${t.title}"` });
   let parentId: Types.ObjectId | null = null;
   let parentAuthor: Types.ObjectId | null = null;
   if (input.parentId) {
@@ -387,6 +395,7 @@ export async function updateComment(viewer: IUser, space: Space, access: SpaceAc
   }
   if (t.locked && !access.canManage) throw forbidden("This topic is locked.");
   rateLimit(`comment-edit:${sid(viewer._id)}`, 30, 60_000);
+  if (mine && input.body !== c.body) await checkAutoMod(space, viewer, access, { text: input.body ?? "", where: `"${t.title}" (an edit)` });
   const editedAt = input.body === c.body ? c.editedAt : new Date();
   await TopicComment.updateOne({ _id: c._id }, { $set: { body: input.body, editedAt } });
   emitTopic(t.communityId, t._id);
@@ -397,7 +406,8 @@ export async function updateComment(viewer: IUser, space: Space, access: SpaceAc
 export async function deleteComment(viewer: IUser, space: Space, access: SpaceAccess, topicId: string, commentId: string) {
   const t = await topicForComment(space, access, topicId);
   const { c, mine } = await ownComment(viewer, t, commentId);
-  if (!mine) {
+  const asAdmin = !mine && isSiteAdmin(viewer);
+  if (!mine && !asAdmin) {
     if (!access.canManage) throw forbidden("You can only delete your own comments.");
     const authorM = await Membership.findOne({ communityId: t.communityId, subcommunityId: null, userId: c.authorId, status: "active" }).select("role").lean<Pick<IMembership, "role">>();
     if (authorM && !outranks(access.role, authorM.role)) throw forbidden("You can't remove a comment from someone of equal or higher rank.");
@@ -408,6 +418,7 @@ export async function deleteComment(viewer: IUser, space: Space, access: SpaceAc
     TopicLike.deleteMany({ targetType: "comment", targetId: c._id }),
   ]);
   emitTopic(t.communityId, t._id);
+  if (!mine) await logModDelete(viewer, { communityId: t.communityId, authorId: c.authorId }, "topic", t._id, `Comment on "${t.title.slice(0, 60)}": ${c.body.slice(0, 80)}`, `/communities/${space.community.slug}?view=topics&t=${sid(t._id)}`);
   return { deleted: true };
 }
 

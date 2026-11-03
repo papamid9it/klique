@@ -20,6 +20,7 @@ import type { communityCreateSchema, communityListQuery, communityUpdateSchema }
 import { assertPlace, escapeRegex, PAGE_SIZE, purgeSpaceData, recountMembers, sid, uniqueCommunitySlug } from "./helpers";
 import { resolveSpace } from "./spaces.service";
 import { countVisibleSubs } from "./subcommunities.service";
+import { assertCanCreateCommunity } from "./space-limits";
 
 type ListQuery = z.infer<typeof communityListQuery>;
 
@@ -78,7 +79,18 @@ export async function getCommunity(viewer: IUser | null, slug: string): Promise<
       }),
     ]);
   }
-  return toCommunityDetail(space.community, access, { subcommunityCount, upcomingEventCount });
+  const dto = await toCommunityDetail(space.community, access, { subcommunityCount, upcomingEventCount });
+  // your own "Suppress @everyone and @here" here
+  if (viewer && access.isMember) dto.suppressEveryone = !!(await Membership.findOne({ userId: viewer._id, communityId: space.community._id, subcommunityId: null }).select("suppressEveryone").lean<{ suppressEveryone?: boolean }>())?.suppressEveryone;
+  return dto;
+}
+
+/** Your "Suppress @everyone and @here" in this community: those stop pinging you here (your @mentions still do). */
+export async function setSuppressEveryone(viewer: IUser, slug: string, on: boolean) {
+  const space = await resolveSpace(slug);
+  const r = await Membership.updateOne({ userId: viewer._id, communityId: space.community._id, subcommunityId: null, status: "active" }, { $set: { suppressEveryone: on } });
+  if (!r.matchedCount) throw notFound("Join first.");
+  return { suppressEveryone: on };
 }
 
 /**
@@ -100,6 +112,7 @@ export async function createCommunity(viewer: IUser, input: z.infer<typeof commu
   assertVerified(viewer);
   assertPlace(input, true);
   await assertAdultFlags(viewer, { privacy: input.privacy, adult: input.adult, explicit: input.explicit });
+  await assertCanCreateCommunity(viewer);
   rateLimit(`community-create:${sid(viewer._id)}`, 5, 24 * 60 * 60 * 1000);
   const slug = await uniqueCommunitySlug(input.name);
   const doc = await Community.create({
@@ -150,6 +163,7 @@ export async function updateCommunity(viewer: IUser, slug: string, patch: z.infe
   if (patch.groupPolicy !== undefined) set.groupPolicy = patch.groupPolicy;
   if (patch.feedPolicy !== undefined) set.feedPolicy = patch.feedPolicy;
   if (patch.memberEvents !== undefined) set.memberEvents = patch.memberEvents;
+  if (patch.membersMassMention !== undefined) set.membersMassMention = patch.membersMassMention;
   // 18+ and explicit: checked against what the community will be after this change
   if (patch.adult !== undefined || patch.explicit !== undefined || patch.privacy !== undefined) {
     const next = { privacy: patch.privacy ?? space.community.privacy, adult: patch.adult ?? !!space.community.adult, explicit: patch.explicit ?? !!space.community.explicit };

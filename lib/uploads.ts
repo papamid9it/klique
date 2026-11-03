@@ -2,7 +2,7 @@
  * What each kind of upload accepts. Shared by the server (signing) and every client (checking and compressing
  * before upload). Files are resized and compressed on the device, then go straight to Cloudflare R2.
  */
-export type UploadKind = "avatar" | "photo" | "video" | "effect";
+export type UploadKind = "avatar" | "photo" | "video" | "effect" | "emoji";
 
 /** The files one upload is made of: the picture or video itself, plus a small copy (photos) or a still frame (videos). */
 export type UploadVariant = "main" | "sm" | "poster";
@@ -46,6 +46,15 @@ export const UPLOAD_SPECS: Record<UploadKind, UploadSpec> = {
     formats: ["mp4", "mov", "webm", "m4v"],
     maxPickBytes: 500 * MB,
     variants: { main: { types: ["video/mp4", "video/webm"], maxBytes: 100 * MB }, poster: { types: STILL, maxBytes: 1 * MB } },
+  },
+  /** a community's custom emoji: small, square-ish, transparent; GIFs stay animated (at most 256 KB) */
+  emoji: {
+    label: "Emoji",
+    resource: "image",
+    folder: "emoji",
+    formats: ["png", "gif", "webp"],
+    maxPickBytes: 2 * MB,
+    variants: { main: { types: ["image/webp", "image/png", "image/gif"], maxBytes: 256 * 1024 } },
   },
   /** profile effects (site admins only): a Lottie, .json or .lottie. Uploaded through the server (/api/admin/effect-files), which checks it. */
   effect: {

@@ -10,6 +10,7 @@ import { RowSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { useApi } from "@/lib/hooks/useApi";
 import { useRealtimeEvent } from "@/components/providers/RealtimeProvider";
+import { EntryAnswers } from "./EntryQuestions";
 
 /** Pending join requests for a private community. */
 export function RequestsPanel({ slug, onDecided }: { slug: string; onDecided?: () => void }) {
@@ -61,6 +62,7 @@ export function RequestsPanel({ slug, onDecided }: { slug: string; onDecided?: (
             }
           />
           {r.message && <p className="rounded-control bg-raised px-3.5 py-2 text-[13px] text-ink-muted">&ldquo;{r.message}&rdquo;</p>}
+          <EntryAnswers answers={r.answers} />
         </li>
       ))}
     </ul>

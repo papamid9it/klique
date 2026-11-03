@@ -10,6 +10,7 @@ import { getInterest } from "@/lib/constants";
 import type { CommunityCardDTO } from "@/lib/types";
 import { JoinButton, PointsNeededChip } from "./JoinButton";
 import { MemberCount } from "./CommunityRow";
+import { VerifiedCheck } from "@/components/ui/VerifiedCheck";
 
 /** Grid card for browsing communities. Private communities you're not in show a lock and nothing else. */
 export function CommunityCard({ community, onChange, tag }: { community: CommunityCardDTO; onChange?: (c: CommunityCardDTO) => void; tag?: string }) {
@@ -48,6 +49,7 @@ export function CommunityCard({ community, onChange, tag }: { community: Communi
           <Link href={`/communities/${c.slug}`} className="hover:underline hover:underline-offset-2">
             {c.name}
           </Link>
+          <VerifiedCheck on={c.verified} size={15} />
           {c.privacy === "private" && <Icon name="lock" size={14} className="shrink-0 text-ink-muted" />}
           {c.official && (
             <span className="inline-flex size-4 shrink-0 items-center justify-center rounded-full bg-accent text-accent-ink" title="Official Klique community">

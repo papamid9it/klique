@@ -29,7 +29,7 @@ export async function myCommunities(viewer: IUser): Promise<MyCommunityDTO[]> {
   const ids = [...parentRole.keys()];
   const [communities, channels, reads, guest] = await Promise.all([
     Community.find({ _id: { $in: ids } }).lean<ICommunity[]>(),
-    Channel.find({ communityId: { $in: ids }, topicId: null }).select("communityId subcommunityId visibility lastMessageId lastMessageAt").lean<IChannel[]>(),
+    Channel.find({ communityId: { $in: ids }, topicId: null, parentChannelId: null }).select("communityId subcommunityId visibility overrides categoryOverrides lastMessageId lastMessageAt").lean<IChannel[]>(),
     ChannelRead.find({ userId: viewer._id, communityId: { $in: ids } }).lean<IChannelRead[]>(),
     ChannelMember.find({ userId: viewer._id, communityId: { $in: ids } }).select("channelId").lean<{ channelId: Types.ObjectId }[]>(),
   ]);
@@ -88,6 +88,7 @@ export async function myCommunities(viewer: IUser): Promise<MyCommunityDTO[]> {
         interest: c.interest,
         coverImage: c.coverImage,
         privacy: c.privacy,
+        verified: !!c.verified || !!c.official,
         role: parentRole.get(sid(c._id))!,
         unread: slot.unread.length > 0 || !!slot.crewUnread,
         unreadCount: Math.min(99, unreadTotals.get(sid(c._id)) ?? 0),

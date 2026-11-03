@@ -16,3 +16,25 @@ export function activeMention(text: string, caret: number): { start: number; que
   const m = upto.match(/(?<![\w@])@([a-zA-Z0-9_]{0,20})$/);
   return m ? { start: caret - m[0].length, query: m[1] } : null;
 }
+
+/**
+ * Mass mentions, Discord style: @everyone (everyone who can see the channel) and @here (only those online now).
+ * Klique also takes @all (= @everyone) and @channel (= @here). They only ping when the author may use them
+ * (owners and admins always; members when the community allows it); otherwise they're plain words.
+ */
+export const MASS_WORDS: Record<string, "everyone" | "here"> = { everyone: "everyone", all: "everyone", here: "here", channel: "here" };
+const MASS_SOURCE = "(?<![\\w@])@(everyone|all|here|channel)(?![\\w])";
+
+/** The widest mass mention in a message: "everyone" beats "here"; null when there's none. */
+export function extractMassMention(body: string): "everyone" | "here" | null {
+  let found: "everyone" | "here" | null = null;
+  for (const m of body.matchAll(new RegExp(MASS_SOURCE, "gi"))) {
+    const kind = MASS_WORDS[m[1].toLowerCase()];
+    if (kind === "everyone") return "everyone";
+    found = kind;
+  }
+  return found;
+}
+
+/** Handles nobody can have: they're the mass mentions. */
+export const RESERVED_HANDLES = new Set(Object.keys(MASS_WORDS));

@@ -7,6 +7,14 @@ export const APP_NAME = "klique";
  */
 export const KLIQUE_SLUG = "klique";
 
+/**
+ * Profile designs (animated name effects, picture frames, profile themes, profile effects, animated pictures and
+ * banners) are switched off for now: names and pictures show plainly everywhere, and the Profile style page and
+ * the admin's design prices and effects are hidden. Nothing is deleted: turn this back on to bring them back.
+ * A plain profile picture and banner, and moods, are unaffected.
+ */
+export const PROFILE_DESIGNS_ENABLED = false;
+
 /** Where people can reach you about their data or the rules (shown on /terms and /privacy). Set NEXT_PUBLIC_SUPPORT_EMAIL. */
 export const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL?.trim() || "";
 /**
@@ -143,14 +151,17 @@ export const LIMITS = {
 export const HANDLE_REGEX = /^[a-z0-9_]+$/;
 
 export type DmPolicy = "everyone" | "shared" | "nobody";
+/**
+ * "Who can message me" (Nov 2026, Instagram style). Friends, people in a klique with you right now, and admins of a
+ * community you also run can always chat with you. For everyone else:
+ *  - "everyone": they can send ONE message as a request (text only); it waits in your Requests until you accept it
+ *  - "shared": only friends and klique mates (the id is older than the name)
+ *  - "nobody": nobody new; friends still can
+ */
 export const DM_POLICIES: { id: DmPolicy; label: string; hint: string }[] = [
-  { id: "everyone", label: "Everyone", hint: "Anyone on klique can message you." },
-  {
-    id: "shared",
-    label: "People in my communities",
-    hint: "Only people who share at least one community with you.",
-  },
-  { id: "nobody", label: "Nobody", hint: "Your inbox is closed to new conversations." },
+  { id: "everyone", label: "Everyone, as message requests", hint: "Friends and klique mates chat with you freely. Anyone else can send one message, which waits in your Requests until you accept it." },
+  { id: "shared", label: "Friends and klique mates only", hint: "Only friends, people in a klique with you, and admins of communities you also run." },
+  { id: "nobody", label: "No one new", hint: "Only your friends can start a chat with you." },
 ];
 
 export type ProfileVisibility = "public" | "members" | "private";

@@ -148,7 +148,7 @@ export default function WelcomePage() {
         <>
           <h1 className="display mt-2 text-[clamp(2rem,6vw,3rem)]">Join your first communities</h1>
           <p className="mt-2 max-w-xl text-[15px] text-ink-muted">
-            Join at least {data.needed}. Their events and chats are what fill your homepage, along with Klique&apos;s own events. You&apos;re already in Klique.
+            Join at least {data.needed}. Their events and chats are what fill your homepage, along with Klique&apos;s own events. You&apos;re already in Klique HQ.
             {data.widened && " There aren't many in your categories yet, so here are some others too."}
           </p>
           {/* the rule, plainly, where they're looking (it pulses when they try to go on too early) */}

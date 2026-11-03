@@ -166,7 +166,7 @@ async function cleanInput(viewer: IUser, input: z.infer<typeof adCampaignSchema>
     const runs = await Membership.exists({ userId: viewer._id, communityId: c._id, subcommunityId: null, status: "active", role: { $in: ["owner", "admin"] } });
     if (!runs) throw forbidden("You can promote communities you own or run.");
     if (c.privacy !== "public") throw badRequest("Only public communities can be advertised.");
-    if (isKlique(c)) throw badRequest("Everyone's already in Klique.");
+    if (isKlique(c)) throw badRequest("Everyone's already in Klique HQ.");
     return {
       ...base,
       communityId: c._id,

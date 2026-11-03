@@ -5,6 +5,8 @@ import type { z } from "zod";
 import { isAnimatedPicture } from "@/lib/cosmetics";
 import { isStyleKey, styleName, stylePrice, walletConfigOf, wornKeys, type StyleKey, type WalletConfig, type Worn } from "@/lib/wallet";
 import type { AdminHypeOverviewDTO, AdminWalletUserDTO, HypeTxnDTO, HypeWalletDTO, StyleUnlockDTO } from "@/lib/types";
+import { activePlan, planUnlocksStyle } from "@/lib/plans";
+import type { StyleKind } from "@/lib/wallet";
 import { appUrl, paystackConfig } from "../env";
 import { badRequest, conflict, notFound } from "../http/errors";
 import { rateLimit } from "../http/rate-limit";
@@ -18,6 +20,8 @@ import { isSiteAdmin } from "../policies/hosting";
 import { sid } from "./helpers";
 import { deleteUploads } from "./media.service";
 import { paystack } from "./promotions.service";
+import { grantPlanDays } from "./subscriptions.service";
+import { HYPE_PER_LITE_DAY } from "../migrations/hype";
 import { notify } from "./push.service";
 
 /**
@@ -30,6 +34,8 @@ import { notify } from "./push.service";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const CONFIG_KEY = "walletConfig";
+/** Hype was replaced by Lite and Pro plans (Nov 2026): nothing new can be bought or unlocked with it */
+const HYPE_ON_SALE = false;
 const REMIND_MS = 3 * DAY_MS;
 const HISTORY_PAGE = 30;
 
@@ -68,10 +74,15 @@ async function move(userId: Types.ObjectId, amount: number, kind: HypeTxnKind, n
   return balance;
 }
 
-/** May this person wear this design right now? Free designs: always. Otherwise: an unexpired unlock. */
+/**
+ * May this person wear this design right now? Free designs: always. Otherwise their plan covers it (Lite: frames
+ * and name effects; Pro: everything), or an unexpired unlock bought with Hype before plans.
+ */
 export async function canWear(userId: Types.ObjectId, key: StyleKey, config?: WalletConfig): Promise<boolean> {
   const c = config ?? (await getWalletConfig());
   if (stylePrice(c, key) === 0) return true;
+  const u = await User.findById(userId).select("plan planUntil").lean<Pick<IUser, "plan" | "planUntil">>();
+  if (u && planUnlocksStyle(activePlan(u), key.split(":")[0] as StyleKind)) return true;
   return !!(await StyleUnlock.exists({ userId, key, endedAt: null, expiresAt: { $gt: new Date() } }));
 }
 
@@ -86,7 +97,7 @@ export async function assertCanWear(viewer: IUser, patch: Worn) {
   if (!added.length) return;
   const c = await getWalletConfig();
   for (const key of added) {
-    if (!(await canWear(viewer._id, key, c))) throw conflict(`Unlock the ${styleName(key)} first (${stylePrice(c, key)} Hype for ${c.unlockDays} days).`);
+    if (!(await canWear(viewer._id, key, c))) throw conflict(`The ${styleName(key)} comes with ${["frame", "name"].includes(key.split(":")[0]) ? "Lite and Pro" : "Pro"}. See Settings, Plan.`);
   }
 }
 
@@ -132,6 +143,8 @@ export async function getHistory(viewer: IUser, before?: string) {
  * have ended). Paid from your balance now.
  */
 export async function unlockStyle(viewer: IUser, key: StyleKey, autoRenew?: boolean): Promise<HypeWalletDTO> {
+  // Hype is gone (Nov 2026): plans replaced it, and leftover Hype became Lite days
+  if (!HYPE_ON_SALE) throw badRequest("Hype is gone: designs come with Lite and Pro now. See Settings, Plan.");
   if (!isStyleKey(key)) throw badRequest("We don't know that design.");
   if (isSiteAdmin(viewer)) throw badRequest("Site admins wear every design free. Just pick it.");
   // profile effects are uploaded by site admins: it has to be one people can pick
@@ -168,6 +181,7 @@ export async function setAutoRenew(viewer: IUser, key: string, autoRenew: boolea
 export async function buyPack(viewer: IUser, packId: string): Promise<{ authorizationUrl: string; reference: string }> {
   const c = await getWalletConfig();
   const pack = c.packs.find((p) => p.id === packId);
+  if (!HYPE_ON_SALE) throw badRequest("Hype isn't sold any more: Lite and Pro plans replaced it. See Settings, Plan.");
   if (!pack) throw badRequest("That pack isn't on sale any more.");
   if (!paystackConfig()) throw badRequest("Buying Hype isn't set up yet.");
   rateLimit(`points-buy:${sid(viewer._id)}`, 20, 60 * 60 * 1000);
@@ -185,6 +199,13 @@ export async function buyPack(viewer: IUser, packId: string): Promise<{ authoriz
 async function creditPurchase(p: IHypePurchase, paidAt: Date): Promise<boolean> {
   const claimed = await HypePurchase.findOneAndUpdate({ _id: p._id, status: "pending" }, { $set: { status: "paid", paidAt } }, { returnDocument: "after" }).lean<IHypePurchase>();
   if (!claimed) return false;
+  // a pack paid for after Hype went away (a checkout started just before): it becomes Lite days, like leftover Hype
+  if (!HYPE_ON_SALE) {
+    const days = Math.ceil(claimed.hype / HYPE_PER_LITE_DAY);
+    await grantPlanDays(claimed.userId, "lite", days, "hype");
+    notify([claimed.userId], { title: `${days} days of Lite added`, body: "Hype was replaced by plans, so your pack became Lite days.", data: { href: "/settings?tab=plan" } }, { category: "points", ref: `hype:${claimed.reference}` });
+    return true;
+  }
   const balance = await move(claimed.userId, claimed.hype, "purchase", `Bought ${claimed.hype.toLocaleString("en-NG")} Hype`, claimed.reference);
   notify(
     [claimed.userId],

@@ -60,7 +60,8 @@ export interface Mood {
   tokens: MoodTokens;
 }
 
-export const DEFAULT_MOOD: MoodId = "monochrome";
+/** what new accounts, signed-out visitors and anyone who never picked a mood get (Nov 2026: was "monochrome") */
+export const DEFAULT_MOOD: MoodId = "paper-mono";
 
 export const MOODS: Mood[] = [
   {

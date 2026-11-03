@@ -54,7 +54,7 @@ export function TextField({ label, hint, error, className, ...rest }: InputProps
   );
 }
 
-type AreaProps = Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "className"> & { label: string; hint?: string; error?: string; counter?: number };
+type AreaProps = Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "className"> & { label: string; hint?: string; error?: string; counter?: number; ref?: React.Ref<HTMLTextAreaElement> };
 
 export function TextArea({ label, hint, error, counter, value, ...rest }: AreaProps) {
   const len = typeof value === "string" ? value.length : 0;

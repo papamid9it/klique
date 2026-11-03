@@ -13,6 +13,7 @@ import { Icon } from "@/components/ui/Icon";
 import { cx } from "@/components/ui/cx";
 import { LIMITS, isInterestId, type InterestId } from "@/lib/constants";
 import type { CommunityPrivacy, GroupPolicy } from "@/lib/types";
+import { usePlanLimit } from "@/components/domain/account/PlanTab";
 
 const STEPS = ["Who can join", "About it", "Where it is"] as const;
 
@@ -20,9 +21,10 @@ const STEPS = ["Who can join", "About it", "Where it is"] as const;
  * Discord's "Create your server" flow as three short steps: who can join, the basics, and where it is.
  * `onSubmit` should throw on failure; field errors from the API send you back to the step that has them.
  */
-export function CommunityWizard({ onSubmit }: { onSubmit: (input: CommunityInput) => Promise<void> }) {
+export function CommunityWizard({ onSubmit, onCancel }: { onSubmit: (input: CommunityInput) => Promise<void>; /** Cancel on the first step (default: go to /communities) */ onCancel?: () => void }) {
   const categories = useCategories();
   const [step, setStep] = useState(0);
+  const limit = usePlanLimit();
   const [privacy, setPrivacy] = useState<CommunityPrivacy>("public");
   const [age, setAge] = useState({ adult: false, explicit: false });
   const [feedPolicy, setFeedPolicy] = useState<GroupPolicy>("off");
@@ -47,7 +49,8 @@ export function CommunityWizard({ onSubmit }: { onSubmit: (input: CommunityInput
         setErrors(err.errors);
         if (err.errors.name || err.errors.description || err.errors.interest || err.errors.coverImage || err.errors.adult || err.errors.explicit) setStep(1);
       }
-      setGeneral(err instanceof Error ? err.message : "Something went wrong.");
+      // a plan limit (communities you can own) opens the upgrade prompt
+      if (!limit.handled(err)) setGeneral(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
       setBusy(false);
     }
@@ -57,6 +60,7 @@ export function CommunityWizard({ onSubmit }: { onSubmit: (input: CommunityInput
 
   return (
     <div className="mx-auto w-full max-w-[34rem] overflow-hidden rounded-card border border-line bg-surface shadow-2xl">
+      {limit.prompt}
       <div className="px-6 pt-7 text-center sm:px-9">
         <ol className="mb-5 flex items-center justify-center gap-2" aria-label="Progress">
           {STEPS.map((s, i) => (
@@ -146,9 +150,15 @@ export function CommunityWizard({ onSubmit }: { onSubmit: (input: CommunityInput
             <Icon name="arrow-left" size={14} /> Back
           </Button>
         ) : (
-          <Button variant="ghost" href="/communities">
-            Cancel
-          </Button>
+          onCancel ? (
+            <Button variant="ghost" onClick={onCancel}>
+              Cancel
+            </Button>
+          ) : (
+            <Button variant="ghost" href="/communities">
+              Cancel
+            </Button>
+          )
         )}
         {step === 1 && (
           <Button variant="primary" onClick={() => setStep(2)} disabled={name.trim().length < 2 || !coverImage.trim()} title={coverImage.trim() ? undefined : "Add a cover image first"}>

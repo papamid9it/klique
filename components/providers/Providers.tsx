@@ -65,13 +65,14 @@ export function Providers({ children }: { children: ReactNode }) {
         <RealtimeProvider>
           <ThemeProvider>
             <PlaceProvider>
-              <ProfileCardProvider>
-                <MediaViewerProvider>
+              {/* the media viewer goes outside the profile card: the card's own pop-ups (gallery photos) open it too */}
+              <MediaViewerProvider>
+                <ProfileCardProvider>
                   <LeaveProvider>
                     <PanelSlotProvider>{children}</PanelSlotProvider>
                   </LeaveProvider>
-                </MediaViewerProvider>
-              </ProfileCardProvider>
+                </ProfileCardProvider>
+              </MediaViewerProvider>
             </PlaceProvider>
           </ThemeProvider>
         </RealtimeProvider>

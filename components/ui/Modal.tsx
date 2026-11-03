@@ -42,12 +42,14 @@ export function Modal({
         if (e.target === ref.current) onClose();
       }}
       className={cx(
-        "m-auto w-[calc(100%-2rem)] rounded-card border border-line bg-surface p-0 text-ink shadow-2xl backdrop:bg-black/60 backdrop:backdrop-blur-sm",
-        size === "sm" ? "max-w-sm" : size === "lg" ? "max-w-2xl" : size === "xl" ? "max-w-4xl" : "max-w-md",
+        "rounded-card border border-line bg-surface p-0 text-ink shadow-2xl backdrop:bg-black/60 backdrop:backdrop-blur-sm",
+        // phones: a sheet up from the bottom, full width; bigger screens: a centred box
+        "max-sm:mx-0 max-sm:mt-auto max-sm:mb-0 max-sm:w-full max-sm:max-w-none max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 sm:m-auto sm:w-[calc(100%-2rem)]",
+        size === "sm" ? "sm:max-w-sm" : size === "lg" ? "sm:max-w-2xl" : size === "xl" ? "sm:max-w-4xl" : "sm:max-w-md",
       )}
     >
       {open && (
-        <div className="max-h-[85dvh] overflow-y-auto p-5 sm:p-6">
+        <div className="max-h-[90dvh] overflow-y-auto overscroll-contain p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:max-h-[85dvh] sm:p-6">
           <div className="mb-4 flex items-start justify-between gap-4">
             <div>
               <h2 id={titleId} className="text-lg font-semibold tracking-tight">
@@ -55,7 +57,7 @@ export function Modal({
               </h2>
               {description && <p className="mt-1 text-sm text-ink-muted">{description}</p>}
             </div>
-            <button type="button" onClick={onClose} aria-label="Close" className="-mt-1 -mr-1 inline-flex size-9 items-center justify-center rounded-full text-ink-muted hover:bg-raised hover:text-ink">
+            <button type="button" onClick={onClose} aria-label="Close" className="-mt-1 -mr-1 inline-flex size-11 shrink-0 items-center justify-center rounded-full text-ink-muted hover:bg-raised hover:text-ink sm:size-9">
               <Icon name="x" />
             </button>
           </div>

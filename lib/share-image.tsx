@@ -4,7 +4,7 @@ import { cdn } from "./cdn";
 import { SHARE_SIZE, ShareCard } from "./share-card";
 
 /** What every share card says when there's nothing more specific (private, gone, or failed to load). */
-export const GENERIC_SHARE = { eyebrow: "klique.", title: "Find your people." };
+export const GENERIC_SHARE = { eyebrow: "klique.", title: "Find your klique." };
 
 type Card = { eyebrow: string; title: string; lines?: string[]; image?: string | null };
 

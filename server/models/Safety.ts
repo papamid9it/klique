@@ -22,7 +22,7 @@ export const Block: Model<IBlock> = (models.Block as Model<IBlock>) || model<IBl
 export interface IReport {
   _id: Types.ObjectId;
   reporterId: Types.ObjectId;
-  targetType: "user" | "post" | "event" | "community" | "subcommunity" | "message" | "channelMessage" | "ad" | "feedPost";
+  targetType: "user" | "post" | "event" | "community" | "subcommunity" | "message" | "channelMessage" | "ad" | "feedPost" | "klique";
   targetId: Types.ObjectId;
   /** extra routing context so a moderator knows where the target lives */
   communityId: Types.ObjectId | null;
@@ -39,7 +39,7 @@ const ReportSchema = new Schema<IReport>(
     reporterId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     targetType: {
       type: String,
-      enum: ["user", "post", "event", "community", "subcommunity", "message", "channelMessage", "ad", "feedPost"],
+      enum: ["user", "post", "event", "community", "subcommunity", "message", "channelMessage", "ad", "feedPost", "klique"],
       required: true,
     },
     targetId: { type: Schema.Types.ObjectId, required: true },

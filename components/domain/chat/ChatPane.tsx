@@ -1,6 +1,6 @@
 "use client";
 
-import { errorMessage } from "@/app/ApiCore";
+import ApiClient, { errorMessage } from "@/app/ApiCore";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { SpaceRef } from "@/app/services/ChannelService";
 import { channelSource, type ChatSource } from "@/app/services/ChatSource";
@@ -13,22 +13,29 @@ import { Button, Spinner } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/States";
+import { formatDateShort, formatTime } from "@/lib/format";
+import { useApi, useNow } from "@/lib/hooks/useApi";
 import { cx } from "@/components/ui/cx";
 import { LIMITS, slowModeLabel } from "@/lib/constants";
 import { useChat, type SendError } from "@/lib/hooks/useChat";
 import { useAttachments } from "@/lib/hooks/useAttachments";
 import { useStickers } from "@/lib/hooks/useStickers";
 import { useDebounced } from "@/lib/hooks/useApi";
-import { activeMention } from "@/lib/mentions";
-import type { ChannelDTO, ChannelMessageDTO, ReplyRefDTO, UserBrief } from "@/lib/types";
+import { activeMention, extractMassMention } from "@/lib/mentions";
+import { Modal } from "@/components/ui/Modal";
+import type { ChannelDTO, ChannelMessageDTO, Envelope, ReplyRefDTO, UserBrief } from "@/lib/types";
 import { AttachmentStrip } from "./AttachmentStrip";
 import { Dropdown } from "@/components/ui/Dropdown";
 import { Message } from "./Message";
 import { ReplyingTo } from "./ReplyQuote";
 import { AttachedSticker, StickerPicker, type StickerChoice } from "./Reactions";
 import { PollComposer } from "./Polls";
+import { EmojiPicker } from "./EmojiPicker";
 import { TypingLine } from "./TypingLine";
 import { useTyping } from "@/lib/hooks/useTyping";
+import { emitAppEvent } from "@/lib/appEvents";
+import { draftThread } from "@/app/services/threadStart";
+
 
 const GROUP_GAP_MS = 5 * 60 * 1000;
 const dayKey = (iso: string) => new Date(iso).toLocaleDateString("en-CA", { timeZone: "Africa/Lagos" });
@@ -59,7 +66,13 @@ export function ChatPane({
   intro,
   placeholder,
   closedNote,
+  focus,
+  onOpenThread,
 }: {
+  /** open a thread (by slug) in the side panel; with it, messages offer "Start thread" */
+  onOpenThread?: (slug: string) => void;
+  /** a message to jump to (from search): older pages load until it's found, then it scrolls into view and flashes */
+  focus?: string | null;
   /** a community or group channel (or pass `source` for any other chat, like a crew's) */
   space?: SpaceRef;
   source?: ChatSource;
@@ -106,6 +119,26 @@ export function ChatPane({
     },
     [toast],
   );
+
+  // Jump to a message from search: load older pages until it's there (at most 20), then scroll to it and flash it.
+  const focused = useRef<string | null>(null);
+  const tries = useRef(0);
+  useEffect(() => {
+    if (!focus || focused.current === focus || loading || loadingOlder) return;
+    if (items.some((m) => m.id === focus)) {
+      focused.current = focus;
+      atBottom.current = false;
+      requestAnimationFrame(() => jump(focus));
+      return;
+    }
+    if (hasOlder && tries.current < 20) {
+      tries.current++;
+      void loadOlder();
+    } else {
+      focused.current = focus;
+      toast("That message is too far back to jump to.");
+    }
+  }, [focus, items, loading, loadingOlder, hasOlder, loadOlder, jump, toast]);
 
   // Keep the viewport sensible whenever messages change.
   useLayoutEffect(() => {
@@ -231,7 +264,7 @@ export function ChatPane({
                           <span className="h-px flex-1 bg-line" />
                         </li>
                       )}
-                      <Message m={m} showHead={showHead} mine={!!user && m.author.id === user.id} meId={user?.id ?? null} onDelete={setDeleting} onEdit={(msg, body) => chat.edit(msg.id, body)} onReport={user ? setReporting : undefined} onReply={isMember && channel.canPost ? setReplyTo : undefined} onPin={(msg, pinned) => void chat.pin(msg.id, pinned).then((err) => (err ? toast(err, "error") : setPinTick((n) => n + 1)))} onJump={jump} canReact={isMember && !!user} onReact={(msg, kind) => void chat.react(msg.id, kind).then((err) => err && toast(err, "error"))} onSaveSticker={user ? saveSticker : undefined} />
+                      <Message m={m} showHead={showHead} mine={!!user && m.author.id === user.id} meId={user?.id ?? null} onDelete={setDeleting} onEdit={(msg, body) => chat.edit(msg.id, body)} onReport={user ? setReporting : undefined} onReply={isMember && channel.canPost ? setReplyTo : undefined} onPin={(msg, pinned) => void chat.pin(msg.id, pinned).then((err) => (err ? toast(err, "error") : setPinTick((n) => n + 1)))} onJump={jump} canReact={isMember && !!user} onReact={(msg, kind) => void chat.react(msg.id, kind).then((err) => err && toast(err, "error"))} onSaveSticker={user ? saveSticker : undefined} onOpenThread={onOpenThread} onThread={onOpenThread && space && !space.sub && isMember && !channel.thread ? (msg) => onOpenThread(msg.thread ? msg.thread.slug : draftThread({ space, channelSlug: channel.slug, messageId: msg.id, author: msg.author.displayName, body: msg.body })) : undefined} />
                     </div>
                   );
                 })}
@@ -256,7 +289,7 @@ export function ChatPane({
         )}
       </div>
 
-      <Composer source={src} placeholder={placeholder} closedNote={closedNote} channel={channel} isMember={isMember} gate={gate} send={chat.send} onSent={() => (atBottom.current = true)} onPolled={() => void chat.reload()} replyTo={replyTo} onClearReply={() => setReplyTo(null)} />
+      <Composer source={src} placeholder={placeholder} closedNote={closedNote} channel={channel} isMember={isMember} gate={gate} send={chat.send} onSent={() => (atBottom.current = true)} onPolled={() => void chat.reload()} replyTo={replyTo} onClearReply={() => setReplyTo(null)} emojiCommunity={space?.slug} />
 
       <ConfirmModal
         open={!!deleting}
@@ -373,7 +406,10 @@ function Composer({
   onClearReply,
   closedNote,
   onPolled,
+  emojiCommunity,
 }: {
+  /** the community whose custom emoji the picker offers first */
+  emojiCommunity?: string;
   /** a poll was posted: fetch the chat so it shows */
   onPolled: () => void;
   source: ChatSource;
@@ -387,6 +423,7 @@ function Composer({
   replyTo: ChannelMessageDTO | null;
   onClearReply: () => void;
 }) {
+  const now = useNow(15_000);
   const attach = useAttachments();
   const fileInput = useRef<HTMLInputElement>(null);
   const { user, status } = useAuth();
@@ -396,6 +433,20 @@ function Composer({
   // "X is typing…": only where you could type yourself
   const typing = useTyping(status === "authed" && isMember && channel.canPost ? (source.typing ?? null) : null);
   const [stickers, setStickers] = useState(false);
+  const [emoji, setEmoji] = useState(false);
+  // slash commands from the community's bots (loaded once someone starts with "/")
+  const wantsCommands = !!emojiCommunity && isMember && text.startsWith("/");
+  const commands = useApi(wantsCommands ? () => new ApiClient().get<Envelope<{ botId: string; bot: string; avatarUrl: string | null; name: string; description: string; options: { name: string; description: string; required: boolean }[] }[]>>(`/api/communities/${emojiCommunity}/commands`) : null, [wantsCommands, emojiCommunity], { key: `commands:${emojiCommunity ?? ""}` });
+  // put a custom emoji in at the cursor
+  const insertEmoji = (t: string) => {
+    const el = area.current;
+    const at = el?.selectionStart ?? text.length;
+    const end = el?.selectionEnd ?? at;
+    const pad = at > 0 && !/\s$/.test(text.slice(0, at)) ? " " : "";
+    setText(text.slice(0, at) + pad + t + " " + text.slice(end));
+    setEmoji(false);
+    requestAnimationFrame(() => el?.focus());
+  };
   const [sticker, setSticker] = useState<StickerChoice | null>(null);
   const [polling, setPolling] = useState(false);
   const [mention, setMention] = useState<{ start: number; query: string } | null>(null);
@@ -412,15 +463,25 @@ function Composer({
       return;
     }
     const mine = ++ticket.current;
+    // @everyone / @here first, when you may use them (Discord shows them at the top)
+    const q = query.toLowerCase();
+    const mass: UserBrief[] = channel.canMassMention
+      ? (["everyone", "here"] as const)
+          .filter((w) => w.startsWith(q))
+          .map((w) => ({ id: `@${w}`, handle: w, displayName: w === "everyone" ? "Notify everyone who can see this channel" : "Notify everyone online here", avatarUrl: null, country: "", city: "" }))
+      : [];
     source.mentionable(query).then(
       (r) => {
         if (mine !== ticket.current) return;
-        setOptions(r.data);
+        setOptions([...mass, ...r.data]);
         setActive(0);
       },
       () => mine === ticket.current && setOptions([]),
     );
-  }, [query, source, channel.canPost]);
+  }, [query, source, channel.canPost, channel.canMassMention]);
+  // a mass mention in the box: Discord's hint when you can't use it, and a check before notifying a crowd
+  const mass = extractMassMention(text);
+  const [confirmMass, setConfirmMass] = useState(false);
 
   const resize = () => {
     const el = area.current;
@@ -448,8 +509,32 @@ function Composer({
     });
   }
 
-  async function submit() {
+  async function submit(confirmed = false) {
     const body = text.trim();
+    // a slash command for one of the community's bots: ask the bot instead of sending a message
+    const slash = /^\/([a-z0-9_-]{1,32})(?:\s+([\s\S]*))?$/i.exec(body);
+    const cmd = slash ? (commands.data ?? []).find((c) => c.name === slash[1].toLowerCase()) : null;
+    if (cmd && emojiCommunity) {
+      const rest = (slash![2] ?? "").trim();
+      const options: Record<string, string> = {};
+      if (cmd.options.length === 1) options[cmd.options[0].name] = rest;
+      else for (const m of rest.matchAll(/([a-z0-9_-]+):\s*("([^"]*)"|\S+)/gi)) options[m[1].toLowerCase()] = m[3] ?? m[2];
+      setText("");
+      requestAnimationFrame(resize);
+      try {
+        const res = await new ApiClient().post<{ data: { answered: boolean; message?: string } }>(`/api/communities/${emojiCommunity}/channels/${channel.slug}/interactions`, { botId: cmd.botId, command: cmd.name, options, text: rest });
+        onSent();
+        if (!res.data.answered && res.data.message) toast(res.data.message);
+      } catch (e) {
+        setText(body);
+        toast(errorMessage(e), "error");
+      }
+      return;
+    }
+    if (!confirmed && channel.canMassMention && extractMassMention(body) && (channel.audience ?? 0) > 10) {
+      setConfirmMass(true);
+      return;
+    }
     const images = attach.urls;
     const chosen = sticker;
     if ((!body && !images.length && !chosen) || !user || attach.uploading || slow.left > 0) return;
@@ -492,6 +577,26 @@ function Composer({
     );
   }
   if (!isMember) return <div className={cx(bar, "flex items-center justify-between gap-3")}>{gate}</div>;
+  if (channel.timedOutUntil && now && +new Date(channel.timedOutUntil) > +now) {
+    return (
+      <div className={cx(bar, "flex items-center gap-2 text-sm text-ink-muted")} role="status">
+        <Icon name="clock" size={15} />
+        You&apos;re timed out here until {formatTime(channel.timedOutUntil)}
+        {+new Date(channel.timedOutUntil) - +now > 20 * 3600_000 ? `, ${formatDateShort(channel.timedOutUntil)}` : ""}. You can still read.
+      </div>
+    );
+  }
+  if (channel.needsRules) {
+    return (
+      <div className={cx(bar, "flex flex-wrap items-center gap-3 text-sm text-ink-muted")} role="status">
+        <Icon name="info" size={15} />
+        <span className="flex-1">Accept the community&apos;s rules to start chatting.</span>
+        <Button size="sm" variant="primary" onClick={() => emitAppEvent("welcome")}>
+          Read the rules
+        </Button>
+      </div>
+    );
+  }
   if (!channel.canPost) {
     return (
       <div className={cx(bar, "flex items-center gap-2 text-sm text-ink-muted")}>
@@ -502,9 +607,20 @@ function Composer({
   }
 
   const open = !!mention && options.length > 0;
+  // the "/" menu: the community's bots' commands matching what's typed so far
+  const slashTyping = /^\/([a-z0-9_-]*)$/i.exec(text);
+  const slashOptions = slashTyping ? (commands.data ?? []).filter((c) => c.name.startsWith(slashTyping[1].toLowerCase())).slice(0, 8) : [];
   const left = LIMITS.messageBody - text.length;
   return (
     <>
+    <Modal open={confirmMass} onClose={() => setConfirmMass(false)} title={mass === "here" ? "Notify everyone online?" : "Notify everyone?"} description={`This will notify ${mass === "here" ? "everyone online among" : "all"} ${(channel.audience ?? 0).toLocaleString("en-NG")} people who can see #${channel.name}. Are you sure?`} size="sm">
+      <div className="flex justify-end gap-2">
+        <Button onClick={() => setConfirmMass(false)}>Cancel</Button>
+        <Button variant="primary" onClick={() => (setConfirmMass(false), void submit(true))}>
+          Send
+        </Button>
+      </div>
+    </Modal>
     {/* outside the form: the poll's own form must not sit inside this one */}
     {polling && (
       <PollComposer
@@ -530,6 +646,37 @@ function Composer({
     >
       {/* over the chat's bottom edge, so nothing moves when someone starts or stops typing */}
       {!open && <TypingLine names={typing.names} className="pointer-events-none absolute right-4 bottom-full left-4 bg-gradient-to-t from-canvas to-transparent pt-2 sm:right-6 sm:left-6" />}
+      {!open && slashOptions.length > 0 && (
+        <ul role="listbox" aria-label="Commands" className="absolute right-4 bottom-full left-4 z-20 mb-1 max-h-64 overflow-y-auto rounded-card border border-line bg-surface p-1.5 shadow-2xl sm:right-6 sm:left-6">
+          {slashOptions.map((c) => (
+            <li
+              key={`${c.botId}-${c.name}`}
+              role="option"
+              aria-selected={false}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                setText(`/${c.name} `);
+                area.current?.focus();
+              }}
+              className="flex cursor-pointer items-center gap-3 rounded-control px-2.5 py-2 hover:bg-raised"
+            >
+              <Avatar name={c.bot} src={c.avatarUrl} size={26} />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm">
+                  <span className="font-mono font-semibold">/{c.name}</span>
+                  {c.options.map((o) => (
+                    <span key={o.name} className="ml-1.5 font-mono text-[12px] text-ink-muted">
+                      {o.required ? `<${o.name}>` : `[${o.name}]`}
+                    </span>
+                  ))}
+                </span>
+                <span className="block truncate text-xs text-ink-muted">{c.description || c.bot}</span>
+              </span>
+              <span className="shrink-0 text-[11px] text-ink-muted">{c.bot}</span>
+            </li>
+          ))}
+        </ul>
+      )}
       {open && (
         <ul id="mention-list" role="listbox" aria-label="Tag someone" className="absolute right-4 bottom-full left-4 z-20 mb-1 max-h-64 overflow-y-auto rounded-card border border-line bg-surface p-1.5 shadow-2xl sm:right-6 sm:left-6">
           {options.map((o, i) => (
@@ -545,12 +692,27 @@ function Composer({
               onMouseEnter={() => setActive(i)}
               className={cx("flex cursor-pointer items-center gap-3 rounded-control px-2.5 py-2", i === active ? "bg-raised" : "")}
             >
-              <Avatar name={o.displayName} src={o.avatarUrl} frame={o.avatarFrame} size={28} />
-              <span className="min-w-0 flex-1 truncate text-sm font-semibold">{o.displayName}</span>
-              <span className="font-mono text-[11px] text-ink-muted">@{o.handle}</span>
+              {o.id.startsWith("@") ? (
+                <>
+                  <span className="inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-raised font-mono text-sm font-bold">@</span>
+                  <span className="min-w-0 flex-1 truncate text-sm font-semibold">@{o.handle}</span>
+                  <span className="truncate text-[11px] text-ink-muted">{o.displayName}</span>
+                </>
+              ) : (
+                <>
+                  <Avatar name={o.displayName} src={o.avatarUrl} frame={o.avatarFrame} size={28} />
+                  <span className="min-w-0 flex-1 truncate text-sm font-semibold">{o.displayName}</span>
+                  <span className="font-mono text-[11px] text-ink-muted">@{o.handle}</span>
+                </>
+              )}
             </li>
           ))}
         </ul>
+      )}
+      {mass && !channel.canMassMention && (
+        <p className="mb-1.5 flex items-center gap-1.5 px-1 text-[12px] text-ink-muted" aria-live="polite">
+          <Icon name="info" size={13} className="shrink-0" /> You don&apos;t have permission to mention everyone. It will send without notifying anyone.
+        </p>
       )}
       {slow.on && (
         <p className="mb-1.5 flex items-center gap-1.5 px-1 text-[12px] text-ink-muted" aria-live="polite">
@@ -642,6 +804,12 @@ function Composer({
           }}
           className="max-h-[180px] min-h-10 flex-1 resize-none bg-transparent px-2.5 py-2 text-[15px] leading-relaxed text-ink placeholder:text-ink-muted/70 focus:outline-none"
         />
+        <span className="relative">
+          <button type="button" onClick={() => setEmoji((o) => !o)} disabled={slow.left > 0} aria-label="Custom emoji" aria-expanded={emoji} title="Custom emoji" className="inline-flex size-10 shrink-0 items-center justify-center rounded-full text-ink-muted transition hover:bg-raised hover:text-ink disabled:opacity-40">
+            <Icon name="smile" size={20} />
+          </button>
+          {emoji && <EmojiPicker community={emojiCommunity} onPick={insertEmoji} onClose={() => setEmoji(false)} className="absolute right-0 bottom-full mb-2" />}
+        </span>
         <span className="relative">
           <button type="button" onClick={() => setStickers((o) => !o)} disabled={slow.left > 0} aria-label="Stickers" aria-expanded={stickers} title="Stickers" className="inline-flex size-10 shrink-0 items-center justify-center rounded-full text-ink-muted transition hover:bg-raised hover:text-ink disabled:opacity-40">
             <Icon name="sticker" size={20} />

@@ -37,36 +37,44 @@ import { DeviceSettings } from "@/components/domain/account/DeviceSettings";
 import { NotificationSettings } from "@/components/domain/account/NotificationSettings";
 import { ResendButton } from "@/components/domain/account/EmailStatus";
 import { StylePicker, themeOf, type StyleDraft } from "@/components/domain/account/StylePicker";
-import { HypeTab, UnlockDialog, styleAccess, useHypeWallet } from "@/components/domain/account/Points";
+import { UnlockDialog, styleAccess, useHypeWallet } from "@/components/domain/account/Points";
+import { PlanTab } from "@/components/domain/account/PlanTab";
+import { ProfileMediaEditor } from "@/components/domain/account/ProfileMediaEditor";
+import { FeedMedia } from "@/components/domain/feed/FeedMedia";
 import { AgeSettings } from "@/components/domain/account/AgeSettings";
 import type { StyleKey } from "@/lib/wallet";
 import { UserName } from "@/components/ui/UserName";
 import { ProfileBanner, monthYear } from "@/components/domain/profile/ProfileParts";
 import { Avatar } from "@/components/ui/Avatar";
 import { placeLabel, type Place } from "@/lib/places";
-import { DM_POLICIES, LIMITS, PROFILE_VISIBILITY, type DmPolicy, type InterestId, type ProfileVisibility } from "@/lib/constants";
+import { DM_POLICIES, LIMITS, PROFILE_DESIGNS_ENABLED, PROFILE_VISIBILITY, type DmPolicy, type InterestId, type ProfileVisibility } from "@/lib/constants";
 import { useApi } from "@/lib/hooks/useApi";
 import { MOODS, type MoodId } from "@/lib/moods";
 import type { UserMe } from "@/lib/types";
+import { useMediaViewer } from "@/components/providers/MediaViewerProvider";
+import { DevelopersTab } from "@/components/domain/account/DevelopersTab";
 
-type Tab = "account" | "profile" | "style" | "hype" | "privacy" | "blocked" | "notifications" | "appearance";
-const GROUPS: { title: string; items: { id: Tab; label: string; icon: "user" | "edit" | "asterisk" | "coin" | "shield" | "ban" | "sliders" | "bell" }[] }[] = [
+type Tab = "account" | "profile" | "gallery" | "style" | "plan" | "developers" | "privacy" | "blocked" | "notifications" | "appearance";
+const GROUPS: { title: string; items: { id: Tab; label: string; icon: "user" | "edit" | "image" | "asterisk" | "coin" | "code" | "shield" | "ban" | "sliders" | "bell" }[] }[] = [
   {
     title: "User settings",
     items: [
       { id: "account", label: "My Account", icon: "user" },
       { id: "profile", label: "Profile", icon: "edit" },
-      { id: "style", label: "Profile style", icon: "asterisk" },
-      { id: "hype", label: "Hype & points", icon: "coin" },
+      { id: "gallery", label: "Gallery", icon: "image" },
+      // profile designs are off for now (PROFILE_DESIGNS_ENABLED)
+      ...(PROFILE_DESIGNS_ENABLED ? [{ id: "style" as const, label: "Profile style", icon: "asterisk" as const }] : []),
+      { id: "plan", label: "Plan & points", icon: "coin" },
+      { id: "developers", label: "Developers", icon: "code" },
       { id: "privacy", label: "Privacy & Safety", icon: "shield" },
       { id: "blocked", label: "Blocked people", icon: "ban" },
     ],
   },
   { title: "App settings", items: [{ id: "notifications", label: "Notifications", icon: "bell" }, { id: "appearance", label: "Appearance", icon: "sliders" }] },
 ];
-const TITLES: Record<Tab, string> = { account: "My Account", profile: "Profile", style: "Profile style", hype: "Hype & points", privacy: "Privacy & Safety", blocked: "Blocked people", notifications: "Notifications", appearance: "Appearance" };
+const TITLES: Record<Tab, string> = { account: "My Account", profile: "Profile", gallery: "Gallery", style: "Profile style", plan: "Plan & points", developers: "Developers", privacy: "Privacy & Safety", blocked: "Blocked people", notifications: "Notifications", appearance: "Appearance" };
 /** old anchors (#messages, #safety, #mood…) still land somewhere sensible */
-const HASH: Record<string, Tab> = { account: "account", profile: "profile", style: "style", design: "style", hype: "hype", points: "hype", wallet: "hype", rank: "hype", privacy: "privacy", messages: "privacy", safety: "privacy", blocked: "blocked", blocks: "blocked", appearance: "appearance", mood: "appearance", notifications: "notifications" };
+const HASH: Record<string, Tab> = { account: "account", profile: "profile", gallery: "gallery", photos: "gallery", media: "gallery", ...(PROFILE_DESIGNS_ENABLED ? { style: "style" as const, design: "style" as const } : {}), plan: "plan", developers: "developers", bots: "developers", subscription: "plan", hype: "plan", points: "plan", wallet: "plan", rank: "plan", privacy: "privacy", messages: "privacy", safety: "privacy", blocked: "blocked", blocks: "blocked", appearance: "appearance", mood: "appearance", notifications: "notifications" };
 
 /** A titled block inside a tab: small caps heading, optional intro, then the content. */
 function Block({ title, intro, children }: { title: string; intro?: string; children: React.ReactNode }) {
@@ -105,9 +113,12 @@ function ProfileForm({ me, onDraft }: { me: UserMe; onDraft?: (d: ProfileDraft) 
   const [displayName, setDisplayName] = useState(me.displayName);
   const [bio, setBio] = useState(me.bio);
   const [pronouns, setPronouns] = useState(me.pronouns ?? "");
+  const [gender, setGender] = useState<UserMe["gender"]>(me.gender ?? "unspecified");
   const [place, setPlace] = useState<Place>({ country: me.country, region: me.region, city: me.city });
   const [neighborhood, setNeighborhood] = useState(me.neighborhood);
   const [avatarUrl, setAvatarUrl] = useState(me.avatarUrl ?? "");
+  // the banner lives in Profile style; while designs are off (PROFILE_DESIGNS_ENABLED) it's edited here
+  const [bannerUrl, setBannerUrl] = useState(me.bannerUrl ?? "");
   const [interests, setInterests] = useState<InterestId[]>(me.interests);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -135,9 +146,11 @@ function ProfileForm({ me, onDraft }: { me: UserMe; onDraft?: (d: ProfileDraft) 
         displayName: displayName.trim(),
         bio: bio.trim(),
         pronouns: pronouns.trim(),
+        gender,
         ...place,
         neighborhood,
         avatarUrl: avatarUrl.trim() || null,
+        ...(!PROFILE_DESIGNS_ENABLED && bannerUrl !== (me.bannerUrl ?? "") ? { bannerUrl: bannerUrl.trim() || null } : {}),
         ...(interestsChanged ? { interests } : {}),
       });
       setUser(res.data);
@@ -157,8 +170,21 @@ function ProfileForm({ me, onDraft }: { me: UserMe; onDraft?: (d: ProfileDraft) 
       <TextField label="Handle" value={`@${me.handle}`} readOnly hint="Your handle can't be changed." />
       <TextArea label="Bio" value={bio} onChange={(e) => setBio(e.target.value)} maxLength={LIMITS.bio} counter={LIMITS.bio} error={fieldErrors.bio} hint="A line or two about what you're into." />
       <TextField label="Pronouns (optional)" value={pronouns} onChange={(e) => setPronouns(e.target.value)} maxLength={LIMITS.pronouns} error={fieldErrors.pronouns} placeholder="e.g. she/her" hint="Shown after your name on your profile." />
+      <SelectField label="Gender (optional)" value={gender} onChange={(e) => setGender(e.target.value as UserMe["gender"])} hint="Never shown on your profile. Only used for kliques with gender rules (women only, men only, or set numbers of each).">
+        <option value="unspecified">Prefer not to say</option>
+        <option value="woman">Woman</option>
+        <option value="man">Man</option>
+      </SelectField>
       <PlaceFields value={place} onChange={(p) => { setPlace(p); }} neighborhood={neighborhood} onNeighborhood={setNeighborhood} errors={fieldErrors} />
       <ImageField kind="avatar" shape="round" label="Profile picture" value={avatarUrl} onChange={setAvatarUrl} error={fieldErrors.avatarUrl} fallback={<Avatar name={displayName || me.displayName} size={80} />} reposition={{ aspect: 1, round: true }} hint="After uploading, drag it to choose what shows in the circle. Leave empty to use your initials." />
+      {!PROFILE_DESIGNS_ENABLED && <ImageField kind="photo" label="Banner" value={bannerUrl} onChange={setBannerUrl} reposition={{ aspect: 4 }} hint="The wide picture across the top of your profile. Drag it to choose what shows." />}
+      <p className="text-[13px] text-ink-muted">
+        Photos and videos on your profile are in{" "}
+        <a href="/settings#gallery" className="font-medium text-accent-text underline">
+          Gallery
+        </a>
+        .
+      </p>
 
       <fieldset>
         <legend className="text-[13px] font-medium">
@@ -413,6 +439,7 @@ const aboutOf = (me: UserMe): ProfileDraft => ({ displayName: me.displayName, bi
 
 /** The little profile card beside the Profile and Profile style forms, updating as you edit. */
 function ProfilePreview({ me, draft }: { me: UserMe; draft: PreviewDraft }) {
+  const viewMedia = useMediaViewer();
   return (
     <aside aria-label="Preview" className="lg:sticky lg:top-14 lg:self-start">
       <p className="eyebrow mb-2">Preview</p>
@@ -426,6 +453,8 @@ function ProfilePreview({ me, draft }: { me: UserMe; draft: PreviewDraft }) {
           </span>
           <p className="mt-2 truncate text-lg font-semibold tracking-[-0.02em]"><UserName name={draft.displayName || me.displayName} effect={draft.nameEffect} /></p>
           <p className="font-mono text-xs text-ink-muted">@{me.handle}</p>
+          {/* your photos and videos, as they show on your profile card */}
+          {(me.media?.length ?? 0) > 0 && <FeedMedia media={me.media} className="mt-3 overflow-hidden rounded-card" openLabel="View bigger" zoomHint onOpen={(i) => viewMedia(me.media, i)} />}
           <div className="mt-3 space-y-2.5 rounded-control border border-line bg-raised/50 p-3 text-[13px]">
             {draft.bio && <p className="whitespace-pre-wrap">{draft.bio}</p>}
             <p className="inline-flex items-center gap-1 text-ink-muted"><Icon name="pin" size={12} /> {[draft.neighborhood, placeLabel(draft.place)].filter(Boolean).join(", ")}</p>
@@ -508,7 +537,7 @@ function StyleTab({ me, go }: { me: UserMe; go: (t: Tab) => void }) {
       <form onSubmit={save} className="space-y-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="max-w-md text-sm text-ink-muted">How you show up around klique. Your banner is free. {wallet?.allFree ? "As a site admin, every design is free for you." : <>Name effects, frames, themes, effects and animated pictures cost Hype{wallet ? ` and last ${wallet.config.unlockDays} days` : ""}.</>}</p>
-          <button type="button" onClick={() => go("hype")} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-line bg-surface px-3.5 text-[13px] font-semibold hover:bg-raised">
+          <button type="button" onClick={() => go("plan")} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-line bg-surface px-3.5 text-[13px] font-semibold hover:bg-raised">
             <Icon name="coin" size={15} /> <span className="font-mono">{(wallet?.balance ?? me.hype ?? 0).toLocaleString("en-NG")}</span> Hype
           </button>
         </div>
@@ -523,7 +552,7 @@ function StyleTab({ me, go }: { me: UserMe; go: (t: Tab) => void }) {
           onSave={saveDesign}
           onUnlockAll={unlockAll}
           balance={wallet?.allFree ? undefined : wallet?.balance}
-          onGetHype={() => go("hype")}
+          onGetHype={() => go("plan")}
         />
         {unlocking && (
           <UnlockDialog
@@ -532,7 +561,7 @@ function StyleTab({ me, go }: { me: UserMe; go: (t: Tab) => void }) {
             wallet={wallet}
             me={me}
             onClose={() => setUnlocking(null)}
-            onGetHype={() => go("hype")}
+            onGetHype={() => go("plan")}
             onDone={(w) => {
               setWallet(w);
               // back in the picker they came from, which saves it
@@ -698,17 +727,15 @@ export default function SettingsPage() {
             </div>
             {tab === "account" && <AccountTab me={user} go={select} onSignOut={out} onEverywhere={everywhere} busy={busy} />}
             {tab === "profile" && <ProfileTab me={user} />}
+            {tab === "gallery" && <ProfileMediaEditor me={user} />}
             {/* designs are the point here: they keep moving (globals.css kq-live) */}
-            {tab === "style" && (
+            {tab === "style" && PROFILE_DESIGNS_ENABLED && (
               <div className="kq-live">
                 <StyleTab me={user} go={select} />
               </div>
             )}
-            {tab === "hype" && (
-              <div className="kq-live">
-                <HypeTab me={user} onStyle={() => select("style")} />
-              </div>
-            )}
+            {tab === "plan" && <PlanTab />}
+            {tab === "developers" && <DevelopersTab />}
             {tab === "privacy" && (
               <div className="space-y-6">
                 <PrefsSections me={user} />

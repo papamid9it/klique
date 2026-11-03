@@ -7,6 +7,7 @@ import { notifyNow } from "./push.service";
 import { runCrewReminders } from "./crews.service";
 import { runAdLifecycle } from "./ad-campaigns.service";
 import { runStyleLifecycle } from "./wallet.service";
+import { runPlanLifecycle } from "./subscriptions.service";
 
 /**
  * "Starting soon" reminders to everyone going, on their phones (mobile app) and browsers (desktop and web app).
@@ -33,12 +34,16 @@ export async function runReminders(): Promise<{ events: number; notified: number
     );
     notified += going.length;
   }
-  // crews hear about an hour before their own meetup time
+  // kliques hear about an hour before their own meetup time
   notified += await runCrewReminders(now);
   // ads: "ends tomorrow" and "ended" (with results)
   notified += await runAdLifecycle(now);
   // Hype: styles from before unlocks existed, "ends in 3 days", auto-renew or take off
   notified += await runStyleLifecycle(now);
+  // Lite/Pro: plans that ran out go back to Free
+  notified += await runPlanLifecycle(now);
+  // threads nobody replied to (older than 10 minutes) go
+  await (await import("./channels.service")).sweepEmptyThreads().catch((e) => console.warn("[threads] sweep:", (e as Error).message));
   return { events: due.length, notified };
 }
 

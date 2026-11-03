@@ -6,6 +6,14 @@ const nextConfig: NextConfig = {
   // where uploaded pictures and videos are served from, for picking the right stored copy in the browser
   env: { NEXT_PUBLIC_MEDIA_URL: (process.env.R2_PUBLIC_URL ?? "").trim().replace(/\/$/, "") },
   partialPrefetching: true,
+  // crews became kliques (Nov 2026): old links keep working
+  async redirects() {
+    return [
+      { source: "/crews/:id", destination: "/kliques/:id", permanent: true },
+      { source: "/events/:id/crews", destination: "/events/:id/kliques", permanent: true },
+      { source: "/og/crew/:id", destination: "/og/klique/:id", permanent: true },
+    ];
+  },
   // Pictures that never change under the same name are cached for a year; the browser never re-asks.
   async headers() {
     return [

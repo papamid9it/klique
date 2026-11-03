@@ -1,5 +1,7 @@
 "use client";
 
+import { ProfileGallery } from "./AdminMediaRemove";
+import { PlanBadge } from "@/components/domain/account/PlanTab";
 import { ProfileEffect } from "@/components/ui/ProfileEffect";
 import { themeStyle } from "@/components/ui/profileTheme";
 import { useRouter } from "next/navigation";
@@ -69,7 +71,7 @@ export function ProfileCard({ handle, onClose, onExpand }: { handle: string; onC
           <PresenceDot presence={p.presence} self={view.isSelf} className="right-1.5 bottom-1.5 size-[18px]" />
         </button>
         <h2 className="mt-2 text-lg leading-tight font-semibold tracking-[-0.02em] break-words">
-          <UserName name={p.displayName} effect={p.nameEffect} />
+          <UserName name={p.displayName} effect={p.nameEffect} /> <PlanBadge plan={p.badge} size={17} className="ml-1" />
         </h2>
         <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[13px] text-ink-muted">
           <span className="font-mono text-xs">@{p.handle}</span>
@@ -77,6 +79,8 @@ export function ProfileCard({ handle, onClose, onExpand }: { handle: string; onC
           <PointsPill n={p.points} />
         </p>
         {view.visible && p.bio && <p className="mt-3 line-clamp-3 text-[13px] leading-relaxed whitespace-pre-wrap">{p.bio}</p>}
+        {/* their photos and videos: swipe through */}
+        {view.visible && p.media?.length > 0 && <div className="mt-3"><ProfileGallery userId={p.id} media={p.media} className="overflow-hidden rounded-card" /></div>}
         {!view.visible && <p className="mt-3 text-[13px] text-ink-muted">{view.hiddenReason === "members" ? "Only people who share a community with them can see more." : "This profile is private."}</p>}
 
         {view.isSelf ? <SelfActions view={view} onSaved={(presence) => setData((d) => (d ? { ...d, profile: { ...d.profile, presence } } : d))} onClose={onClose} /> : <OtherActions view={view} onFriendship={(friendship) => setData((d) => (d ? { ...d, friendship } : d))} onReload={() => void reload()} onClose={onClose} />}

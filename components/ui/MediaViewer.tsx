@@ -10,6 +10,8 @@ export interface ViewerItem {
   kind: "image" | "video";
   url: string;
   poster?: string | null;
+  /** the viewer's own upload: only then can they download it (or make it a sticker) */
+  mine?: boolean;
 }
 
 export interface ViewerAction {
@@ -20,8 +22,9 @@ export interface ViewerAction {
   onSelect: (item: ViewerItem) => void;
 }
 
-const MAX = 5;
-const DOUBLE = 2.5;
+/** zoom stays modest: up to 3x, and a double tap goes to 2x */
+const MAX = 3;
+const DOUBLE = 2;
 type T = { s: number; x: number; y: number };
 const ID: T = { s: 1, x: 0, y: 0 };
 
@@ -53,6 +56,9 @@ async function download(url: string) {
 /**
  * Fullscreen pictures and videos. Pinch, scroll or double-tap to zoom; drag to look around a zoomed picture;
  * swipe or use the arrows to move between the pictures of one post; swipe down or Esc to close.
+ * Other people's pictures and videos can't be downloaded from here (no Download button, no right-click menu, no
+ * dragging the picture out); your own uploads keep Download, except where the caller says not (galleries). It's a modal <dialog> of its own, so it opens on top of other modal dialogs (a profile pop-up, a
+ * post): the browser puts modal dialogs above everything else and makes the rest of the page unclickable.
  */
 export function MediaViewer({ items, start, onClose, actions }: { items: ViewerItem[]; start: number; onClose: () => void; actions?: (item: ViewerItem) => ViewerAction[] }) {
   const [i, setI] = useState(Math.min(Math.max(0, start), items.length - 1));
@@ -69,6 +75,13 @@ export function MediaViewer({ items, start, onClose, actions }: { items: ViewerI
     tRef.current = t;
   });
   const img = useRef<HTMLImageElement>(null);
+  const dialog = useRef<HTMLDialogElement>(null);
+  // open as a modal dialog (above any other open one), closed again when the viewer goes
+  useEffect(() => {
+    const d = dialog.current;
+    if (d && !d.open) d.showModal();
+    return () => d?.close();
+  }, []);
   const many = items.length > 1;
   const cur = items[i];
 
@@ -85,17 +98,22 @@ export function MediaViewer({ items, start, onClose, actions }: { items: ViewerI
   useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    // caught first (window, capture phase) so Esc closes only the viewer, not a pop-up underneath it
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-      else if (e.key === "ArrowRight") go(1);
+      if (e.key === "Escape") {
+        // stop it here: no other Esc handler, and no browser "close the top dialog" once this one is gone
+        e.stopPropagation();
+        e.preventDefault();
+        onClose();
+      } else if (e.key === "ArrowRight") go(1);
       else if (e.key === "ArrowLeft") go(-1);
       else if (e.key === "+" || e.key === "=") setT((p) => zoomAt(p, { x: 0, y: 0 }, Math.min(MAX, p.s * 1.4)));
       else if (e.key === "-") setT((p) => zoomAt(p, { x: 0, y: 0 }, Math.max(1, p.s / 1.4)));
     };
-    document.addEventListener("keydown", onKey);
+    window.addEventListener("keydown", onKey, true);
     return () => {
       document.body.style.overflow = prev;
-      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("keydown", onKey, true);
     };
   }, [onClose, go]);
 
@@ -200,11 +218,18 @@ export function MediaViewer({ items, start, onClose, actions }: { items: ViewerI
   }
 
   const fade = Math.max(0.35, 1 - drag.y / 400);
-  const extra = actions?.(cur) ?? [];
+  const extra = cur.mine ? (actions?.(cur) ?? []) : [];
   const btn = "inline-flex size-10 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur transition hover:bg-white/20";
 
   return createPortal(
-    <div role="dialog" aria-modal="true" aria-label={cur.kind === "video" ? "Video" : "Picture"} className="fixed inset-0 z-[400] flex flex-col text-white select-none" style={{ background: `rgba(0,0,0,${fade})` }}>
+    <dialog
+      ref={dialog}
+      aria-label={cur.kind === "video" ? "Video" : "Picture"}
+      // Esc is handled by the key listener (it also zooms back out first), not the dialog's own close
+      onCancel={(e) => e.preventDefault()}
+      className="m-0 h-dvh max-h-none w-dvw max-w-none overflow-hidden border-0 bg-transparent p-0 backdrop:bg-transparent"
+    >
+    <div onContextMenu={(e) => e.preventDefault()} onDragStart={(e) => e.preventDefault()} className="fixed inset-0 z-[400] flex flex-col text-white select-none" style={{ background: `rgba(0,0,0,${fade})` }}>
       <div className="relative z-10 flex items-center gap-2 px-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2">
         <span className="min-w-0 flex-1 font-mono text-[12px] text-white/70">{many ? `${i + 1} / ${items.length}` : ""}</span>
         {extra.map((a) => (
@@ -222,9 +247,11 @@ export function MediaViewer({ items, start, onClose, actions }: { items: ViewerI
             <Icon name="expand" size={17} />
           </button>
         )}
-        <button type="button" onClick={() => void download(cur.url)} aria-label="Download" title="Download" className={btn}>
-          <Icon name="download" size={18} />
-        </button>
+        {cur.mine && (
+          <button type="button" onClick={() => void download(cur.url)} aria-label="Download" title="Download" className={btn}>
+            <Icon name="download" size={18} />
+          </button>
+        )}
         <button type="button" onClick={onClose} aria-label="Close" title="Close (Esc)" className={btn}>
           <Icon name="x" size={18} />
         </button>
@@ -245,7 +272,7 @@ export function MediaViewer({ items, start, onClose, actions }: { items: ViewerI
         }}
       >
         {cur.kind === "video" ? (
-          <video key={cur.url} ref={video} src={videoSrc(cur.url)} poster={cur.poster ?? videoPoster(cur.url) ?? undefined} controls autoPlay playsInline className="absolute inset-0 m-auto max-h-full max-w-full" />
+          <video key={cur.url} ref={video} src={videoSrc(cur.url)} poster={cur.poster ?? videoPoster(cur.url) ?? undefined} controls autoPlay playsInline controlsList={cur.mine ? undefined : "nodownload"} disablePictureInPicture={!cur.mine} draggable={false} className="absolute inset-0 m-auto max-h-full max-w-full" />
         ) : (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -254,7 +281,7 @@ export function MediaViewer({ items, start, onClose, actions }: { items: ViewerI
             src={cdn(cur.url, { w: 1920, full: true })}
             alt=""
             draggable={false}
-            className="pointer-events-none absolute inset-0 m-auto max-h-full max-w-full object-contain will-change-transform"
+            className="pointer-events-none absolute inset-0 m-auto max-h-full max-w-full object-contain will-change-transform [-webkit-touch-callout:none]"
             style={{ transform: `translate(${t.x + drag.x}px, ${t.y + drag.y}px) scale(${t.s})`, transition: animate ? "transform 180ms ease-out" : undefined, cursor: t.s > 1 ? "grab" : "zoom-in" }}
           />
         )}
@@ -277,7 +304,8 @@ export function MediaViewer({ items, start, onClose, actions }: { items: ViewerI
           ))}
         </div>
       )}
-    </div>,
+    </div>
+    </dialog>,
     document.body,
   );
 }

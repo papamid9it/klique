@@ -4,9 +4,9 @@
  * need your decision. Ordinary chat never notifies; it shows as unread dots and counts instead.
  */
 export const NOTIFY_CATEGORIES = [
-  { id: "mentions", label: "Mentions and replies in chat", hint: "Someone @mentions you, or replies to one of your messages, in a channel or your crew's chat." },
+  { id: "mentions", label: "Mentions and replies in chat", hint: "Someone @mentions you, or replies to one of your messages, in a channel or your klique's chat." },
   { id: "replies", label: "Topic comments", hint: "New comments on your topics, and replies to your comments. Several on one topic arrive as one notification." },
-  { id: "crews", label: "Crews", hint: "New messages in your crew chats (one line per crew, and no buzz while you're reading), requests to join your crew, being let in or not, changes to the meetup, and a reminder an hour before you meet." },
+  { id: "crews", label: "Kliques", hint: "New messages in your klique chats (one line per klique, and no buzz while you're reading), requests to join your klique, being let in or not, changes to the meetup, and a reminder an hour before you meet." },
   { id: "admin", label: "Communities you run", hint: "People asking to join your private communities (one notification per community, however many ask). Site admins: ads waiting for review." },
   { id: "community", label: "Your communities", hint: "Your request to join was approved, you were added to a group, or made (or no longer) an admin." },
   { id: "events", label: "Events", hint: "New events in your communities and groups, events you're going to changing time or place, being cancelled or removed, and \"starting soon\"." },

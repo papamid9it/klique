@@ -59,6 +59,7 @@ export const profileUpdateSchema = z.object({
   displayName: text(LIMITS.displayName, 1).optional(),
   bio: optText(LIMITS.bio),
   pronouns: optText(LIMITS.pronouns),
+  gender: z.enum(["woman", "man", "unspecified"]).optional(),
   presence: z.enum(PRESENCES.map((p) => p.id) as [string, ...string[]]).optional(),
   ...placeOptional,
   neighborhood: optText(60),
@@ -126,6 +127,8 @@ export const communityUpdateSchema = z.object({
   minPointsJoin: minPoints,
   minPointsPost: minPoints,
   memberEvents: z.boolean().optional(),
+  /** members may use @everyone / @here (owners and admins always can) */
+  membersMassMention: z.boolean().optional(),
   coverImage: clearableUrl,
   adult: z.boolean().optional(),
   explicit: z.boolean().optional(),
@@ -156,6 +159,24 @@ export const groupAddableQuery = z.object({ q: z.string().trim().max(60).default
 export const joinSchema = z.object({
   message: optText(LIMITS.requestMessage),
   inviteCode: z.string().trim().max(64).optional(),
+  /** answers to the entry questions, by question id ("I agree" boxes: true) */
+  answers: z.record(z.string().max(20), z.union([z.string().trim().max(500), z.boolean()])).optional(),
+});
+
+/** a community's entry questions (owners and admins) */
+export const screeningSchema = z.object({
+  enabled: z.boolean(),
+  questions: z
+    .array(
+      z.object({
+        id: z.string().trim().regex(/^[a-z0-9]{1,20}$/),
+        kind: z.enum(["text", "choice", "agree"]),
+        prompt: z.string().trim().min(2, "Write the question").max(200),
+        options: z.array(z.string().trim().min(1).max(80)).max(8).default([]),
+        required: z.boolean().default(true),
+      }),
+    )
+    .max(5, "Up to 5 questions"),
 });
 
 export const roleSchema = z.object({ role: z.enum(["admin", "member"]) });
@@ -381,7 +402,7 @@ export const messageListQuery = z.object({
 /* -------------------------------- safety ---------------------------- */
 
 export const reportSchema = z.object({
-  targetType: z.enum(["user", "post", "event", "community", "subcommunity", "message", "channelMessage", "ad", "feedPost"]),
+  targetType: z.enum(["user", "post", "event", "community", "subcommunity", "message", "channelMessage", "ad", "feedPost", "klique"]),
   targetId: objectId,
   reason: z.enum(REPORT_REASONS.map((r) => r.id) as [string, ...string[]]),
   details: optText(LIMITS.reportDetails),
@@ -406,7 +427,11 @@ export const channelCreateSchema = z.object({
   memberIds: z.array(objectId).max(100).optional(),
 });
 
+/** a role's allow / deny on a channel or category (custom roles) */
+export const roleOverridesSchema = z.array(z.object({ roleId: z.string().regex(/^[a-f0-9]{24}$/i), view: z.enum(["allow", "deny"]).nullable(), post: z.enum(["allow", "deny"]).nullable() })).max(50);
+
 export const channelUpdateSchema = z.object({
+  overrides: roleOverridesSchema.optional(),
   name: channelName.optional(),
   topic: optText(200),
   type: z.enum(["text", "announcement", "voice"]).optional(),
@@ -427,6 +452,7 @@ export const memberSearchQuery = z.object({ q: z.preprocess(blankToUndef, z.stri
 export const unfurlQuery = z.object({ url: z.string().trim().max(2000) });
 
 export const categorySchema = z.object({ name: text(40, 2) });
+export const categoryUpdateSchema = z.object({ name: text(40, 2).optional(), overrides: roleOverridesSchema.optional() });
 
 export const chatBodySchema = chatPayload;
 export const pinSchema = z.object({ pinned: z.boolean() });
@@ -444,7 +470,7 @@ export const friendRespondSchema = z.object({ action: z.enum(["accept", "decline
 /* -------------------------------- uploads --------------------------- */
 
 export const uploadSignSchema = z.object({
-  kind: z.enum(["avatar", "photo", "video", "effect"]),
+  kind: z.enum(["avatar", "photo", "video", "effect", "emoji"]),
   files: z
     .array(z.object({ variant: z.enum(["main", "sm", "poster"]), type: z.string().max(40), size: z.number().int().min(1).max(200 * 1024 * 1024) }))
     .min(1)
@@ -479,7 +505,7 @@ export const adminCommunitiesQuery = pageQuery.extend({
   adult: z.enum(["1", "0"]).optional(),
 });
 /** Admin: take a community's 18+ or explicit flag off */
-export const adminCommunityFlagsSchema = z.object({ adult: z.literal(false).optional(), explicit: z.literal(false).optional(), note: z.string().trim().max(300).optional() });
+export const adminCommunityFlagsSchema = z.object({ adult: z.literal(false).optional(), explicit: z.literal(false).optional(), verified: z.boolean().optional(), note: z.string().trim().max(300).optional() });
 
 export const adminAuditQuery = pageQuery.extend({
   q: z.string().trim().max(100).default(""),
@@ -612,21 +638,76 @@ export const sidebarsQuery = z.object({
     .pipe(z.array(z.string()).min(1, "Pass at least one community").max(20)),
 });
 
-/* ------------------------------- crews ------------------------------ */
+/* ------------------------------ kliques ----------------------------- */
 
 const crewFields = {
+  title: text(120, 8),
+  interest: interestId,
+  coverImage: mediaUrl,
   area: text(40, 2),
   meetupPoint: text(120, 2),
   meetupAt: isoDate,
   note: text(300).default(""),
   joinMode: z.enum(["open", "approval"]).default("approval"),
-  maxMembers: z.number().int().min(2, "A crew is at least 2 people").max(100, "A crew can have up to 100 people").default(10),
+  maxMembers: z.number().int().min(2, "Leave at least 1 spot for someone else").max(100, "A klique can have up to 99 spots").default(10),
+  womenOnly: z.boolean().default(false),
+  /** who can join; mixed: so many spots for women, so many for men, the rest for anyone */
+  audience: z.enum(["everyone", "women", "men", "mixed"]).default("everyone"),
+  womenSpots: z.number().int().min(0).max(99).default(0),
+  menSpots: z.number().int().min(0).max(99).default(0),
 };
 
+/** an event's klique (the event is in the address) */
 export const crewCreateSchema = z.object(crewFields);
+/** a community's klique: which community, by slug */
+export const kliqueCreateSchema = z.object({ ...crewFields, community: z.string().trim().min(1).max(80) });
+
+/* ------------------------------- plans ------------------------------ */
+
+const perPlan = (min: number, max: number) => z.object({ free: z.number().int().min(min).max(max), lite: z.number().int().min(min).max(max), pro: z.number().int().min(min).max(max) }).partial();
+/** Admin → Plans: prices (naira a month) and limits; `join.pro: null` (or any null) is "no limit" */
+export const planConfigSchema = z.object({
+  prices: z.object({ lite: z.number().int().min(100).max(1_000_000), pro: z.number().int().min(100).max(1_000_000) }).partial().optional(),
+  create: perPlan(0, 1000).optional(),
+  join: z.object({ free: z.number().int().min(0).max(1000).nullable(), lite: z.number().int().min(0).max(1000).nullable(), pro: z.number().int().min(0).max(1000).nullable() }).partial().optional(),
+  mediaSlots: perPlan(0, 24).optional(),
+  communitiesCreate: perPlan(0, 10_000).optional(),
+  communitiesJoin: perPlan(0, 10_000).optional(),
+  groupsCreate: perPlan(0, 1000).optional(),
+  webhooks: perPlan(0, 50).optional(),
+  emojiSlots: perPlan(0, 500).optional(),
+});
+/** your profile photos and videos, in order (the plan decides how many: profile-media.service) */
+export const profileMediaSchema = z.object({ items: z.array(z.object({ kind: z.enum(["image", "video"]), url: mediaUrl, poster: z.union([mediaUrl, z.null()]).default(null) })).max(24, "Up to 24") });
+export const planCheckoutSchema = z.object({ plan: z.enum(["lite", "pro"]) });
+export const planVerifySchema = z.object({ reference: z.string().trim().regex(/^ksb_[a-f0-9]{18}$/) });
+/** Admin: give someone days of a plan */
+export const planGrantSchema = z.object({ who: z.string().trim().min(1).max(60), plan: z.enum(["lite", "pro"]), days: z.number().int().min(1).max(366) });
+
+/** /kliques and "Kliques for you": `when` is today, this weekend or the next 7 days */
+export const kliqueListQuery = z.object({
+  interest: z.preprocess(blankToUndef, interestId.optional()),
+  when: z.preprocess(blankToUndef, z.enum(["today", "weekend", "week"]).optional()),
+  q: z.preprocess(blankToUndef, z.string().trim().max(40).optional()),
+  /** one community's kliques (its own and its events'), by slug */
+  community: z.preprocess(blankToUndef, z.string().trim().max(80).optional()),
+  /** only kliques in communities you're in */
+  mine: z.preprocess((v) => v === "1" || v === "true" || v === true, z.boolean()).default(false),
+  /** a place (lib/places scope: "city:NG:lagos", "country:GH", "world"…); default: your country */
+  where: whereParam,
+  page: z.coerce.number().int().min(1).max(50).default(1),
+  limit: z.coerce.number().int().min(1).max(30).default(12),
+});
 
 export const crewUpdateSchema = z
   .object({
+    title: crewFields.title.optional(),
+    interest: interestId.optional(),
+    coverImage: mediaUrl.optional(),
+    womenOnly: z.boolean().optional(),
+    audience: z.enum(["everyone", "women", "men", "mixed"]).optional(),
+    womenSpots: z.number().int().min(0).max(99).optional(),
+    menSpots: z.number().int().min(0).max(99).optional(),
     area: crewFields.area.optional(),
     meetupPoint: crewFields.meetupPoint.optional(),
     meetupAt: isoDate.optional(),

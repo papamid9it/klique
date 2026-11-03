@@ -19,10 +19,10 @@ export interface PointsConfig {
 export const POINT_ACTIONS: { id: PointAction; label: string; hint: string }[] = [
   { id: "attend", label: "Came to an event", hint: "The host confirms you were there." },
   { id: "hostAttendee", label: "Someone came to your event", hint: "Per person the host confirms (up to 50 per event)." },
-  { id: "crew", label: "Went with a crew", hint: "You were in a crew of 2 or more for an event you were confirmed at." },
+  { id: "crew", label: "Went with a klique", hint: "You were in a klique of 2 or more for an event you were confirmed at." },
   { id: "postUpvote", label: "Upvote on your post", hint: "Someone else upvoted a post of yours (once per person per post)." },
   { id: "boardUpvote", label: "Upvote on your board post", hint: "Someone else upvoted a board post of yours (once per person per post)." },
-  { id: "reaction", label: "Good reaction to your message", hint: "Someone else reacted 👍 ❤️ 😂 😮 🥳 🔥 to your message in a community, group or crew chat. Not DMs." },
+  { id: "reaction", label: "Good reaction to your message", hint: "Someone else reacted 👍 ❤️ 😂 😮 🥳 🔥 to your message in a community, group or klique chat. Not DMs." },
 ];
 
 export const DEFAULT_POINTS_CONFIG: PointsConfig = {

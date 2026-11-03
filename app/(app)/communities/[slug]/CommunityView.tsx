@@ -55,20 +55,24 @@ import { mutateApi, useApi } from "@/lib/hooks/useApi";
 import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { softNavigate } from "@/lib/nav";
 import type { ChannelDTO, ChannelGroupDTO, ChannelsDTO, CommunityDTO, MyCommunityDTO } from "@/lib/types";
+import { CommunitySearchBox, CommunitySearchResults } from "@/components/domain/space/CommunitySearch";
+import { WelcomeModal } from "@/components/domain/space/Welcome";
+import { ThreadSide, ThreadsModal } from "@/components/domain/chat/Threads";
 
 const VIEWS: Record<WorkspaceView, { label: string; icon: IconName }> = {
   dashboard: { label: "Dashboard", icon: "sliders" },
   topics: { label: "Topics", icon: "topics" },
   posts: { label: "Posts", icon: "image" },
   events: { label: "Events", icon: "calendar" },
-  crews: { label: "Crews", icon: "pin" },
+  kliques: { label: "Kliques", icon: "pin" },
+  search: { label: "Search", icon: "search" },
   groups: { label: "Groups", icon: "folder" },
   members: { label: "Members", icon: "users" },
 };
 
 const GROUP_VIEWS: Record<Exclude<GroupView, "updates">, { label: string; icon: IconName }> = {
   events: { label: "Events", icon: "calendar" },
-  crews: { label: "Crews", icon: "pin" },
+  kliques: { label: "Kliques", icon: "pin" },
   members: { label: "Members", icon: "users" },
 };
 
@@ -94,6 +98,11 @@ function CommunityWorkspace({ slug }: { slug: string }) {
   const toast = useToast();
   const { user } = useAuth();
   const { data: c, loading, error, status, reload, setData } = useApi(() => CommunityService.get(slug), [slug, user?.id], { key: `community:${slug}` });
+  // the welcome screen: null = as the server says (once, for new members); the composer can open it again
+  const [welcomeOpen, setWelcomeOpen] = useState<boolean | null>(null);
+  // a channel's thread list (opened from its header)
+  const [threadsOf, setThreadsOf] = useState<{ slug: string; name: string } | null>(null);
+  useAppEvent("welcome", () => setWelcomeOpen(true));
   // the tab title follows along when the community changed without a page load
   const communityName = c?.name;
   useEffect(() => {
@@ -116,7 +125,8 @@ function CommunityWorkspace({ slug }: { slug: string }) {
   // crews you're in for this community's events: listed on the left, one tap from their chat
   const myCrews = useApi(canUse && user ? () => CrewService.mineIn(slug) : null, [slug, user?.id, canUse], { key: `my-crews:${slug}` });
   const reloadCrews = myCrews.reload;
-  const crewOpen = sp.get("crew");
+  // ?klique=<id> (old links: ?crew=<id>)
+  const crewOpen = sp.get("klique") ?? sp.get("crew");
   const [deletingGroup, setDeletingGroup] = useState(false);
 
   const wide = useMediaQuery("(min-width: 80rem)");
@@ -164,7 +174,8 @@ function CommunityWorkspace({ slug }: { slug: string }) {
   const groupList = useMemo(() => (groupChannels.data ? [...groupChannels.data.channels] : []), [groupChannels.data]);
   const pool = gSlug ? groupList : ordered;
 
-  const requestedView = sp.get("view");
+  // ?view=crews is the old name of ?view=kliques
+  const requestedView = sp.get("view") === "crews" ? "kliques" : sp.get("view");
   const viewTable: Record<string, { label: string; icon: IconName }> = gSlug ? GROUP_VIEWS : VIEWS;
   const view = (
     requestedView && requestedView in viewTable &&
@@ -294,7 +305,8 @@ function CommunityWorkspace({ slug }: { slug: string }) {
 
   // Settings are a full-screen layer over the workspace: ?settings=<tab> (old ?view=manage links open it too).
   const settingsReq = sp.get("settings") ?? (sp.get("view") === "manage" ? "overview" : null);
-  const canSettings = gSlug ? !!g?.viewer.canManage : c.viewer.canManage;
+  // owners and admins, and anyone whose roles give them moderation tools (they see just those tabs)
+  const canSettings = gSlug ? !!g?.viewer.canManage : c.viewer.canManage || (c.viewer.perms ?? []).some((p) => ["kick", "ban", "timeout", "manageRoles", "viewModLog", "manageWebhooks", "manageEmoji"].includes(p));
   const setSettings = (tab: string | null) => {
     const q = new URLSearchParams(sp.toString());
     if (q.get("view") === "manage") q.delete("view");
@@ -350,18 +362,28 @@ function CommunityWorkspace({ slug }: { slug: string }) {
     q.delete("t");
     softNavigate(`/communities/${slug}?${q.toString()}`);
   };
+  // ?th=<thread slug>: a thread open in the side panel (community channels)
+  const threadSlug = !view && !g ? sp.get("th") : null;
+  const openThread = (s: string | null) => {
+    const q = new URLSearchParams(sp.toString());
+    if (s) q.set("th", s);
+    else q.delete("th");
+    softNavigate(`/communities/${slug}?${q.toString()}`);
+  };
   const voiceChannel = !view && activeChannel?.type === "voice" ? activeChannel : null;
   // the right panel only opens for what you're looking at: a topic's comments or a call's roster
   // on a wide screen a board with no topic open gets its sidebar (trending, rules, contributors, events)
   const boardSide = view === "topics" && !g && !threadId && activeBoard ? activeBoard : null;
   // Posts gets one too (about the community, top posters, events)
   const postsSide = view === "posts" && !g && !!c && (c.feedPolicy ?? "off") !== "off";
-  const sideKind = threadId ? "comments" : voiceChannel ? "voice" : boardSide ? "board" : postsSide ? "posts" : null;
+  const sideKind = threadId ? "comments" : threadSlug ? "thread" : voiceChannel ? "voice" : boardSide ? "board" : postsSide ? "posts" : null;
   // the wide-screen-only panels: no header button, no slide-over on narrow screens
   const panelOnly = sideKind === "board" || sideKind === "posts";
   const side = (onNavigate?: () => void) =>
     sideKind === "comments" ? (
       <TopicSide onClose={closeTopic} bare={!!onNavigate} />
+    ) : sideKind === "thread" && threadSlug ? (
+      <ThreadSide key={threadSlug} slug={slug} threadSlug={threadSlug} isMember={member} gate={<JoinButton size="md" community={c} onChange={(next) => joined(next as CommunityDTO)} />} onClose={() => openThread(null)} />
     ) : sideKind === "voice" && voiceChannel ? (
       <VoiceSide channel={voiceChannel} communityName={g ? g.name : c.name} snapshot={voice} />
     ) : sideKind === "board" && boardSide ? (
@@ -369,11 +391,11 @@ function CommunityWorkspace({ slug }: { slug: string }) {
     ) : sideKind === "posts" && c ? (
       <PostsSidebar c={c} onCommunity={(next) => setData({ ...c, ...next })} />
     ) : null;
-  const sideLabel = sideKind === "comments" ? "Post" : sideKind === "board" ? "About this board" : sideKind === "posts" ? `About ${c?.name ?? "this community"}` : "Voice info";
+  const sideLabel = sideKind === "comments" ? "Post" : sideKind === "thread" ? "Thread" : sideKind === "board" ? "About this board" : sideKind === "posts" ? `About ${c?.name ?? "this community"}` : "Voice info";
   const closeAbout = () => setAboutOpen(false);
 
   const headerIcon: IconName = crewOpen ? "pin" : view ? viewTable[view].icon : activeChannel?.type === "announcement" ? "megaphone" : activeChannel?.type === "voice" ? "mic" : "hash";
-  const headerTitle = crewOpen ? "Crew" : view === "topics" && !g && activeBoard ? activeBoard.name : view ? viewTable[view].label : (activeChannel?.name ?? "Channels");
+  const headerTitle = crewOpen ? "Klique" : view === "topics" && !g && activeBoard ? activeBoard.name : view ? viewTable[view].label : (activeChannel?.name ?? "Channels");
   const headerPrefix = g ? `${g.name} · ` : `${c.name} · `;
   // the community's owner (or a site admin) can look into any group; to chat they add themselves first
   const groupGate = !g || g.viewer.isMember ? null : g.viewer.canManage ? (
@@ -457,9 +479,20 @@ function CommunityWorkspace({ slug }: { slug: string }) {
               {slowModeLabel(activeChannel.slowModeSec)}
             </span>
           )}
+          {/* search the community (Discord style): ?view=search&q=… */}
+          {!g && c && member && (
+            <span className="hidden sm:block">
+              <CommunitySearchBox slug={slug} channels={(channels.data?.channels ?? []).map((x) => ({ slug: x.slug, name: x.name }))} initial={view === "search" ? (sp.get("q") ?? "") : ""} />
+            </span>
+          )}
+          {!view && !g && activeChannel && activeChannel.type !== "voice" && (
+            <button type="button" onClick={() => setThreadsOf({ slug: activeChannel.slug, name: activeChannel.name })} aria-label="Threads" title="Threads" className="inline-flex size-10 shrink-0 items-center justify-center rounded-full text-ink hover:bg-raised">
+              <Icon name="message" size={19} />
+            </button>
+          )}
           {sideKind && !panelOnly && (
             <button type="button" onClick={() => setRightOpen(true)} aria-label={sideLabel} className="inline-flex size-10 shrink-0 items-center justify-center rounded-full text-ink hover:bg-raised xl:hidden">
-              <Icon name={sideKind === "comments" ? "message" : "mic"} size={19} />
+              <Icon name={sideKind === "comments" || sideKind === "thread" ? "message" : "mic"} size={19} />
             </button>
           )}
         </header>
@@ -469,9 +502,16 @@ function CommunityWorkspace({ slug }: { slug: string }) {
           gp
         ) : crewOpen ? (
           <CrewView key={crewOpen} id={crewOpen} tab={sp.get("tab")} embedded onMenu={() => setLeftOpen(true)} onChanged={() => void reloadCrews()} onRead={() => markCrewReadLocally(crewOpen)} />
-        ) : view === "crews" ? (
+        ) : view === "search" && !g ? (
+          <Scroll inner>
+            <div className="mb-3 sm:hidden">
+              <CommunitySearchBox slug={slug} channels={(channels.data?.channels ?? []).map((x) => ({ slug: x.slug, name: x.name }))} initial={sp.get("q") ?? ""} />
+            </div>
+            <CommunitySearchResults slug={slug} q={sp.get("q") ?? ""} />
+          </Scroll>
+        ) : view === "kliques" ? (
           <Scroll inner wide>
-            <CrewsBoard slug={slug} sub={gSlug} eventId={sp.get("e")} onChanged={() => void reloadCrews()} />
+            <CrewsBoard slug={slug} sub={gSlug} eventId={sp.get("e")} community={{ slug, name: c?.name ?? "", interest: c?.interest ?? "" }} onChanged={() => void reloadCrews()} />
           </Scroll>
         ) : view === "events" ? (
           <Scroll inner full>
@@ -536,6 +576,9 @@ function CommunityWorkspace({ slug }: { slug: string }) {
             isMember={g ? g.viewer.isMember : member}
             gate={g ? groupGate : <JoinButton size="md" community={c} onChange={(next) => joined(next as CommunityDTO)} />}
             onRead={() => markReadLocally(activeChannel.slug)}
+            // ?m=<message id>: jump to it (from search)
+            focus={sp.get("m")}
+            onOpenThread={g ? undefined : (s) => openThread(s)}
           />
         ) : (
           <Scroll inner>
@@ -557,7 +600,7 @@ function CommunityWorkspace({ slug }: { slug: string }) {
       </section>
 
       {sideKind && (
-        <aside className={cx("hidden shrink-0 border-l border-line xl:block", sideKind === "comments" ? "w-[30rem] overflow-hidden 2xl:w-[34rem]" : panelOnly ? "w-[22rem] overflow-hidden 2xl:w-[24rem]" : "w-[24rem] overflow-hidden")} aria-label={sideLabel}>
+        <aside className={cx("hidden shrink-0 border-l border-line xl:block", sideKind === "comments" || sideKind === "thread" ? "w-[30rem] overflow-hidden 2xl:w-[34rem]" : panelOnly ? "w-[22rem] overflow-hidden 2xl:w-[24rem]" : "w-[24rem] overflow-hidden")} aria-label={sideLabel}>
           {side()}
         </aside>
       )}
@@ -585,12 +628,37 @@ function CommunityWorkspace({ slug }: { slug: string }) {
         />
       ) : null)}
 
+      {threadsOf && (
+        <ThreadsModal
+          slug={slug}
+          channel={threadsOf}
+          onClose={() => setThreadsOf(null)}
+          onOpen={(s) => {
+            setThreadsOf(null);
+            openThread(s);
+          }}
+        />
+      )}
+      {/* the welcome screen: once for new members (or when they open it to accept the rules) */}
+      {c && (welcomeOpen ?? !!c.viewer.welcomePending) && !settingsReq && (
+        <WelcomeModal
+          slug={c.slug}
+          name={c.name}
+          onClose={() => setWelcomeOpen(false)}
+          onDone={async () => {
+            setWelcomeOpen(false);
+            await reload();
+            await reloadChannels();
+          }}
+        />
+      )}
+
       <SlideOver open={leftOpen} onClose={closeLeft} side="left" title="Channels">
         {list(closeLeft)}
       </SlideOver>
       {/* below xl the right panel is a drawer; an open topic opens it by itself, and closing it closes the topic */}
-      <SlideOver open={(rightOpen && !!sideKind && !panelOnly) || (sideKind === "comments" && !wide)} onClose={sideKind === "comments" ? () => (setRightOpen(false), closeTopic()) : closeRight} side="right" title={sideLabel} wide={sideKind === "comments"}>
-        {side(sideKind === "comments" ? () => (setRightOpen(false), closeTopic()) : closeRight)}
+      <SlideOver open={(rightOpen && !!sideKind && !panelOnly) || ((sideKind === "comments" || sideKind === "thread") && !wide)} onClose={sideKind === "comments" ? () => (setRightOpen(false), closeTopic()) : sideKind === "thread" ? () => (setRightOpen(false), openThread(null)) : closeRight} side="right" title={sideLabel} wide={sideKind === "comments" || sideKind === "thread"}>
+        {side(sideKind === "comments" ? () => (setRightOpen(false), closeTopic()) : sideKind === "thread" ? () => (setRightOpen(false), openThread(null)) : closeRight)}
       </SlideOver>
 
       {/* About (from the community or group name menu): what it is, who runs it, what's coming up, share */}

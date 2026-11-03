@@ -2,10 +2,12 @@ import { Schema, model, models, type Model, type Types } from "mongoose";
 import { defineModel } from "./define";
 
 /**
- * A crew: a few people going to the same event together ("from Yaba, meeting at the bus stop at 3").
- * Everything about a crew (the crew, its members, its chat) carries `expiresAt` = a day after the event ends,
- * and MongoDB deletes it then by itself (TTL indexes). Each account may start ONE crew per event, and be in one
- * crew per event at a time (as host, member, or with a request waiting).
+ * A klique (called a "crew" before Nov 2026; the collections keep that name): a small plan to do something
+ * together, written as a hook ("Who wants to watch Dune at Filmhouse Lekki on Saturday?"). It belongs to an
+ * event (going to it together) or to a community (anything its members want to do). Everything about a klique
+ * (the klique, its members, its chat) carries `expiresAt` = a day after it happens, and MongoDB deletes it then
+ * by itself (TTL indexes). For an event, each account may start ONE klique and be in one at a time (as host,
+ * member, or with a request waiting); how many kliques someone may start or be in overall is a plan limit.
  */
 
 export const CREW_MAX_MEMBERS = 100;
@@ -13,8 +15,26 @@ export type CrewJoinMode = "open" | "approval";
 
 export interface ICrew {
   _id: Types.ObjectId;
-  eventId: Types.ObjectId;
+  /** going to this event together; null for a community klique */
+  eventId: Types.ObjectId | null;
   hostId: Types.ObjectId;
+  /** the hook line, e.g. "Who wants to watch Dune at Filmhouse Lekki on Saturday?" */
+  title: string;
+  /** what it's about (a category id), so it reaches people into that */
+  interest: string;
+  coverImage: string | null;
+  /** only profiles set to "woman" can join (only offered to hosts set to "woman"); kept in step with `audience` */
+  womenOnly: boolean;
+  /**
+   * Who can join: everyone; women only (offered to hosts set to woman); men only (to hosts set to man); or mixed, with
+   * `womenSpots` for women and `menSpots` for men and the rest of the spots open to anyone.
+   */
+  audience?: "everyone" | "women" | "men" | "mixed";
+  womenSpots?: number;
+  menSpots?: number;
+  /** where it happens, for "Kliques for you" (copied from the event, else the community) */
+  country: string;
+  city: string;
   /** where they're coming from, e.g. "Yaba" */
   area: string;
   /** exact place to meet: only members see it */
@@ -37,8 +57,17 @@ export interface ICrew {
 
 const CrewSchema = new Schema<ICrew>(
   {
-    eventId: { type: Schema.Types.ObjectId, ref: "Event", required: true },
+    eventId: { type: Schema.Types.ObjectId, ref: "Event", default: null },
     hostId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    title: { type: String, required: true, trim: true, maxlength: 120 },
+    interest: { type: String, required: true },
+    coverImage: { type: String, default: null },
+    womenOnly: { type: Boolean, default: false },
+    audience: { type: String, enum: ["everyone", "women", "men", "mixed"], default: "everyone" },
+    womenSpots: { type: Number, default: 0, min: 0, max: 99 },
+    menSpots: { type: Number, default: 0, min: 0, max: 99 },
+    country: { type: String, default: "NG" },
+    city: { type: String, default: "" },
     area: { type: String, required: true, trim: true, maxlength: 40 },
     meetupPoint: { type: String, required: true, trim: true, maxlength: 120 },
     meetupAt: { type: Date, required: true },
@@ -54,22 +83,28 @@ const CrewSchema = new Schema<ICrew>(
   { timestamps: true },
 );
 
-// one crew per person per event
-CrewSchema.index({ eventId: 1, hostId: 1 }, { unique: true });
+// one klique per person per event (community kliques have no event)
+CrewSchema.index({ eventId: 1, hostId: 1 }, { unique: true, name: "event_host_unique", partialFilterExpression: { eventId: { $type: "objectId" } } });
 CrewSchema.index({ eventId: 1, createdAt: 1 });
+CrewSchema.index({ communityId: 1, meetupAt: 1 });
+// "Kliques for you" and /kliques: upcoming ones in a place
+CrewSchema.index({ country: 1, city: 1, meetupAt: 1 });
+CrewSchema.index({ hostId: 1, createdAt: -1 });
 CrewSchema.index({ meetupAt: 1, reminderSentAt: 1 });
 CrewSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
-export const Crew: Model<ICrew> = (models.Crew as Model<ICrew>) || model<ICrew>("Crew", CrewSchema);
+export const Crew: Model<ICrew> = defineModel<ICrew>("Crew", CrewSchema);
 
 export interface ICrewMember {
   _id: Types.ObjectId;
   crewId: Types.ObjectId;
-  /** lets the database refuse a second crew for the same event */
-  eventId: Types.ObjectId;
+  /** lets the database refuse a second klique for the same event (null for a community klique) */
+  eventId: Types.ObjectId | null;
   userId: Types.ObjectId;
   role: "host" | "member";
   status: "active" | "pending";
+  /** in a mixed klique, the spot they took: a women's, a men's, or an anyone spot (set when they're let in) */
+  slot?: "woman" | "man" | "any" | null;
   /** what they said when asking to join */
   message: string;
   expiresAt: Date;
@@ -79,23 +114,25 @@ export interface ICrewMember {
 const CrewMemberSchema = new Schema<ICrewMember>(
   {
     crewId: { type: Schema.Types.ObjectId, ref: "Crew", required: true },
-    eventId: { type: Schema.Types.ObjectId, ref: "Event", required: true },
+    eventId: { type: Schema.Types.ObjectId, ref: "Event", default: null },
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     role: { type: String, enum: ["host", "member"], default: "member" },
     status: { type: String, enum: ["active", "pending"], default: "active" },
+    slot: { type: String, enum: ["woman", "man", "any", null], default: null },
     message: { type: String, default: "", maxlength: 200 },
     expiresAt: { type: Date, required: true },
   },
   { timestamps: { createdAt: true, updatedAt: false } },
 );
 
-// one crew per person per event (hosting, in, or asked to join)
-CrewMemberSchema.index({ eventId: 1, userId: 1 }, { unique: true });
+// one klique per person per event (hosting, in, or asked to join), and one row per person per klique
+CrewMemberSchema.index({ eventId: 1, userId: 1 }, { unique: true, name: "event_user_unique", partialFilterExpression: { eventId: { $type: "objectId" } } });
+CrewMemberSchema.index({ crewId: 1, userId: 1 }, { unique: true });
 CrewMemberSchema.index({ crewId: 1, status: 1, createdAt: 1 });
 CrewMemberSchema.index({ userId: 1 });
 CrewMemberSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
-export const CrewMember: Model<ICrewMember> = (models.CrewMember as Model<ICrewMember>) || model<ICrewMember>("CrewMember", CrewMemberSchema);
+export const CrewMember: Model<ICrewMember> = defineModel<ICrewMember>("CrewMember", CrewMemberSchema);
 
 export interface ICrewMessage {
   _id: Types.ObjectId;

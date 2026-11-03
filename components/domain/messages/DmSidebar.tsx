@@ -13,7 +13,11 @@ import { ConversationListSkeleton, Skeleton } from "@/components/ui/Skeleton";
 import { cx } from "@/components/ui/cx";
 import { relativeStamp } from "@/lib/format";
 import { useRealtime, useRealtimeEvent } from "@/components/providers/RealtimeProvider";
-import { useApi, useNow } from "@/lib/hooks/useApi";
+import { useApi, useDebounced, useNow } from "@/lib/hooks/useApi";
+import ApiClient from "@/app/ApiCore";
+import type { Envelope, SearchHitDTO } from "@/lib/types";
+
+const api = new ApiClient();
 import { stickerOf } from "@/lib/reactions";
 import { UserName } from "@/components/ui/UserName";
 
@@ -25,9 +29,15 @@ export function DmSidebar({ onNavigate }: { onNavigate?: () => void }) {
   const router = useRouter();
   const now = useNow();
   const [q, setQ] = useState("");
+  // the same box searches what's been said (text plus from:@user, has:image|link, before:/after:)
+  const dq = useDebounced(q.trim());
+  const found = useApi(authed && dq.length >= 2 ? () => api.get<Envelope<{ hits: SearchHitDTO[] }>>(`/api/conversations/search?q=${encodeURIComponent(dq)}`) : null, [authed, dq], { key: `dm-search:${dq}` });
   const { connected } = useRealtime();
   const inbox = useApi(authed ? () => MessageService.inbox() : null, [authed], { key: "dm-inbox" });
   const summary = useApi(authed ? () => FriendService.summary() : null, [authed], { key: "friends-summary" });
+  // message requests: a small count, not the red badge
+  const requests = useApi(authed ? () => MessageService.requests() : null, [authed], { key: "dm-requests" });
+  useRealtimeEvent(() => void requests.reload(), { filter: (e) => e.type === "dm", debounceMs: 600 });
   // a friend request or an accept: the counts update by themselves
   useRealtimeEvent(() => void summary.reload(), { filter: (e) => e.type === "notify" && e.category === "friends", debounceMs: 400 });
 
@@ -61,9 +71,10 @@ export function DmSidebar({ onNavigate }: { onNavigate?: () => void }) {
   }, [inbox.data, q]);
 
   const incoming = summary.data?.incoming ?? 0;
-  const nav: { href: string; label: string; icon: IconName; active: boolean; badge?: number }[] = [
+  const nav: { href: string; label: string; icon: IconName; active: boolean; badge?: number; count?: number }[] = [
     { href: "/messages/friends", label: "Friends", icon: "users", active: onFriends && tab !== "pending" && tab !== "add" },
     { href: "/messages/friends?tab=pending", label: "Friend requests", icon: "userplus", active: onFriends && tab === "pending", badge: incoming },
+    { href: "/messages/requests", label: "Message requests", icon: "message", active: pathname.startsWith("/messages/requests"), count: requests.data?.length ?? 0 },
   ];
 
   if (status === "loading") {
@@ -104,7 +115,7 @@ export function DmSidebar({ onNavigate }: { onNavigate?: () => void }) {
             onKeyDown={(e) => {
               if (e.key === "Enter" && q.trim() && !rows.length) router.push(`/search?q=${encodeURIComponent(q.trim())}`);
             }}
-            placeholder="Find or start a conversation"
+            placeholder="Find a chat or search messages"
             className="min-w-0 flex-1 bg-transparent text-[13px] text-ink placeholder:text-ink-muted/80 focus:outline-none"
           />
         </div>
@@ -117,6 +128,7 @@ export function DmSidebar({ onNavigate }: { onNavigate?: () => void }) {
               <Link href={n.href} onClick={onNavigate} aria-current={n.active ? "page" : undefined} className={cx("flex h-10 items-center gap-3 rounded-control px-2.5 text-[14px] font-medium transition", n.active ? "bg-raised text-ink" : "text-ink-muted hover:bg-raised/60 hover:text-ink")}>
                 <Icon name={n.icon} size={18} />
                 {n.label}
+                {!!n.count && <span className="ml-auto font-mono text-[11px] text-ink-muted">{n.count > 99 ? "99+" : n.count}</span>}
                 {!!n.badge && (
                   <span className="ml-auto inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-danger px-1.5 text-[11px] leading-none font-bold text-white" aria-label={`${n.badge} waiting`}>
                     {n.badge > 99 ? "99+" : n.badge}
@@ -154,7 +166,7 @@ export function DmSidebar({ onNavigate }: { onNavigate?: () => void }) {
               const unread = c.unreadCount > 0;
               const active = c.id === activeId;
               const sticker = c.lastMessage?.sticker ? stickerOf(c.lastMessage.sticker) : null;
-              const preview = c.lastMessage ? `${c.lastMessage.mine ? "You: " : ""}${sticker ? `${sticker.emoji} Sticker` : c.lastMessage.body}` : "No messages yet";
+              const preview = c.request?.fromMe ? "Request sent · waiting for them to accept" : c.lastMessage ? `${c.lastMessage.mine ? "You: " : ""}${sticker ? `${sticker.emoji} Sticker` : c.lastMessage.body}` : "No messages yet";
               return (
                 <li key={c.id}>
                   <Link href={`/messages/${c.id}`} onClick={onNavigate} aria-current={active ? "page" : undefined} className={cx("flex items-center gap-3 rounded-control px-2.5 py-1.5 transition", active ? "bg-raised" : "hover:bg-raised/60")}>
@@ -178,6 +190,34 @@ export function DmSidebar({ onNavigate }: { onNavigate?: () => void }) {
               );
             })}
           </ul>
+        )}
+
+        {dq.length >= 2 && (
+          <section aria-label="Messages found" className="mt-4">
+            <h2 className="mb-1 px-2.5 text-[11px] font-bold tracking-[0.08em] text-ink-muted uppercase">In your messages</h2>
+            {found.loading && !found.data ? (
+              <Skeleton className="mx-2.5 h-10" />
+            ) : !found.data?.hits.length ? (
+              <p className="px-2.5 py-2 text-[13px] text-ink-muted">Nothing found. Try from:@name, has:image, has:link or before:2026-10-01.</p>
+            ) : (
+              <ul className="space-y-0.5">
+                {found.data.hits.map((h) => (
+                  <li key={h.id}>
+                    <Link href={h.href} onClick={onNavigate} className="block rounded-control px-2.5 py-1.5 hover:bg-raised/60">
+                      <span className="flex items-center gap-2 text-[12px]">
+                        <span className="truncate font-semibold text-ink">{h.title}</span>
+                        <span className="ml-auto shrink-0 font-mono text-[10px] text-ink-muted">{now ? relativeStamp(h.at, now) : ""}</span>
+                      </span>
+                      <span className="line-clamp-2 text-[12px] text-ink-muted">
+                        {h.author ? `${h.author.displayName}: ` : ""}
+                        {h.snippet}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
         )}
       </div>
     </nav>

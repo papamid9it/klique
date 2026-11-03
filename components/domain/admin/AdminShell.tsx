@@ -1,8 +1,9 @@
 "use client";
 
+import { PROFILE_DESIGNS_ENABLED } from "@/lib/constants";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { AdminService } from "@/app/services/AdminService";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { Avatar } from "@/components/ui/Avatar";
@@ -40,8 +41,10 @@ const MENU: { title: string | null; items: Item[] }[] = [
     title: "Revenue",
     items: [
       { href: "/admin/ads", label: "Ads", icon: "megaphone", count: (s) => s.pendingAds },
+      { href: "/admin/plans", label: "Plans", icon: "ticket" },
       { href: "/admin/points", label: "Points", icon: "coin" },
-      { href: "/admin/effects", label: "Profile effects", icon: "asterisk" },
+      // profile designs are off for now (lib/constants PROFILE_DESIGNS_ENABLED)
+      ...(PROFILE_DESIGNS_ENABLED ? [{ href: "/admin/effects", label: "Profile effects", icon: "asterisk" as const }] : []),
       { href: "/admin/payouts", label: "Payouts", icon: "ticket", count: (s) => s.pendingPayouts },
     ],
   },
@@ -172,8 +175,57 @@ function Console({ children }: { children: ReactNode }) {
  */
 export function AdminShell({ children }: { children: ReactNode }) {
   const { status, user } = useAuth();
+  const phone = usePhoneWidth();
+  const [anyway, setAnyway] = useState(() => {
+    try {
+      return sessionStorage.getItem("klique:admin-on-phone") === "1";
+    } catch {
+      return false;
+    }
+  });
+  // a phone: the console is built for a computer, so ask first (once per visit)
+  if (status === "authed" && user?.isAdmin && phone && !anyway) {
+    return (
+      <div className="mx-auto flex min-h-dvh max-w-sm flex-col items-center justify-center gap-4 px-6 text-center">
+        <span className="inline-flex size-14 items-center justify-center rounded-full bg-raised">
+          <Icon name="shield" size={26} />
+        </span>
+        <h1 className="text-xl font-semibold">Admin works best on a computer</h1>
+        <p className="text-sm text-ink-muted">The console has wide tables and lots of tools. You can still use it here, it&apos;s just roomier on a bigger screen.</p>
+        <div className="flex w-full flex-col gap-2">
+          <Button
+            variant="primary"
+            onClick={() => {
+              try {
+                sessionStorage.setItem("klique:admin-on-phone", "1");
+              } catch {
+                /* private mode: it just asks again next time */
+              }
+              setAnyway(true);
+            }}
+          >
+            Continue anyway
+          </Button>
+          <Button href="/">Back to Klique</Button>
+        </div>
+      </div>
+    );
+  }
   if (status === "authed" && user?.isAdmin) return <Console>{children}</Console>;
   return <>{children}</>;
+}
+
+/** True on a phone-width screen (under 640px), after the first render. */
+function usePhoneWidth(): boolean {
+  const [phone, setPhone] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 639px)");
+    const on = () => setPhone(mq.matches);
+    on();
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
+  return phone;
 }
 
 /** Shows the page only to site admins; everyone else gets a loading state, a sign-in prompt or "Admins only". */

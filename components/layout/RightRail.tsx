@@ -7,7 +7,6 @@ import { DiscoverService } from "@/app/services/DiscoverService";
 import { CommunityRow } from "@/components/domain/CommunityRow";
 import { SponsoredBox, useAds } from "@/components/domain/ads/Sponsored";
 import { usePlace } from "@/components/providers/PlaceProvider";
-import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { RowSkeleton } from "@/components/ui/Skeleton";
 import { useApi } from "@/lib/hooks/useApi";
@@ -22,7 +21,9 @@ export function RightRail() {
   const picks = data?.suggestedCommunities.filter((c) => !c.viewer.isMember).slice(0, 4) ?? [];
 
   return (
-    <aside className="sticky top-0 hidden h-dvh flex-col gap-7 overflow-y-auto no-bar border-l border-line px-6 py-7 xl:flex" aria-label="Suggestions">
+    // the suggestions scroll; the "built for your city" line stays pinned at the bottom, below them (never over them)
+    <aside className="sticky top-0 hidden h-dvh flex-col border-l border-line xl:flex" aria-label="Suggestions">
+      <div className="no-bar flex min-h-0 flex-1 flex-col gap-7 overflow-y-auto px-6 pt-7 pb-4">
       <form
         role="search"
         onSubmit={(e) => {
@@ -50,7 +51,7 @@ export function RightRail() {
         <h2 id="rail-communities" className="mb-3 text-base font-semibold tracking-tight">
           Communities for you
         </h2>
-        {loading ? (
+        {loading && !data ? (
           <RowSkeleton rows={3} />
         ) : error ? (
           <p className="text-sm text-ink-muted">Couldn&apos;t load suggestions right now.</p>
@@ -69,17 +70,24 @@ export function RightRail() {
 
       {railAd && <SponsoredBox ad={railAd} />}
 
-      <section className="rounded-card bg-raised p-5" aria-labelledby="rail-crew">
-        <p className="eyebrow">Got a crew?</p>
-        <h2 id="rail-crew" className="mt-2 text-[15px] leading-snug font-semibold">
-          Your people are already out there. Give them a place to find you.
+      {/* plans: Lite and Pro, opening the pricing page */}
+      <Link href="/pricing" className="group block rounded-card border border-line bg-surface p-5 transition hover:border-ink-muted/60" aria-labelledby="rail-pro">
+        <p className="eyebrow flex items-center gap-2">
+          <span className="rounded-full bg-accent px-1.5 py-px text-[10px] font-bold tracking-wide text-accent-ink">PRO</span>
+          <span className="rounded-full border border-accent-text/60 px-1.5 py-px text-[10px] font-bold tracking-wide text-accent-text">LITE</span>
+        </p>
+        <h2 id="rail-pro" className="mt-2.5 text-[15px] leading-snug font-semibold">
+          Start more kliques, show more of you.
         </h2>
-        <Button href="/communities/new" variant="ink" size="sm" className="mt-4">
-          List your community <Icon name="arrow-up-right" size={13} />
-        </Button>
-      </section>
+        <p className="mt-1 text-[13px] text-ink-muted">More kliques, more profile photos and videos, and a badge by your name.</p>
+        <span className="mt-3 inline-flex items-center gap-1 text-[13px] font-semibold group-hover:underline">
+          See plans <Icon name="arrow-up-right" size={13} />
+        </span>
+      </Link>
 
-      <p className="eyebrow mt-auto leading-relaxed normal-case">
+      </div>
+
+      <p className="eyebrow shrink-0 px-6 pt-3 pb-7 leading-relaxed normal-case">
         klique. is built for your city{" "}
         <Link href="/settings#appearance" className="underline underline-offset-2 hover:text-ink">
           Change the mood

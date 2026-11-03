@@ -13,6 +13,7 @@ import { Event, type IEvent } from "../models/Event";
 import { Message, type IMessage } from "../models/Message";
 import { Post, type IPost } from "../models/Post";
 import { Block, Report } from "../models/Safety";
+import { Crew } from "../models/Crew";
 import { Subcommunity, type ISubcommunity } from "../models/Subcommunity";
 import { User, type IUser } from "../models/User";
 import { canSeeChannel, canViewEvent, spaceAccess } from "../policies/access";
@@ -86,6 +87,14 @@ export async function createReport(viewer: IUser, input: z.infer<typeof reportSc
       if (!(await spaceAccess(space, viewer)).canView) throw notFound();
       if (sid(post.authorId) === sid(viewer._id)) throw badRequest("You can't report yourself.");
       communityId = post.communityId;
+      break;
+    }
+    case "klique": {
+      // anyone who can see a klique can report it (the service checks age and access when it's opened)
+      const k = await Crew.findById(input.targetId).select("hostId communityId").lean<{ hostId: Types.ObjectId; communityId: Types.ObjectId | null }>();
+      if (!k) throw notFound();
+      if (sid(k.hostId) === sid(viewer._id)) throw badRequest("You can't report your own klique.");
+      communityId = k.communityId;
       break;
     }
     case "event": {

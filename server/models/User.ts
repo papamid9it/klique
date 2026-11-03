@@ -31,6 +31,15 @@ export interface IUser {
   bio: string;
   /** shown after the name on the profile card, e.g. "she/her" */
   pronouns?: string;
+  /** profile photos and short videos, in order (up to 4; how many show, and how many may be videos, is the plan's) */
+  media?: { kind: "image" | "video"; url: string; poster: string | null }[];
+  /** Lite or Pro (lib/plans), until `planUntil`; after that they're on Free. Set by subscriptions.service only. */
+  plan?: "free" | "lite" | "pro";
+  planUntil?: Date | null;
+  /** when they last used the app (updated at most every couple of minutes): "online now" for @here */
+  lastSeenAt?: Date | null;
+  /** optional; only used for "Women only" kliques (never shown on the profile) */
+  gender?: "woman" | "man" | "unspecified";
   /** the status the person set (the dot on their picture) */
   presence?: Presence;
   interests: InterestId[];
@@ -51,6 +60,8 @@ export interface IUser {
   suspendedAt?: Date | null;
   /** finished joining: picked 3+ categories and joined 2+ communities (null: they're sent to /welcome) */
   onboardedAt?: Date | null;
+  /** a bot's own account (models/BotApp): it can't sign in, take DMs or friend requests; shown with a BOT tag */
+  bot?: { appId: Types.ObjectId } | null;
   /** date of birth: set once by the person (dobSetAt), changed after that only by a site admin (policies/adult) */
   dob?: Date | null;
   dobSetAt?: Date | null;
@@ -85,12 +96,21 @@ const UserSchema = new Schema<IUser>(
     neighborhood: { type: String, default: "", maxlength: 60 },
     bio: { type: String, default: "", maxlength: 280 },
     pronouns: { type: String, default: "", maxlength: 40 },
+    gender: { type: String, enum: ["woman", "man", "unspecified"], default: "unspecified" },
+    media: {
+      type: [{ _id: false, kind: { type: String, enum: ["image", "video"], required: true }, url: { type: String, required: true, maxlength: 2000 }, poster: { type: String, default: null, maxlength: 2000 } }],
+      default: [],
+    },
+    plan: { type: String, enum: ["free", "lite", "pro"], default: "free" },
+    lastSeenAt: { type: Date, default: null },
+    planUntil: { type: Date, default: null },
     presence: { type: String, enum: PRESENCES.map((p) => p.id), default: "online" },
     interests: { type: [{ type: String }], default: [] },
     mood: { type: String, enum: MOOD_IDS, default: DEFAULT_MOOD },
     profileVisibility: { type: String, enum: ["public", "members", "private"], default: "public" },
     attendancePublic: { type: Boolean, default: true },
-    dmPolicy: { type: String, enum: ["everyone", "shared", "nobody"], default: "shared" },
+    // new accounts: anyone can send a message request (Nov 2026; was "shared")
+    dmPolicy: { type: String, enum: ["everyone", "shared", "nobody"], default: "everyone" },
     tokenVersion: { type: Number, default: 0 },
     isDemo: { type: Boolean, default: false },
     notifyPrefs: { type: Schema.Types.Mixed, default: {} },
@@ -98,6 +118,7 @@ const UserSchema = new Schema<IUser>(
     points: { type: Number, default: 0, min: 0 },
     suspendedAt: { type: Date, default: null },
     onboardedAt: { type: Date, default: null },
+    bot: { type: new Schema({ appId: { type: Schema.Types.ObjectId, required: true } }, { _id: false }), default: null },
     dob: { type: Date, default: null },
     dobSetAt: { type: Date, default: null },
     adultConfirmedAt: { type: Date, default: null },

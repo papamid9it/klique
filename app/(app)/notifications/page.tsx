@@ -19,7 +19,7 @@ import { NOTIFY_CATEGORIES } from "@/lib/notifications";
 import type { NotificationDTO } from "@/lib/types";
 
 const ICON: Record<string, IconName> = { mentions: "message", replies: "topics", crews: "pin", admin: "shield", community: "users", events: "calendar", ads: "megaphone", points: "coin", friends: "userplus", messages: "message" };
-const SHORT: Record<string, string> = { mentions: "Mentions & replies", replies: "Topic comments", crews: "Crews", admin: "Communities you run", community: "Your communities", events: "Events", ads: "Your ads", points: "Hype & styles", friends: "Friends" };
+const SHORT: Record<string, string> = { mentions: "Mentions & replies", replies: "Topic comments", crews: "Kliques", admin: "Communities you run", community: "Your communities", events: "Events", ads: "Your ads", points: "Hype & styles", friends: "Friends" };
 const FILTERS = [{ id: "all", label: "All", icon: "bell" as IconName }, { id: "unread", label: "Unread", icon: "asterisk" as IconName }, ...NOTIFY_CATEGORIES.filter((c) => !("pushOnly" in c)).map((c) => ({ id: c.id as string, label: SHORT[c.id] ?? c.label, icon: ICON[c.id] ?? "bell" }))];
 
 /** Today / Yesterday / This week / Earlier, in Lagos time. */
@@ -178,7 +178,7 @@ function NotificationsContent() {
             <InboxEmptyArt />
             <h2 className="mt-4 text-lg font-semibold">{filter === "unread" ? "You're all caught up" : "Nothing here yet"}</h2>
             <p className="mx-auto mt-1 max-w-sm text-sm text-ink-muted">
-              {filter === "all" ? "Requests to join your crews and communities, replies, mentions, event news and your ads show up here." : filter === "unread" ? "No unread notifications." : `No ${title.toLowerCase()} notifications yet.`}
+              {filter === "all" ? "Requests to join your kliques and communities, replies, mentions, event news and your ads show up here." : filter === "unread" ? "No unread notifications." : `No ${title.toLowerCase()} notifications yet.`}
             </p>
           </div>
         ) : (

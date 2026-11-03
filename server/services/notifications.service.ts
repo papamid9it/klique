@@ -49,6 +49,17 @@ export async function listNotifications(viewer: IUser, q: { before?: string; cat
     .sort({ updatedAt: -1 })
     .limit(PAGE + 1)
     .lean<INotification[]>();
+  // lines about a klique that's gone (deleted, or ended and cleared) point nowhere: drop them for good
+  const kliqueIds = [...new Set(rows.flatMap((r) => /^\/kliques\/([a-f0-9]{24})/.exec(r.href ?? "")?.[1] ?? []))];
+  if (kliqueIds.length) {
+    const alive = new Set((await Crew.find({ _id: { $in: kliqueIds } }).distinct("_id")).map(String));
+    const gone = rows.filter((r) => { const id = /^\/kliques\/([a-f0-9]{24})/.exec(r.href ?? "")?.[1]; return !!id && !alive.has(id); });
+    if (gone.length) {
+      await Notification.deleteMany({ _id: { $in: gone.map((r) => r._id) } });
+      const goneIds = new Set(gone.map((r) => String(r._id)));
+      rows.splice(0, rows.length, ...rows.filter((r) => !goneIds.has(String(r._id))));
+    }
+  }
   const by = await Notification.aggregate<{ _id: string; n: number }>([{ $match: { userId: viewer._id, read: false } }, { $group: { _id: "$category", n: { $sum: 1 } } }]);
   const unreadBy = Object.fromEntries(by.map((b) => [b._id, b.n]));
   return { items: await toDtos(rows.slice(0, PAGE)), page: 1, hasMore: rows.length > PAGE, unread: by.reduce((s, b) => s + b.n, 0), unreadBy };
@@ -81,25 +92,24 @@ export async function removeNotification(viewer: IUser, id: string) {
 /** Join requests waiting on you: for crews you host, and for private communities you run. */
 export async function pendingForMe(viewer: IUser): Promise<PendingDTO> {
   const [hosting, running] = await Promise.all([
-    Crew.find({ hostId: viewer._id, expiresAt: { $gt: new Date() } }).select("_id area eventId").lean<{ _id: Types.ObjectId; area: string; eventId: Types.ObjectId }[]>(),
+    Crew.find({ hostId: viewer._id, expiresAt: { $gt: new Date() } }).select("_id title area").lean<{ _id: Types.ObjectId; title: string; area: string }[]>(),
     Membership.find({ userId: viewer._id, subcommunityId: null, status: "active", role: { $in: ["owner", "admin"] } }).select("communityId").lean<{ communityId: Types.ObjectId }[]>(),
   ]);
-  const [crewAsks, communityAsks, communities, events, toReview] = await Promise.all([
+  const [crewAsks, communityAsks, communities, , toReview] = await Promise.all([
     hosting.length ? CrewMember.find({ crewId: { $in: hosting.map((c) => c._id) }, status: "pending" }).sort({ createdAt: 1 }).limit(20).lean<{ crewId: Types.ObjectId; userId: Types.ObjectId; message?: string }[]>() : [],
     running.length ? MembershipRequest.find({ communityId: { $in: running.map((m) => m.communityId) }, subcommunityId: null, status: "pending" }).sort({ createdAt: 1 }).limit(20).lean<{ _id: Types.ObjectId; communityId: Types.ObjectId; userId: Types.ObjectId; message: string }[]>() : [],
     running.length ? Community.find({ _id: { $in: running.map((m) => m.communityId) } }).select("slug name").lean<{ _id: Types.ObjectId; slug: string; name: string }[]>() : [],
-    hosting.length ? Event.find({ _id: { $in: hosting.map((c) => c.eventId) } }).select("title").lean<{ _id: Types.ObjectId; title: string }[]>() : [],
+    [] as { _id: Types.ObjectId; title: string }[],
     running.length ? Event.find({ communityId: { $in: running.map((m) => m.communityId) }, subcommunityId: null, review: "pending", cancelled: false }).sort({ createdAt: 1 }).limit(20).select("title hostId communityId").lean<{ _id: Types.ObjectId; title: string; hostId: Types.ObjectId; communityId: Types.ObjectId }[]>() : [],
   ]);
   const briefs = await loadBriefs([...crewAsks.map((a) => a.userId), ...communityAsks.map((a) => a.userId), ...toReview.map((e) => e.hostId)]);
   const crewById = new Map(hosting.map((c) => [sid(c._id), c]));
-  const eventById = new Map(events.map((e) => [sid(e._id), e.title]));
   const communityById = new Map(communities.map((c) => [sid(c._id), c]));
   return {
     crewRequests: crewAsks.flatMap((a) => {
       const crew = crewById.get(sid(a.crewId));
       const user = briefs.get(sid(a.userId));
-      return crew && user ? [{ crewId: sid(crew._id), area: crew.area, eventTitle: eventById.get(sid(crew.eventId)) ?? "", user, message: a.message ?? "" }] : [];
+      return crew && user ? [{ crewId: sid(crew._id), area: crew.area, eventTitle: crew.title, user, message: a.message ?? "" }] : [];
     }),
     communityRequests: communityAsks.flatMap((a) => {
       const c = communityById.get(sid(a.communityId));

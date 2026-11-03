@@ -148,6 +148,8 @@ export function withApi<P = Record<string, never>, A extends AuthMode = "optiona
         if (claims) {
           const user = await User.findById(claims.sub).lean<IUser>();
           if (user && user.tokenVersion === claims.tv) viewer = user;
+          // "online now" (for @here): at most one write every couple of minutes per person, never in the way
+          if (viewer && (!viewer.lastSeenAt || Date.now() - +viewer.lastSeenAt > 120_000)) void User.updateOne({ _id: viewer._id }, { $set: { lastSeenAt: new Date() } }).catch(() => {});
           if (viewer?.suspendedAt) throw new ApiError(403, "This account has been suspended. Contact support if you think that's a mistake.", { code: "suspended" });
         }
       }

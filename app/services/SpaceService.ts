@@ -8,8 +8,7 @@ import type {
   MembershipRequestDTO,
   Paginated,
   PostDTO,
-  Role,
-} from "@/lib/types";
+  Role, ScreeningDTO } from "@/lib/types";
 
 const api = new ApiClient();
 
@@ -27,8 +26,12 @@ const base = (slug: string, subSlug?: string) =>
 
 export const SpaceService = {
   // both tell the rest of the app (crew pages and the like) that your memberships changed
-  join: (slug: string, subSlug?: string, input: { message?: string } = {}) =>
+  join: (slug: string, subSlug?: string, input: { message?: string; answers?: Record<string, string | boolean> } = {}) =>
     api.post<Envelope<JoinResult>>(`${base(slug, subSlug)}/join`, input).then(changed),
+  /** a community's entry questions (answered before joining) */
+  screening: (slug: string) => api.get<Envelope<ScreeningDTO>>(`/api/communities/${slug}/screening`),
+  /** owners and admins: save the entry questions and the on/off switch */
+  setScreening: (slug: string, input: ScreeningDTO) => api.put<Envelope<ScreeningDTO>>(`/api/communities/${slug}/screening`, input),
   /** Also cancels a pending join request. */
   leave: (slug: string, subSlug?: string) =>
     api.post<Envelope<{ left: boolean; cancelledRequest: boolean }>>(`${base(slug, subSlug)}/leave`).then(changed),

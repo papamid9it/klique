@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { HANDLE_REGEX, isInterestId, LIMITS } from "@/lib/constants";
 import { COUNTRY_CODES, parseScope } from "@/lib/places";
+import { RESERVED_HANDLES } from "@/lib/mentions";
 
 export const OBJECT_ID_REGEX = /^[a-f\d]{24}$/i;
 export const isObjectId = (v: unknown): v is string => typeof v === "string" && OBJECT_ID_REGEX.test(v);
@@ -37,7 +38,9 @@ export const handle = z
   .toLowerCase()
   .min(LIMITS.handleMin, `At least ${LIMITS.handleMin} characters`)
   .max(LIMITS.handleMax, `At most ${LIMITS.handleMax} characters`)
-  .regex(HANDLE_REGEX, "Letters, numbers and underscores only");
+  .regex(HANDLE_REGEX, "Letters, numbers and underscores only")
+  // @everyone, @all, @here and @channel are mass mentions
+  .refine((h) => !RESERVED_HANDLES.has(h), "That handle is taken");
 
 export const pageQuery = z.object({
   page: z.coerce.number().int().min(1).max(500).default(1),

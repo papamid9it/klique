@@ -249,7 +249,7 @@ function NewEventForm() {
         <legend className="px-1 text-[13px] font-medium">Where it&apos;s posted</legend>
         {siteAdmin ? (
           <AdminCommunityPicker
-            officialName="Klique"
+            officialName="Klique HQ"
             value={communitySlug}
             name={pickedCommunity?.name ?? null}
             onChange={(slug) => {

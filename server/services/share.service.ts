@@ -92,24 +92,25 @@ export async function postShare(id: string): Promise<ShareInfo | null> {
 }
 
 /**
- * A crew: where it's coming from, the event, when it meets and how full it is. Never the meetup point (members only).
- * A crew whose event a signed-out visitor can't see gets a plain card.
+ * A klique: its hook line, the event or community, when it meets and how full it is. Never the meetup point
+ * (members only). One a signed-out visitor can't see gets a plain card.
  */
 export async function crewShare(id: string): Promise<ShareInfo | null> {
   await connectDb();
   try {
     const c = await getCrew(null, id);
     const meet = `Meet ${formatDateShort(c.meetupAt)}`;
-    const going = `${c.memberCount}/${c.maxMembers} going together`;
+    const going = `${c.memberCount}/${c.maxMembers} in`;
+    const where = c.event ? `To ${c.event.title}` : c.community ? `In ${c.community.name}` : `From ${c.area}`;
     return {
-      title: `Crew from ${c.area}`,
-      description: `Going to ${c.event.title} together. ${meet} · ${going}. Join a crew near you on klique.`,
-      eyebrow: "Crew",
-      lines: [`To ${c.event.title}`, meet, going],
-      image: c.event.coverImage,
+      title: c.title,
+      description: `${where}. ${meet} · ${going}${c.womenOnly ? " · women only" : ""}. Join a klique on klique.`,
+      eyebrow: "Klique",
+      lines: [where, meet, going],
+      image: c.coverImage ?? c.event?.coverImage ?? null,
     };
   } catch {
-    return { title: "A crew on klique.", description: "People going to an event together. Sign in to see it.", eyebrow: "Crew", lines: [], image: null };
+    return { title: "A klique on klique.", description: "People doing something together. Sign in to see it.", eyebrow: "Klique", lines: [], image: null };
   }
 }
 

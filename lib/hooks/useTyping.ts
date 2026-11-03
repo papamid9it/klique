@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { TypingService } from "@/app/services/TypingService";
+import { useAuth } from "@/components/providers/AuthProvider";
 import { useRealtime } from "@/components/providers/RealtimeProvider";
 import type { TypingTarget } from "@/lib/types";
 
@@ -21,18 +22,22 @@ const POLL_MS = 3_000;
  */
 export function useTyping(target: TypingTarget | null) {
   const { connected, on } = useRealtime();
+  // the live ping goes to everyone in the chat, you included: your own never counts
+  const meId = useAuth().user?.id ?? null;
   const key = target ? JSON.stringify(target) : "";
   const [where, setWhere] = useState<string | null>(null);
   const [people, setPeople] = useState<Map<string, { name: string; until: number }>>(new Map());
   const lastPing = useRef(0);
   const idle = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typing = useRef(false);
+  const meRef = useRef(meId);
+  meRef.current = meId;
   const t = useRef(target);
   t.current = target;
 
   const take = useCallback((list: { id: string; name: string }[]) => {
     const until = Date.now() + SHOW_MS;
-    setPeople(new Map(list.map((p) => [p.id, { name: p.name, until }])));
+    setPeople(new Map(list.filter((p) => p.id !== meRef.current).map((p) => [p.id, { name: p.name, until }])));
   }, []);
 
   // where this chat's typing lives, and who's typing already
@@ -58,7 +63,7 @@ export function useTyping(target: TypingTarget | null) {
   useEffect(() => {
     if (!where) return;
     return on((e) => {
-      if (e.type !== "typing" || e.where !== where) return;
+      if (e.type !== "typing" || e.where !== where || e.user.id === meId) return;
       setPeople((m) => {
         const next = new Map(m);
         if (e.on) next.set(e.user.id, { name: e.user.name, until: Date.now() + SHOW_MS });
@@ -66,7 +71,7 @@ export function useTyping(target: TypingTarget | null) {
         return next;
       });
     });
-  }, [where, on]);
+  }, [where, on, meId]);
 
   // no live connection: ask every few seconds while the chat is on screen
   useEffect(() => {

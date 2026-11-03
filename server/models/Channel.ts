@@ -6,11 +6,21 @@ import { defineModel } from "./define";
  *   community → categories → channels → messages
  * Channels belong to the community (not to groups).
  */
+/** A role's say over a channel (or a whole category): allow or deny seeing it and posting in it; null = as usual. */
+export interface RoleOverride {
+  roleId: Types.ObjectId;
+  view: "allow" | "deny" | null;
+  post: "allow" | "deny" | null;
+}
+const OverrideSchema = new Schema<RoleOverride>({ roleId: { type: Schema.Types.ObjectId, required: true }, view: { type: String, enum: ["allow", "deny", null], default: null }, post: { type: String, enum: ["allow", "deny", null], default: null } }, { _id: false });
+
 export interface IChannelCategory {
   _id: Types.ObjectId;
   communityId: Types.ObjectId;
   name: string;
   position: number;
+  /** role overrides for every channel in it (a channel's own override for a role wins) */
+  overrides?: RoleOverride[];
   createdAt: Date;
 }
 
@@ -19,6 +29,7 @@ const CategorySchema = new Schema<IChannelCategory>(
     communityId: { type: Schema.Types.ObjectId, ref: "Community", required: true },
     name: { type: String, required: true, trim: true, maxlength: 40 },
     position: { type: Number, default: 0 },
+    overrides: { type: [OverrideSchema], default: [] },
   },
   { timestamps: { createdAt: true, updatedAt: false } },
 );
@@ -50,6 +61,13 @@ export interface IChannel {
   slowModeSec: number;
   /** set on a board post's own chat (its replies): hidden from the channel list, opened from the post */
   topicId?: Types.ObjectId | null;
+  /** a thread started from a message (hidden from the channel list): its channel, and the message it hangs off */
+  parentChannelId?: Types.ObjectId | null;
+  threadOf?: Types.ObjectId | null;
+  /** role overrides on this channel */
+  overrides?: RoleOverride[];
+  /** a copy of its category's overrides (kept in step when the category's change or the channel moves) */
+  categoryOverrides?: RoleOverride[];
   /** denormalised for the unread dot and "last active" */
   lastMessageId: Types.ObjectId | null;
   lastMessageAt: Date | null;
@@ -68,6 +86,10 @@ const ChannelSchema = new Schema<IChannel>(
     type: { type: String, enum: ["text", "announcement", "voice"], default: "text" },
     visibility: { type: String, enum: ["all", "managers", "invite"], default: "all" },
     position: { type: Number, default: 0 },
+    parentChannelId: { type: Schema.Types.ObjectId, default: null },
+    threadOf: { type: Schema.Types.ObjectId, default: null },
+    overrides: { type: [OverrideSchema], default: [] },
+    categoryOverrides: { type: [OverrideSchema], default: [] },
     slowModeSec: { type: Number, default: 0, min: 0, max: 3600 },
     lastMessageId: { type: Schema.Types.ObjectId, default: null },
     lastMessageAt: { type: Date, default: null },
@@ -76,6 +98,7 @@ const ChannelSchema = new Schema<IChannel>(
   },
   { timestamps: { createdAt: true, updatedAt: false } },
 );
+ChannelSchema.index({ parentChannelId: 1, lastMessageAt: -1 }, { partialFilterExpression: { parentChannelId: { $type: "objectId" } } });
 ChannelSchema.index({ communityId: 1, subcommunityId: 1, slug: 1 }, { unique: true });
 ChannelSchema.index({ communityId: 1, subcommunityId: 1, categoryId: 1, position: 1 });
 ChannelSchema.index({ topicId: 1 }, { sparse: true });
@@ -115,6 +138,11 @@ export interface IChannelMessage {
   pinnedById: Types.ObjectId | null;
   /** people tagged with @handle (resolved and access-checked on the server) */
   mentions: Types.ObjectId[];
+  /**
+   * A mass mention that pinged: "everyone" (all who can see the channel; counted for each reader unless they
+   * suppress it) or "here" (the people online when it was sent, who are also put in `mentions`).
+   */
+  massMention?: "everyone" | "here" | null;
   /** set when the author changed the text after posting */
   editedAt: Date | null;
   /** soft delete: the row stays so the timeline doesn't jump and reports keep their target */
@@ -122,6 +150,10 @@ export interface IChannelMessage {
   /** hidden pending review (a "minor or non-consensual" report): shown as removed until an admin decides */
   hiddenAt?: Date | null;
   deletedById: Types.ObjectId | null;
+  /** a thread started from this message: its channel, name, how many replies and when the last one came */
+  thread?: { channelId: Types.ObjectId; slug: string; name: string; count: number; lastAt: Date | null; lastBy?: string | null } | null;
+  /** posted by a channel webhook (a bot): shown with its name and picture and a "BOT" tag; authorId is the community's owner */
+  webhook?: { id: Types.ObjectId; name: string; avatarUrl: string | null } | null;
   createdAt: Date;
 }
 
@@ -139,9 +171,12 @@ const MessageSchema = new Schema<IChannelMessage>(
     pinnedAt: { type: Date, default: null },
     pinnedById: { type: Schema.Types.ObjectId, default: null },
     mentions: { type: [Schema.Types.ObjectId], default: [] },
+    massMention: { type: String, enum: ["everyone", "here", null], default: null },
     editedAt: { type: Date, default: null },
     deletedAt: { type: Date, default: null },
     deletedById: { type: Schema.Types.ObjectId, default: null },
+    thread: { type: new Schema({ channelId: Schema.Types.ObjectId, slug: String, name: String, count: { type: Number, default: 0 }, lastAt: { type: Date, default: null }, lastBy: { type: String, default: null } }, { _id: false }), default: null },
+    webhook: { type: new Schema({ id: { type: Schema.Types.ObjectId }, name: { type: String, maxlength: 80 }, avatarUrl: { type: String, default: null } }, { _id: false }), default: null },
     hiddenAt: { type: Date, default: null },
   },
   { timestamps: { createdAt: true, updatedAt: false } },

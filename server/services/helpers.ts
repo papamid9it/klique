@@ -17,6 +17,7 @@ import { purgeCrewChat } from "./crew-chat-purge";
 import { Post } from "../models/Post";
 import { Rsvp, SavedEvent } from "../models/Rsvp";
 import { Subcommunity } from "../models/Subcommunity";
+import { Webhook } from "../models/Webhook";
 
 export const sid = (id: Types.ObjectId | string) => String(id);
 
@@ -110,6 +111,7 @@ export async function purgeSpaceData(communityId: Types.ObjectId, subcommunityId
       ChannelMessage.deleteMany({ channelId: { $in: channelIds } }),
       ChannelRead.deleteMany({ channelId: { $in: channelIds } }),
       ChannelMember.deleteMany({ channelId: { $in: channelIds } }),
+      Webhook.deleteMany({ channelId: { $in: channelIds } }),
       Channel.deleteMany({ _id: { $in: channelIds } }),
     ]);
   }

@@ -71,6 +71,15 @@ export async function compressImage(kind: Exclude<UploadKind, "video">, file: Bl
     throw new CompressError(/heic|heif/i.test(file.name ?? file.type) ? "This browser can't open HEIC photos. Export it as JPG first, or use Safari." : "Couldn't open that picture. Try a JPG, PNG or WebP.");
   }
   try {
+    if (kind === "emoji") {
+      // 128 px, transparent WebP (or PNG where the browser can't make WebP)
+      const c = draw(bmp, bmp.width, bmp.height, { w: 128, h: 128 });
+      const webp = await new Promise<Blob | null>((res) => c.toBlob(res, "image/webp", 0.9));
+      const blob = webp && webp.type === "image/webp" ? webp : await new Promise<Blob | null>((res) => c.toBlob(res, "image/png"));
+      if (!blob) throw new CompressError("Couldn't process that picture.");
+      if (blob.size > 256 * 1024) throw new CompressError("That emoji is still over 256 KB. Try a simpler picture.");
+      return { files: [{ variant: "main", blob }], width: c.width, height: c.height, duration: null };
+    }
     if (kind === "avatar") {
       const c = draw(bmp, bmp.width, bmp.height, { w: MEDIA_LIMITS.avatarPx, h: MEDIA_LIMITS.avatarPx });
       return { files: [{ variant: "main", blob: await encode(c, 0.85) }], width: c.width, height: c.height, duration: null };

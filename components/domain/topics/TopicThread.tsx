@@ -225,6 +225,7 @@ function PostSkeleton() {
 
 /** The post at the start of its chat: who and when, the title, tags, the picture, then the text. */
 function PostIntro({ t, empty }: { t: TopicDTO; empty: boolean }) {
+  const { user } = useAuth();
   const now = useNow();
   return (
     <article className="px-4 pt-5 pb-2 sm:px-5" aria-label={t.title}>
@@ -261,7 +262,7 @@ function PostIntro({ t, empty }: { t: TopicDTO; empty: boolean }) {
           ))}
         </ul>
       )}
-      <TopicMedia media={t.media.slice(0, 1)} tall className="mt-3" />
+      <TopicMedia media={t.media.slice(0, 1)} tall className="mt-3" mine={!!user && t.author.handle === user.handle} />
       {t.body && (
         <p className="mt-3 text-[15px] leading-relaxed break-words whitespace-pre-wrap">
           <Linkified text={t.body} />

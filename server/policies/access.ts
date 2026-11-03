@@ -11,6 +11,8 @@ import type { ISubcommunity } from "../models/Subcommunity";
 import type { IUser } from "../models/User";
 import { isSiteAdmin } from "./hosting";
 import { kliqueId } from "../services/klique-id";
+import { CommunityRole, type ICommunityRole } from "../models/CommunityRole";
+import { ADMIN_PERMISSIONS, ALL_PERMISSIONS, isPermission, type Permission } from "@/lib/roles";
 
 /**
  * AUTHORIZATION POLICIES — the single source of truth for "who may do what".
@@ -38,6 +40,73 @@ export interface SpaceAccess extends ViewerAccess {
   pointsToPost: number;
   /** an 18+ community this person may not enter yet, and why (policies/adult); they're treated as an outsider */
   adultGate?: AdultGate;
+  /** timed out in the community (and so in its groups) until then: `canPost` is false meanwhile */
+  timedOutUntil?: string | null;
+  /** what their roles let them do in the community (owners: everything; admins: lib/roles ADMIN_PERMISSIONS) */
+  perms?: Permission[];
+  /** how high up they are: owner highest, then their highest role's position (0 with no roles) */
+  rank?: number;
+  /** the community roles they hold (for channel overrides) */
+  roleIds?: string[];
+  /** they must accept the community's rules (welcome screen) before posting: `canPost` is false meanwhile */
+  needsRules?: boolean;
+  /** the welcome screen is waiting for them */
+  welcomePending?: boolean;
+}
+
+/** where "admin" sits when the Admin role hasn't been made yet (migrations/roles makes it at this position) */
+export const ADMIN_RANK = 1000;
+const OWNER_RANK = 1e9;
+
+/** A member's permissions, rank and role ids from their community membership and the roles it holds. */
+export function rolePowers(role: Role | null, roles: Pick<ICommunityRole, "_id" | "position" | "permissions">[]): { perms: Permission[]; rank: number; roleIds: string[] } {
+  if (role === "owner") return { perms: [...ALL_PERMISSIONS], rank: OWNER_RANK, roleIds: roles.map((r) => String(r._id)) };
+  const perms = new Set<Permission>(role === "admin" ? ADMIN_PERMISSIONS : []);
+  for (const r of roles) for (const p of r.permissions) if (isPermission(p)) perms.add(p);
+  const rank = Math.max(role === "admin" ? ADMIN_RANK : 0, ...roles.map((r) => r.position));
+  return { perms: [...perms], rank: role ? rank : 0, roleIds: role ? roles.map((r) => String(r._id)) : [] };
+}
+
+/** May they do this in the community? (site admins can, everywhere) */
+export const can = (access: Pick<SpaceAccess, "perms" | "canManage">, p: Permission) => !!access.perms?.includes(p);
+
+/** Throws unless they have that permission. */
+export function assertPerm(access: Pick<SpaceAccess, "perms" | "canManage">, p: Permission, what = "do that") {
+  if (!can(access, p)) throw forbidden(`You don't have permission to ${what}.`);
+}
+
+/** The roles a membership holds (one query; none when it has none). */
+export async function rolesOf(m: Pick<IMembership, "roleIds" | "status"> | null): Promise<Pick<ICommunityRole, "_id" | "position" | "permissions">[]> {
+  if (!m || m.status !== "active" || !m.roleIds?.length) return [];
+  return CommunityRole.find({ _id: { $in: m.roleIds } }).select("position permissions").lean<Pick<ICommunityRole, "_id" | "position" | "permissions">[]>();
+}
+
+/** When a community membership's timeout runs out (null: not timed out now). Owners are never timed out. */
+export function timeoutOf(m: Pick<IMembership, "timeoutUntil" | "role" | "status"> | null | undefined): string | null {
+  if (!m || m.status !== "active" || m.role === "owner" || !m.timeoutUntil) return null;
+  return +new Date(m.timeoutUntil) > Date.now() ? new Date(m.timeoutUntil).toISOString() : null;
+}
+
+/** "You're timed out here until 3:40 PM." (with the reason they were given) */
+export function timeoutMessage(until: string): string {
+  const d = new Date(until);
+  const soon = +d - Date.now() < 20 * 60 * 60 * 1000;
+  const when = d.toLocaleString("en-NG", { timeZone: "Africa/Lagos", hour12: true, ...(soon ? { hour: "numeric", minute: "2-digit" } : { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) });
+  return `You're timed out in this community until ${when}. You can still read.`;
+}
+
+/** Throws when this person is timed out in that community (for writes that don't go through spaceAccess). */
+export async function assertNoCommunityTimeout(userId: Types.ObjectId, communityId: Types.ObjectId | null | undefined) {
+  if (!communityId) return;
+  const m = await Membership.findOne({ userId, communityId, subcommunityId: null }).select("timeoutUntil role status").lean<IMembership>();
+  const until = timeoutOf(m);
+  if (until) throw forbidden(timeoutMessage(until));
+}
+
+/** Throws for a timed-out member (posting, reacting, voting, starting events or kliques). */
+export function assertNotTimedOut(access: Pick<SpaceAccess, "timedOutUntil" | "needsRules">) {
+  if (access.timedOutUntil) throw forbidden(timeoutMessage(access.timedOutUntil));
+  if (access.needsRules) throw forbidden("Accept the community's rules first (open the community to see them).");
 }
 
 const isManager = (r: Role | null) => r === "owner" || r === "admin";
@@ -72,22 +141,32 @@ function activeRole(m: IMembership | null): Role | null {
 
 /** Pure community-level access from already-loaded rows (lets list pages batch the lookups). */
 export function communityAccessFrom(
-  community: Pick<ICommunity, "privacy"> & Partial<Pick<ICommunity, "official" | "minPointsPost">>,
+  community: Pick<ICommunity, "privacy"> & Partial<Pick<ICommunity, "official" | "minPointsPost" | "welcome">>,
   membership: IMembership | null,
   pendingRequest: boolean,
   gate?: PointsGate,
+  roles: Pick<ICommunityRole, "_id" | "position" | "permissions">[] = [],
 ): SpaceAccess {
   const role = activeRole(membership);
   const banned = membership?.status === "banned";
   const isPublic = community.privacy === "public";
   const short = role ? pointsShort(community.minPointsPost, role, gate, !!community.official) : 0;
+  const timedOutUntil = timeoutOf(membership);
+  // the welcome screen: rules to accept first (owners and admins never), and whether they've seen it
+  const welcome = community.welcome?.enabled ? community.welcome : null;
+  const needsRules = !!welcome && welcome.requireAccept && welcome.rules.length > 0 && role === "member" && !membership?.rulesAcceptedAt;
+  const welcomePending = !!welcome && role !== null && !membership?.welcomedAt && (needsRules || role === "member");
   return {
     role,
     isMember: role !== null,
     pendingRequest: role ? false : pendingRequest,
     canManage: isManager(role),
     canView: isPublic ? true : role !== null,
-    canPost: role !== null,
+    canPost: role !== null && !timedOutUntil && !needsRules,
+    needsRules,
+    welcomePending,
+    timedOutUntil,
+    ...rolePowers(role, roles),
     pointsToPost: short,
     banned,
     parentRole: role,
@@ -108,19 +187,29 @@ export function subAccessFrom(
   subMembership: IMembership | null,
   viewerIsSiteAdmin = false,
   points?: number,
+  parentRoles: Pick<ICommunityRole, "_id" | "position" | "permissions">[] = [],
 ): SpaceAccess {
   const parentRole = activeRole(parentMembership);
   const role = activeRole(subMembership);
   const banned = subMembership?.status === "banned";
   const overseer = parentRole === "owner" || viewerIsSiteAdmin;
   const short = role && points !== undefined ? pointsShort(sub?.minPointsPost, overseer ? "owner" : role, { points, siteAdmin: viewerIsSiteAdmin }) : 0;
+  // a timeout in the community holds in its groups too
+  const timedOutUntil = timeoutOf(parentMembership);
   return {
     role,
     isMember: role !== null,
     pendingRequest: false,
     canManage: isManager(role) || overseer,
     canView: role !== null || overseer,
-    canPost: role !== null,
+    canPost: role !== null && !timedOutUntil,
+    timedOutUntil,
+    // in a group: its own admins can manage it; the community's roles carry over (a moderator there moderates here)
+    ...(() => {
+      const fromParent = rolePowers(parentRole, parentRoles);
+      const own = rolePowers(overseer ? "owner" : role, []);
+      return { perms: [...new Set([...fromParent.perms, ...own.perms])], rank: Math.max(fromParent.rank, own.rank), roleIds: fromParent.roleIds };
+    })(),
     pointsToPost: short,
     banned,
     parentRole,
@@ -170,7 +259,9 @@ async function rawSpaceAccess(space: Space, viewer: IUser | null): Promise<Space
           subcommunityId: null,
           status: "pending",
         }));
-    return communityAccessFrom(community, m, pending, gateOf(viewer));
+    const access = communityAccessFrom(community, m, pending, gateOf(viewer), await rolesOf(m));
+    // site admins can do anything a moderator can, anywhere
+    return isSiteAdmin(viewer) ? { ...access, perms: [...ALL_PERMISSIONS] } : access;
   }
 
   // ---- subcommunity ----
@@ -180,7 +271,7 @@ async function rawSpaceAccess(space: Space, viewer: IUser | null): Promise<Space
     findMembership(viewer._id, community._id, null),
     findMembership(viewer._id, community._id, sub._id),
   ]);
-  return subAccessFrom(sub, parentM, subM, isSiteAdmin(viewer), viewer.points ?? 0);
+  return subAccessFrom(sub, parentM, subM, isSiteAdmin(viewer), viewer.points ?? 0, await rolesOf(parentM));
 }
 
 /* ---------------------------- assertions ---------------------------- */
@@ -190,6 +281,8 @@ export function assertCanView(access: SpaceAccess, what = "this") {
 }
 
 export function assertCanPost(access: SpaceAccess) {
+  assertNotTimedOut(access);
+  if (access.needsRules) throw forbidden("Accept the community's rules first (open the community to see them).");
   if (!access.canPost) throw forbidden("Join this community to post or host here.");
 }
 
@@ -258,10 +351,13 @@ export function publishedEvents(viewer: Pick<IUser, "_id"> | null): Record<strin
 export async function canReviewEvent(event: Pick<IEvent, "communityId" | "subcommunityId">, viewer: IUser | null): Promise<boolean> {
   if (!viewer || !event.communityId) return false;
   if (isSiteAdmin(viewer)) return true;
-  const rows = await Membership.find({ userId: viewer._id, communityId: event.communityId, status: "active", subcommunityId: { $in: [null, event.subcommunityId ?? null] } }).select("subcommunityId role").lean<Pick<IMembership, "subcommunityId" | "role">[]>();
-  const parent = rows.find((m) => !m.subcommunityId)?.role ?? null;
+  const rows = await Membership.find({ userId: viewer._id, communityId: event.communityId, status: "active", subcommunityId: { $in: [null, event.subcommunityId ?? null] } }).select("subcommunityId role roleIds status").lean<Pick<IMembership, "subcommunityId" | "role" | "roleIds" | "status">[]>();
+  const parentRow = rows.find((m) => !m.subcommunityId) ?? null;
+  const parent = parentRow?.role ?? null;
   const own = event.subcommunityId ? (rows.find((m) => m.subcommunityId && String(m.subcommunityId) === String(event.subcommunityId))?.role ?? null) : parent;
-  return isManager(own) || (!!event.subcommunityId && parent === "owner");
+  if (isManager(own) || (!!event.subcommunityId && parent === "owner")) return true;
+  // a community role with "Manage events"
+  return rolePowers(parent, await rolesOf(parentRow)).perms.includes("manageEvents");
 }
 
 const inAdultCommunity = async (event: Pick<IEvent, "communityId">) => !!event.communityId && (await adultCommunityIds()).some((id) => String(id) === String(event.communityId));
@@ -334,16 +430,42 @@ export function canSetRole(actor: Role | null, target: Role, next: Role): boolea
  *   "invite"   a private room: people on its guest list, plus the space's owners/admins
  * Anything the viewer can't see must look like it doesn't exist (callers answer 404).
  */
-export function canSeeChannel(channel: Pick<IChannel, "visibility">, access: SpaceAccess, invited = false): boolean {
+export function canSeeChannel(channel: Pick<IChannel, "visibility"> & Partial<Pick<IChannel, "overrides" | "categoryOverrides">>, access: SpaceAccess, invited = false): boolean {
   if (!access.canView) return false;
-  if (channel.visibility === "all") return true;
   if (access.canManage) return true;
+  // a role's allow or deny (any allow wins over a deny; a channel's own beats its category's)
+  const say = roleSay(channel, access, "view");
+  if (say === "allow" && access.isMember) return true;
+  if (say === "deny") return false;
+  if (channel.visibility === "all") return true;
   return channel.visibility === "invite" && invited;
 }
 
-/** Posting needs membership of the space; announcement channels additionally need owner/admin. */
-export function canPostInChannel(channel: Pick<IChannel, "visibility" | "type">, access: SpaceAccess, invited = false): boolean {
-  return canSeeChannel(channel, access, invited) && access.canPost && !access.banned && (channel.type !== "announcement" || access.canManage) && channel.type !== "voice";
+/** Posting needs membership of the space; announcement channels additionally need owner/admin (or a role allowed to). */
+export function canPostInChannel(channel: Pick<IChannel, "visibility" | "type"> & Partial<Pick<IChannel, "overrides" | "categoryOverrides">>, access: SpaceAccess, invited = false): boolean {
+  if (!canSeeChannel(channel, access, invited) || !access.canPost || access.banned || channel.type === "voice") return false;
+  if (access.canManage) return true;
+  const say = roleSay(channel, access, "post");
+  if (say === "deny") return false;
+  return channel.type !== "announcement" || say === "allow";
+}
+
+/**
+ * What this person's roles say about seeing or posting in a channel: "allow" if any of their roles allows it,
+ * else "deny" if any denies it, else null (the channel's usual rule). For each role the channel's own override
+ * counts; without one, its category's.
+ */
+function roleSay(channel: Partial<Pick<IChannel, "overrides" | "categoryOverrides">>, access: Pick<SpaceAccess, "roleIds">, what: "view" | "post"): "allow" | "deny" | null {
+  const mine = access.roleIds;
+  if (!mine?.length || (!channel.overrides?.length && !channel.categoryOverrides?.length)) return null;
+  let deny = false;
+  for (const id of mine) {
+    const own = channel.overrides?.find((o) => String(o.roleId) === id);
+    const value = own?.[what] ?? channel.categoryOverrides?.find((o) => String(o.roleId) === id)?.[what] ?? null;
+    if (value === "allow") return "allow";
+    if (value === "deny") deny = true;
+  }
+  return deny ? "deny" : null;
 }
 
 /** Who may start a group in a community, from its `groupPolicy` setting. */

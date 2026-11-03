@@ -20,6 +20,7 @@ import { PanelSlot, hasPagePanel } from "./PagePanel";
 import { prefetchCommunity } from "./prefetchCommunity";
 import { UserMenu } from "./UserMenu";
 import { PresenceDot } from "@/components/domain/profile/ProfileParts";
+import { VerifiedCheck } from "@/components/ui/VerifiedCheck";
 
 const row = "flex h-11 items-center gap-3 rounded-control px-3.5 text-[15px] font-medium transition";
 /** The panel's middle: scrolls on its own, fading out at its top and bottom edges. */
@@ -154,7 +155,10 @@ function MyCommunities() {
                 <span className="relative block size-8 shrink-0 overflow-hidden rounded-[10px]">
                   <Cover src={c.coverImage} seed={c.id} interest={c.interest} className="size-full" />
                 </span>
-                <span className={cx("min-w-0 flex-1 truncate text-[13.5px]", c.unread ? "font-semibold text-ink" : "font-medium text-ink-muted")}>{c.name}</span>
+                <span className={cx("flex min-w-0 flex-1 items-center gap-1 text-[13.5px]", c.unread ? "font-semibold text-ink" : "font-medium text-ink-muted")}>
+                  <span className="truncate">{c.name}</span>
+                  <VerifiedCheck on={c.verified} size={12} />
+                </span>
                 <CountBadge n={Math.max(c.unreadCount ?? 0, c.mentions)} mention={c.mentions > 0} />
               </Link>
             </li>

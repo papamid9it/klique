@@ -15,4 +15,8 @@ export const MessageService = {
   remove: (id: string, messageId: string) => api.delete<Envelope<{ deleted: boolean }>>(`/api/conversations/${id}/messages/${messageId}`),
   react: (id: string, messageId: string, kind: ReactionKind) => api.post<Envelope<ReactionDTO[]>>(`/api/conversations/${id}/messages/${messageId}/reactions`, { kind }),
   markRead: (id: string) => api.post<Envelope<{ read: boolean }>>(`/api/conversations/${id}/read`),
+  /** message requests sent to you */
+  requests: () => api.get<Envelope<ConversationDTO[]>>("/api/conversations/requests"),
+  /** accept, delete (silently) or block a message request */
+  answerRequest: (id: string, action: "accept" | "delete" | "block") => api.post<Envelope<{ accepted?: boolean; deleted?: boolean }>>(`/api/conversations/${id}/request`, { action }),
 };

@@ -51,7 +51,7 @@ export function WhoCame({ eventId, onClose }: { eventId: string; onClose: () => 
   const left = people.filter((p) => !p.attended).map((p) => p.user.id);
 
   return (
-    <Modal open onClose={onClose} title="Who came?" description={mine ? `Tick off everyone who showed up. Each person gets ${worth("attend")} points (more if they came with a crew), and you get ${worth("hostAttendee")} for each.` : "Tick off everyone who showed up. They earn points for coming, and you earn some for each."}>
+    <Modal open onClose={onClose} title="Who came?" description={mine ? `Tick off everyone who showed up. Each person gets ${worth("attend")} points (more if they came with a klique), and you get ${worth("hostAttendee")} for each.` : "Tick off everyone who showed up. They earn points for coming, and you earn some for each."}>
       {loading ? (
         <Skeleton className="h-48 w-full rounded-card" />
       ) : error || !data ? (

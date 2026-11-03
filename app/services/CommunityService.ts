@@ -34,6 +34,8 @@ export interface CommunityInput {
   minPointsPost?: number;
   /** members may send events in for approval */
   memberEvents?: boolean;
+  /** members may use @everyone / @here */
+  membersMassMention?: boolean;
   coverImage?: string | null;
 }
 

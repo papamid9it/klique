@@ -21,6 +21,7 @@ import type {
   ChatPage,
   StaffDTO,
   UserBrief,
+  ThreadDTO,
 } from "@/lib/types";
 import { ApiError, badRequest, forbidden, notFound } from "../http/errors";
 import { rateLimit } from "../http/rate-limit";
@@ -33,6 +34,7 @@ import {
   ensureChannelIndexes,
   type IChannel,
   type IChannelCategory,
+  type RoleOverride,
   type IChannelMember,
   type IChannelMessage,
   type IChannelRead,
@@ -42,17 +44,16 @@ import { Membership, type IMembership } from "../models/Membership";
 import { Subcommunity, type ISubcommunity } from "../models/Subcommunity";
 import { User, type IUser } from "../models/User";
 import {
-  assertCanManage,
   assertCanView,
   canPostInChannel,
   canSeeChannel,
-  outranks,
   subAccessFrom,
   type Space,
   type SpaceAccess,
 } from "../policies/access";
 import { loadBriefs, toBrief } from "../serializers";
-import type { categorySchema, channelCreateSchema, channelUpdateSchema, chatListQuery } from "../validators/schemas";
+import type { categorySchema, categoryUpdateSchema, channelCreateSchema, channelUpdateSchema, chatListQuery, roleOverridesSchema } from "../validators/schemas";
+import { CommunityRole } from "../models/CommunityRole";
 import { hiddenUserIds } from "./blocks";
 import { escapeRegex, sid, slugify } from "./helpers";
 import { awardPointsLater } from "./points.service";
@@ -60,8 +61,16 @@ import { notify } from "./push.service";
 import { emitChannel, emitTopic } from "./realtime";
 import { Board, Topic, TopicComment, TopicFollow, type ITopic, type ITopicComment } from "../models/Topic";
 import { mentionBriefs, resolveMentions } from "./mentions";
+import { extractMassMention } from "@/lib/mentions";
 import { createPoll, deletePoll, pollPreview } from "./polls.service";
 import type { pollInput } from "../validators/schemas";
+import { logModDelete } from "./admin-audit";
+import { Webhook } from "../models/Webhook";
+import { assertNotTimedOut, assertPerm, can } from "../policies/access";
+import { standings } from "./roles.service";
+import { checkAutoMod } from "./automod.service";
+import { normalizeEmoji } from "./emoji.service";
+import { EMOJI_TOKEN } from "@/lib/emoji-tokens";
 
 const MAX_CHANNELS = 50;
 const MAX_CATEGORIES = 15;
@@ -131,7 +140,8 @@ export async function ensureDefaultGroupChannels(subId: Types.ObjectId, communit
 /* Serializers                                                         */
 /* ------------------------------------------------------------------ */
 
-const toCategory = (c: IChannelCategory): ChannelCategoryDTO => ({ id: sid(c._id), name: c.name, position: c.position });
+const toOverrides = (list: RoleOverride[] | undefined) => (list ?? []).map((o) => ({ roleId: sid(o.roleId), view: o.view ?? null, post: o.post ?? null }));
+const toCategory = (c: IChannelCategory): ChannelCategoryDTO => ({ id: sid(c._id), name: c.name, position: c.position, ...(c.overrides?.length ? { overrides: toOverrides(c.overrides) } : {}) });
 
 interface DtoCtx {
   access: SpaceAccess;
@@ -143,6 +153,10 @@ interface DtoCtx {
   memberCounts?: Map<string, number>;
   /** a site admin: never held back by slow mode */
   siteAdmin?: boolean;
+  /** the community lets members use @everyone / @here (owners and admins always can) */
+  membersMass?: boolean;
+  /** how many people are in the space (for "This will notify N people") */
+  audience?: number;
 }
 
 /** Owners, admins and site admins post without waiting. */
@@ -166,10 +180,16 @@ function toChannel(c: IChannel, ctx: DtoCtx): ChannelDTO {
     unread: ctx.access.isMember && !!last && (!read || last > read),
     unreadCount: ctx.access.isMember && !!last && (!read || last > read) ? (ctx.unreadCounts?.get(sid(c._id)) ?? 1) : 0,
     canPost: canPostInChannel(c, ctx.access, invited),
+    ...(ctx.access.timedOutUntil ? { timedOutUntil: ctx.access.timedOutUntil } : {}),
+    ...(ctx.access.needsRules ? { needsRules: true } : {}),
+    ...(ctx.access.perms?.includes("manageChannels") && c.overrides?.length ? { overrides: toOverrides(c.overrides) } : {}),
     mentions: ctx.mentionCounts.get(sid(c._id)) ?? 0,
     ...(ctx.memberCounts?.has(sid(c._id)) ? { memberCount: ctx.memberCounts.get(sid(c._id)) } : {}),
     slowModeSec: c.slowModeSec ?? 0,
     slowModeExempt: slowModeExempt(ctx.access, !!ctx.siteAdmin),
+    // Discord's "Mention @everyone, @here and all roles"
+    canMassMention: ctx.access.isMember && (ctx.access.canManage || !!ctx.siteAdmin || !!ctx.membersMass || !!ctx.access.perms?.includes("mentionEveryone")),
+    audience: c.visibility === "invite" ? (ctx.memberCounts?.get(sid(c._id)) ?? ctx.audience ?? 0) : (ctx.audience ?? 0),
   };
 }
 
@@ -177,7 +197,7 @@ function toChannel(c: IChannel, ctx: DtoCtx): ChannelDTO {
  * Unread @mentions per channel for this viewer (capped, and only for channels that have unread). With
  * `unreadOut`, also how many messages are unread in each (other people's, capped at 99).
  */
-async function countMentions(viewerId: Types.ObjectId, channels: IChannel[], readBy: Map<string, IChannelRead>, unreadOut?: Map<string, number>): Promise<Map<string, number>> {
+async function countMentions(viewerId: Types.ObjectId, channels: IChannel[], readBy: Map<string, IChannelRead>, unreadOut?: Map<string, number>, suppressEveryone = false): Promise<Map<string, number>> {
   const out = new Map<string, number>();
   const unread = channels
     .filter((c) => {
@@ -190,7 +210,8 @@ async function countMentions(viewerId: Types.ObjectId, channels: IChannel[], rea
     unread.map(async (c) => {
       const after = readBy.get(sid(c._id))?.lastReadMessageId ?? ZERO_ID;
       const [n, u] = await Promise.all([
-        ChannelMessage.countDocuments({ channelId: c._id, mentions: viewerId, deletedAt: null, _id: { $gt: after } }, { limit: 99 }),
+        // @mentions of you, and @everyone (unless you suppress it in this community; @here already lists who it pinged)
+        ChannelMessage.countDocuments({ channelId: c._id, deletedAt: null, _id: { $gt: after }, authorId: { $ne: viewerId }, ...(suppressEveryone ? { mentions: viewerId } : { $or: [{ mentions: viewerId }, { massMention: "everyone" }] }) }, { limit: 99 }),
         unreadOut ? ChannelMessage.countDocuments({ channelId: c._id, authorId: { $ne: viewerId }, deletedAt: null, _id: { $gt: after } }, { limit: 99 }) : 0,
       ]);
       if (n) out.set(sid(c._id), n);
@@ -219,17 +240,19 @@ export async function listChannels(viewer: IUser | null, space: Space, access: S
   const scope = scopeOf(space);
   const [categories, channels, reads, invited] = await Promise.all([
     space.sub ? Promise.resolve<IChannelCategory[]>([]) : ChannelCategory.find({ communityId }).sort({ position: 1, createdAt: 1 }).lean<IChannelCategory[]>(),
-    Channel.find({ ...scope, topicId: null }).sort({ position: 1, createdAt: 1 }).lean<IChannel[]>(),
+    Channel.find({ ...scope, topicId: null, parentChannelId: null }).sort({ position: 1, createdAt: 1 }).lean<IChannel[]>(),
     viewer && access.isMember ? ChannelRead.find({ userId: viewer._id, communityId }).lean<IChannelRead[]>() : Promise.resolve<IChannelRead[]>([]),
     invitedSet(viewer, communityId),
   ]);
   const readBy = new Map(reads.map((r) => [sid(r.channelId), r]));
   const visible = channels.filter((c) => canSeeChannel(c, access, invited.has(sid(c._id))) && (VOICE_ENABLED || c.type !== "voice"));
   const unreadCounts = new Map<string, number>();
-  const mentionCounts = viewer && access.isMember ? await countMentions(viewer._id, visible, readBy, unreadCounts) : new Map<string, number>();
+  const suppress = viewer ? !!(await Membership.findOne({ userId: viewer._id, communityId, subcommunityId: null }).select("suppressEveryone").lean<Pick<IMembership, "suppressEveryone">>())?.suppressEveryone : false;
+  const mentionCounts = viewer && access.isMember ? await countMentions(viewer._id, visible, readBy, unreadCounts, suppress) : new Map<string, number>();
   const memberCounts = access.canManage ? await guestCounts(visible) : undefined;
   const siteAdmin = !!viewer && isSiteAdmin(viewer);
-  const ctx: DtoCtx = { access, readBy, invited, mentionCounts, unreadCounts, memberCounts, siteAdmin };
+  const membersMass = !!space.community.membersMassMention;
+  const ctx: DtoCtx = { access, readBy, invited, mentionCounts, unreadCounts, memberCounts, siteAdmin, membersMass, audience: space.sub ? space.sub.memberCount : space.community.memberCount };
 
   // The groups you're in (community list only), each with the channels you can see.
   const groups: ChannelGroupDTO[] = [];
@@ -245,7 +268,7 @@ export async function listChannels(viewer: IUser | null, space: Space, access: S
         const gAccess = subAccessFrom(sub, parentM, m, isSiteAdmin(viewer), viewer.points ?? 0);
         const rows = subChannels.filter((c) => sid(c.subcommunityId!) === sid(sub._id) && canSeeChannel(c, gAccess, invited.has(sid(c._id))) && (VOICE_ENABLED || c.type !== "voice"));
         const gUnread = new Map<string, number>();
-        const gMentions = await countMentions(viewer._id, rows, readBy, gUnread);
+        const gMentions = await countMentions(viewer._id, rows, readBy, gUnread, suppress);
         const gCounts = gAccess.canManage ? await guestCounts(rows) : undefined;
         groups.push({
           id: sid(sub._id),
@@ -253,7 +276,7 @@ export async function listChannels(viewer: IUser | null, space: Space, access: S
           name: sub.name,
           visibility: sub.visibility,
           role: gAccess.role,
-          channels: rows.map((c) => toChannel(c, { access: gAccess, readBy, invited, mentionCounts: gMentions, unreadCounts: gUnread, memberCounts: gCounts, siteAdmin })),
+          channels: rows.map((c) => toChannel(c, { access: gAccess, readBy, invited, mentionCounts: gMentions, unreadCounts: gUnread, memberCounts: gCounts, siteAdmin, membersMass, audience: sub.memberCount })),
         });
       }
     }
@@ -272,11 +295,29 @@ async function guestCounts(channels: IChannel[]): Promise<Map<string, number>> {
 /** Load a channel the viewer may see. Hidden ones look like they don't exist. */
 async function loadChannel(viewer: IUser | null, space: Space, access: SpaceAccess, channelSlug: string): Promise<{ channel: IChannel; invited: boolean }> {
   assertCanView(access, "this channel");
-  const channel = await Channel.findOne({ ...scopeOf(space), slug: channelSlug.toLowerCase() }).lean<IChannel>();
-  if (!channel) throw notFound("We couldn't find that channel.");
-  const invited = !!viewer && channel.visibility === "invite" && !!(await ChannelMember.exists({ channelId: channel._id, userId: viewer._id }));
+  const found = await Channel.findOne({ ...scopeOf(space), slug: channelSlug.toLowerCase() }).lean<IChannel>();
+  if (!found) throw notFound("We couldn't find that channel.");
+  // a thread follows its channel: whoever can see the channel sees the thread (and anyone who may post there, or
+  // in an announcement channel any member, may reply in it)
+  let channel = found;
+  let guestOf = found._id;
+  if (found.parentChannelId) {
+    const parent = await Channel.findById(found.parentChannelId).lean<IChannel>();
+    if (!parent) throw notFound("We couldn't find that thread.");
+    channel = { ...found, visibility: parent.visibility, overrides: parent.overrides, categoryOverrides: parent.categoryOverrides, type: parent.type === "voice" ? "voice" : "text" };
+    guestOf = parent._id;
+  }
+  const invited = !!viewer && channel.visibility === "invite" && !!(await ChannelMember.exists({ channelId: guestOf, userId: viewer._id }));
   if (!canSeeChannel(channel, access, invited)) throw notFound("We couldn't find that channel.");
   return { channel, invited };
+}
+
+/** A channel someone may post in (for slash commands): the same checks as sending a message. */
+export async function channelForPost(viewer: IUser, space: Space, access: SpaceAccess, channelSlug: string): Promise<{ channel: IChannel }> {
+  assertNotTimedOut(access);
+  const { channel, invited } = await loadChannel(viewer, space, access, channelSlug);
+  if (!canPostInChannel(channel, access, invited)) throw forbidden("You can't post here.");
+  return { channel };
 }
 
 /** The channel someone may type in (they could post there): for the "is typing…" line. */
@@ -314,7 +355,7 @@ async function assertSpaceMembers(space: Space, userIds: string[]): Promise<Type
 }
 
 export async function createChannel(viewer: IUser, space: Space, access: SpaceAccess, input: z.infer<typeof channelCreateSchema>): Promise<ChannelDTO> {
-  assertCanManage(access);
+  assertPerm(access, "manageChannels", "manage channels");
   if (input.type === "voice" && !VOICE_ENABLED) throw badRequest("Voice channels are coming soon.");
   await ensureChannelIndexes();
   rateLimit(`channel-create:${sid(viewer._id)}`, 20, 60 * 60 * 1000);
@@ -342,7 +383,7 @@ export async function createChannel(viewer: IUser, space: Space, access: SpaceAc
 }
 
 export async function updateChannel(viewer: IUser, space: Space, access: SpaceAccess, channelSlug: string, patch: z.infer<typeof channelUpdateSchema>): Promise<ChannelDTO> {
-  assertCanManage(access);
+  assertPerm(access, "manageChannels", "manage channels");
   const { channel } = await loadChannel(viewer, space, access, channelSlug);
   const set: Partial<IChannel> = {};
   if (patch.name !== undefined && patch.name !== channel.name) {
@@ -353,7 +394,13 @@ export async function updateChannel(viewer: IUser, space: Space, access: SpaceAc
   if (patch.type === "voice" && !VOICE_ENABLED) throw badRequest("Voice channels are coming soon.");
   if (patch.type !== undefined) set.type = patch.type;
   if (patch.visibility !== undefined) set.visibility = patch.visibility;
-  if (patch.categoryId !== undefined) set.categoryId = await assertCategory(space, patch.categoryId);
+  if (patch.categoryId !== undefined) {
+    set.categoryId = await assertCategory(space, patch.categoryId);
+    // it takes on its new category's role overrides
+    const cat = set.categoryId ? await ChannelCategory.findById(set.categoryId).select("overrides").lean<Pick<IChannelCategory, "overrides">>() : null;
+    set.categoryOverrides = cat?.overrides ?? [];
+  }
+  if (patch.overrides !== undefined) set.overrides = await cleanOverrides(space, patch.overrides);
   if (patch.slowModeSec !== undefined) set.slowModeSec = patch.slowModeSec;
   await Channel.updateOne({ _id: channel._id }, set);
   // open chats and channel lists pick the change up (slow mode, name, who can post) without a reload
@@ -364,21 +411,28 @@ export async function updateChannel(viewer: IUser, space: Space, access: SpaceAc
 }
 
 export async function deleteChannel(viewer: IUser, space: Space, access: SpaceAccess, channelSlug: string) {
-  assertCanManage(access);
+  assertPerm(access, "manageChannels", "manage channels");
   const { channel } = await loadChannel(viewer, space, access, channelSlug);
+  // its threads go with it
+  const threads = await Channel.find({ parentChannelId: channel._id }).select("_id").lean<{ _id: Types.ObjectId }[]>();
+  if (threads.length) {
+    const ids = threads.map((t) => t._id);
+    await Promise.all([ChannelMessage.deleteMany({ channelId: { $in: ids } }), ChannelRead.deleteMany({ channelId: { $in: ids } }), Channel.deleteMany({ _id: { $in: ids } })]);
+  }
   const withFiles = await ChannelMessage.find({ channelId: channel._id, "images.0": { $exists: true } }).select("images").lean<{ images: string[] }[]>();
   deleteUploads(withFiles.flatMap((m) => m.images));
   await Promise.all([
     ChannelMessage.deleteMany({ channelId: channel._id }),
     ChannelRead.deleteMany({ channelId: channel._id }),
     ChannelMember.deleteMany({ channelId: channel._id }),
+    Webhook.deleteMany({ channelId: channel._id }),
     Channel.deleteOne({ _id: channel._id }),
   ]);
   return { deleted: true };
 }
 
 export async function createCategory(space: Space, access: SpaceAccess, input: z.infer<typeof categorySchema>): Promise<ChannelCategoryDTO> {
-  assertCanManage(access);
+  assertPerm(access, "manageChannels", "manage channels");
   if (space.sub) throw badRequest("Groups don't use categories.");
   const communityId = space.community._id;
   if ((await ChannelCategory.countDocuments({ communityId })) >= MAX_CATEGORIES) throw badRequest(`A community can have up to ${MAX_CATEGORIES} categories.`);
@@ -387,16 +441,32 @@ export async function createCategory(space: Space, access: SpaceAccess, input: z
   return toCategory(doc.toObject());
 }
 
-export async function renameCategory(space: Space, access: SpaceAccess, categoryId: string, input: z.infer<typeof categorySchema>) {
-  assertCanManage(access);
-  const cat = await ChannelCategory.findOneAndUpdate({ _id: categoryId, communityId: space.community._id }, { name: input.name }, { returnDocument: "after" }).lean<IChannelCategory>();
+export async function renameCategory(space: Space, access: SpaceAccess, categoryId: string, input: z.infer<typeof categoryUpdateSchema>) {
+  assertPerm(access, "manageChannels", "manage channels");
+  const set: Partial<IChannelCategory> = {};
+  if (input.name) set.name = input.name;
+  if (input.overrides) set.overrides = await cleanOverrides(space, input.overrides);
+  const cat = await ChannelCategory.findOneAndUpdate({ _id: categoryId, communityId: space.community._id }, { $set: set }, { returnDocument: "after" }).lean<IChannelCategory>();
   if (!cat) throw notFound("We couldn't find that category.");
+  // its channels carry a copy, so checks don't need the category
+  if (input.overrides) {
+    await Channel.updateMany({ communityId: space.community._id, categoryId: cat._id }, { $set: { categoryOverrides: cat.overrides ?? [] } });
+    emitChannel(space.community._id, cat._id);
+  }
   return toCategory(cat);
+}
+
+/** Overrides for roles that exist in this community, at most one per role; empty ones dropped. */
+async function cleanOverrides(space: Space, list: z.infer<typeof roleOverridesSchema>): Promise<RoleOverride[]> {
+  const ids = await CommunityRole.find({ communityId: space.community._id, _id: { $in: list.map((o) => o.roleId) } }).distinct("_id");
+  const ok = new Set(ids.map(String));
+  const seen = new Set<string>();
+  return list.filter((o) => ok.has(o.roleId) && !seen.has(o.roleId) && (o.view || o.post) && seen.add(o.roleId)).map((o) => ({ roleId: new Types.ObjectId(o.roleId), view: o.view, post: o.post }));
 }
 
 /** Channels inside a deleted category are kept and become uncategorised. */
 export async function deleteCategory(space: Space, access: SpaceAccess, categoryId: string) {
-  assertCanManage(access);
+  assertPerm(access, "manageChannels", "manage channels");
   const res = await ChannelCategory.deleteOne({ _id: categoryId, communityId: space.community._id });
   if (!res.deletedCount) throw notFound("We couldn't find that category.");
   await Channel.updateMany({ communityId: space.community._id, categoryId }, { categoryId: null });
@@ -408,7 +478,7 @@ export async function deleteCategory(space: Space, access: SpaceAccess, category
 /* ------------------------------------------------------------------ */
 
 async function loadPrivateChannel(viewer: IUser, space: Space, access: SpaceAccess, channelSlug: string) {
-  assertCanManage(access);
+  assertPerm(access, "manageChannels", "manage channels");
   const { channel } = await loadChannel(viewer, space, access, channelSlug);
   if (channel.visibility !== "invite") throw badRequest("Only private channels have a guest list.");
   return channel;
@@ -494,28 +564,29 @@ async function toMessages(rows: IChannelMessage[], viewer: IUser | null, access:
     mentionBriefs(rows.flatMap((r) => r.mentions ?? [])),
     summarizeReactions("channel", rows.filter((r) => !r.deletedAt).map((r) => r._id), viewer?._id ?? null),
   ]);
-  // Managers may delete anything below their own rank; work out the authors' roles in one query.
-  const roleByUser = new Map<string, IMembership["role"]>();
-  if (viewer && access.canManage) {
-    const ms = await Membership.find({ ...scopeOf(space), status: "active", userId: { $in: [...new Set(rows.map((r) => sid(r.authorId)))] } })
-      .select("userId role")
-      .lean<Pick<IMembership, "userId" | "role">[]>();
-    for (const m of ms) roleByUser.set(sid(m.userId), m.role);
-  }
+  // the authors' standing in the community: their name colour (highest coloured role), and their rank, since you
+  // may only delete messages from people below you (with "Delete messages")
+  const standing = await standings(space.community._id, rows.map((r) => r.authorId));
+  const mayDelete = can(access, "deleteMessages");
   const me = viewer ? sid(viewer._id) : "";
   // the messages these rows answer (same channel only), with who wrote them
   const replyIds = [...new Set(rows.map((r) => (r.replyToId ? sid(r.replyToId) : "")).filter(Boolean))];
   const replyRows = replyIds.length ? await ChannelMessage.find({ _id: { $in: replyIds }, channelId: rows[0].channelId }).lean<IChannelMessage[]>() : [];
   const replyAuthors = await loadBriefs(replyRows.map((r) => r.authorId));
-  const replyMap = new Map(replyRows.map((r) => [sid(r._id), toReplyRef(r, replyAuthors.get(sid(r.authorId))?.displayName ?? "Someone")]));
+  const replyMap = new Map(replyRows.map((r) => [sid(r._id), toReplyRef(r, r.webhook?.name ?? replyAuthors.get(sid(r.authorId))?.displayName ?? "Someone")]));
   return rows.flatMap((raw) => {
     // hidden pending review reads as removed
     const r = raw.hiddenAt && !raw.deletedAt ? { ...raw, deletedAt: raw.hiddenAt } : raw;
-    const author = authors.get(sid(r.authorId));
+    // a webhook's message shows the webhook's own name and picture (no profile behind it)
+    const bot = r.webhook ? { id: `webhook-${sid(r.webhook.id)}`, handle: "", displayName: r.webhook.name, avatarUrl: r.webhook.avatarUrl ?? null, country: "", city: "" as UserBrief["city"] } : null;
+    const author = bot ?? authors.get(sid(r.authorId));
     if (!author) return [];
-    const authorRole = roleByUser.get(sid(r.authorId));
-    const canEdit = !!viewer && !r.deletedAt && !r.sticker && !r.stickerUrl && !r.pollId && sid(r.authorId) === me && access.isMember;
-    const canDelete = !!viewer && !r.deletedAt && (sid(r.authorId) === me ? access.isMember : access.canManage && (authorRole === undefined || outranks(access.role, authorRole)));
+    const authorRank = standing.get(sid(r.authorId))?.rank ?? 0;
+    const canEdit = !bot && !!viewer && !r.deletedAt && !r.sticker && !r.stickerUrl && !r.pollId && sid(r.authorId) === me && access.isMember;
+    const canDelete =
+      !!viewer &&
+      !r.deletedAt &&
+      (bot ? isSiteAdmin(viewer) || mayDelete : sid(r.authorId) === me ? access.isMember : isSiteAdmin(viewer) || (mayDelete && authorRank < (access.rank ?? 0)));
     const mentions = r.deletedAt ? [] : (r.mentions ?? []).flatMap((id) => mentionMap.get(sid(id)) ?? []);
     return [
       {
@@ -536,8 +607,12 @@ async function toMessages(rows: IChannelMessage[], viewer: IUser | null, access:
         canEdit,
         canDelete,
         mentions,
-        mentionsMe: !!me && mentions.some((m) => m.id === me),
+        mentionsMe: !!me && (mentions.some((m) => m.id === me) || (!r.deletedAt && r.massMention === "everyone" && sid(r.authorId) !== me)),
+        massMention: r.deletedAt ? null : (r.massMention ?? null),
         pollId: r.deletedAt || !r.pollId ? null : sid(r.pollId),
+        ...(bot ? { bot: true } : {}),
+        ...(r.thread && !r.deletedAt ? { thread: { slug: r.thread.slug, name: r.thread.name, count: r.thread.count ?? 0, lastAt: r.thread.lastAt?.toISOString() ?? null, lastBy: r.thread.lastBy ?? null } } : {}),
+        ...(!bot && standing.get(sid(r.authorId))?.color ? { color: standing.get(sid(r.authorId))!.color } : {}),
       },
     ];
   });
@@ -571,24 +646,42 @@ export async function listMessages(viewer: IUser | null, space: Space, access: S
 }
 
 export async function postMessage(viewer: IUser, space: Space, access: SpaceAccess, channelSlug: string, input: { body: string; sticker?: string; stickerUrl?: string; images?: string[]; replyToId?: string; poll?: z.infer<typeof pollInput> }): Promise<ChannelMessageDTO> {
-  const { body, sticker, images = [], replyToId } = input;
+  assertNotTimedOut(access);
+  const { sticker, images = [], replyToId } = input;
   const stickerUrl = input.stickerUrl && !sticker ? assertStickerUrl(input.stickerUrl) : null;
   const { channel, invited } = await loadChannel(viewer, space, access, channelSlug);
+  // custom emoji: :name: shortcuts, and only emoji they may use here
+  const body = await normalizeEmoji(viewer, channel.communityId, input.body);
   if (!canPostInChannel(channel, access, invited)) {
     if (access.banned) throw forbidden("You can't post here.");
     if (!access.isMember) throw forbidden("Join to chat.");
     throw forbidden("Only owners and admins can post in this channel.");
   }
   rateLimit(`chat:${sid(viewer._id)}`, 20, 15_000);
+  // AutoMod: the community's rules (blocks throw with the reason)
+  await checkAutoMod(space, viewer, access, { text: input.poll ? `${input.poll.question} ${input.poll.answers.map((a) => a.text).join(" ")}` : body, channelId: channel._id, where: `#${channel.name}` });
   await assertSlowMode(viewer, access, channel);
 
   const mentions = await resolveMentions(viewer, channel, body);
+  // @everyone / @here (and @all / @channel): only owners, admins, site admins, and members where the community allows
+  // it; anyone else's just sends as words. Rate-limited, and never in a post's reply thread.
+  const massWanted = !input.poll && !channel.topicId ? extractMassMention(body) : null;
+  const mayMass = access.canManage || isSiteAdmin(viewer) || can(access, "mentionEveryone") || !!space.community.membersMassMention;
+  let massMention: "everyone" | "here" | null = null;
+  let massIds: Types.ObjectId[] = [];
+  if (massWanted && mayMass) {
+    rateLimit(`mass-mention:${sid(viewer._id)}`, 6, 60 * 60 * 1000);
+    massIds = await massAudience(channel, massWanted);
+    massMention = massWanted;
+    // @here lists exactly who it pinged (so it only counts for them); @everyone counts for every reader
+    if (massWanted === "here") for (const id of massIds) if (!mentions.some((m) => sid(m) === sid(id))) mentions.push(id);
+  }
   const replyTarget = replyToId ? await ChannelMessage.findOne({ _id: replyToId, channelId: channel._id }).select("_id authorId").lean<{ _id: Types.ObjectId; authorId: Types.ObjectId }>() : null;
   // a poll rides on its own message (anything else sent with it is dropped)
   const poll = input.poll ? await createPoll(viewer, { scope: "channel", targetId: channel._id, communityId: channel.communityId }, input.poll) : null;
   const doc = poll
     ? await ChannelMessage.create({ channelId: channel._id, communityId: channel.communityId, authorId: viewer._id, body: "", images: [], pollId: poll._id, replyToId: replyTarget?._id ?? null, mentions: [] })
-    : await ChannelMessage.create({ channelId: channel._id, communityId: channel.communityId, authorId: viewer._id, body, sticker: sticker ?? null, stickerUrl, images, replyToId: replyTarget?._id ?? null, mentions });
+    : await ChannelMessage.create({ channelId: channel._id, communityId: channel.communityId, authorId: viewer._id, body, sticker: sticker ?? null, stickerUrl, images, replyToId: replyTarget?._id ?? null, mentions, massMention });
   noteStickerUse(viewer._id, stickerUrl);
   await Promise.all([
     Channel.updateOne({ _id: channel._id }, { lastMessageId: doc._id, lastMessageAt: doc.createdAt }),
@@ -597,9 +690,14 @@ export async function postMessage(viewer: IUser, space: Space, access: SpaceAcce
   emitChannel(channel.communityId, channel._id);
   const post = channel.topicId ? await Topic.findById(channel.topicId).select("_id title boardId communityId").lean<Pick<ITopic, "_id" | "title" | "boardId" | "communityId">>() : null;
   const href = post ? await postHref(space, post) : null;
-  const where = post ? `"${post.title}"` : `#${channel.name}`;
+  // a reply in a thread: the message it hangs off counts it, and its channel's chat updates
+  if (channel.parentChannelId && channel.threadOf) {
+    await ChannelMessage.updateOne({ _id: channel.threadOf }, { $inc: { "thread.count": 1 }, $set: { "thread.lastAt": doc.createdAt, "thread.lastBy": viewer.displayName } });
+    emitChannel(channel.communityId, channel.parentChannelId);
+  }
+  const where = post ? `"${post.title}"` : channel.parentChannelId ? `the thread "${channel.name}"` : `#${channel.name}`;
   // Phones hear about it only when it is for them: an @mention or an answer to their message.
-  const targets = [...(mentions ?? []), ...(replyTarget ? [replyTarget.authorId] : [])].filter((id) => sid(id) !== sid(viewer._id));
+  const targets = [...new Map([...(mentions ?? []), ...massIds, ...(replyTarget ? [replyTarget.authorId] : [])].map((id) => [sid(id), id])).values()].filter((id) => sid(id) !== sid(viewer._id));
   const said = poll ? pollPreview(poll.question) : previewOf({ body, sticker, stickerUrl, images });
   notify(targets, {
     title: `${viewer.displayName} in ${where}`,
@@ -607,7 +705,155 @@ export async function postMessage(viewer: IUser, space: Space, access: SpaceAcce
     data: href ? { href } : { type: "channel", communitySlug: space.community.slug, channelSlug: channel.slug, ...(space.sub ? { subSlug: space.sub.slug } : {}) },
   }, { actorId: viewer._id, category: "mentions", groupKey: `chat:${sid(channel._id)}`, many: (n) => `${n} mentions and replies in ${where}`, ref: `channel:${sid(channel._id)}` });
   if (post && href) await onPostReply(viewer, post, href, said, targets);
-  return (await toMessages([doc.toObject()], viewer, access, space))[0];
+  const out = (await toMessages([doc.toObject()], viewer, access, space))[0];
+  // bots in the community hear about it (not the bot that sent it)
+  void import("./bots.service").then((b) => b.emitBotEvent(channel.communityId, "message.create", { channel: { id: sid(channel._id), slug: channel.slug, name: channel.name, threadOf: channel.parentChannelId ? sid(channel.parentChannelId) : null }, message: { id: out.id, body: out.body, author: out.author, replyTo: out.replyTo?.id ?? null, mentions: out.mentions } }, { except: viewer._id }));
+  return out;
+}
+
+/**
+ * A channel webhook posts a message (server/services/webhooks.service checked the secret, the channel and limits):
+ * text only, through the same pipeline as people's messages (live update, @mentions, unread counts), shown under
+ * the webhook's name with a BOT tag. @everyone / @here only ping when the webhook is allowed to; @handle mentions
+ * resolve like the community owner's would (the message is filed under the owner).
+ */
+export async function postWebhookMessage(hook: { _id: Types.ObjectId; name: string; avatarUrl: string | null; allowMassMention: boolean }, owner: IUser, channel: IChannel, body: string, name?: string, avatarUrl?: string | null): Promise<{ id: string }> {
+  const mentions = await resolveMentions(owner, channel, body);
+  const massWanted = hook.allowMassMention && !channel.topicId ? extractMassMention(body) : null;
+  let massMention: "everyone" | "here" | null = null;
+  let massIds: Types.ObjectId[] = [];
+  if (massWanted) {
+    rateLimit(`mass-mention:webhook:${sid(hook._id)}`, 6, 60 * 60 * 1000);
+    massIds = await massAudience(channel, massWanted);
+    massMention = massWanted;
+    if (massWanted === "here") for (const id of massIds) if (!mentions.some((m) => sid(m) === sid(id))) mentions.push(id);
+  }
+  const shown = { id: hook._id, name: (name || hook.name).slice(0, 80), avatarUrl: avatarUrl ?? hook.avatarUrl ?? null };
+  const doc = await ChannelMessage.create({ channelId: channel._id, communityId: channel.communityId, authorId: owner._id, body, images: [], mentions, massMention, webhook: shown });
+  await Channel.updateOne({ _id: channel._id }, { lastMessageId: doc._id, lastMessageAt: doc.createdAt });
+  emitChannel(channel.communityId, channel._id);
+  const targets = [...new Map([...mentions, ...massIds].map((id) => [sid(id), id])).values()];
+  if (targets.length) {
+    const community = await Community.findById(channel.communityId).select("slug").lean<{ slug: string }>();
+    const sub = channel.subcommunityId ? await Subcommunity.findById(channel.subcommunityId).select("slug").lean<{ slug: string }>() : null;
+    notify(targets, { title: `${shown.name} in #${channel.name}`, body: previewOf({ body, sticker: null, stickerUrl: null, images: [] }), data: { type: "channel", communitySlug: community?.slug ?? "", channelSlug: channel.slug, ...(sub ? { subSlug: sub.slug } : {}) } }, { category: "mentions", groupKey: `chat:${sid(channel._id)}`, many: (n) => `${n} mentions in #${channel.name}`, ref: `channel:${sid(channel._id)}` });
+  }
+  return { id: sid(doc._id) };
+}
+
+/* ------------------------------ threads ------------------------------ */
+
+/** A thread with no replies for this long is archived (shown under "Archived"; a reply opens it again). */
+const THREAD_ARCHIVE_MS = 7 * 24 * 60 * 60 * 1000;
+const threadArchived = (t: Pick<IChannel, "lastMessageAt" | "createdAt">) => Date.now() - +(t.lastMessageAt ?? t.createdAt) > THREAD_ARCHIVE_MS;
+
+/**
+ * Start a thread off a message (or open the one it already has). Anyone who can see the channel and post in the
+ * community can; in an announcement channel members can thread off posts they can't reply to in the channel.
+ */
+export async function startThread(viewer: IUser, space: Space, access: SpaceAccess, channelSlug: string, messageId: string, name: string | undefined, firstReply: string): Promise<ChannelDTO> {
+  assertNotTimedOut(access);
+  const body = firstReply.trim();
+  // no empty threads: one is made together with its first reply
+  if (!body) throw badRequest("Write the first reply to start the thread.");
+  const { channel, invited } = await loadChannel(viewer, space, access, channelSlug);
+  if (channel.parentChannelId || channel.topicId || channel.type === "voice") throw badRequest("Threads can only start from messages in a text channel.");
+  if (!access.canPost) throw forbidden("Join to start a thread.");
+  const msg = await ChannelMessage.findOne({ _id: messageId, channelId: channel._id }).lean<IChannelMessage>();
+  if (!msg || msg.deletedAt) throw notFound("We couldn't find that message.");
+  const slug = `t-${sid(msg._id)}`;
+  let thread = msg.thread ? await Channel.findById(msg.thread.channelId).lean<IChannel>() : null;
+  let made = false;
+  if (!thread) {
+    rateLimit(`thread:${sid(viewer._id)}`, 20, 60 * 60_000);
+    const title = (name?.trim() || msg.body.replace(EMOJI_TOKEN, ":$1:").replace(/\s+/g, " ").trim() || "Thread").slice(0, 40);
+    try {
+      thread = (await Channel.create({ communityId: channel.communityId, subcommunityId: channel.subcommunityId ?? null, categoryId: channel.categoryId ?? null, slug, name: title, type: "text", visibility: channel.visibility, position: 0, createdById: viewer._id, parentChannelId: channel._id, threadOf: msg._id })).toObject() as IChannel;
+      made = true;
+    } catch (err) {
+      if ((err as { code?: number }).code !== 11000) throw err;
+      thread = (await Channel.findOne({ ...scopeOf(space), slug }).lean<IChannel>())!; // started twice at once
+    }
+    await ChannelMessage.updateOne({ _id: msg._id, thread: null }, { $set: { thread: { channelId: thread._id, slug, name: thread.name, count: 0, lastAt: null, lastBy: null } } });
+  }
+  // the first reply (all the usual checks: AutoMod, slow mode…); if it's refused, the new thread goes again
+  try {
+    await postMessage(viewer, space, access, thread.slug, { body });
+  } catch (err) {
+    if (made) {
+      await Promise.all([Channel.deleteOne({ _id: thread._id }), ChannelMessage.updateOne({ _id: msg._id }, { $set: { thread: null } })]);
+    }
+    throw err;
+  }
+  // answer straight from what's here (no second lookup)
+  const merged: IChannel = { ...thread, visibility: channel.visibility, overrides: channel.overrides, categoryOverrides: channel.categoryOverrides, type: "text" };
+  const dto = toChannel(merged, { access, readBy: new Map(), invited: new Set(invited ? [sid(thread._id)] : []), mentionCounts: new Map(), siteAdmin: isSiteAdmin(viewer) });
+  return { ...dto, thread: { parentSlug: channel.slug, parentName: channel.name, startMessageId: sid(msg._id), archived: false } };
+}
+
+/**
+ * Safety net (run with the reminders job): threads with no replies older than 10 minutes go, and their message's
+ * "replies" button with them. People can't make empty threads; this catches anything else.
+ */
+export async function sweepEmptyThreads(olderThanMs = 10 * 60_000): Promise<number> {
+  const old = await Channel.find({ parentChannelId: { $ne: null }, lastMessageId: null, createdAt: { $lt: new Date(Date.now() - olderThanMs) } }).select("_id threadOf communityId parentChannelId").limit(500).lean<Pick<IChannel, "_id" | "threadOf" | "communityId" | "parentChannelId">[]>();
+  if (!old.length) return 0;
+  await Promise.all([
+    Channel.deleteMany({ _id: { $in: old.map((t) => t._id) } }),
+    ChannelRead.deleteMany({ channelId: { $in: old.map((t) => t._id) } }),
+    ChannelMessage.updateMany({ _id: { $in: old.flatMap((t) => (t.threadOf ? [t.threadOf] : [])) }, "thread.count": { $in: [0, null] } }, { $set: { thread: null } }),
+  ]);
+  for (const t of old) if (t.parentChannelId) emitChannel(t.communityId, t.parentChannelId);
+  return old.length;
+}
+
+/** One thread, as a channel (with where it hangs off). */
+export async function getThread(viewer: IUser | null, space: Space, access: SpaceAccess, threadSlug: string): Promise<ChannelDTO> {
+  const { channel, invited } = await loadChannel(viewer, space, access, threadSlug);
+  if (!channel.parentChannelId) throw notFound("We couldn't find that thread.");
+  const parent = (await Channel.findById(channel.parentChannelId).select("slug name").lean<Pick<IChannel, "slug" | "name">>())!;
+  const read = viewer && access.isMember ? await ChannelRead.findOne({ userId: viewer._id, channelId: channel._id }).lean<IChannelRead>() : null;
+  const dto = toChannel(channel, { access, readBy: new Map(read ? [[sid(channel._id), read]] : []), invited: new Set(invited ? [sid(channel._id)] : []), mentionCounts: new Map(), siteAdmin: !!viewer && isSiteAdmin(viewer) });
+  return { ...dto, thread: { parentSlug: parent.slug, parentName: parent.name, startMessageId: sid(channel.threadOf!), archived: threadArchived(channel) } };
+}
+
+/** A channel's threads: active ones first (latest reply first), then archived. */
+export async function listThreads(viewer: IUser | null, space: Space, access: SpaceAccess, channelSlug: string): Promise<ThreadDTO[]> {
+  const { channel } = await loadChannel(viewer, space, access, channelSlug);
+  const rows = await Channel.find({ parentChannelId: channel._id }).sort({ lastMessageAt: -1, createdAt: -1 }).limit(100).lean<IChannel[]>();
+  const [starters, people] = await Promise.all([
+    ChannelMessage.find({ _id: { $in: rows.flatMap((r) => (r.threadOf ? [r.threadOf] : [])) } }).select("thread").lean<Pick<IChannelMessage, "_id" | "thread">[]>(),
+    loadBriefs(rows.map((r) => r.createdById)),
+  ]);
+  const starter = new Map(starters.map((m) => [sid(m._id), m.thread]));
+  const items = rows.map((r) => ({ slug: r.slug, name: r.name, count: starter.get(sid(r.threadOf!))?.count ?? 0, lastAt: r.lastMessageAt?.toISOString() ?? null, createdAt: r.createdAt.toISOString(), archived: threadArchived(r), startedBy: people.get(sid(r.createdById)) ?? null, startMessageId: sid(r.threadOf!), lastBy: starter.get(sid(r.threadOf!))?.lastBy ?? null }));
+  return [...items.filter((t) => !t.archived), ...items.filter((t) => t.archived)];
+}
+
+/** at most this many people are pinged by one @everyone (the rest still see it highlighted) */
+const MASS_CAP = 5000;
+/** "online now" for @here: used the app in the last few minutes, and not invisible */
+const HERE_MS = 5 * 60_000;
+
+/**
+ * Who a mass mention pings: everyone who can see the channel (its space's members; for a private channel its
+ * guests and the owners and admins), minus anyone who suppresses @everyone and @here in this community; @here only
+ * those online now.
+ */
+async function massAudience(channel: IChannel, kind: "everyone" | "here"): Promise<Types.ObjectId[]> {
+  const rows = await Membership.find({ communityId: channel.communityId, subcommunityId: channel.subcommunityId ?? null, status: "active" }).select("userId role").limit(MASS_CAP * 2).lean<{ userId: Types.ObjectId; role: string }[]>();
+  let ids = rows.map((r) => r.userId);
+  if (channel.visibility === "invite") {
+    const guests = new Set((await ChannelMember.find({ channelId: channel._id }).select("userId").lean<{ userId: Types.ObjectId }[]>()).map((m) => sid(m.userId)));
+    ids = rows.filter((r) => guests.has(sid(r.userId)) || r.role === "owner" || r.role === "admin").map((r) => r.userId);
+  } else if (channel.visibility === "managers") ids = rows.filter((r) => r.role === "owner" || r.role === "admin").map((r) => r.userId);
+  const quiet = new Set((await Membership.find({ communityId: channel.communityId, subcommunityId: null, suppressEveryone: true, userId: { $in: ids } }).select("userId").lean<{ userId: Types.ObjectId }[]>()).map((m) => sid(m.userId)));
+  ids = ids.filter((id) => !quiet.has(sid(id)));
+  if (kind === "here") {
+    const online = await User.find({ _id: { $in: ids }, lastSeenAt: { $gte: new Date(Date.now() - HERE_MS) }, presence: { $ne: "invisible" } }).select("_id").lean<{ _id: Types.ObjectId }[]>();
+    ids = online.map((u) => u._id);
+  }
+  return ids.slice(0, MASS_CAP);
 }
 
 /**
@@ -633,7 +879,8 @@ export async function editMessage(viewer: IUser, space: Space, access: SpaceAcce
   if (msg.pollId) throw forbidden("Polls can't be edited. Delete it and start another.");
   if (!canPostInChannel(channel, access, invited)) throw forbidden("You can't post here any more, so you can't edit this.");
   rateLimit(`chat-edit:${sid(viewer._id)}`, 30, 60_000);
-  const next = body.trim();
+  if (body.trim() !== msg.body.trim()) await checkAutoMod(space, viewer, access, { text: body, channelId: null, where: `#${channel.name} (an edit)` });
+  const next = (await normalizeEmoji(viewer, channel.communityId, body)).trim();
   const mentions = await resolveMentions(viewer, channel, next);
   const editedAt = next === msg.body ? msg.editedAt : new Date();
   await ChannelMessage.updateOne({ _id: msg._id }, { $set: { body: next, mentions, editedAt } });
@@ -648,12 +895,16 @@ export async function deleteMessage(viewer: IUser, space: Space, access: SpaceAc
   if (msg.deletedAt) return { deleted: true };
 
   const own = sid(msg.authorId) === sid(viewer._id);
+  const asAdmin = !own && isSiteAdmin(viewer);
   if (own) {
     if (!access.isMember) throw forbidden("You can't do that.");
-  } else {
-    if (!access.canManage) throw forbidden("Only owners and admins can remove other people's messages.");
-    const authorM = await Membership.findOne({ ...scopeOf(space), userId: msg.authorId, status: "active" }).select("role").lean<Pick<IMembership, "role">>();
-    if (authorM && !outranks(access.role, authorM.role)) throw forbidden("You can't remove a message from someone of equal or higher rank.");
+  } else if (!asAdmin) {
+    if (!can(access, "deleteMessages")) throw forbidden("You don't have permission to remove other people's messages.");
+    // a webhook's message: anyone allowed to delete messages; a person's: only if they're below you
+    if (!msg.webhook) {
+      const author = (await standings(space.community._id, [msg.authorId])).get(sid(msg.authorId));
+      if (author && author.rank >= (access.rank ?? 0)) throw forbidden("You can't remove a message from someone at or above your rank.");
+    }
   }
   await ChannelMessage.updateOne({ _id: msg._id }, { body: "", mentions: [], images: [], sticker: null, stickerUrl: null, pinnedAt: null, pinnedById: null, deletedAt: new Date(), deletedById: viewer._id });
   deleteUploads(msg.images ?? []); // its photos and videos go with it
@@ -663,6 +914,7 @@ export async function deleteMessage(viewer: IUser, space: Space, access: SpaceAc
     await Topic.updateOne({ _id: channel.topicId, commentCount: { $gt: 0 } }, { $inc: { commentCount: -1 } });
     emitTopic(channel.communityId, channel.topicId);
   }
+  if (!own) await logModDelete(viewer, { communityId: channel.communityId, authorId: msg.authorId }, "channelMessage", msg._id, `Message in ${space.community.name} #${channel.name}: ${msg.body.slice(0, 80)}`);
   return { deleted: true };
 }
 
@@ -687,6 +939,7 @@ export async function pinMessage(viewer: IUser, space: Space, access: SpaceAcces
  * join, then hand back a signed, short-lived token for that one room.
  */
 export async function joinVoice(viewer: IUser, space: Space, access: SpaceAccess, channelSlug: string): Promise<VoiceJoinDTO> {
+  assertNotTimedOut(access);
   const { channel, invited } = await loadChannel(viewer, space, access, channelSlug);
   if (channel.type !== "voice") throw forbidden("This isn't a voice channel.");
   if (!VOICE_ENABLED) throw forbidden("Voice channels are coming soon.");
@@ -726,12 +979,14 @@ export async function listPins(viewer: IUser | null, space: Space, access: Space
 
 /** Members who can read the channel may react (announcement channels included); banned and non-members may not. */
 export async function reactToMessage(viewer: IUser, space: Space, access: SpaceAccess, channelSlug: string, messageId: string, kind: ReactionKind): Promise<ReactionDTO[]> {
+  assertNotTimedOut(access);
   const { channel } = await loadChannel(viewer, space, access, channelSlug);
   if (access.banned || !access.isMember) throw forbidden("Join to react.");
   rateLimit(`react:${sid(viewer._id)}`, 60, 30_000);
   const msg = await ChannelMessage.findOne({ _id: messageId, channelId: channel._id, deletedAt: null }).select("_id authorId").lean<Pick<IChannelMessage, "_id" | "authorId">>();
   if (!msg) throw notFound("We couldn't find that message.");
   const reactions = await toggleReaction("channel", msg._id, viewer._id, kind);
+  void import("./bots.service").then((b) => b.emitBotEvent(channel.communityId, "reaction", { channel: { id: sid(channel._id), slug: channel.slug }, messageId: sid(msg._id), kind, user: { id: sid(viewer._id), handle: viewer.handle }, added: reactions.some((r) => r.kind === kind && r.mine) }, { except: viewer._id }));
   // a good reaction earns the author points (once per person per message; bad ones earn nothing and take nothing)
   if (GOOD_REACTIONS.has(kind) && reactions.some((r) => r.mine && r.kind === kind)) awardPointsLater(msg.authorId, "reaction", `channel:${sid(msg._id)}:${sid(viewer._id)}`, viewer._id);
   emitChannel(channel.communityId, channel._id);

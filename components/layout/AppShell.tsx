@@ -13,7 +13,7 @@ import { HomePanel } from "./HomePanel";
 import { usePagePath } from "@/lib/nav";
 
 /** /communities/<slug> (not /communities/new) is the chat workspace and owns its own panes; so does a crew (its chat). */
-const isWorkspace = (p: string) => /^\/communities\/(?!new$)[^/]+\/?$/.test(p) || /^\/crews\/[^/]+\/?$/.test(p) || p === "/messages" || p.startsWith("/messages/");
+const isWorkspace = (p: string) => /^\/communities\/(?!new$)[^/]+\/?$/.test(p) || /^\/kliques\/[^/]+\/?$/.test(p) || p === "/messages" || p.startsWith("/messages/");
 
 const SKIP =
   "sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[200] focus:rounded-control focus:bg-ink focus:px-4 focus:py-2 focus:text-canvas";
@@ -52,6 +52,8 @@ function Shell({ children }: { children: ReactNode }) {
   if (pathname === "/settings" || pathname === "/settings/") return <>{children}</>;
   // So is the admin console, with its own menu.
   if (pathname === "/admin" || pathname.startsWith("/admin/")) return <>{children}</>;
+  // Making a community is a focused, full-screen step (no menus around it)
+  if (pathname.replace(/\/$/, "") === "/communities/new") return <>{children}</>;
 
   if (isWorkspace(pathname)) {
     return (
@@ -92,7 +94,7 @@ function Shell({ children }: { children: ReactNode }) {
   // Everything else (Home, Events, Notifications, Communities, Saved, search…): the home panel · page,
   // and the suggestions rail beside the home feed on wide screens.
   const home = pathname === "/";
-  const wide = ["/events", "/saved", "/communities", "/search", "/notifications"].includes(pathname.replace(/\/$/, ""));
+  const wide = ["/events", "/kliques", "/saved", "/communities", "/search", "/notifications"].includes(pathname.replace(/\/$/, ""));
 
   return (
     <div className={home ? "min-h-dvh lg:grid lg:grid-cols-[272px_minmax(0,1fr)] xl:grid-cols-[272px_minmax(0,1fr)_320px]" : "min-h-dvh lg:grid lg:grid-cols-[272px_minmax(0,1fr)]"}>

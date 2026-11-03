@@ -29,6 +29,8 @@ const PATHS = {
   ban: <><circle cx="12" cy="12" r="8.5" /><path d="m6 6 12 12" /></>,
   logout: <><path d="M15 16.5 19.5 12 15 7.5M19.5 12H9" /><path d="M11.5 20.5h-6A1.5 1.5 0 0 1 4 19V5a1.5 1.5 0 0 1 1.5-1.5h6" /></>,
   "chevron-down": <path d="m6 9.5 6 6 6-6" />,
+  "chevron-up": <path d="m6 14.5 6-6 6 6" />,
+  code: <path d="m8.5 7.5-4.5 4.5 4.5 4.5M15.5 7.5l4.5 4.5-4.5 4.5" />,
   "chevron-right": <path d="m9.5 6 6 6-6 6" />,
   "chevron-left": <path d="m14.5 6-6 6 6 6" />,
   clock: <><circle cx="12" cy="12" r="8.5" /><path d="M12 7v5.2l3.2 1.8" /></>,

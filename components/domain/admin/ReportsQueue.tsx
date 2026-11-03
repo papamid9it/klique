@@ -35,6 +35,7 @@ const KIND: Record<ReportDTO["targetType"], string> = {
   channelMessage: "Channel message",
   message: "Direct message",
   ad: "Ad",
+  klique: "Klique",
 };
 const reasonLabel = (id: string) => REPORT_REASONS.find((r) => r.id === id)?.label ?? id;
 

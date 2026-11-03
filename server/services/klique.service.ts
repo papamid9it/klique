@@ -36,7 +36,7 @@ export async function ensureKlique(fallbackOwner?: Types.ObjectId): Promise<ICom
   if (!ownerId) return null; // no site admin has signed up yet
   const fields = {
     slug: KLIQUE_SLUG,
-    name: "Klique",
+    name: "Klique HQ",
     description: "Everyone on Klique is here. Announcements from the Klique team, and the events Klique puts on for everybody.",
     interest: "music" as const,
     country: "NG",
@@ -46,6 +46,7 @@ export async function ensureKlique(fallbackOwner?: Types.ObjectId): Promise<ICom
     groupPolicy: "off" as const,
     ownerId,
     official: true,
+    verified: true,
   };
   let doc: ICommunity;
   try {
@@ -59,6 +60,16 @@ export async function ensureKlique(fallbackOwner?: Types.ObjectId): Promise<ICom
     doc = (await Community.create(fields)).toObject();
   }
   await Membership.updateOne({ userId: ownerId, communityId: doc._id, subcommunityId: null }, { $set: { role: "owner", status: "active" } }, { upsert: true });
+  // Everyone who signed up before Klique existed (joinKlique was a no-op for them) is in it too.
+  const everyone = await User.find({ _id: { $ne: ownerId } }).select("_id").lean<{ _id: Types.ObjectId }[]>();
+  for (let i = 0; i < everyone.length; i += 1000) {
+    await Membership.bulkWrite(
+      everyone.slice(i, i + 1000).map((u) => ({
+        updateOne: { filter: { userId: u._id, communityId: doc._id, subcommunityId: null }, update: { $setOnInsert: { role: "member", status: "active" } }, upsert: true },
+      })),
+      { ordered: false },
+    );
+  }
   await ensureDefaultChannels(doc._id, ownerId);
   await recountMembers(doc._id, null);
   rememberKliqueId(doc._id);

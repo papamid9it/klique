@@ -242,7 +242,7 @@ const FeedVideo = forwardRef<VideoHandle, { url: string; poster: string | null; 
  * burst where you tapped, every time; in the viewer a tap plays or pauses a video and a double tap upvotes too.
  * `fill` fills its parent instead (the post viewer, on wide screens), and `withSound` starts videos with sound.
  */
-export function FeedMedia({ media, className, onOpen, onDoubleTap, fill, withSound }: { media: TopicMediaDTO[]; className?: string; onOpen?: () => void; onDoubleTap?: () => void; fill?: boolean; withSound?: boolean }) {
+export function FeedMedia({ media, className, onOpen, onDoubleTap, fill, withSound, openLabel = "Open the post", zoomHint }: { media: TopicMediaDTO[]; className?: string; /** a tap: gets which picture or video was tapped */ onOpen?: (index: number) => void; onDoubleTap?: () => void; fill?: boolean; withSound?: boolean; /** what a tap does, for screen readers */ openLabel?: string; /** show a small "zoom" sign on pictures (a tap opens them big) */ zoomHint?: boolean }) {
   const first = media[0];
   const firstKey = first ? (first.kind === "video" ? (first.poster ?? videoPoster(first.url) ?? first.url) : first.url) : "";
   const [ratio, setRatio] = useState<number | null>(() => shapes.get(firstKey) ?? null);
@@ -281,7 +281,7 @@ export function FeedMedia({ media, className, onOpen, onDoubleTap, fill, withSou
   // with a burst at the spot each time (the single tap waits a moment to tell them apart)
   const tap = (k: number, e: React.MouseEvent) => {
     // in the viewer a picture is already as big as it gets: a tap there does nothing
-    const act = () => (onOpen ? onOpen() : media[k].kind === "video" ? videos.current[k]?.toggle() : undefined);
+    const act = () => (onOpen ? onOpen(k) : media[k].kind === "video" ? videos.current[k]?.toggle() : undefined);
     if (!onDoubleTap) return act();
     const now = e.timeStamp;
     if (now - lastTap.current < 250) {
@@ -338,11 +338,11 @@ export function FeedMedia({ media, className, onOpen, onDoubleTap, fill, withSou
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
-                      if (onOpen) onOpen();
+                      if (onOpen) onOpen(k);
                       else videos.current[k]?.toggle();
                     }
                   }}
-                  aria-label={onOpen ? "Open the post" : "Play or pause the video"}
+                  aria-label={onOpen ? openLabel : "Play or pause the video"}
                   className="relative block size-full cursor-pointer"
                 >
                   <FeedVideo
@@ -365,7 +365,13 @@ export function FeedMedia({ media, className, onOpen, onDoubleTap, fill, withSou
                 </div>
               ) : (
                 wanted(k) && (
-                  <button type="button" onClick={(e) => tap(k, e)} aria-label={onOpen ? `Open the post (picture ${k + 1} of ${media.length})` : `Picture ${k + 1} of ${media.length}`} className={cx("relative block size-full", onOpen ? "cursor-pointer" : "cursor-default")}>
+                  <button type="button" onClick={(e) => tap(k, e)} aria-label={onOpen ? `${openLabel} (picture ${k + 1} of ${media.length})` : `Picture ${k + 1} of ${media.length}`} className={cx("group/zoom relative block size-full", zoomHint && onOpen ? "cursor-zoom-in" : onOpen ? "cursor-pointer" : "cursor-default")}>
+                    {zoomHint && onOpen && (
+                      // "tap to zoom": always there on touch screens, on hover with a mouse
+                      <span aria-hidden="true" className="pointer-events-none absolute right-2 bottom-2 z-10 inline-flex items-center gap-1 rounded-full bg-black/60 px-2 py-1 text-[11px] font-semibold text-white backdrop-blur transition [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/zoom:opacity-100">
+                        <Icon name="zoom-in" size={13} /> Zoom
+                      </span>
+                    )}
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={cdn(m.url, { w: 1280 })}

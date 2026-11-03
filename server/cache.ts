@@ -18,6 +18,8 @@ export const cacheConfigured = () => !!url() && !!token();
 
 type Cmd = (string | number)[];
 const PREFIX = "klique:";
+/** failures in a row (one slow first request at start-up isn't worth a warning) */
+let failures = 0;
 let warned = false;
 
 /** Run commands in one round trip. Returns null when Redis is off or unreachable. */
@@ -29,16 +31,21 @@ async function pipeline(commands: Cmd[]): Promise<unknown[] | null> {
       headers: { Authorization: `Bearer ${token()}`, "Content-Type": "application/json" },
       body: JSON.stringify(commands),
       cache: "no-store",
-      signal: AbortSignal.timeout(1500),
+      // the first request opens a fresh TLS connection to Upstash (far from Lagos), which can take a few seconds
+      signal: AbortSignal.timeout(failures ? 1500 : 4000),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const rows = (await res.json()) as { result?: unknown; error?: string }[];
     if (rows.some((r) => r.error)) throw new Error(rows.find((r) => r.error)?.error);
+    if (warned) console.log("[cache] Redis is back");
+    failures = 0;
+    warned = false;
     return rows.map((r) => r.result);
   } catch (err) {
-    if (!warned) {
+    // each call tries Redis again; this only says the last one(s) used the in-memory copy instead
+    if (++failures >= 3 && !warned) {
       warned = true;
-      console.warn("[cache] Redis unavailable, using in-memory fallback:", (err as Error)?.message);
+      console.warn("[cache] Redis isn't answering, using the in-memory fallback for now:", (err as Error)?.message);
     }
     return null;
   }

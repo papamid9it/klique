@@ -9,7 +9,7 @@ export default function TermsPage() {
   return (
     <LegalDoc
       title="Terms of Service"
-      updated="27 October 2026"
+      updated="3 November 2026"
       intro={
         <p>
           These terms are the agreement between you and klique. (&ldquo;klique&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;) for using our website and apps. By creating an account or using klique you agree to them. If you don&apos;t agree, please don&apos;t use
@@ -45,7 +45,9 @@ export default function TermsPage() {
       </Section>
 
       <Section n={4} title="Communities and their owners">
-        <p>People who create communities and groups run them and set their own house rules on top of these terms. Owners and admins can remove members and content in their spaces. klique doesn&apos;t moderate every message, but we may step in at any time.</p>
+        <p>People who create communities and groups run them and set their own house rules on top of these terms. Owners and admins moderate their own community: they can remove posts, comments, messages and members, ask entry questions before letting people in, and see a log of moderation in their space.</p>
+        <p>Owners can give members roles with moderation powers (for example to delete messages, or to time out, remove or ban people). A <strong>timeout</strong> means you can still read but can&apos;t post, react or vote in that community until it ends. Communities can also switch on <strong>AutoMod</strong>, automatic filters for scam links, banned words, mass mentions, repeated messages and sudden waves of joins: it may block what you write, alert the community&apos;s moderators, time you out or pause joining for a while. Its actions are logged for the community&apos;s staff.</p>
+        <p>klique doesn&apos;t check every message, but our admins can step in anywhere at any time, and can delete any post, comment, chat message, klique or community that breaks these terms. Moderation actions are logged.</p>
       </Section>
 
       <Section n={5} title="18+ communities and explicit content" id="adult">
@@ -70,19 +72,64 @@ export default function TermsPage() {
         </ul>
       </Section>
 
-      <Section n={7} title="Our service">
+      <Section n={7} title="Kliques" id="kliques">
+        <p>A klique is a small group of people going to an event or meeting up together.</p>
+        <ul>
+          <li>
+            <strong>18+ only.</strong> To start or join a klique you must be 18 or older (by the date of birth on your account), and you may need to verify your email first.
+          </li>
+          <li>
+            <strong>Who can join.</strong> A host can open a klique to everyone, to women only, to men only, or to a set number of women and men. These use the gender on your profile. Only a host whose profile says woman can start a women-only klique (and the same for men). If your profile doesn&apos;t say a gender, you can join kliques open to everyone and spots open to anyone. Setting a false gender to get into a klique breaks these terms.
+          </li>
+          <li>Hosts decide who joins (or let people join straight away), and can remove people. Community owners and admins can moderate kliques in their community.</li>
+          <li>
+            <strong>Meet safely.</strong> Meet in public places, tell someone where you&apos;re going and who with, arrange your own way home, and leave if you feel unsafe. Don&apos;t share more personal information than you need to.
+          </li>
+          <li>
+            <strong>klique isn&apos;t responsible for meetups.</strong> klique helps people find each other, but we don&apos;t check people, organise or supervise meetups, and we aren&apos;t responsible for what happens offline, to the extent the law allows. You go at your own risk and are responsible for how you behave.
+          </li>
+          <li>If someone makes you uncomfortable, use Report and Block on their profile or in the chat. Blocking stops them messaging you. In an emergency, contact the police or emergency services first.</li>
+        </ul>
+      </Section>
+
+      <Section n={8} title="Messages and mentions" id="messages">
+        <ul>
+          <li>
+            <strong>Message requests.</strong> Depending on your message settings, someone who isn&apos;t your friend may send you one text message as a request (no pictures or links). It stays in Requests until you accept it, delete it or block them. If you delete it, the sender isn&apos;t told. People in the same klique, and owners and admins of the same community, can message each other directly.
+          </li>
+          <li>
+            <strong>Mass mentions.</strong> @everyone and @all notify everyone who can see a channel, and @here and @channel notify everyone online. Community owners and admins can always use them. Members can use them only if the community allows it. Don&apos;t use them to spam.
+          </li>
+          <li>
+            <strong>Bots and webhooks.</strong> Communities can add bots and webhooks made by other people (marked BOT). Their makers, not klique, are responsible for them; the community&apos;s owner chooses what a bot may do there. Bot makers must follow these terms and our <Link href="/developers" className="font-medium text-accent-text underline">developer guide</Link>.
+          </li>
+          <li>Pictures and videos other people share are theirs. Don&apos;t save, repost or share someone else&apos;s photos without their permission.</li>
+        </ul>
+      </Section>
+
+      <Section n={9} title="Plans and payments">
+        <p>
+          Lite and Pro are optional monthly plans that <strong>renew monthly until you cancel</strong>. You can cancel any time in Settings → Plan &amp; points and keep the plan until the end of the month you paid for. Plan limits can change. Hype has ended, and leftover Hype was turned into days of Lite. The full details, with donations, contributions, refunds and payouts, are in our{" "}
+          <Link href="/terms/payments" className="font-medium text-accent-text underline">
+            Payment terms
+          </Link>
+          .
+        </p>
+      </Section>
+
+      <Section n={10} title="Our service">
         <p>We work to keep klique running and safe, but it&apos;s provided &ldquo;as is&rdquo;. We may change, pause or stop features. To the extent the law allows, we aren&apos;t liable for indirect or consequential losses, for content posted by others, or for what happens at events, and our total liability to you is limited to ₦50,000. Nothing in these terms limits rights you have under Nigerian consumer protection law that can&apos;t be limited.</p>
       </Section>
 
-      <Section n={8} title="Ending your account">
-        <p>You can delete your account at any time in Settings → My Account. We may suspend or close accounts that break these terms or the law.</p>
+      <Section n={11} title="Ending your account">
+        <p>You can delete your account at any time in Settings → My Account. Deleting your account also stops a Lite or Pro plan from renewing. Days already paid for aren&apos;t refunded. We may suspend or close accounts that break these terms or the law.</p>
       </Section>
 
-      <Section n={9} title="Changes and law">
+      <Section n={12} title="Changes and law">
         <p>We may update these terms. If a change is significant, we&apos;ll tell you in the app or by email before it takes effect. These terms are governed by the laws of the Federal Republic of Nigeria, and the courts of Lagos State have jurisdiction.</p>
       </Section>
 
-      <Section n={10} title="Contact">
+      <Section n={13} title="Contact">
         <p>
           Questions about these terms? <Contact />.
         </p>

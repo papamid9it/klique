@@ -27,6 +27,7 @@ import { FeedComment, FeedPost, FeedVote } from "../server/models/FeedPost";
 import { Membership } from "../server/models/Membership";
 import { Reaction } from "../server/models/Reaction";
 import { User } from "../server/models/User";
+import { assertSafeSeedTarget } from "./seed-guard";
 
 const TAG = "feed";
 const SETTING = "seed:feed";
@@ -199,6 +200,7 @@ async function seed() {
 
 async function main() {
   if (!process.env.MONGODB_URI) throw new Error("MONGODB_URI isn't set (.env.local).");
+  assertSafeSeedTarget(process.env.MONGODB_URI);
   await mongoose.connect(process.env.MONGODB_URI);
   if (flag("clean")) await clean();
   else await seed();

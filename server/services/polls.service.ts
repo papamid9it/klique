@@ -17,6 +17,7 @@ import { loadBriefs } from "../serializers";
 import type { pollInput } from "../validators/schemas";
 import { sid } from "./helpers";
 import { emitChannel, emitDm, publish, rtChannel } from "./realtime";
+import { assertNoCommunityTimeout } from "../policies/access";
 
 /** In communities bigger than this, who voted for what stays hidden (only the numbers show). */
 const VOTERS_SHOWN_UP_TO = 500;
@@ -132,6 +133,7 @@ export async function votePoll(viewer: IUser, id: string, answerIds: string[]): 
   const poll = await loadPoll(id);
   const rights = await rightsFor(viewer, poll);
   if (!rights.canVote) throw forbidden("Join to vote in this poll.");
+  await assertNoCommunityTimeout(viewer._id, poll.communityId);
   if (isOver(poll)) throw badRequest("This poll has ended.");
   rateLimit(`poll-vote:${sid(viewer._id)}`, 60, 60_000);
   const valid = new Set(poll.answers.map((a) => a.id));

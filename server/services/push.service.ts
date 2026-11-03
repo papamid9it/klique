@@ -48,7 +48,7 @@ export function urlFor(data: Record<string, string>): string {
     case "event":
       return `/events/${data.id}`;
     case "crew":
-      return `/crews/${data.id}`;
+      return `/kliques/${data.id}`;
     case "dm":
       return `/messages/${data.conversationId}`;
     case "group":
