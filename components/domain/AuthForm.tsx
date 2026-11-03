@@ -26,6 +26,9 @@ const PAGE_NOTICES: Record<string, string> = {
   suspended: "This account has been suspended. Contact support if you think that's a mistake.",
 };
 
+/** the desktop app sends people here when the Google hand-off back to the app didn't work */
+const DESKTOP_GOOGLE_FAILED = "Google sign-in didn't finish. Please try again.";
+
 const PERKS = [
   { icon: "calendar", title: "Events near you", text: "Parties, meetups and shows in your city, ranked for you." },
   { icon: "users", title: "Communities", text: "Channels, topics and voice rooms for the people you actually like." },
@@ -37,7 +40,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const next = safeNext(params.get("next"));
   const { data: config } = useApi(() => AuthService.config(), []);
   const google = !!config?.google;
-  return mode === "login" ? <LoginCard next={next} google={google} notice={PAGE_NOTICES[params.get("error") ?? ""]} reset={params.get("reset") === "1"} /> : <SignupCard next={next} google={google} />;
+  return mode === "login" ? <LoginCard next={next} google={google} notice={PAGE_NOTICES[params.get("error") ?? ""] ?? (params.get("desktop_error") === "1" ? DESKTOP_GOOGLE_FAILED : undefined)} reset={params.get("reset") === "1"} /> : <SignupCard next={next} google={google} />;
 }
 
 /* --------------------------------- log in --------------------------------- */

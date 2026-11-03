@@ -35,6 +35,8 @@ export interface NativeStart {
   redirect: string;
   /** sha256 hex of the verifier the app keeps secret */
   challenge: string;
+  /** the desktop app (desktop=1): finish on our "Opening Klique…" page; phone apps get the plain redirect their auth browser expects */
+  desktop?: true;
 }
 
 /** Validate what a mobile app asked for; null means "this is a normal web sign-in". */
@@ -45,7 +47,7 @@ export function nativeFromQuery(q: URLSearchParams): NativeStart | null {
   if (!nativeRedirects().includes(redirect) || !/^[a-f0-9]{64}$/.test(challenge)) {
     throw new ApiError(400, "That app sign-in request isn't valid.", { code: "google_failed" });
   }
-  return { redirect, challenge };
+  return { redirect, challenge, ...(q.get("desktop") === "1" ? { desktop: true as const } : {}) };
 }
 
 export async function startGoogle(next: string, native: NativeStart | null = null): Promise<{ url: string; cookie: string }> {

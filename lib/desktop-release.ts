@@ -42,10 +42,13 @@ export const FALLBACK_RELEASE: DesktopRelease = {
   minVersion: V,
   notes: "First release of the Klique desktop app.",
   files: [
-    // only what's uploaded so far (portable .zip, .pkg.tar.xz, .rpm and .tar.gz join once they're in the bucket)
     f("windows", "installer", "Windows installer (.exe)", `Klique-Setup-${V}.exe`, 115297647, "6a06e1dd024f7b13e35c29774e9c4c003ef27c986bdf91ff7250e8c9e50d5c7f"),
+    f("windows", "portable", "Portable (.zip)", `Klique-${V}-win-x64.zip`, 153210868, "3c7beaf715cfca0a23b90df6db70733f5778be51b95dcb454d5e29a1a41f44d9"),
     f("linux", "appimage", "AppImage (any distro)", `Klique-${V}-x86_64.AppImage`, 125677746, "7bc6828f7ad79ec5a6b43c5f478d05d21d25d9ad8674a8718e28ac071efdb412"),
     f("linux", "deb", "Ubuntu / Debian / Mint (.deb)", `klique_${V}_amd64.deb`, 90141650, "5c3487a280a9e53deb998d6e73ba90b736fb0edb84ea259c98e12d41301a8b71"),
+    f("linux", "pacman", "Arch, Manjaro (.pkg.tar.xz)", `klique-${V}-x86_64.pkg.tar.xz`, 90159368, "334ba019bf88ae3598871ac149b3019d0fb41c51d38f7721a9bc89f0285549d2"),
+    f("linux", "rpm", "Fedora, openSUSE (.rpm)", `klique-${V}.x86_64.rpm`, 90054653, "0efa54f0ddd47931d1d706f2090302238fb45af6c841b076af97e92d5300646c"),
+    f("linux", "targz", "Archive (.tar.gz)", `Klique-${V}-linux-x64.tar.gz`, 119932891, "d0450670164af773bc318fe0cc5ddc068526193931e813536d876cd1884642b0"),
     // Mac comes later: "dmg" files with arch "arm64" / "x64" (Klique-<v>-arm64.dmg, Klique-<v>-x64.dmg)
   ],
 };
