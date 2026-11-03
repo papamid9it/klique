@@ -41,6 +41,7 @@ export function useAccountMenu(): MenuEntry[] | null {
     { label: "Advertise", icon: "megaphone", onSelect: () => router.push("/ads") },
     { label: "Plan & points", icon: "coin", onSelect: () => router.push("/settings?tab=plan") },
     { label: "Settings", icon: "sliders", onSelect: () => router.push("/settings") },
+    { label: "Desktop app", icon: "download", onSelect: () => router.push("/download") },
     ...(user.isAdmin ? ([{ label: "Admin console", icon: "shield", onSelect: () => router.push("/admin") }] as MenuEntry[]) : []),
     { type: "sep" },
     { label: "Sign out", icon: "logout", danger: true, onSelect: () => void signOut() },

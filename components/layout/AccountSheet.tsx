@@ -15,7 +15,7 @@ import { useAccountMenu } from "./UserMenu";
 export function AccountSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { user } = useAuth();
   // the admin console is for computers (on a phone /admin asks first): not offered here
-  const items = useAccountMenu()?.filter((e) => !(e.type === undefined && "label" in e && e.label === "Admin console"));
+  const items = useAccountMenu()?.filter((e) => !(e.type === undefined && "label" in e && (e.label === "Admin console" || e.label === "Desktop app")));
   if (!user || !items) return null;
   const row = "flex min-h-12 w-full items-center gap-3 rounded-control px-3 text-left text-[16px] font-medium transition active:bg-raised";
   const render = (e: MenuEntry, i: number) => {

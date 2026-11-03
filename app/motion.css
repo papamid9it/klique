@@ -15,3 +15,9 @@
 .kq-calm :is(li, .kq-live):is(:hover, :focus-within) .kq-name::after {
   animation-play-state: running !important;
 }
+
+/* /download: the hero's drifting glow, floating window, underline and moving band (motion-safe only) */
+@keyframes kqdrift { from { transform: translate(0, 0) scale(1); } to { transform: translate(6rem, 3rem) scale(1.15); } }
+@keyframes kqfloat { 0%, 100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-14px) rotate(1deg); } }
+@keyframes kqline { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes kqmarquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }

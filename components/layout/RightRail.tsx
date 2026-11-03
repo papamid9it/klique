@@ -10,6 +10,7 @@ import { usePlace } from "@/components/providers/PlaceProvider";
 import { Icon } from "@/components/ui/Icon";
 import { RowSkeleton } from "@/components/ui/Skeleton";
 import { useApi } from "@/lib/hooks/useApi";
+import { DesktopPrompt } from "@/components/domain/DesktopPrompt";
 
 export function RightRail() {
   const router = useRouter();
@@ -69,6 +70,8 @@ export function RightRail() {
       </section>
 
       {railAd && <SponsoredBox ad={railAd} />}
+
+      <DesktopPrompt />
 
       {/* plans: Lite and Pro, opening the pricing page */}
       <Link href="/pricing" className="group block rounded-card border border-line bg-surface p-5 transition hover:border-ink-muted/60" aria-labelledby="rail-pro">

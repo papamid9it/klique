@@ -265,7 +265,7 @@ export const MOODS: Mood[] = [
   {
     id: "monochrome",
     name: "Monochrome",
-    description: "Black, white and greys. Nothing but the content. The default.",
+    description: "Black, white and greys. Nothing but the content.",
     scheme: "dark",
     tokens: {
       canvas: "#0a0a0a",
@@ -313,6 +313,17 @@ export const MOOD_IDS = MOODS.map((m) => m.id) as MoodId[];
 export function getMood(id: string | null | undefined): Mood {
   return MOODS.find((m) => m.id === id) ?? MOODS[0];
 }
+
+/**
+ * What someone chose in Settings → Appearance: a mood, or "system" (match the device: Paper Mono when it's light,
+ * Monochrome when it's in dark mode). "system" is the default for everyone who never chose.
+ */
+export type MoodPref = MoodId | "system";
+export const MOOD_PREFS = ["system", ...MOOD_IDS] as MoodPref[];
+export const DEFAULT_PREF: MoodPref = "system";
+export const isMoodPref = (v: unknown): v is MoodPref => v === "system" || isMoodId(v);
+/** The mood actually shown for a preference (`dark`: the device is in dark mode). */
+export const resolveMood = (pref: MoodPref, dark: boolean): MoodId => (pref === "system" ? (dark ? "monochrome" : "paper-mono") : pref);
 
 export function isMoodId(id: unknown): id is MoodId {
   return typeof id === "string" && (MOOD_IDS as string[]).includes(id);

@@ -1,6 +1,6 @@
 import ApiClient from "@/app/ApiCore";
 import type { CityId, DmPolicy, InterestId, Presence, ProfileVisibility } from "@/lib/constants";
-import type { MoodId } from "@/lib/moods";
+import type { MoodPref } from "@/lib/moods";
 import type { Envelope, Paginated, ProfileView, UserBrief, UserMe, TopicMediaDTO } from "@/lib/types";
 
 const api = new ApiClient();
@@ -25,7 +25,7 @@ export interface ProfileUpdate {
   nameEffect?: string | null;
   profileTheme?: { primary: string; accent: string } | null;
   profileEffect?: string | null;
-  mood?: MoodId;
+  mood?: MoodPref;
   profileVisibility?: ProfileVisibility;
   attendancePublic?: boolean;
   dmPolicy?: DmPolicy;

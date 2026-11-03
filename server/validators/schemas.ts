@@ -2,7 +2,7 @@ import { z } from "zod";
 import { DATE_FILTERS } from "@/lib/dates";
 import { DM_POLICIES, LIMITS, PRESENCES, PROFILE_VISIBILITY, REPORT_REASONS, SLOW_MODE_STEPS } from "@/lib/constants";
 import { FRAME_IDS, NAME_EFFECT_IDS } from "@/lib/cosmetics";
-import { MOOD_IDS } from "@/lib/moods";
+import { MOOD_PREFS } from "@/lib/moods";
 import { REACTION_IDS, STICKER_IDS } from "@/lib/reactions";
 import { FEED_TITLE_MAX, TEXT_BACKGROUND_IDS, TEXT_CARD_MAX } from "@/lib/feedText";
 import { NOTIFY_CATEGORY_IDS } from "@/lib/notifications";
@@ -82,7 +82,7 @@ export const profileUpdateSchema = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a date")
     .refine((v) => { const d = Date.parse(`${v}T00:00:00Z`); return !Number.isNaN(d) && d < Date.now() && d > Date.parse("1900-01-01T00:00:00Z"); }, "Enter your real date of birth")
     .optional(),
-  mood: z.enum(MOOD_IDS as [string, ...string[]]).optional(),
+  mood: z.enum(MOOD_PREFS as [string, ...string[]]).optional(),
   profileVisibility: z.enum(PROFILE_VISIBILITY.map((p) => p.id) as [string, ...string[]]).optional(),
   attendancePublic: z.boolean().optional(),
   dmPolicy: z.enum(DM_POLICIES.map((p) => p.id) as [string, ...string[]]).optional(),

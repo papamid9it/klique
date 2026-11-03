@@ -22,3 +22,23 @@ export async function migrateMood(conn: Connection): Promise<"migrated" | "alrea
   await settings.updateOne({ _id: MOOD_MIGRATION }, { $set: { value: { state: "done", people: r.modifiedCount }, updatedAt: new Date() } });
   return "migrated";
 }
+
+/**
+ * One-off (Nov 2026): the default is "system" now (Paper Mono, or Monochrome on a device in dark mode). Paper Mono
+ * was saved on every account as the old default, so everyone still on it moves to "system"; other moods were
+ * chosen, and stay. Runs once ("migration:mood-system-v1").
+ */
+export async function migrateMoodSystem(conn: Connection): Promise<"migrated" | "already done"> {
+  const db = conn.db;
+  if (!db) throw new Error("Not connected.");
+  const settings = db.collection<{ _id: string; value?: unknown; updatedAt?: Date }>("appsettings");
+  try {
+    await settings.insertOne({ _id: "migration:mood-system-v1", value: { state: "running" }, updatedAt: new Date() });
+  } catch (e) {
+    if ((e as { code?: number })?.code === 11000) return "already done";
+    throw e;
+  }
+  const r = await db.collection("users").updateMany({ $or: [{ mood: "paper-mono" }, { mood: { $exists: false } }] }, { $set: { mood: "system" } });
+  await settings.updateOne({ _id: "migration:mood-system-v1" }, { $set: { value: { state: "done", people: r.modifiedCount }, updatedAt: new Date() } });
+  return "migrated";
+}

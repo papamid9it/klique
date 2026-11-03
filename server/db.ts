@@ -6,7 +6,7 @@ import { migrateKliqueAudience, migrateKliques } from "./migrations/kliques";
 import { migrateMediaSlots } from "./migrations/plans";
 import { migrateRoles } from "./migrations/roles";
 import { migrateHype } from "./migrations/hype";
-import { migrateMood } from "./migrations/mood";
+import { migrateMood, migrateMoodSystem } from "./migrations/mood";
 import { migrateDm } from "./migrations/dm";
 
 /**
@@ -38,6 +38,7 @@ export async function connectDb(): Promise<typeof mongoose> {
         if ((await migrateMediaSlots(m.connection)) === "migrated") console.log("[db] plans: gallery slots are Free 2, Lite 4, Pro 6 (any mix)");
         if ((await migrateHype(m.connection)) === "migrated") console.log("[db] leftover Hype turned into Lite days");
         if ((await migrateMood(m.connection)) === "migrated") console.log("[db] everyone on the old default mood is on Paper Mono now");
+        if ((await migrateMoodSystem(m.connection)) === "migrated") console.log("[db] the default mood matches each person's device now");
         if ((await migrateDm(m.connection)) === "migrated") console.log("[db] message requests: \"people in my communities\" moved to everyone-as-requests");
         return m;
       })

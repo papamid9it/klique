@@ -3,7 +3,7 @@
  * (this web app today; mobile / desktop later). Pure types — no runtime code.
  */
 import type { CityId, DmPolicy, InterestId, Presence, ProfileVisibility, ReportReason } from "./constants";
-import type { MoodId } from "./moods";
+import type { MoodPref } from "./moods";
 
 export type Id = string;
 export type ISODate = string;
@@ -92,7 +92,7 @@ export interface UserMe extends UserProfile {
   /** false for Google-only accounts: they can add a password without entering a current one */
   hasPassword: boolean;
   googleLinked: boolean;
-  mood: MoodId;
+  mood: MoodPref;
   privacy: UserPrivacy;
   dmPolicy: DmPolicy;
   unreadMessages: number;

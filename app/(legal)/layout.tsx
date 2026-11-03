@@ -14,6 +14,9 @@ export default function LegalLayout({ children }: { children: ReactNode }) {
           <Link href="/privacy" className="hover:text-ink">
             Privacy
           </Link>
+          <Link href="/download" className="hover:text-ink">
+            Desktop app
+          </Link>
         </nav>
       </header>
       <main id="main" className="mx-auto max-w-3xl px-4 pt-10 pb-24 sm:px-8">

@@ -17,7 +17,8 @@ export const metadata: Metadata = {
   twitter: { card: "summary_large_image" },
 };
 
-export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#f6f6f6" }; // Paper Mono, the default mood
+// the browser bars match the default mood: Paper Mono, or Monochrome when the device is in dark mode
+export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: [{ media: "(prefers-color-scheme: light)", color: "#f6f6f6" }, { media: "(prefers-color-scheme: dark)", color: "#0a0a0a" }] };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (

@@ -48,7 +48,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { placeLabel, type Place } from "@/lib/places";
 import { DM_POLICIES, LIMITS, PROFILE_DESIGNS_ENABLED, PROFILE_VISIBILITY, type DmPolicy, type InterestId, type ProfileVisibility } from "@/lib/constants";
 import { useApi } from "@/lib/hooks/useApi";
-import { MOODS, type MoodId } from "@/lib/moods";
+import { MOODS } from "@/lib/moods";
 import type { UserMe } from "@/lib/types";
 import { DevelopersTab } from "@/components/domain/account/DevelopersTab";
 
@@ -238,6 +238,29 @@ function MoodPicker() {
   const toast = useToast();
   return (
     <div role="radiogroup" aria-label="Mood" className="grid gap-3 sm:grid-cols-2">
+      {/* the default: light or dark with the device */}
+      <label className={cx("relative flex cursor-pointer flex-col gap-3 rounded-card border bg-raised p-4 transition has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-accent-text sm:col-span-2", mood === "system" ? "border-accent-text ring-1 ring-accent-text" : "border-line hover:border-ink-muted")}>
+        <input
+          type="radio"
+          name="mood"
+          value="system"
+          checked={mood === "system"}
+          onChange={() => {
+            setMood("system");
+            toast("Mood: matches your device", "success");
+          }}
+          className="sr-only"
+        />
+        <span className="flex items-center gap-1.5" aria-hidden="true">
+          <span className="size-7 rounded-full border border-line" style={{ backgroundColor: "#f6f6f6" }} />
+          <span className="size-7 rounded-full border border-line" style={{ backgroundColor: "#0a0a0a" }} />
+          {mood === "system" && <Icon name="check" size={16} className="ml-auto text-accent-text" />}
+        </span>
+        <span>
+          <span className="block text-sm font-semibold">Match my device</span>
+          <span className="block text-xs text-ink-muted">Paper Mono in light mode, Monochrome in dark mode. Switches with your phone or computer.</span>
+        </span>
+      </label>
       {MOODS.map((m) => {
         const on = mood === m.id;
         const swatches = [m.tokens.canvas, m.tokens.surface, m.tokens.accent, m.tokens.accent2];
@@ -249,7 +272,7 @@ function MoodPicker() {
               value={m.id}
               checked={on}
               onChange={() => {
-                setMood(m.id as MoodId);
+                setMood(m.id);
                 toast(`Mood: ${m.name}`, "success");
               }}
               className="sr-only"

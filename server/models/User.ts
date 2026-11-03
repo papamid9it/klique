@@ -2,7 +2,7 @@ import { Schema, type Model, type Types } from "mongoose";
 import { PRESENCES, type DmPolicy, type InterestId, type Presence, type ProfileVisibility } from "@/lib/constants";
 import { defineModel } from "./define";
 import { FRAME_IDS, NAME_EFFECT_IDS } from "@/lib/cosmetics";
-import { DEFAULT_MOOD, MOOD_IDS, type MoodId } from "@/lib/moods";
+import { DEFAULT_PREF, MOOD_PREFS, type MoodPref } from "@/lib/moods";
 
 export interface IUser {
   _id: Types.ObjectId;
@@ -43,7 +43,8 @@ export interface IUser {
   /** the status the person set (the dot on their picture) */
   presence?: Presence;
   interests: InterestId[];
-  mood: MoodId;
+  /** a mood, or "system" (match the device) */
+  mood: MoodPref;
   profileVisibility: ProfileVisibility;
   attendancePublic: boolean;
   dmPolicy: DmPolicy;
@@ -106,7 +107,7 @@ const UserSchema = new Schema<IUser>(
     planUntil: { type: Date, default: null },
     presence: { type: String, enum: PRESENCES.map((p) => p.id), default: "online" },
     interests: { type: [{ type: String }], default: [] },
-    mood: { type: String, enum: MOOD_IDS, default: DEFAULT_MOOD },
+    mood: { type: String, enum: MOOD_PREFS, default: DEFAULT_PREF },
     profileVisibility: { type: String, enum: ["public", "members", "private"], default: "public" },
     attendancePublic: { type: Boolean, default: true },
     // new accounts: anyone can send a message request (Nov 2026; was "shared")
