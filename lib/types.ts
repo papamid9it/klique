@@ -393,6 +393,8 @@ export interface MemberDTO {
   canRemove: boolean;
   /** their custom roles, top first */
   roles?: Pick<RoleDTO, "id" | "name" | "color" | "icon">[];
+  /** the emoji on their picture in this community: the owner's emoji, or their highest role's */
+  roleBadge?: RoleBadge | null;
   /** you can change their roles */
   canEditRoles?: boolean;
   /** owners and admins above them may time them out (or lift it) */

@@ -117,10 +117,7 @@ export function MembersPanel({ slug, subSlug, group }: { slug: string; subSlug?:
         <PersonRow
           key={m.user.id}
           user={m.user}
-          badge={(() => {
-            const top = m.roles?.find((r) => r.icon);
-            return top?.icon ? { icon: top.icon, label: top.name } : null;
-          })()}
+          badge={m.roleBadge ? { icon: m.roleBadge.icon, label: m.roleBadge.name } : null}
           action={
             <div className="flex flex-wrap items-center justify-end gap-1.5">
               {/* what they answered to the entry questions (owners and admins see this) */}

@@ -17,7 +17,7 @@ import type { Envelope, RoleDTO } from "@/lib/types";
 import { ConfirmModal } from "./parts";
 
 const api = new ApiClient();
-type Roles = { items: RoleDTO[]; myRank: number; canManage: boolean; cap: number };
+type Roles = { items: RoleDTO[]; myRank: number; canManage: boolean; cap: number; owner: { icon: string | null; canEdit: boolean } };
 
 /** The community's roles, for pickers elsewhere (members, channel permissions). */
 export function useRoles(slug: string) {
@@ -45,6 +45,7 @@ export function RolesPanel({ slug }: { slug: string }) {
   const { data, loading, error, reload, setData } = useRoles(slug);
   const [editing, setEditing] = useState<RoleDTO | "new" | null>(null);
   const [removing, setRemoving] = useState<RoleDTO | null>(null);
+  const [editingOwner, setEditingOwner] = useState(false);
   if (loading && !data) return <Skeleton className="h-60 w-full rounded-card" />;
   if (error || !data) return <ErrorState message={error} onRetry={reload} />;
   const roles = data.items;
@@ -79,6 +80,26 @@ export function RolesPanel({ slug }: { slug: string }) {
       </SettingsBlock>
       <SettingsBlock>
         <ul className="divide-y divide-line overflow-hidden rounded-card border border-line bg-surface">
+          <li className="flex items-center gap-3 px-4 py-3">
+            <span aria-hidden="true" className="size-3 shrink-0 rounded-full" style={{ background: "var(--ink-muted)" }} />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold">
+                {data.owner.icon && <span className="mr-1">{data.owner.icon}</span>}
+                Owner
+                <span className="ml-2 text-[11px] font-normal text-ink-muted">built in</span>
+              </p>
+              <p className="truncate text-xs text-ink-muted">1 person · every permission</p>
+            </div>
+            {data.owner.canEdit ? (
+              <Button size="sm" variant="ghost" onClick={() => setEditingOwner(true)}>
+                Edit
+              </Button>
+            ) : (
+              <span className="text-[11px] text-ink-muted" title="Only the owner can change this">
+                <Icon name="lock" size={13} />
+              </span>
+            )}
+          </li>
           {roles.map((r) => (
             <li key={r.id} className="flex items-center gap-3 px-4 py-3">
               <span aria-hidden="true" className="size-3 shrink-0 rounded-full" style={{ background: r.color ?? "var(--ink-muted)" }} />
@@ -130,6 +151,17 @@ export function RolesPanel({ slug }: { slug: string }) {
           }}
         />
       )}
+      {editingOwner && (
+        <OwnerEmojiModal
+          slug={slug}
+          icon={data.owner.icon}
+          onClose={() => setEditingOwner(false)}
+          onSaved={(icon) => {
+            setEditingOwner(false);
+            setData((d) => (d ? { ...d, owner: { ...d.owner, icon } } : d));
+          }}
+        />
+      )}
       <ConfirmModal
         open={!!removing}
         onClose={() => setRemoving(null)}
@@ -144,6 +176,38 @@ export function RolesPanel({ slug }: { slug: string }) {
         }}
       />
     </>
+  );
+}
+
+/** The owner's emoji: on their picture inside this community, like a role's. */
+function OwnerEmojiModal({ slug, icon, onClose, onSaved }: { slug: string; icon: string | null; onClose: () => void; onSaved: (icon: string | null) => void }) {
+  const toast = useToast();
+  const [value, setValue] = useState(icon ?? "");
+  const [busy, setBusy] = useState(false);
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      const res = await api.put<Envelope<{ icon: string | null }>>(`/api/communities/${slug}/roles/owner`, { icon: value.trim() || null });
+      toast("Owner emoji saved", "success");
+      onSaved(res.data.icon);
+    } catch (err) {
+      toast(errorMessage(err), "error");
+      setBusy(false);
+    }
+  }
+  return (
+    <Modal open onClose={onClose} title="Owner emoji" description="It shows on your picture inside this community. Leave it empty for none." size="sm">
+      <form onSubmit={save} className="space-y-5" noValidate>
+        <TextField label="Emoji (optional)" value={value} onChange={(e) => setValue(e.target.value)} maxLength={4} placeholder="👑" />
+        <div className="flex justify-end gap-2">
+          <Button onClick={onClose}>Cancel</Button>
+          <Button type="submit" variant="primary" loading={busy}>
+            Save
+          </Button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 

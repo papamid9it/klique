@@ -60,6 +60,8 @@ export interface ICommunity {
   } | null;
   /** a "Verified" check by its name: given (and taken away) only by site admins; Klique HQ always has it */
   verified?: boolean;
+  /** the emoji on the owner's picture inside this community; the owner chooses it, and it stays if ownership moves */
+  ownerIcon?: string | null;
   /**
    * Entry questions (like a membership screening): when on, anyone joining answers them first (public: joins right
    * after; private: the answers go with the request). Up to 5. Owners and admins set them in settings.
@@ -94,6 +96,7 @@ const CommunitySchema = new Schema<ICommunity>(
     memberEvents: { type: Boolean, default: true },
     adult: { type: Boolean, default: false },
     verified: { type: Boolean, default: false },
+    ownerIcon: { type: String, default: null, maxlength: 16 },
     membersMassMention: { type: Boolean, default: false },
     automod: { type: Schema.Types.Mixed, default: null },
     raidUntil: { type: Date, default: null },

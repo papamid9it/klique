@@ -4,6 +4,7 @@ import { z } from "zod";
 import { ADMIN_PERMISSIONS, ROLE_CAP, isPermission, PERMISSIONS } from "@/lib/roles";
 import type { RoleDTO } from "@/lib/types";
 import { badRequest, forbidden, notFound } from "../http/errors";
+import { Community } from "../models/Community";
 import { CommunityRole, type ICommunityRole } from "../models/CommunityRole";
 import { Membership, type IMembership } from "../models/Membership";
 import { ModAction } from "../models/ModAction";
@@ -27,6 +28,7 @@ export const roleInput = z.object({
 });
 export const roleOrderInput = z.object({ ids: z.array(z.string().regex(/^[a-f0-9]{24}$/i)).max(ROLE_CAP) });
 export const memberRolesInput = z.object({ roleIds: z.array(z.string().regex(/^[a-f0-9]{24}$/i)).max(ROLE_CAP) });
+export const ownerIconInput = z.object({ icon: z.string().trim().max(16).nullable() });
 
 const toDto = (r: ICommunityRole, counts?: Map<string, number>): RoleDTO => ({
   id: sid(r._id),
@@ -62,7 +64,7 @@ export interface MemberStanding {
   /** the colour of their highest coloured role (shown on their name), if any */
   color: string | null;
   roles: Pick<RoleDTO, "id" | "name" | "color" | "icon">[];
-  /** the emoji of their highest role that has one (shown on their picture inside the community), if any */
+  /** the owner's emoji for the owner, else the emoji of their highest role that has one (shown on their picture inside the community), if any */
   badge: { icon: string; name: string } | null;
 }
 
@@ -75,10 +77,12 @@ export async function standings(communityId: Types.ObjectId, userIds: (Types.Obj
   const roleIds = [...new Set(ms.flatMap((m) => (m.roleIds ?? []).map(String)))];
   const roles = roleIds.length ? await CommunityRole.find({ _id: { $in: roleIds } }).lean<ICommunityRole[]>() : [];
   const byId = new Map(roles.map((r) => [sid(r._id), r]));
+  const ownerIcon = ms.some((m) => m.role === "owner") ? (await Community.findById(communityId).select("ownerIcon").lean<{ ownerIcon?: string | null }>())?.ownerIcon : null;
   for (const m of ms) {
     const mine = (m.roleIds ?? []).flatMap((id) => byId.get(String(id)) ?? []).sort((a, b) => b.position - a.position);
     const top = mine.find((r) => r.icon);
-    out.set(sid(m.userId), { rank: rolePowers(m.role, mine).rank, color: mine.find((r) => r.color)?.color ?? null, roles: mine.map((r) => ({ id: sid(r._id), name: r.name, color: r.color, icon: r.icon })), badge: top?.icon ? { icon: top.icon, name: top.name } : null });
+    const badge = m.role === "owner" && ownerIcon ? { icon: ownerIcon, name: "Owner" } : top?.icon ? { icon: top.icon, name: top.name } : null;
+    out.set(sid(m.userId), { rank: rolePowers(m.role, mine).rank, color: mine.find((r) => r.color)?.color ?? null, roles: mine.map((r) => ({ id: sid(r._id), name: r.name, color: r.color, icon: r.icon })), badge });
   }
   return out;
 }
@@ -91,7 +95,7 @@ async function manage(viewer: IUser, slug: string): Promise<{ space: Space; acce
 }
 
 /** The community's roles, top first, with how many hold each (anyone in it can see them). */
-export async function listRoles(viewer: IUser, slug: string): Promise<{ items: RoleDTO[]; myRank: number; canManage: boolean; cap: number }> {
+export async function listRoles(viewer: IUser, slug: string): Promise<{ items: RoleDTO[]; myRank: number; canManage: boolean; cap: number; owner: { icon: string | null; canEdit: boolean } }> {
   const { space, access } = await resolveSpaceFor(viewer, slug);
   if (!access.isMember && !access.canManage) throw forbidden("Join to see this community's roles.");
   await ensureAdminRole(space.community._id);
@@ -99,7 +103,16 @@ export async function listRoles(viewer: IUser, slug: string): Promise<{ items: R
   const counts = new Map<string, number>(
     (await Membership.aggregate<{ _id: Types.ObjectId; n: number }>([{ $match: { communityId: space.community._id, subcommunityId: null, status: "active", roleIds: { $exists: true, $ne: [] } } }, { $unwind: "$roleIds" }, { $group: { _id: "$roleIds", n: { $sum: 1 } } }])).map((x) => [sid(x._id), x.n]),
   );
-  return { items: rows.map((r) => toDto(r, counts)), myRank: access.rank ?? 0, canManage: !!access.perms?.includes("manageRoles"), cap: ROLE_CAP };
+  return { items: rows.map((r) => toDto(r, counts)), myRank: access.rank ?? 0, canManage: !!access.perms?.includes("manageRoles"), cap: ROLE_CAP, owner: { icon: space.community.ownerIcon ?? null, canEdit: access.role === "owner" } };
+}
+
+/** The emoji on the owner's picture inside the community. Only the owner chooses it; empty takes it off. */
+export async function setOwnerIcon(viewer: IUser, slug: string, icon: string | null): Promise<{ icon: string | null }> {
+  const { space, access } = await resolveSpaceFor(viewer, slug);
+  if (access.role !== "owner") throw forbidden("Only the owner can choose the owner's emoji.");
+  const next = icon || null;
+  await Community.updateOne({ _id: space.community._id }, { $set: { ownerIcon: next } });
+  return { icon: next };
 }
 
 const cleanPerms = (p: string[] | undefined, mine: string[]) => [...new Set((p ?? []).filter(isPermission))].filter((x) => mine.includes(x));

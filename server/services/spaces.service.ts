@@ -288,7 +288,7 @@ export async function listMembers(
         joinedAt: m.createdAt.toISOString(),
         canChangeRole: !isSelf && canSetRole(access.role, m.role, m.role === "admin" ? "member" : "admin"),
         canRemove: below && (can(access, "kick") || can(access, "ban")),
-        ...(!space.sub ? { roles: st?.roles ?? [], canEditRoles: can(access, "manageRoles") && (below || (isSelf && m.role !== "owner")) } : {}),
+        ...(!space.sub ? { roles: st?.roles ?? [], roleBadge: st?.badge ?? null, canEditRoles: can(access, "manageRoles") && (below || (isSelf && m.role !== "owner")) } : {}),
         // timeouts are community-wide (set from the community, not a group)
         ...(!space.sub && (can(access, "timeout") || access.canManage) ? { canTimeout: below && can(access, "timeout"), timedOutUntil: timeoutOf(m), timeoutReason: timeoutOf(m) ? (m.timeoutReason ?? null) : null } : {}),
         // what they answered to the entry questions: for the owner and admins only
