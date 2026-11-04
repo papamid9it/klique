@@ -25,6 +25,8 @@ export interface IFeedPost {
   explicit?: boolean;
   /** hidden pending review (a "minor or non-consensual" report): nobody but site admins sees it */
   hiddenAt?: Date | null;
+  /** a one-off id the app sends with "Post", so a repeat of the same send never makes a second post */
+  clientKey?: string | null;
   media: { kind: "image" | "video"; url: string; poster: string | null }[];
   /** denormalised vote and comment counts (FeedVote / FeedComment keep them in step) */
   upCount: number;
@@ -46,6 +48,7 @@ const FeedPostSchema = new Schema<IFeedPost>(
     textBg: { type: String, default: null },
     explicit: { type: Boolean, default: false },
     hiddenAt: { type: Date, default: null },
+    clientKey: { type: String, default: undefined },
     media: { type: [new Schema({ kind: { type: String, enum: ["image", "video"], required: true }, url: { type: String, required: true }, poster: { type: String, default: null } }, { _id: false })], default: [] },
     upCount: { type: Number, default: 0 },
     downCount: { type: Number, default: 0 },
@@ -58,6 +61,8 @@ FeedPostSchema.index({ communityId: 1, createdAt: -1 });
 FeedPostSchema.index({ createdAt: -1 });
 FeedPostSchema.index({ authorId: 1, createdAt: -1 });
 FeedPostSchema.index({ tags: 1, createdAt: -1 });
+// one post per send (only rows that have a key)
+FeedPostSchema.index({ authorId: 1, clientKey: 1 }, { unique: true, partialFilterExpression: { clientKey: { $type: "string" } } });
 
 export const FeedPost: Model<IFeedPost> = defineModel<IFeedPost>("FeedPost", FeedPostSchema);
 
@@ -99,6 +104,8 @@ export interface IFeedComment {
   tags?: string[];
   editedAt?: Date | null;
   deletedAt: Date | null;
+  /** a one-off id sent with the comment, so a repeat of the same send never makes a second */
+  clientKey?: string | null;
   createdAt: Date;
 }
 
@@ -116,9 +123,11 @@ const FeedCommentSchema = new Schema<IFeedComment>(
     tags: { type: [String], default: [] },
     editedAt: { type: Date, default: null },
     deletedAt: { type: Date, default: null },
+    clientKey: { type: String, default: undefined },
   },
   { timestamps: { createdAt: true, updatedAt: false } },
 );
 FeedCommentSchema.index({ postId: 1, _id: 1 });
+FeedCommentSchema.index({ authorId: 1, clientKey: 1 }, { unique: true, partialFilterExpression: { clientKey: { $type: "string" } } });
 
 export const FeedComment: Model<IFeedComment> = defineModel<IFeedComment>("FeedComment", FeedCommentSchema);

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { DesktopAppLink } from "@/components/layout/DesktopAppLink";
 import { Logo } from "@/components/layout/Logo";
 
 export default function LegalLayout({ children }: { children: ReactNode }) {
@@ -14,9 +15,7 @@ export default function LegalLayout({ children }: { children: ReactNode }) {
           <Link href="/privacy" className="hover:text-ink">
             Privacy
           </Link>
-          <Link href="/download" className="hover:text-ink">
-            Desktop app
-          </Link>
+          <DesktopAppLink className="hover:text-ink" />
         </nav>
       </header>
       <main id="main" className="mx-auto max-w-3xl px-4 pt-10 pb-24 sm:px-8">

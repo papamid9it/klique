@@ -190,7 +190,7 @@ export function DownloadView({ release }: { release: DesktopRelease & { live: bo
             os="linux"
             here={os === "linux"}
             files={files("linux")}
-            steps={stepsFor("linux", [["appimage", "AppImage, any distro: chmod +x Klique-*.AppImage, then run it."], ["deb", "Ubuntu, Debian, Mint: sudo apt install ./klique_*_amd64.deb"], ["pacman", "Arch, Manjaro: sudo pacman -U klique-*.pkg.tar.xz"], ["rpm", "Fedora: sudo dnf install ./klique-*.rpm"]])}
+            steps={stepsFor("linux", [["appimage", "AppImage, any distro: make it runnable, then open it."], ["deb", "Ubuntu, Debian, Mint: install the .deb with apt."], ["pacman", "Arch, Manjaro: install the package with pacman."], ["rpm", "Fedora, openSUSE: install the .rpm with dnf or zypper."], [null, "The exact commands, ready to copy, are just below."]])}
           />
           {macReady ? (
             <OsCard
@@ -214,6 +214,7 @@ export function DownloadView({ release }: { release: DesktopRelease & { live: bo
             </div>
           )}
         </div>
+        <InstallCommands release={release} />
         <p className="mt-8 rounded-[18px] bg-raised px-5 py-4 text-sm">
           <strong>On a phone?</strong> No download needed: open <Link href="/" className="font-semibold underline">getklique.app</Link> and add it to your home screen (Share → Add to Home Screen on iPhone, or the ⋮ menu → Install app on Android).
         </p>
@@ -289,6 +290,77 @@ function OsCard({ os, here, files, steps }: { os: DesktopOs; here: boolean; file
           <li key={s}>{s}</li>
         ))}
       </ol>
+    </div>
+  );
+}
+
+/**
+ * "Install from the terminal": one tab per kind of file, each the exact command for this release's file name
+ * (from where the browser saves it, ~/Downloads), with a Copy button. Linux only: on Windows you just run the installer.
+ */
+function InstallCommands({ release }: { release: DesktopRelease }) {
+  const name = (os: DesktopOs, kind: DesktopKind) => {
+    const f = release.files.find((x) => x.os === os && x.kind === kind);
+    return f ? decodeURIComponent(f.url.split("/").pop() ?? "") : null;
+  };
+  const tabs: { id: string; label: string; lines: string[]; note?: string }[] = [];
+  const appimage = name("linux", "appimage");
+  if (appimage) tabs.push({ id: "appimage", label: "AppImage", note: "Any Linux. Nothing gets installed; keep the file somewhere handy.", lines: [`chmod +x ~/Downloads/${appimage} && ~/Downloads/${appimage}`] });
+  const deb = name("linux", "deb");
+  if (deb) tabs.push({ id: "deb", label: "Ubuntu / Debian", note: "Also Linux Mint, Pop!_OS and elementary.", lines: [`sudo apt install ~/Downloads/${deb}`] });
+  const pkg = name("linux", "pacman");
+  if (pkg) tabs.push({ id: "pacman", label: "Arch", note: "Also Manjaro and EndeavourOS. To remove it later: sudo pacman -R klique-desktop", lines: [`sudo pacman -U ~/Downloads/${pkg}`] });
+  const rpm = name("linux", "rpm");
+  if (rpm) tabs.push({ id: "rpm", label: "Fedora", note: `On openSUSE: sudo zypper install ~/Downloads/${rpm}`, lines: [`sudo dnf install ~/Downloads/${rpm}`] });
+  const tgz = name("linux", "targz");
+  if (tgz) {
+    const dir = tgz.replace(/\.tar\.gz$/, "");
+    tabs.push({ id: "targz", label: ".tar.gz", note: `Unpacks into your home folder (~/${dir}) and opens it.`, lines: [`tar -xzf ~/Downloads/${tgz} -C ~/ && ~/${dir}/klique`] });
+  }
+  const [tab, setTab] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  if (!tabs.length) return null;
+  const shown = tabs.find((t) => t.id === tab) ?? tabs[0];
+  const text = shown.lines.join("\n");
+  return (
+    <div id="install" className="mt-10 scroll-mt-6 overflow-hidden rounded-[22px] border border-line bg-surface">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line px-5 pt-5 pb-4">
+        <h3 className="mr-auto text-lg font-black tracking-tight">Linux: install from the terminal</h3>
+        <div role="tablist" aria-label="Kind of file" className="no-bar -mx-1 flex max-w-full gap-1 overflow-x-auto px-1">
+          {tabs.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={shown.id === t.id}
+              onClick={() => (setTab(t.id), setCopied(false))}
+              className={cx("h-8 shrink-0 rounded-full px-3 text-[13px] font-semibold transition", shown.id === t.id ? "bg-ink text-canvas" : "text-ink-muted hover:bg-raised hover:text-ink")}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="p-5">
+        <div className="relative rounded-[14px] bg-raised">
+          <pre className="overflow-x-auto px-4 py-3.5 pr-24 font-mono text-[13px] leading-relaxed text-ink">
+            {shown.lines.map((l) => (
+              <span key={l} className="block">
+                <span aria-hidden="true" className="text-ink-muted select-none">$ </span>
+                {l}
+              </span>
+            ))}
+          </pre>
+          <button
+            type="button"
+            onClick={() => void navigator.clipboard.writeText(text).then(() => (setCopied(true), setTimeout(() => setCopied(false), 1600)))}
+            className="absolute top-2.5 right-2.5 inline-flex h-8 items-center gap-1.5 rounded-full border border-line bg-surface px-3 text-[12px] font-semibold hover:border-ink"
+          >
+            <Icon name={copied ? "check" : "copy"} size={13} /> {copied ? "Copied" : "Copy"}
+          </button>
+        </div>
+        {shown.note && <p className="mt-3 text-sm text-ink-muted">{shown.note}</p>}
+      </div>
     </div>
   );
 }

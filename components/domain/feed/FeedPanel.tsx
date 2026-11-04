@@ -95,7 +95,7 @@ export function FeedPanel({ c }: { c: CommunityDTO }) {
           onClose={() => setComposing(false)}
           onPosted={(p) => {
             setComposing(false);
-            setItems((list) => [p, ...list]);
+            setItems((list) => [p, ...list.filter((x) => x.id !== p.id)]); // once, even if it was already there
           }}
         />
       )}

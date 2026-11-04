@@ -165,12 +165,18 @@ export async function createPost(viewer: IUser, space: Space, access: SpaceAcces
   assertNotTimedOut(access);
   assertFeed(space);
   if (!canPostIn(space.community, access)) throw forbidden(space.community.feedPolicy === "admins" ? "Only owners and admins post here." : access.pointsToPost ? `You need ${access.pointsToPost.toLocaleString("en-NG")} points to post here.` : "Join this community to post.");
+  // the same send again (a double click, a retry): the post it already made, not a second one
+  const again = input.clientKey ? await FeedPost.findOne({ authorId: viewer._id, clientKey: input.clientKey }).lean<IFeedPost>() : null;
+  if (again) return (await toPosts([again], viewer))[0];
   rateLimit(`feed-post:${sid(viewer._id)}`, 15, 60 * 60_000);
   await checkAutoMod(space, viewer, access, { text: `${input.title ?? ""} ${input.caption}`.trim(), where: "Posts" });
   // a title and a card colour only mean something on a post without pictures or a video
   const style = textStyleOf(input);
   const refs = await resolveText(viewer, `${input.title ?? ""} ${input.caption}`);
-  const doc = await FeedPost.create({
+  let doc;
+  try {
+    doc = await FeedPost.create({
+    ...(input.clientKey ? { clientKey: input.clientKey } : {}),
     communityId: space.community._id,
     authorId: viewer._id,
     caption: input.caption,
@@ -182,7 +188,13 @@ export async function createPost(viewer: IUser, space: Space, access: SpaceAcces
     // only a community that allows explicit content takes explicit posts
     explicit: !!space.community.explicit && input.explicit,
     media: input.media.map((m) => ({ kind: m.kind, url: m.url, poster: m.poster ?? null })),
-  });
+    });
+  } catch (e) {
+    // two copies of the same send at the same moment: the other one won, so hand back that post
+    const made = (e as { code?: number }).code === 11000 && input.clientKey ? await FeedPost.findOne({ authorId: viewer._id, clientKey: input.clientKey }).lean<IFeedPost>() : null;
+    if (made) return (await toPosts([made], viewer))[0];
+    throw e;
+  }
   await tellTagged(viewer, space, refs.userIds, `/p/${sid(doc._id)}`, input.caption, "post");
   return (await toPosts([doc.toObject() as IFeedPost], viewer))[0];
 }
@@ -317,6 +329,8 @@ export async function addComment(viewer: IUser, space: Space, access: SpaceAcces
   assertNotTimedOut(access);
   assertFeed(space);
   if (!access.isMember || access.banned) throw forbidden("Join this community to comment.");
+  const again = input.clientKey ? await FeedComment.findOne({ authorId: viewer._id, clientKey: input.clientKey }).lean<IFeedComment>() : null;
+  if (again) return (await toComments([again], viewer, access.role ?? null))[0];
   rateLimit(`feed-comment:${sid(viewer._id)}`, 30, 5 * 60_000);
   await checkAutoMod(space, viewer, access, { text: input.body ?? "", where: "a post's comments" });
   const sticker = input.sticker ?? null;
@@ -328,7 +342,14 @@ export async function addComment(viewer: IUser, space: Space, access: SpaceAcces
     if (!parent) throw badRequest("The comment you're replying to is gone.");
   }
   const refs = await resolveText(viewer, input.body);
-  const doc = await FeedComment.create({ postId: p._id, communityId: p.communityId, authorId: viewer._id, parentId: parent?._id ?? null, body: input.body, sticker, stickerUrl, mentionIds: refs.userIds, communityRefIds: refs.communityIds, tags: refs.tags });
+  let doc;
+  try {
+    doc = await FeedComment.create({ ...(input.clientKey ? { clientKey: input.clientKey } : {}), postId: p._id, communityId: p.communityId, authorId: viewer._id, parentId: parent?._id ?? null, body: input.body, sticker, stickerUrl, mentionIds: refs.userIds, communityRefIds: refs.communityIds, tags: refs.tags });
+  } catch (e) {
+    const made = (e as { code?: number }).code === 11000 && input.clientKey ? await FeedComment.findOne({ authorId: viewer._id, clientKey: input.clientKey }).lean<IFeedComment>() : null;
+    if (made) return (await toComments([made], viewer, access.role ?? null))[0];
+    throw e;
+  }
   await FeedPost.updateOne({ _id: p._id }, { $inc: { commentCount: 1 } });
   noteStickerUse(viewer._id, stickerUrl);
   const said = previewOf({ body: input.body, sticker, stickerUrl }).slice(0, 140);
@@ -459,9 +480,11 @@ export async function homeFeed(viewer: IUser, page: number, at?: number): Promis
     open.length ? FeedPost.find({ communityId: { $in: open.map((c) => c._id) }, createdAt: { $gte: new Date(now - 60 * 24 * HOUR), $lte: new Date(now) }, ...notHidden }).sort({ createdAt: -1 }).limit(400).lean<IFeedPost[]>() : [],
     elsewhere.length ? FeedPost.find({ communityId: { $in: elsewhere.map((c) => c._id) }, createdAt: { $gte: new Date(now - 14 * 24 * HOUR), $lte: new Date(now) }, ...notHidden }).sort({ createdAt: -1 }).limit(200).lean<IFeedPost[]>() : [],
   ]);
-  pool.sort((a, b) => rank(b, now) - rank(a, now));
+  // ties broken by id, so every page sees the same order and pages never overlap
+  const idOrder = (a: IFeedPost, b: IFeedPost) => (sid(b._id) > sid(a._id) ? 1 : sid(b._id) < sid(a._id) ? -1 : 0);
+  pool.sort((a, b) => rank(b, now) - rank(a, now) || idOrder(a, b));
   // what's taking off, pictures and video first
-  suggestions.sort((a, b) => Number(b.media.length > 0) - Number(a.media.length > 0) || rank(b, now) - rank(a, now));
+  suggestions.sort((a, b) => Number(b.media.length > 0) - Number(a.media.length > 0) || rank(b, now) - rank(a, now) || idOrder(a, b));
 
   // yours with a suggestion after every few, then suggestions only (the same order every time, so pages line up)
   const merged: { post: IFeedPost; trending: boolean }[] = [];

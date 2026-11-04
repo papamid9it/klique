@@ -7,6 +7,8 @@ import { Dropdown, type MenuEntry } from "@/components/ui/Dropdown";
 import { useSetStatus } from "@/components/domain/profile/StatusPicker";
 import { StatusIcon } from "@/components/domain/profile/ProfileParts";
 import { PRESENCES } from "@/lib/constants";
+import { useInDesktopApp } from "@/lib/hooks/useInDesktopApp";
+import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
 
 /**
  * Your account menu: your status, profile, ads, settings, admin, sign out. One menu used from the sidebar's profile card,
@@ -25,6 +27,10 @@ export function useAccountMenu(): MenuEntry[] | null {
   const { user, signOut } = useAuth();
   const card = useProfileCard();
   const setStatus = useSetStatus();
+  // big screens have Saved in the Communities panel already; phones reach it from here (the Me tab)
+  const wide = useMediaQuery("(min-width: 1024px)");
+  // in the desktop app, "Desktop app" (go and download it) makes no sense
+  const inApp = useInDesktopApp();
   if (!user) return null;
   return [
     // your status: one row, the four choices beside it
@@ -37,11 +43,11 @@ export function useAccountMenu(): MenuEntry[] | null {
     },
     { type: "sep" },
     { label: "Your profile", icon: "user", onSelect: () => card.openFull(user.handle) },
-    { label: "Saved", icon: "bookmark", onSelect: () => router.push("/saved") },
+    ...(wide ? [] : ([{ label: "Saved", icon: "bookmark", onSelect: () => router.push("/saved") }] as MenuEntry[])),
     { label: "Advertise", icon: "megaphone", onSelect: () => router.push("/ads") },
     { label: "Plan & points", icon: "coin", onSelect: () => router.push("/settings?tab=plan") },
     { label: "Settings", icon: "sliders", onSelect: () => router.push("/settings") },
-    { label: "Desktop app", icon: "download", onSelect: () => router.push("/download") },
+    ...(inApp ? [] : ([{ label: "Desktop app", icon: "download", onSelect: () => router.push("/download") }] as MenuEntry[])),
     ...(user.isAdmin ? ([{ label: "Admin console", icon: "shield", onSelect: () => router.push("/admin") }] as MenuEntry[]) : []),
     { type: "sep" },
     { label: "Sign out", icon: "logout", danger: true, onSelect: () => void signOut() },

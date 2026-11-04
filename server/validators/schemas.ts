@@ -216,6 +216,8 @@ const mediaList = z
   .refine((m) => !m.some((x) => x.kind === "video") || m.length === 1, "A video can't be mixed with pictures");
 
 /** pictures or a video, text, or both (lib/feedText: short text is a card, long text needs a title) */
+/** a one-off id the app makes for one send (posts, comments) */
+const clientKey = z.string().regex(/^[A-Za-z0-9_-]{8,64}$/);
 export const feedPostSchema = z
   .object({
     caption: text(LIMITS.feedCaption).default(""),
@@ -224,6 +226,8 @@ export const feedPostSchema = z
     /** explicit (only in a community that allows explicit content): blurred until tapped */
     explicit: z.boolean().default(false),
     media: mediaList.default([]),
+    /** a random id per "New post" box: the same send twice makes one post */
+    clientKey: clientKey.optional(),
   })
   .refine((v) => v.media.length > 0 || v.caption.length > 0, { path: ["caption"], message: "Add a picture, a video or some text." })
   .refine((v) => v.media.length > 0 || v.caption.length <= TEXT_CARD_MAX || v.title.length > 0, { path: ["title"], message: "Add a title for a longer post." });
@@ -235,6 +239,8 @@ export const feedVoteSchema = z.object({ value: z.union([z.literal(1), z.literal
 export const feedCommentSchema = z
   .object({
     body: text(LIMITS.feedComment),
+    /** a random id per comment sent: the same send twice makes one comment */
+    clientKey: clientKey.optional(),
     sticker: z.enum(STICKER_IDS).optional(),
     /** a saved picture sticker (checked against our uploads by the service) */
     stickerUrl: z.string().trim().min(1).max(600).optional(),

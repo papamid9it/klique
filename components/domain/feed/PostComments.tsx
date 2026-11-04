@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
-import { FeedService } from "@/app/services/FeedService";
+import { FeedService, newClientKey } from "@/app/services/FeedService";
 import { AttachedSticker, ReactButton, ReactionBar, StickerPicker, StickerView, type StickerChoice } from "@/components/domain/chat/Reactions";
 import { EditedTag, MessageEditor } from "@/components/domain/chat/MessageEditor";
 import { useAuth } from "@/components/providers/AuthProvider";
@@ -213,12 +213,17 @@ export function PostComments({ post, onCount, pinned, top, focus }: { post: Feed
     if (replyTo && !v.startsWith(`@${replyTo.handle}`)) setReplyTo(null);
   };
 
+  const sending = useRef(false);
+  const commentKey = useRef(newClientKey());
   async function add(draft: Draft): Promise<boolean> {
-    if (!requireAuth()) return false;
+    if (!requireAuth() || sending.current) return false;
+    sending.current = true;
     const to = replyTo && draft.body.startsWith(`@${replyTo.handle}`) ? replyTo : null;
     try {
-      const res = await FeedService.comment(slug, post.id, { ...draft, parentId: to?.id });
-      setData((d) => [...(d ?? []), res.data]);
+      // the same id until it goes through: a repeat of this send makes one comment
+      const res = await FeedService.comment(slug, post.id, { ...draft, parentId: to?.id, clientKey: commentKey.current });
+      commentKey.current = newClientKey();
+      setData((d) => [...(d ?? []).filter((x) => x.id !== res.data.id), res.data]);
       onCount(post.commentCount + 1);
       setReplyTo(null);
       // your reply shows in its thread, opened all the way
@@ -228,6 +233,8 @@ export function PostComments({ post, onCount, pinned, top, focus }: { post: Feed
     } catch (e) {
       toast(errorMessage(e), "error");
       return false;
+    } finally {
+      sending.current = false;
     }
   }
 

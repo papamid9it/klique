@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
-import { FeedService } from "@/app/services/FeedService";
+import { FeedService, newClientKey } from "@/app/services/FeedService";
 import { UploadService } from "@/app/services/UploadService";
 import { MOCK_IMAGES, MOCK_VIDEOS, looksLikeVideo } from "@/components/domain/topics/TopicMedia";
 import { useToast } from "@/components/providers/ToastProvider";
@@ -39,6 +39,9 @@ export function PostComposer({ slug, communityName, explicitAllowed, onClose, on
   const [link, setLink] = useState("");
   const [progress, setProgress] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
+  // one id for this "New post" box: sending it twice (double click, slow network) still makes one post
+  const [clientKey] = useState(newClientKey);
+  const sending = useRef(false);
   const photos = useRef<HTMLInputElement>(null);
   const video = useRef<HTMLInputElement>(null);
   const hasVideo = media.some((m) => m.kind === "video");
@@ -68,14 +71,17 @@ export function PostComposer({ slug, communityName, explicitAllowed, onClose, on
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (sending.current) return;
+    sending.current = true;
     setBusy(true);
     try {
-      const res = await FeedService.create(slug, { ...(mode === "media" ? { caption: caption.trim(), media } : { caption: caption.trim(), title: title.trim(), textBg, media: [] }), ...(explicitAllowed ? { explicit } : {}) });
+      const res = await FeedService.create(slug, { ...(mode === "media" ? { caption: caption.trim(), media } : { caption: caption.trim(), title: title.trim(), textBg, media: [] }), ...(explicitAllowed ? { explicit } : {}), clientKey });
       toast("Posted", "success");
       onPosted(res.data);
     } catch (err) {
       toast(errorMessage(err), "error");
     } finally {
+      sending.current = false;
       setBusy(false);
     }
   }
