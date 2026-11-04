@@ -23,20 +23,62 @@ function useLoadCategories() {
   }, []);
 }
 
-/** Marks whatever is being scrolled with data-scrolling for a moment, so its (otherwise hidden) scrollbar shows. */
-function useScrollingMarker() {
+const scrollsAlong = (value: string) => value === "auto" || value === "scroll";
+
+/** The innermost thing under this element that can really scroll; the page itself when nothing closer can. */
+function scrollerOf(start: Element | null): Element | null {
+  const root = document.documentElement;
+  for (let el = start; el && el !== root && el !== document.body; el = el.parentElement) {
+    const { overflowX, overflowY } = getComputedStyle(el);
+    if ((scrollsAlong(overflowY) && el.scrollHeight > el.clientHeight) || (scrollsAlong(overflowX) && el.scrollWidth > el.clientWidth)) return el;
+  }
+  const locked = getComputedStyle(root).overflowY === "hidden" || getComputedStyle(document.body).overflowY === "hidden";
+  return !locked && root.scrollHeight > root.clientHeight ? root : null;
+}
+
+/**
+ * Only one scrollbar ever shows: data-bar sits on the one thing you're over, or on what's scrolling right now for a
+ * moment. CSS can't do this alone, because :hover also matches every parent, the page included, so hovering a panel
+ * would light up the panel's bar and the page's together.
+ */
+function useScrollbarMarker() {
   useEffect(() => {
-    const timers = new Map<Element, ReturnType<typeof setTimeout>>();
-    const onScroll = (e: Event) => {
-      const el = e.target instanceof Element ? e.target : document.documentElement;
-      el.setAttribute("data-scrolling", "");
-      clearTimeout(timers.get(el));
-      timers.set(el, setTimeout(() => (el.removeAttribute("data-scrolling"), timers.delete(el)), 900));
+    let current: Element | null = null;
+    let hovered: Element | null = null;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const show = (el: Element | null) => {
+      if (el === current) return;
+      current?.removeAttribute("data-bar");
+      el?.setAttribute("data-bar", "");
+      current = el;
     };
+    const onOver = (e: PointerEvent) => {
+      // dragging a scrollbar keeps that one showing, wherever the pointer wanders
+      if (e.pointerType === "touch" || e.buttons) return;
+      hovered = scrollerOf(e.target instanceof Element ? e.target : null);
+      clearTimeout(timer);
+      show(hovered);
+    };
+    const onScroll = (e: Event) => {
+      show(e.target instanceof Element ? e.target : document.documentElement);
+      clearTimeout(timer);
+      timer = setTimeout(() => show(hovered), 900);
+    };
+    const onLeave = () => {
+      hovered = null;
+      clearTimeout(timer);
+      show(null);
+    };
+    const root = document.documentElement;
+    document.addEventListener("pointerover", onOver, { passive: true });
     document.addEventListener("scroll", onScroll, { capture: true, passive: true });
+    root.addEventListener("pointerleave", onLeave);
     return () => {
+      document.removeEventListener("pointerover", onOver);
       document.removeEventListener("scroll", onScroll, true);
-      timers.forEach((t) => clearTimeout(t));
+      root.removeEventListener("pointerleave", onLeave);
+      clearTimeout(timer);
+      show(null);
     };
   }, []);
 }
@@ -57,7 +99,7 @@ function useDataSaverMarker() {
 
 export function Providers({ children }: { children: ReactNode }) {
   useLoadCategories();
-  useScrollingMarker();
+  useScrollbarMarker();
   useDataSaverMarker();
   useMotionMarker();
   return (

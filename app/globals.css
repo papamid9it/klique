@@ -190,9 +190,10 @@ body {
 }
 
 /* Scrollbars stay out of sight: a clear track, and a thin thumb that only shows (dim, tinted from the ink colour, so
-   light moods get a dark tint) while you're over, focused in or scrolling the thing that scrolls. The bar keeps its
-   room all the time, so nothing shifts when it appears. Browsers that support scrollbar-color (Firefox, Chrome
-   121+) use it; older WebKit uses the ::-webkit rules. Touch screens keep their own overlay scrollbars. */
+   light moods get a dark tint) on the one thing marked data-bar: what you're over or scrolling (Providers sets it, so
+   two bars never show together). The bar keeps its room all the time, so nothing shifts when it appears. Browsers
+   that support scrollbar-color (Firefox, Chrome 121+) use it; older WebKit uses the ::-webkit rules. Touch screens
+   keep their own overlay scrollbars. */
 @media (hover: hover) {
   * {
     scrollbar-width: thin;
@@ -200,9 +201,7 @@ body {
     scrollbar-color: color-mix(in oklab, var(--ink) 0%, transparent) transparent;
     transition: scrollbar-color 0.2s;
   }
-  *:hover,
-  *:focus-within,
-  [data-scrolling] {
+  [data-bar] {
     scrollbar-color: color-mix(in oklab, var(--ink) 10%, transparent) transparent;
   }
   *::-webkit-scrollbar {
@@ -217,12 +216,10 @@ body {
     background: transparent;
     border-radius: 999px;
   }
-  *:hover::-webkit-scrollbar-thumb,
-  *:focus-within::-webkit-scrollbar-thumb,
-  [data-scrolling]::-webkit-scrollbar-thumb {
+  [data-bar]::-webkit-scrollbar-thumb {
     background: color-mix(in oklab, var(--ink) 10%, transparent);
   }
-  *::-webkit-scrollbar-thumb:hover {
+  [data-bar]::-webkit-scrollbar-thumb:hover {
     background: color-mix(in oklab, var(--ink) 20%, transparent);
   }
 }
