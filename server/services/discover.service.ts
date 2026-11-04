@@ -1,4 +1,5 @@
 import type { InterestId } from "@/lib/constants";
+import { EVENT_FALLBACK_MS } from "@/lib/event-time";
 import { parseScope, scopeFilter, scopeFromPlace, scopeToString } from "@/lib/places";
 import { visibleCategories } from "@/lib/constants";
 import { dateRangeFor, startOfLagosDay } from "@/lib/dates";
@@ -18,7 +19,7 @@ import { listEvents } from "./events.service";
 import { kliqueId } from "./klique-id";
 import { escapeRegex } from "./helpers";
 
-const LINGER_MS = 3 * 60 * 60 * 1000;
+const LINGER_MS = EVENT_FALLBACK_MS;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export async function discover(viewer: IUser | null, whereParam?: string): Promise<DiscoverDTO> {

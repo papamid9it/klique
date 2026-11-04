@@ -1,4 +1,5 @@
 import "server-only";
+import { eventEndMs } from "@/lib/event-time";
 import { Types } from "mongoose";
 import type { AttendanceDTO } from "@/lib/types";
 import { badRequest, forbidden, notFound } from "../http/errors";
@@ -22,7 +23,6 @@ import { awardPoints } from "./points.service";
  */
 
 const WINDOW_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
-const FALLBACK_DURATION_MS = 3 * 60 * 60 * 1000;
 /** the host earns for at most this many people per event */
 const HOST_MAX = 50;
 
@@ -43,7 +43,7 @@ async function managedEvent(viewer: IUser, id: string): Promise<IEvent> {
 }
 
 function windowOf(event: IEvent) {
-  const end = event.endsAt ?? new Date(+event.startsAt + FALLBACK_DURATION_MS);
+  const end = new Date(eventEndMs(event));
   const now = Date.now();
   return { open: !event.cancelled && now >= +event.startsAt && now <= +end + WINDOW_AFTER_MS, closesAt: new Date(+end + WINDOW_AFTER_MS) };
 }

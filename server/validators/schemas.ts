@@ -693,6 +693,8 @@ export const kliqueListQuery = z.object({
   community: z.preprocess(blankToUndef, z.string().trim().max(80).optional()),
   /** only kliques in communities you're in */
   mine: z.preprocess((v) => v === "1" || v === "true" || v === true, z.boolean()).default(false),
+  /** hide kliques with no spots left */
+  open: z.preprocess((v) => v === "1" || v === "true" || v === true, z.boolean()).default(false),
   /** a place (lib/places scope: "city:NG:lagos", "country:GH", "world"…); default: your country */
   where: whereParam,
   page: z.coerce.number().int().min(1).max(50).default(1),

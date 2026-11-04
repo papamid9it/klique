@@ -1,4 +1,5 @@
 import { activePlan } from "@/lib/plans";
+import { eventEndMs } from "@/lib/event-time";
 import type { Types } from "mongoose";
 import { isAdult } from "./policies/adult";
 import { Payment } from "./models/Money";
@@ -265,7 +266,6 @@ export async function toPosts(posts: IPost[], opts: { canDelete: (p: IPost) => b
 
 /* ------------------------------- events ----------------------------- */
 
-const EVENT_FALLBACK_DURATION_MS = 3 * 60 * 60 * 1000;
 
 export async function toEvents(events: IEvent[], viewer: IUser | null): Promise<EventDTO[]> {
   if (!events.length) return [];
@@ -324,7 +324,7 @@ export async function toEvents(events: IEvent[], viewer: IUser | null): Promise<
     const c = e.communityId ? communityMap.get(sid(e.communityId)) : undefined;
     const s = e.subcommunityId ? subMap.get(sid(e.subcommunityId)) : undefined;
     const isHost = !!viewer && sid(e.hostId) === sid(viewer._id);
-    const end = (e.endsAt ?? new Date(e.startsAt.getTime() + EVENT_FALLBACK_DURATION_MS)).getTime();
+    const end = eventEndMs(e);
     return {
       id: sid(e._id),
       title: e.title,

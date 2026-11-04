@@ -179,7 +179,11 @@ export async function searchCommunity(viewer: IUser, slug: string, raw: string, 
   const topicFilter = { communityId, ...authorFilter("authorId"), ...dates("createdAt"), ...(q.has.includes("image") || q.has.includes("video") ? { "media.0": { $exists: true } } : {}), ...(q.has.includes("link") ? { body: { $regex: /https?:\/\//i } } : {}), ...textFilter };
   const postFilter = { communityId, hiddenAt: null, ...authorFilter("authorId"), ...dates("createdAt"), ...(q.has.includes("video") ? { "media.kind": "video" } : q.has.includes("image") ? { "media.kind": "image" } : {}), ...textFilter };
   const eventFilter = { communityId, review: null, ...authorFilter("hostId"), ...dates("startsAt"), ...textFilter };
-  const kliqueFilter = { communityId, ...authorFilter("hostId"), ...dates("meetupAt"), ...textFilter };
+  // closed kliques (the meetup time has passed; an event's kliques meet before it starts) aren't found any more
+  const kliqueDates = dates("meetupAt") as { meetupAt?: Record<string, Date> };
+  // and an event's kliques close when the event starts, even when they meet up later
+  const startedEvents = await Event.find({ communityId, startsAt: { $lte: new Date(), $gte: new Date(Date.now() - 14 * 24 * 3600_000) } }).distinct("_id");
+  const kliqueFilter = { communityId, ...authorFilter("hostId"), meetupAt: { ...(kliqueDates.meetupAt ?? {}), $gt: new Date() }, ...(startedEvents.length ? { eventId: { $nin: startedEvents } } : {}), ...textFilter };
 
   const counts: Record<SearchKind, number> = { message: 0, topic: 0, post: 0, event: 0, klique: 0, member: 0 };
   const take = (k: SearchKind) => (only === k ? { skip: (page - 1) * PAGE, limit: PAGE + 1 } : { skip: 0, limit: PREVIEW });

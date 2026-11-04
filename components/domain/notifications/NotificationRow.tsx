@@ -129,6 +129,13 @@ export function NotificationRow({ n, now, icon, kind, onOpen, onPatch, onRemove 
         Review
       </Button>
     </>
+  ) : a?.kind === "event" && n.eventOver ? (
+    <>
+      <span className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-muted">{n.eventOver === "cancelled" ? "Cancelled" : "Ended"}</span>
+      <Button size="sm" onClick={onOpen}>
+        View
+      </Button>
+    </>
   ) : a?.kind === "event" ? (
     <>
       <Button size="sm" variant="primary" loading={busy === "go"} onClick={() => void act("go", () => EventService.rsvp(a.eventId, "going"), "You're going")}>

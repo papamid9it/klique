@@ -13,6 +13,7 @@ import { Membership } from "../models/Membership";
 import { MembershipRequest } from "../models/MembershipRequest";
 import { notFound } from "../http/errors";
 import { sid } from "./helpers";
+import { eventEnded } from "@/lib/event-time";
 
 /** The bell: your notification inbox, its unread count, and what you want to hear about. */
 
@@ -20,7 +21,13 @@ export const unreadNotificationCount = (userId: Types.ObjectId | string) => Noti
 
 /** Lines with the faces of who did them (one batched lookup for the page). */
 async function toDtos(rows: INotification[]): Promise<NotificationDTO[]> {
-  const briefs = await loadBriefs(rows.flatMap((n) => n.actorIds ?? []));
+  // event news: whether the event is over (or called off) by now, so the line stops offering "Going"
+  const eventIds = [...new Set(rows.flatMap((n) => (n.action?.kind === "event" ? [n.action.eventId] : [])))];
+  const [briefs, events] = await Promise.all([
+    loadBriefs(rows.flatMap((n) => n.actorIds ?? [])),
+    eventIds.length ? Event.find({ _id: { $in: eventIds } }).select("startsAt endsAt cancelled").lean<{ _id: Types.ObjectId; startsAt: Date; endsAt?: Date | null; cancelled?: boolean }[]>() : Promise.resolve([]),
+  ]);
+  const over = new Map(events.map((e) => [sid(e._id), e.cancelled ? ("cancelled" as const) : eventEnded(e) ? ("ended" as const) : null]));
   return rows.map((n) => ({
     id: sid(n._id),
     category: n.category,
@@ -33,6 +40,7 @@ async function toDtos(rows: INotification[]): Promise<NotificationDTO[]> {
     actors: (n.actorIds ?? []).flatMap((a) => (briefs.has(sid(a)) ? [briefs.get(sid(a))!] : [])),
     image: n.image ?? null,
     action: n.action ?? null,
+    ...(n.action?.kind === "event" && over.get(n.action.eventId) ? { eventOver: over.get(n.action.eventId)! } : {}),
   }));
 }
 

@@ -145,7 +145,7 @@ export function KliqueCard({ crew, wide, joinable = true, onDismiss }: { crew: C
           <Faces people={crew.faces} total={crew.memberCount} size={22} />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[11.5px] text-ink-muted">{goingLine(crew)}</span>
-            {!crew.closed && <span className="block text-[11px] font-semibold text-accent-text">{crew.isFull ? "Full" : `${spotsLeft} ${spotsLeft === 1 ? "spot" : "spots"} left`}</span>}
+            {!crew.closed && <span className={cx("block text-[11px] font-semibold", crew.isFull ? "text-ink-muted" : "text-accent-text")}>{crew.isFull ? `${crew.memberCount}/${crew.maxMembers} · Full` : `${spotsLeft} ${spotsLeft === 1 ? "spot" : "spots"} left`}</span>}
           </span>
           <SoftLink href={href} className={buttonClass(s === "host" || s === "member" ? "primary" : !s && !crew.closed && !crew.isFull && joinable ? "primary" : "secondary", "sm", "shrink-0")}>
             {actionLabel(crew, joinable)}
@@ -198,7 +198,7 @@ export function CrewRow({ crew, joinable = true }: { crew: CrewCardDTO; joinable
         <span className="inline-flex items-center gap-1 font-mono text-[11px] text-ink-muted">
           <Icon name="users" size={12} /> {crew.memberCount}/{crew.maxMembers}
         </span>
-        {!crew.closed && !crew.isFull && <span className="text-[11px] text-ink-muted">{spotsLeft} left</span>}
+        {!crew.closed && (crew.isFull ? <span className="rounded-full border border-line px-2 py-0.5 text-[10.5px] font-semibold text-ink-muted">Full</span> : <span className="text-[11px] text-ink-muted">{spotsLeft} left</span>)}
       </div>
       <SoftLink href={href} scroll={false} className={buttonClass(s === "host" || s === "member" ? "primary" : "secondary", "sm", "shrink-0")}>
         {actionLabel(crew, joinable)}

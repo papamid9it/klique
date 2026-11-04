@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
+import { Switch } from "@/components/ui/Field";
 import { Suspense, useCallback, useEffect, useState, type ReactNode } from "react";
 import { CrewService, type KliqueFilters } from "@/app/services/CrewService";
 import { KliqueCard, crewHref } from "@/components/domain/crews/parts";
@@ -43,6 +44,7 @@ function useFilters() {
   const when: When = w === "today" || w === "weekend" || w === "week" ? w : "any";
   const interest = sp.get("interest") ?? "";
   const q = sp.get("q") ?? "";
+  const hideFull = sp.get("open") === "1";
   const set = useCallback(
     (patch: Record<string, string>) => {
       const next = new URLSearchParams(window.location.search);
@@ -55,7 +57,7 @@ function useFilters() {
     },
     [router],
   );
-  return { where, community, when, interest, q, set };
+  return { where, community, when, interest, q, hideFull, set };
 }
 type Filters = ReturnType<typeof useFilters>;
 
@@ -189,6 +191,11 @@ function FilterControls({ f }: { f: Filters }) {
           )}
         </div>
       </Group>
+
+      {/* full kliques show after the open ones; this leaves them out */}
+      <div className="px-3 pt-1">
+        <Switch checked={f.hideFull} onChange={(v) => f.set({ open: v ? "1" : "" })} label="Hide full" hint="Only kliques with a spot left" />
+      </div>
     </div>
   );
 }
@@ -211,13 +218,14 @@ function KliquesPage() {
     q: f.q || undefined,
     community: f.community && f.community !== "mine" ? f.community : undefined,
     mine: f.community === "mine" || undefined,
+    open: f.hideFull || undefined,
     limit: PAGE * pages,
   };
   const key = `kliques-browse:${JSON.stringify(filters)}`;
   const { data, loading, refreshing, error, reload } = useApi(() => CrewService.list(filters), [key], { key, keepPrevious: true });
   useRealtimeEvent(() => void reload(), { filter: (e) => e.type === "crew" && !e.chat, debounceMs: 800 });
   const items: CrewCardDTO[] = data?.items ?? [];
-  const active = [f.community, f.when !== "any" ? f.when : "", f.interest, f.q].filter(Boolean).length;
+  const active = [f.community, f.when !== "any" ? f.when : "", f.interest, f.q, f.hideFull ? "open" : ""].filter(Boolean).length;
 
   return (
     <div>

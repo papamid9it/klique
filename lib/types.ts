@@ -1680,6 +1680,8 @@ export interface NotificationDTO {
   image: string | null;
   /** answered right from the line */
   action: { kind: "crewRequest"; crewId: Id; userId: Id } | { kind: "communityRequest"; slug: string; requestId: Id } | { kind: "event"; eventId: Id } | { kind: "eventReview"; eventId: Id } | null;
+  /** event news about an event that's over by now ("ended") or called off ("cancelled"): no Going any more */
+  eventOver?: "ended" | "cancelled";
 }
 
 /** What's waiting on you (the right column of Notifications): join requests you can answer right there. */

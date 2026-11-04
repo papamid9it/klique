@@ -1,4 +1,5 @@
 import "server-only";
+import { EVENT_FALLBACK_MS, eventEndMs, eventEnded } from "@/lib/event-time";
 import { Types } from "mongoose";
 import type { z } from "zod";
 import { extractMentionHandles } from "@/lib/mentions";
@@ -67,7 +68,7 @@ const MAX_LEAD_MS = 2 * DAY_MS;
 const MAX_AHEAD_MS = 60 * DAY_MS;
 const FACES = 5;
 
-const eventEnd = (e: Pick<IEvent, "startsAt" | "endsAt">) => e.endsAt ?? new Date(+e.startsAt + FALLBACK_DURATION_MS);
+const eventEnd = (e: Pick<IEvent, "startsAt" | "endsAt">) => new Date(eventEndMs(e));
 /** a day after the event ends */
 export const crewExpiry = (e: Pick<IEvent, "startsAt" | "endsAt">) => new Date(+eventEnd(e) + DAY_MS);
 /** a community klique: a day after it's over */
@@ -120,6 +121,13 @@ async function canSeeCommunityKliques(viewer: IUser | null, c: CommunityBits): P
 }
 
 /** The klique and what it belongs to, if this viewer may see them. */
+/** Once a klique is over, only the people in it can still open it (until it deletes itself). */
+async function assertOpenToViewer(viewer: IUser | null, crew: ICrew, event: IEvent | null) {
+  if (!kliqueOver(crew, event)) return;
+  if (viewer && (await CrewMember.exists({ crewId: crew._id, userId: viewer._id, status: "active" }))) return;
+  throw notFound(GONE);
+}
+
 async function visibleCrew(viewer: IUser | null, crewId: string): Promise<{ crew: ICrew; event: IEvent | null; community: CommunityBits | null }> {
   const crew = await Crew.findById(oid(crewId)).lean<ICrew>();
   if (!crew || isMinor(viewer)) throw notFound(GONE);
@@ -127,17 +135,34 @@ async function visibleCrew(viewer: IUser | null, crewId: string): Promise<{ crew
     const event = await visibleEvent(viewer, crew.eventId).catch(() => {
       throw notFound(GONE);
     });
+    await assertOpenToViewer(viewer, crew, event);
     const community = event.communityId ? await Community.findById(event.communityId).select(COMMUNITY_FIELDS).lean<CommunityBits>() : null;
     return { crew, event, community };
   }
   const community = crew.communityId ? await Community.findById(crew.communityId).select(COMMUNITY_FIELDS).lean<CommunityBits>() : null;
   if (!community || !(await canSeeCommunityKliques(viewer, community))) throw notFound(GONE);
+  await assertOpenToViewer(viewer, crew, null);
   return { crew, event: null, community };
 }
 
-/** When joining closes: the event's start, or the meetup itself for a community klique. */
+/**
+ * Over: its event has ended (lib/event-time), or for a community klique, 3 hours after the meetup. From then on
+ * it's out of every list and search, and only its own members can still open it (read-only for joining) until
+ * it deletes itself a day later (expiresAt, a TTL index).
+ */
+export const kliqueOver = (crew: Pick<ICrew, "meetupAt">, event: Pick<IEvent, "startsAt" | "endsAt"> | null, now = Date.now()) =>
+  event ? eventEnded(event, now) : +crew.meetupAt + EVENT_FALLBACK_MS < now;
+
+/**
+ * Closed: from the moment its event starts (a community klique: its meetup time), or the event is called off. No
+ * joining, asking or letting people in from then; it leaves every list and search for people who aren't in it.
+ * Its members keep it (and its chat) until it deletes itself, a day after the end (kliqueOver, expiresAt).
+ */
 const closesAt = (crew: Pick<ICrew, "meetupAt">, event: Pick<IEvent, "startsAt"> | null) => (event ? event.startsAt : crew.meetupAt);
-const isClosed = (crew: Pick<ICrew, "meetupAt">, event: Pick<IEvent, "startsAt" | "cancelled"> | null) => +closesAt(crew, event) <= Date.now() || !!event?.cancelled;
+export const kliqueClosed = (crew: Pick<ICrew, "meetupAt">, event: Pick<IEvent, "startsAt" | "cancelled"> | null, now = Date.now()) => +closesAt(crew, event) <= now || !!event?.cancelled;
+const isClosed = kliqueClosed;
+/** What people are told when it's closed. */
+const closedMessage = (event: Pick<IEvent, "cancelled"> | null) => (event?.cancelled ? "This klique is closed. The event was cancelled." : event ? "This klique is closed. The event has started." : "This klique is closed. The meetup time has passed.");
 
 function validateMeetup(meetupAt: Date, event: IEvent | null) {
   const now = Date.now();
@@ -359,11 +384,13 @@ export async function listEventCrews(viewer: IUser | null, eventId: string, opts
   const limit = Math.min(Math.max(opts.limit ?? 10, 1), MAX_CREW_LIST);
   const q = opts.q?.trim();
   const filter: Record<string, unknown> = { eventId: event._id, hostId: { $nin: hidden } };
+  const mineRow = viewer ? await CrewMember.findOne({ eventId: event._id, userId: viewer._id }).select("crewId").lean<{ crewId: Types.ObjectId }>() : null;
+  // the event has started (or is off): its kliques are closed and out of sight, except the one you're in
+  if (+event.startsAt <= Date.now() || event.cancelled) filter._id = mineRow?.crewId ?? null;
   if (q) {
     const rx = new RegExp(escapeRegex(q), "i");
     filter.$or = [{ title: rx }, { area: rx }, { note: rx }];
   }
-  const mineRow = viewer ? await CrewMember.findOne({ eventId: event._id, userId: viewer._id }).select("crewId").lean<{ crewId: Types.ObjectId }>() : null;
   // yours goes first (when it matches), the rest page after it
   const mineCrew = mineRow ? await Crew.findOne({ ...filter, _id: mineRow.crewId }).lean<ICrew>() : null;
   const [rest, total] = await Promise.all([
@@ -373,6 +400,8 @@ export async function listEventCrews(viewer: IUser | null, eventId: string, opts
       .lean<ICrew[]>(),
     Crew.countDocuments(filter),
   ]);
+  // most people first, but the full ones after those with a spot left
+  rest.sort((a, b) => (a.memberCount >= a.maxMembers ? 1 : 0) - (b.memberCount >= b.maxMembers ? 1 : 0));
   const cards = await toCards(mineCrew ? [mineCrew, ...rest] : rest, viewer, { events: [event] });
   const mineCard = cards.find((c) => c.viewer.standing);
 
@@ -403,7 +432,7 @@ export async function listEventCrews(viewer: IUser | null, eventId: string, opts
 async function joinBlock(viewer: IUser, crew: ICrew, event: IEvent | null, card: Pick<CrewCardDTO, "closed" | "isFull">): Promise<string | null> {
   const person = personBlock(viewer, "join");
   if (person) return person;
-  if (card.closed) return event ? "The event has started, so this klique is closed." : "This klique has already happened.";
+  if (card.closed) return closedMessage(event);
   if (card.isFull) return "This klique is full.";
   const slot = slotFor(crew, viewer.gender, (await slotCounts([crew._id])).get(sid(crew._id)));
   if (slot !== "woman" && slot !== "man" && slot !== "any") return slot;
@@ -500,7 +529,8 @@ export async function listKliques(viewer: IUser | null, q: z.infer<typeof klique
     const rx = new RegExp(escapeRegex(q.q), "i");
     filter.$or = [{ title: rx }, { area: rx }, { note: rx }];
   }
-  if (opts.forYou) filter.$expr = { $lt: ["$memberCount", "$maxMembers"] };
+  // recommendations are for joining, and "Hide full" asks for the same: only kliques with a spot left
+  if (opts.forYou || q.open) filter.$expr = { $lt: ["$memberCount", "$maxMembers"] };
   const pool = await Crew.find(filter).sort({ meetupAt: 1 }).limit(400).lean<ICrew[]>();
 
   // only what this viewer may see: events they can see, communities that are public or theirs
@@ -536,7 +566,9 @@ export async function listKliques(viewer: IUser | null, q: z.infer<typeof klique
     Math.max(0, 1 - (+c.meetupAt - now) / (14 * DAY_MS)) +
     Math.log2(1 + c.memberCount) * 0.5 +
     (boosted.has(sid(c.hostId)) ? 0.75 : 0);
-  visible.sort((a, b) => score(b) - score(a) || +a.meetupAt - +b.meetupAt);
+  // full ones still show, after every klique with a spot left (leaving reopens one: memberCount drops)
+  const full = (c: ICrew) => (c.memberCount >= c.maxMembers ? 1 : 0);
+  visible.sort((a, b) => full(a) - full(b) || score(b) - score(a) || +a.meetupAt - +b.meetupAt);
 
   const start = (q.page - 1) * q.limit;
   const slice = visible.slice(start, start + q.limit);
@@ -824,6 +856,7 @@ async function takeSpot(crewId: Types.ObjectId): Promise<boolean> {
 export async function joinCrew(viewer: IUser, crewId: string, message: string): Promise<CrewDTO> {
   assertVerified(viewer);
   const { crew, event } = await visibleCrew(viewer, crewId);
+  if (isClosed(crew, event)) throw conflict(closedMessage(event));
   if (event) assertEventOpen(event);
   if (await CrewMember.exists({ crewId: crew._id, userId: viewer._id })) return getCrew(viewer, crewId);
   const blocked = await joinBlock(viewer, crew, event, { closed: isClosed(crew, event), isFull: crew.memberCount >= crew.maxMembers });
@@ -884,7 +917,7 @@ export async function decideRequest(viewer: IUser, crewId: string, userId: strin
     notify([row.userId], declined(crew), { category: "crews", ref: `crew:${sid(crew._id)}` });
     return getCrew(viewer, crewId);
   }
-  if (isClosed(crew, event)) throw badRequest("It has started, so the klique is closed.");
+  if (isClosed(crew, event)) throw conflict(closedMessage(event));
   // there has to be a spot for them under the klique's rules
   const gender = (await User.findById(row.userId).select("gender").lean<Pick<IUser, "gender">>())?.gender;
   const slot = slotFor(crew, gender, (await slotCounts([crew._id])).get(sid(crew._id)));
@@ -910,7 +943,7 @@ export async function decideAll(viewer: IUser, crewId: string, accept: boolean):
     notify(pending.map((p) => p.userId), declined(crew), { category: "crews", ref: `crew:${sid(crew._id)}` });
     return getCrew(viewer, crewId);
   }
-  if (isClosed(crew, event)) throw badRequest("It has started, so the klique is closed.");
+  if (isClosed(crew, event)) throw conflict(closedMessage(event));
   const room = Math.max(0, crew.maxMembers - crew.memberCount);
   if (!room) throw conflict("Your klique is full. Raise the limit or remove someone first.");
   // oldest first, each only if there's a spot for them under the klique's rules

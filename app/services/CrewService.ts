@@ -31,6 +31,8 @@ export interface KliqueFilters {
   community?: string;
   /** only kliques in your communities */
   mine?: boolean;
+  /** hide kliques with no spots left */
+  open?: boolean;
   /** a place scope ("city:NG:lagos", "country:GH", "world") */
   where?: string;
   page?: number;

@@ -1,4 +1,5 @@
 import type { QueryFilter, Types } from "mongoose";
+import { EVENT_FALLBACK_MS, eventEnded } from "@/lib/event-time";
 import { assertCanHostInSpace, assertCanHostPublic, canHostInSpace, isSiteAdmin } from "../policies/hosting";
 import { deleteUploads } from "./media.service";
 import { sameFile } from "@/lib/focal";
@@ -39,7 +40,8 @@ import { Membership } from "../models/Membership";
 import { logModDelete } from "./admin-audit";
 
 /** Events stay "upcoming" until 3 hours after they start (when no end time is set). */
-const LINGER_MS = 3 * 60 * 60 * 1000;
+/** events stay listed until they're over: up to this long after they start when there's no end time */
+const LINGER_MS = EVENT_FALLBACK_MS;
 
 type ListQuery = z.infer<typeof eventListQuery>;
 
@@ -488,10 +490,9 @@ async function assertCanJoinIn(viewer: IUser, event: IEvent, what: string) {
 export async function setRsvp(viewer: IUser, id: string, status: "going" | "interested"): Promise<EventDTO> {
   const event = await loadVisibleEvent(viewer, id);
   await assertCanJoinIn(viewer, event, "RSVP");
-  const end = (event.endsAt ?? new Date(event.startsAt.getTime() + LINGER_MS)).getTime();
   if (event.cancelled) throw conflict("This event was cancelled.");
   if (event.review) throw conflict(event.review === "pending" ? "This event is waiting for an admin to approve it." : "This event wasn't approved.");
-  if (end < Date.now()) throw conflict("This event has already happened.");
+  if (eventEnded(event)) throw conflict("This event has already ended.");
 
   const existing = await Rsvp.findOne({ eventId: event._id, userId: viewer._id }).lean<{ status: string }>();
   if (status === "going" && existing?.status !== "going" && event.capacity !== null && event.goingCount >= event.capacity) {

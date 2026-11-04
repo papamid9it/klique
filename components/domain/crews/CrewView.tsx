@@ -282,7 +282,14 @@ function Crew({ crew, tab, embedded, onChange, onGone, onRead, onMenu, reload }:
               <Button size="sm" variant="primary" onClick={join} loading={busy === "join"}>
                 {crew.joinMode === "open" ? "Join klique" : "Ask to join"}
               </Button>
-            ) : v.joinSpace ? (
+            ) : crew.isFull && !crew.closed ? (
+              <>
+                <Button size="sm" disabled>
+                  Full
+                </Button>
+                <p className="text-xs text-ink-muted">This klique is full.</p>
+              </>
+          ) : v.joinSpace ? (
               <JoinSpaceButton space={v.joinSpace} crewOpen={crew.joinMode === "open"} />
             ) : (
               v.joinBlockedReason && <p className="text-xs text-ink-muted">{v.joinBlockedReason}</p>
