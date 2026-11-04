@@ -19,7 +19,7 @@ export function RightRail() {
   const { data, loading, error } = useApi(() => DiscoverService.discover(where), [where], { key: `discover:${where}` });
 
   const [railAd] = useAds("home-rail");
-  const picks = data?.suggestedCommunities.filter((c) => !c.viewer.isMember).slice(0, 4) ?? [];
+  const picks = data?.suggestedCommunities.filter((c) => !c.viewer.isMember).slice(0, 3) ?? [];
 
   return (
     // the suggestions scroll; the "built for your city" line stays pinned at the bottom, below them (never over them)
