@@ -51,9 +51,13 @@ export function usePlanLimit() {
   return { handled, prompt: <UpgradePrompt message={message} onClose={() => setMessage(null)} /> };
 }
 
-/** A Lite or Pro member's badge by their name: a rosette with a check (blue for Pro, silver for Lite). */
-export function PlanBadge({ plan, size = 15, className }: { plan: "lite" | "pro" | null | undefined; size?: number; className?: string }) {
+/**
+ * The badge by someone's name: Klique Team (an ink rosette with a crown), or a Lite or Pro member (a rosette with a
+ * check: blue for Pro, silver for Lite). The server gives each person one at most.
+ */
+export function PlanBadge({ plan, size = 15, className }: { plan: "team" | "lite" | "pro" | null | undefined; size?: number; className?: string }) {
   if (!plan) return null;
+  if (plan === "team") return <Rosette tone="team" size={size} label="Klique Team" className={className} />;
   return <Rosette tone={plan === "pro" ? "blue" : "silver"} size={size} label={plan === "pro" ? "Pro member" : "Lite member"} className={className} />;
 }
 

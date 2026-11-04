@@ -522,7 +522,7 @@ export async function searchSpaceMembers(viewer: IUser, space: Space, access: Sp
     ...(rx ? { $or: [{ handle: rx }, { displayName: rx }] } : {}),
     _id: { $nin: [...hidden, viewer._id] },
   })
-    .select("handle displayName avatarUrl avatarFrame nameEffect country city")
+    .select("handle displayName avatarUrl avatarFrame nameEffect plan planUntil email country city")
     .limit(400)
     .lean<IUser[]>();
   const memberRows = await Membership.find({ ...scopeOf(space), status: "active", userId: { $in: users.map((u) => u._id) } }).select("userId").lean<Pick<IMembership, "userId">[]>();

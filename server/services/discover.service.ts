@@ -150,7 +150,7 @@ async function searchPeople(viewer: IUser | null, q: string, where?: string) {
     $or: [{ handle: rx }, { displayName: rx }],
   })
     .limit(8)
-    .select("handle displayName avatarUrl avatarFrame nameEffect country city")
+    .select("handle displayName avatarUrl avatarFrame nameEffect plan planUntil email country city")
     .lean<IUser[]>();
   return rows.map(toBrief);
 }

@@ -3,9 +3,10 @@ import { cx } from "./cx";
 /**
  * A scalloped "verification" rosette with a white check, drawn here (not anyone's asset). `tone`: blue for Pro
  * members, silver for Lite members, gold for verified communities, so a person's plan never reads as a
- * community's verification.
+ * community's verification. "team" (Klique's own people) is the mood's ink with a little crown in the page colour:
+ * black with a white crown in light moods, white with a dark crown in dark ones.
  */
-const FILL = { blue: "#1D9BF0", silver: "#8B98A5", gold: "#D4A017" } as const;
+const FILL = { blue: "#1D9BF0", silver: "#8B98A5", gold: "#D4A017", team: "var(--ink)" } as const;
 
 /** 12 soft scallops around a circle (a rosette), as one path. */
 const ROSETTE = (() => {
@@ -24,7 +25,11 @@ export function Rosette({ tone, size = 16, label, className }: { tone: keyof typ
     <svg viewBox="0 0 24 24" width={size} height={size} role="img" aria-label={label} className={cx("inline-block shrink-0 align-[-0.15em]", className)}>
       <title>{label}</title>
       <path d={ROSETTE} fill={FILL[tone]} stroke={FILL[tone]} strokeWidth="1.6" strokeLinejoin="round" />
-      <path d="M7.6 12.3l2.9 2.9 5.9-6" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+      {tone === "team" ? (
+        <path d="M7 15.6h10l.9-6.4-3.3 2.5L12 7.6l-2.6 4.1-3.3-2.5z" fill="var(--canvas)" stroke="var(--canvas)" strokeWidth="0.9" strokeLinejoin="round" />
+      ) : (
+        <path d="M7.6 12.3l2.9 2.9 5.9-6" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+      )}
     </svg>
   );
 }

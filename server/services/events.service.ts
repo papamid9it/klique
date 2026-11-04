@@ -536,7 +536,7 @@ export async function getAttendees(viewer: IUser | null, id: string): Promise<At
     _id: { $in: rsvps.map((r) => r.userId) },
     $or: [{ attendancePublic: true }, { _id: viewer._id }],
   })
-    .select("handle displayName avatarUrl avatarFrame nameEffect country city")
+    .select("handle displayName avatarUrl avatarFrame nameEffect plan planUntil email country city")
     .limit(24)
     .lean<IUser[]>();
 

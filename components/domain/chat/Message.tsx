@@ -19,6 +19,7 @@ import { PollCard } from "./Polls";
 import { UserName } from "@/components/ui/UserName";
 import { MASS_WORDS } from "@/lib/mentions";
 import { BotTag } from "@/components/domain/space/WebhooksPanel";
+import { PlanBadge } from "@/components/domain/account/PlanTab";
 import { EmojiText } from "@/components/ui/CustomEmoji";
 
 const TOKEN_RX = /(https?:\/\/[^\s<]+)|(?<![\w@])@([a-zA-Z0-9_]{3,20})(?![\w])/g;
@@ -150,6 +151,7 @@ export const Message = memo(function Message({
               </ProfileTrigger>
             )}
             {!m.bot && m.author.bot && <BotTag />}
+            {!m.bot && <PlanBadge plan={m.author.badge} size={13} className="self-center" />}
             <time dateTime={m.createdAt} className="font-mono text-[11px] text-ink-muted">
               {formatTime(m.createdAt)}
             </time>

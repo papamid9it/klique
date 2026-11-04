@@ -182,7 +182,7 @@ export async function listPeople(viewer: IUser | null, q: z.infer<typeof peopleQ
     .sort({ createdAt: -1 })
     .skip((q.page - 1) * size)
     .limit(size + 1)
-    .select("handle displayName avatarUrl avatarFrame nameEffect country city")
+    .select("handle displayName avatarUrl avatarFrame nameEffect plan planUntil email country city")
     .lean<IUser[]>();
   return { items: rows.slice(0, size).map(toBrief), page: q.page, hasMore: rows.length > size };
 }

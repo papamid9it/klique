@@ -28,8 +28,8 @@ export interface UserBrief {
   id: Id;
   handle: string;
   displayName: string;
-  /** a Lite or Pro badge by their name */
-  badge?: "lite" | "pro" | null;
+  /** the badge by their name: Klique Team (site admins), or a Lite or Pro member */
+  badge?: "team" | "lite" | "pro" | null;
   avatarUrl: string | null;
   /** animated ring around the picture (lib/cosmetics FrameId), if chosen */
   avatarFrame?: string | null;

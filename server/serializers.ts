@@ -48,7 +48,7 @@ export function viewerAccess(a: SpaceAccess): ViewerAccess {
 
 /* ------------------------------- users ------------------------------ */
 
-export const toBrief = (u: Pick<IUser, "_id" | "handle" | "displayName" | "avatarUrl" | "country" | "city"> & Partial<Pick<IUser, "avatarFrame" | "nameEffect" | "plan" | "planUntil" | "bot">>): UserBrief => ({
+export const toBrief = (u: Pick<IUser, "_id" | "handle" | "displayName" | "avatarUrl" | "country" | "city"> & Partial<Pick<IUser, "avatarFrame" | "nameEffect" | "plan" | "planUntil" | "bot" | "email">>): UserBrief => ({
   id: sid(u._id),
   handle: u.handle,
   displayName: u.displayName,
@@ -61,8 +61,12 @@ export const toBrief = (u: Pick<IUser, "_id" | "handle" | "displayName" | "avata
   ...(u.bot ? { bot: true } : {}),
 });
 
-/** "lite" or "pro" while they're on that plan (lib/plans). */
-const badgeOf = (u: Partial<Pick<IUser, "plan" | "planUntil">>): UserBrief["badge"] => {
+/**
+ * The badge by their name: "team" for Klique's own people (site admins, ADMIN_EMAILS), else "lite" or "pro" while
+ * they're on that plan (lib/plans). One badge per person; the team one wins. Worked out here only, never set by anyone.
+ */
+const badgeOf = (u: Partial<Pick<IUser, "plan" | "planUntil" | "email">>): UserBrief["badge"] => {
+  if (u.email && isSiteAdmin({ email: u.email })) return "team";
   const p = activePlan(u);
   return p === "free" ? null : p;
 };
@@ -106,7 +110,7 @@ export const toMe = (u: IUser, unreadMessages = 0, unreadNotifications = 0): Use
   explicitOnAt: u.explicitOptInAt ? u.explicitOptInAt.toISOString() : null,
 });
 
-const BRIEF_FIELDS = "handle displayName avatarUrl avatarFrame nameEffect plan planUntil country city bot";
+const BRIEF_FIELDS = "handle displayName avatarUrl avatarFrame nameEffect plan planUntil email country city bot";
 
 export async function loadBriefs(ids: (Types.ObjectId | string)[]): Promise<Map<string, UserBrief>> {
   const unique = [...new Set(ids.map(sid))];

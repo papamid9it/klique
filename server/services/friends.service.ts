@@ -167,7 +167,7 @@ export async function suggestions(viewer: IUser, limit = 5): Promise<FriendSugge
     { $limit: limit * 3 },
   ]);
   const users = await User.find({ _id: { $in: shared.map((s) => s._id) }, profileVisibility: { $ne: "private" } })
-    .select("handle displayName avatarUrl avatarFrame nameEffect country city")
+    .select("handle displayName avatarUrl avatarFrame nameEffect plan planUntil email country city")
     .lean<IUser[]>();
   const byId = new Map(users.map((u) => [sid(u._id), u]));
   return shared
