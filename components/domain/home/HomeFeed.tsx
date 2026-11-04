@@ -19,7 +19,7 @@ import { eventPhoto } from "@/lib/fake";
 import { compactCount, dateChip, formatTime } from "@/lib/format";
 import { useEventActions } from "@/lib/hooks/useEventActions";
 import { KliqueCard } from "@/components/domain/crews/parts";
-import type { CommunityCardDTO, CrewCardDTO, DiscoverDTO, EventDTO, FeedPostDTO, HomeFeedItem } from "@/lib/types";
+import type { CommunityCardDTO, CrewCardDTO, DiscoverDTO, EventDTO, FeedPostDTO, HomeFeedItem, UserBrief } from "@/lib/types";
 import { VerifiedCheck } from "@/components/ui/VerifiedCheck";
 
 /** A community to join, in the "Communities to join" carousel: picture, name, members, Join. */
@@ -336,7 +336,29 @@ function planFeed(posts: number, kliques: CrewCardDTO[], events: EventDTO[], ads
  * (ones not already at the top of the page) and once a row of communities to join. The next page loads as you
  * near the bottom, until "You're all caught up". What's loaded is kept, so Back returns to the same spot.
  */
-export function HomeFeed({ moreEvents, kliques = [], communities, onEvent, onCommunity, onDismissKlique, refreshRef }: { moreEvents: EventDTO[]; kliques?: CrewCardDTO[]; communities: CommunityCardDTO[]; onEvent: (e: EventDTO) => void; onCommunity: (c: CommunityCardDTO) => void; onDismissKlique?: (id: string) => void; /** filled with "load the feed again from the top" for Home's refresh button */ refreshRef?: RefObject<(() => Promise<void>) | null> }) {
+const NEWER_EVERY_MS = 60_000;
+
+export function HomeFeed({
+  moreEvents,
+  kliques = [],
+  communities,
+  onEvent,
+  onCommunity,
+  onDismissKlique,
+  refreshRef,
+  onNewer,
+}: {
+  moreEvents: EventDTO[];
+  kliques?: CrewCardDTO[];
+  communities: CommunityCardDTO[];
+  onEvent: (e: EventDTO) => void;
+  onCommunity: (c: CommunityCardDTO) => void;
+  onDismissKlique?: (id: string) => void;
+  /** filled with "load the feed again from the top" for Home's refresh */
+  refreshRef?: RefObject<(() => Promise<void>) | null>;
+  /** who posted since the newest post on screen (checked every minute while the tab is open; empty: nothing new) */
+  onNewer?: (authors: UserBrief[]) => void;
+}) {
   const { status, requireAuth } = useAuth();
   const authed = status === "authed";
   const { items, hasMore, error, load, setItems, sentinel, anchor } = useInfiniteFeed<HomeFeedItem>(
@@ -352,6 +374,46 @@ export function HomeFeed({ moreEvents, kliques = [], communities, onEvent, onCom
       refreshRef.current = null;
     };
   }, [refreshRef, load, authed]);
+  // newer posts than the newest one on screen? A look at the first page every minute while the tab is in view
+  // (and straight away on coming back to it), for Home's "New posts" pill. Trending posts from elsewhere don't count.
+  const itemsRef = useRef(items);
+  const onNewerRef = useRef(onNewer);
+  useEffect(() => {
+    itemsRef.current = items;
+    onNewerRef.current = onNewer;
+  });
+  const topId = items?.[0]?.post.id;
+  useEffect(() => onNewerRef.current?.([]), [topId]); // a fresh feed: nothing new any more
+  useEffect(() => {
+    if (!authed) return;
+    let gone = false;
+    let last = Date.now();
+    const check = async () => {
+      if (document.visibilityState !== "visible") return;
+      const list = itemsRef.current;
+      const mine = list?.filter((x) => !x.trending) ?? [];
+      if (!mine.length) return;
+      last = Date.now();
+      const ids = new Set(list!.map((x) => x.post.id));
+      const newest = Math.max(...mine.map((x) => Date.parse(x.post.createdAt)));
+      try {
+        const res = (await FeedService.home(1)).data;
+        if (gone) return;
+        const newer = res.items.filter((x) => !x.trending && !ids.has(x.post.id) && Date.parse(x.post.createdAt) > newest);
+        onNewerRef.current?.(newer.map((x) => x.post.author));
+      } catch {
+        /* offline for a moment: try again next time */
+      }
+    };
+    const t = setInterval(() => void check(), NEWER_EVERY_MS);
+    const back = () => document.visibilityState === "visible" && Date.now() - last > NEWER_EVERY_MS && void check();
+    document.addEventListener("visibilitychange", back);
+    return () => {
+      gone = true;
+      clearInterval(t);
+      document.removeEventListener("visibilitychange", back);
+    };
+  }, [authed]);
   const ads = useAds("home-feed", { count: 3 }, authed);
   // a post opens over the feed at its own link (/p/[id])
   const { opened, setOpened, open, close } = usePostOverlay();
