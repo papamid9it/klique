@@ -31,6 +31,7 @@ import {
   spaceAccess,
   type Space,
   type SpaceAccess,
+  canSeeMembers,
 } from "../policies/access";
 import { loadBriefs, toPosts } from "../serializers";
 import { escapeRegex, newInviteCode, recountMembers, sid } from "./helpers";
@@ -240,8 +241,9 @@ export async function listMembers(
   page: number,
   q?: string,
 ): Promise<Paginated<MemberDTO>> {
-  // Member lists are for members only (even in public communities).
-  if (!access.isMember) throw forbidden("Join to see who's in here.");
+  // A community's member list is for its owner, admins and moderators (canSeeMembers); a group's (small and
+  // private) for its members. Site admins see both.
+  if (space.sub ? !access.isMember && !access.canModerate : !canSeeMembers(access)) throw forbidden(space.sub ? "Join to see who's in here." : "Only the community's admins can see its member list.");
 
   const size = 24;
   const base: Record<string, unknown> = { ...spaceFilter(space), status: "active" as const };

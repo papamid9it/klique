@@ -8,7 +8,7 @@ import { OverflowMenu } from "@/components/domain/OverflowMenu";
 import { ReportDialog } from "@/components/domain/ReportDialog";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useToast } from "@/components/providers/ToastProvider";
-import { Button } from "@/components/ui/Button";
+import { Button, Spinner } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { RowSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/States";
@@ -148,6 +148,7 @@ export function MembersPanel({ slug, subSlug, group }: { slug: string; subSlug?:
                   <option value="admin">Admin</option>
                 </select>
               )}
+              {busyId === m.user.id && <Spinner size={14} />}
               {/* phones: these fold into ⋯ so each person stays one row */}
               <span className="hidden sm:contents">
                 {iOwn && m.user.id !== user?.id && (

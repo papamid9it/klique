@@ -160,7 +160,8 @@ export function ChannelList({
     { id: "kliques", label: "Kliques", icon: "pin", show: true },
     // groups are private: the folder only appears once you're in one (the owner and site admins see them all)
     { id: "groups", label: "Groups", icon: "folder", count: c.subcommunityCount, show: (c.subcommunityCount ?? 0) > 0 },
-    { id: "members", label: "Members", icon: "users", count: c.memberCount, show: c.viewer.isMember },
+    // the member list is for owners, admins and moderators
+    { id: "members", label: "Members", icon: "users", count: c.memberCount, show: !!c.viewer.canSeeMembers },
   ];
 
   const modals = (

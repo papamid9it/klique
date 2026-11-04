@@ -23,8 +23,9 @@ export function RightRail() {
 
   return (
     // the suggestions scroll; the "built for your city" line stays pinned at the bottom, below them (never over them)
-    <aside className="sticky top-0 hidden h-dvh flex-col border-l border-line xl:flex" aria-label="Suggestions">
-      <div className="no-bar flex min-h-0 flex-1 flex-col gap-7 overflow-y-auto px-6 pt-7 pb-4">
+    <aside data-right-rail="" className="sticky top-0 hidden h-dvh flex-col border-l border-line xl:flex" aria-label="Suggestions">
+      {/* each card keeps its full height (never squeezed or clipped); the list scrolls instead, with the thin scrollbar that shows on hover */}
+      <div className="flex min-h-0 flex-1 flex-col gap-7 overflow-y-auto px-6 pt-7 pb-4 [&>*]:shrink-0">
       <form
         role="search"
         onSubmit={(e) => {

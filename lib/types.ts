@@ -194,6 +194,8 @@ export interface ViewerAccess {
   pendingRequest: boolean;
   /** owner/admin of this space (manage members, requests, invites, settings) */
   canManage: boolean;
+  /** may open the member list (owners, admins, moderators; members don't see each other's list) */
+  canSeeMembers?: boolean;
   /** may read posts/events/members */
   canView: boolean;
   /** may create posts / events here */

@@ -70,6 +70,12 @@ export function rolePowers(role: Role | null, roles: Pick<ICommunityRole, "_id" 
 /** May they do this in the community? (site admins can, everywhere) */
 export const can = (access: Pick<SpaceAccess, "perms" | "canManage">, p: Permission) => !!access.perms?.includes(p);
 
+/**
+ * Who may see a community's member list: its owner and admins, and anyone whose roles let them moderate people
+ * (remove, ban, time out, give roles). Site admins have every permission. Members don't see each other's list.
+ */
+export const canSeeMembers = (access: Pick<SpaceAccess, "perms" | "canManage">) => access.canManage || (["kick", "ban", "timeout", "manageRoles"] as Permission[]).some((p) => can(access, p));
+
 /** Throws unless they have that permission. */
 export function assertPerm(access: Pick<SpaceAccess, "perms" | "canManage">, p: Permission, what = "do that") {
   if (!can(access, p)) throw forbidden(`You don't have permission to ${what}.`);

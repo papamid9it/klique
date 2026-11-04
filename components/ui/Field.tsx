@@ -2,6 +2,31 @@
 
 import { useId, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
 import { cx } from "./cx";
+import type { SaveStatus } from "@/lib/hooks/useAutoSave";
+
+/** A field that saves by itself: a spinner while it saves, then a check for a moment (lib/hooks/useAutoSave). */
+export function SaveMark({ status, className }: { status?: SaveStatus; className?: string }) {
+  if (status === "saving")
+    return (
+      <span role="status" aria-label="Saving" className={cx("inline-flex text-ink-muted", className)}>
+        <svg width={15} height={15} viewBox="0 0 24 24" className="animate-spin" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeOpacity="0.25" strokeWidth="3" />
+          <path d="M21 12a9 9 0 0 0-9-9" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+        </svg>
+      </span>
+    );
+  if (status === "saved")
+    return (
+      <span role="status" className={cx("inline-flex items-center gap-1 text-[12px] font-semibold text-success", className)}>
+        <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="m5 12.5 4.5 4.5L19 7.5" />
+        </svg>
+        Saved
+      </span>
+    );
+  if (status === "error") return <span role="status" className={cx("text-[12px] font-semibold text-danger", className)}>Not saved</span>;
+  return null;
+}
 
 const CONTROL =
   "w-full rounded-control border border-line bg-raised px-3.5 text-[15px] text-ink placeholder:text-ink-muted/70 transition focus:border-accent-text disabled:opacity-60 aria-[invalid=true]:border-danger";
@@ -74,16 +99,17 @@ export function TextArea({ label, hint, error, counter, value, ...rest }: AreaPr
   );
 }
 
-type SelectProps = Omit<SelectHTMLAttributes<HTMLSelectElement>, "className"> & { label: string; hint?: string; error?: string; children: ReactNode; compact?: boolean };
+type SelectProps = Omit<SelectHTMLAttributes<HTMLSelectElement>, "className"> & { label: string; hint?: string; error?: string; children: ReactNode; compact?: boolean; /** saves by itself: spinner, then "Saved" */ status?: SaveStatus };
 
-export function SelectField({ label, hint, error, children, compact, ...rest }: SelectProps) {
+export function SelectField({ label, hint, error, children, compact, status, ...rest }: SelectProps) {
   return (
     <Field label={label} hint={hint} error={error} htmlFor={rest.id}>
       {({ id, describedBy, invalid }) => (
         <div className="relative">
-          <select id={id} aria-describedby={describedBy} aria-invalid={invalid} className={cx(CONTROL, "appearance-none pr-9", compact ? "h-9 text-sm" : "h-11")} {...rest}>
+          <select id={id} aria-describedby={describedBy} aria-invalid={invalid} aria-busy={status === "saving" || undefined} className={cx(CONTROL, "appearance-none pr-9", compact ? "h-9 text-sm" : "h-11", status && status !== "idle" && "pr-24")} {...rest} disabled={rest.disabled || status === "saving"}>
             {children}
           </select>
+          <SaveMark status={status} className="pointer-events-none absolute top-1/2 right-9 -translate-y-1/2" />
           <svg aria-hidden="true" viewBox="0 0 24 24" className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-ink-muted" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="m6 9.5 6 6 6-6" />
           </svg>
@@ -94,7 +120,7 @@ export function SelectField({ label, hint, error, children, compact, ...rest }: 
 }
 
 /** Accessible switch (role="switch"). */
-export function Switch({ checked, onChange, label, hint, disabled }: { checked: boolean; onChange: (v: boolean) => void; label: string; hint?: string; disabled?: boolean }) {
+export function Switch({ checked, onChange, label, hint, disabled, status }: { checked: boolean; onChange: (v: boolean) => void; label: string; hint?: string; disabled?: boolean; /** saves by itself: spinner, then "Saved" */ status?: SaveStatus }) {
   const id = useId();
   return (
     <div className="flex items-start justify-between gap-4">
@@ -104,17 +130,21 @@ export function Switch({ checked, onChange, label, hint, disabled }: { checked: 
         </label>
         {hint && <p className="mt-0.5 text-xs text-ink-muted">{hint}</p>}
       </div>
+      <span className="mt-0.5 flex shrink-0 items-center gap-2">
+      <SaveMark status={status} />
       <button
         id={id}
         type="button"
         role="switch"
         aria-checked={checked}
-        disabled={disabled}
+        aria-busy={status === "saving" || undefined}
+        disabled={disabled || status === "saving"}
         onClick={() => onChange(!checked)}
         className={cx("relative mt-0.5 h-6 w-11 shrink-0 rounded-full border transition disabled:opacity-50", checked ? "border-accent bg-accent" : "border-line bg-raised")}
       >
         <span className={cx("absolute top-0.5 left-0.5 size-[18px] rounded-full transition-transform", checked ? "translate-x-5 bg-accent-ink" : "bg-ink-muted")} />
       </button>
+      </span>
     </div>
   );
 }

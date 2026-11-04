@@ -25,7 +25,7 @@ import type { IPost } from "./models/Post";
 import { Rsvp, SavedEvent } from "./models/Rsvp";
 import { Subcommunity, type ISubcommunity } from "./models/Subcommunity";
 import { User, type IUser } from "./models/User";
-import { canCreateGroup, communityAccessFrom, gateOf, type SpaceAccess } from "./policies/access";
+import { canCreateGroup, canSeeMembers, communityAccessFrom, gateOf, type SpaceAccess } from "./policies/access";
 
 const sid = (id: Types.ObjectId | string) => String(id);
 
@@ -36,6 +36,7 @@ export function viewerAccess(a: SpaceAccess): ViewerAccess {
     isMember: a.isMember,
     pendingRequest: a.pendingRequest,
     canManage: a.canManage,
+    canSeeMembers: canSeeMembers(a),
     canView: a.canView,
     canPost: a.canPost,
     ...(a.canModerate ? { canModerate: true } : {}),

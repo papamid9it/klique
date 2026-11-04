@@ -45,6 +45,7 @@ interface Hooks {
  * to the community, so they keep working if it changes owner.
  */
 export function WebhooksPanel({ slug }: { slug: string }) {
+  const [busy, setBusy] = useState<{ id: string; what: "mass" | "renew" } | null>(null);
   const toast = useToast();
   const confirm = useConfirm();
   const now = useNow();
@@ -55,20 +56,26 @@ export function WebhooksPanel({ slug }: { slug: string }) {
 
   async function renew(h: Hook) {
     if (!(await confirm({ title: "Make a new link?", body: "The old link stops working straight away; anything using it must get the new one.", confirmLabel: "New link" }))) return;
+    setBusy({ id: h.id, what: "renew" });
     try {
       const res = await api.patch<Envelope<{ webhook: Hook; url: string | null }>>(`/api/communities/${slug}/webhooks/${h.id}`, { regenerate: true });
       if (res.data.url) setShown({ name: h.name, url: res.data.url });
       toast("New link made. The old one stopped working.", "success");
     } catch (e) {
       toast(errorMessage(e), "error");
+    } finally {
+      setBusy(null);
     }
   }
   async function setMass(h: Hook, on: boolean) {
+    setBusy({ id: h.id, what: "mass" });
     try {
       await api.patch(`/api/communities/${slug}/webhooks/${h.id}`, { allowMassMention: on });
       await reload();
     } catch (e) {
       toast(errorMessage(e), "error");
+    } finally {
+      setBusy(null);
     }
   }
 
@@ -113,11 +120,11 @@ export function WebhooksPanel({ slug }: { slug: string }) {
                     Posts in #{h.channel?.name ?? "deleted channel"} · made by {h.createdBy?.displayName ?? "someone"} · {h.lastUsedAt && now ? `last used ${relativeStamp(h.lastUsedAt, now)}` : "not used yet"}
                   </p>
                   <div className="mt-2 max-w-sm">
-                    <Switch checked={h.allowMassMention} onChange={(v) => void setMass(h, v)} label="Can ping @everyone and @here" />
+                    <Switch checked={h.allowMassMention} onChange={(v) => void setMass(h, v)} status={busy?.id === h.id && busy.what === "mass" ? "saving" : undefined} label="Can ping @everyone and @here" />
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <Button size="sm" onClick={() => void renew(h)}>
+                  <Button size="sm" onClick={() => void renew(h)} loading={busy?.id === h.id && busy.what === "renew"}>
                     New link
                   </Button>
                   <Button size="sm" variant="ghost" onClick={() => setRemoving(h)}>

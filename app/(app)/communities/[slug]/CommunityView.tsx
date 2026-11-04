@@ -179,7 +179,7 @@ function CommunityWorkspace({ slug }: { slug: string }) {
   const viewTable: Record<string, { label: string; icon: IconName }> = gSlug ? GROUP_VIEWS : VIEWS;
   const view = (
     requestedView && requestedView in viewTable &&
-    (requestedView !== "members" || (gSlug ? !!g?.viewer.isMember : member)) &&
+    (requestedView !== "members" || (gSlug ? !!g?.viewer.isMember : !!c?.viewer.canSeeMembers)) &&
     (requestedView !== "dashboard" || (!gSlug && !!c?.viewer.canManage)) &&
     (gSlug ? requestedView !== "groups" : requestedView !== "updates")
       ? requestedView

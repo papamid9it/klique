@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useAutoSave } from "@/lib/hooks/useAutoSave";
 import { useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
 import { CommunityService } from "@/app/services/CommunityService";
@@ -43,7 +44,6 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
   const [saving, setSaving] = useState(false);
   const [formKey, setFormKey] = useState(0);
   const [deleting, setDeleting] = useState(false);
-  const [busyPrivacy, setBusyPrivacy] = useState(false);
 
   // owners and admins see everything; a role with moderation powers sees just its tools
   const admin = c.viewer.canManage;
@@ -55,45 +55,27 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
     t === "notifications" || (t === "members" && canMembers) || (t === "roles" && may("manageRoles")) || (t === "emoji" && may("manageEmoji")) || (t === "modlog" && may("viewModLog")) || (t === "webhooks" && (runsApps || perms.includes("manageWebhooks"))) || admin;
   const active: CommunityTab = allowed(requested) ? requested : canMembers ? "members" : may("viewModLog") ? "modlog" : may("manageEmoji") ? "emoji" : "notifications";
 
-  async function setFeed(next: GroupPolicy) {
+  // settings that save the moment they change: a spinner in the field while saving, then "Saved" (useAutoSave)
+  const feedSave = useAutoSave<GroupPolicy>();
+  const groupSave = useAutoSave<GroupPolicy>();
+  const eventsSave = useAutoSave<boolean>();
+  const massSave = useAutoSave<boolean>();
+  const privacySave = useAutoSave<boolean>();
+  const saveTo = async (patch: Parameters<typeof CommunityService.update>[1], done: string) => {
     try {
-      await CommunityService.update(c.slug, { feedPolicy: next });
-      toast(next === "off" ? "Posts turned off" : "Posts settings saved", "success");
+      await CommunityService.update(c.slug, patch);
+      toast(done, "success");
       await onChanged();
     } catch (e) {
       toast(errorMessage(e), "error");
+      throw e;
     }
-  }
-  async function setMemberEvents(next: boolean) {
-    try {
-      await CommunityService.update(c.slug, { memberEvents: next });
-      toast(next ? "Members can suggest events" : "Only owners and admins post events now", "success");
-      await onChanged();
-    } catch (e) {
-      toast(errorMessage(e), "error");
-    }
-  }
-  async function setPolicy(next: GroupPolicy) {
-    try {
-      await CommunityService.update(c.slug, { groupPolicy: next });
-      toast("Group settings saved", "success");
-      await onChanged();
-    } catch (e) {
-      toast(errorMessage(e), "error");
-    }
-  }
-  async function setPrivacy(next: boolean) {
-    setBusyPrivacy(true);
-    try {
-      await CommunityService.update(c.slug, { privacy: next ? "private" : "public" });
-      toast(next ? "Community is now private" : "Community is now public", "success");
-      await onChanged();
-    } catch (e) {
-      toast(errorMessage(e), "error");
-    } finally {
-      setBusyPrivacy(false);
-    }
-  }
+  };
+  const setFeed = (next: GroupPolicy) => feedSave.run(() => saveTo({ feedPolicy: next }, next === "off" ? "Posts turned off" : "Posts settings saved"), next);
+  const setMemberEvents = (next: boolean) => eventsSave.run(() => saveTo({ memberEvents: next }, next ? "Members can suggest events" : "Only owners and admins post events now"), next);
+  const setPolicy = (next: GroupPolicy) => groupSave.run(() => saveTo({ groupPolicy: next }, "Group settings saved"), next);
+  const setMass = (next: boolean) => massSave.run(() => saveTo({ membersMassMention: next }, next ? "Members can mention everyone" : "Only owners and admins can mention everyone"), next);
+  const setPrivacy = (next: boolean) => privacySave.run(() => saveTo({ privacy: next ? "private" : "public" }, next ? "Community is now private" : "Community is now public"), next);
 
   const groups: SettingsGroup[] = [
     {
@@ -173,7 +155,7 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
 
       {active === "groups" && (
         <SettingsBlock title="Who can create groups" intro="Groups are smaller spaces with their own chat channels. Admins can always manage them.">
-          <SelectField label="Group creation" value={c.groupPolicy} onChange={(e) => void setPolicy(e.target.value as GroupPolicy)}>
+          <SelectField label="Group creation" value={groupSave.pending ?? c.groupPolicy} status={groupSave.status} onChange={(e) => void setPolicy(e.target.value as GroupPolicy)}>
             <option value="admins">Only admins</option>
             <option value="members">Any member</option>
             <option value="off">Nobody (groups off)</option>
@@ -184,7 +166,8 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
       {active === "groups" && (
         <SettingsBlock title="Who can post events" intro="Owners and admins post events straight away, from the Events page. A group's own owner and admins can post in their group.">
           <Switch
-            checked={c.memberEvents}
+            checked={eventsSave.pending ?? c.memberEvents}
+            status={eventsSave.status}
             onChange={(v) => void setMemberEvents(v)}
             label="Members can suggest events"
             hint="A member's event waits for you or another admin to approve it (from the event, your notifications or the Dashboard). Nobody else sees it until then."
@@ -195,16 +178,9 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
       {active === "groups" && (
         <SettingsBlock title="Mentions" intro="Like Discord's “Mention @everyone, @here and all roles”. @everyone (or @all) pings everyone who can see the channel; @here (or @channel) only those online now.">
           <Switch
-            checked={!!c.membersMassMention}
-            onChange={async (v) => {
-              try {
-                await CommunityService.update(c.slug, { membersMassMention: v });
-                toast(v ? "Members can mention everyone" : "Only owners and admins can mention everyone", "success");
-                await onChanged();
-              } catch (e) {
-                toast(errorMessage(e), "error");
-              }
-            }}
+            checked={massSave.pending ?? !!c.membersMassMention}
+            status={massSave.status}
+            onChange={(v) => void setMass(v)}
             label="Members can use @everyone and @here"
             hint="Off by default. You and your admins always can. Without it, members can still type them, but nobody gets pinged."
           />
@@ -213,7 +189,7 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
 
       {active === "posts" && (
         <SettingsBlock title="Posts" intro="An Instagram-style section of pictures and videos, with up and down votes and comments. Posts also reach members' home feeds.">
-          <SelectField label="Who can post" value={c.feedPolicy} onChange={(e) => void setFeed(e.target.value as GroupPolicy)}>
+          <SelectField label="Who can post" value={feedSave.pending ?? c.feedPolicy} status={feedSave.status} onChange={(e) => void setFeed(e.target.value as GroupPolicy)}>
             <option value="off">Nobody (Posts off)</option>
             <option value="admins">Only owners and admins</option>
             <option value="members">Any member</option>
@@ -255,9 +231,9 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
       {active === "privacy" && (
         <SettingsBlock title="Access">
           <Switch
-            checked={isPrivate}
-            onChange={setPrivacy}
-            disabled={busyPrivacy}
+            checked={privacySave.pending ?? isPrivate}
+            onChange={(v) => void setPrivacy(v)}
+            status={privacySave.status}
             label="Private community"
             hint="When on, only members can see posts, events and members, and new people need approval or an invite."
           />
