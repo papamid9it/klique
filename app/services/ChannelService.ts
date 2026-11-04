@@ -85,6 +85,7 @@ export const ChannelService = {
   pins: (s: SpaceRef, channelSlug: string) => api.get<Envelope<ChannelMessageDTO[]>>(`${base(s)}/channels/${channelSlug}/pins`),
   /** Permission to join a voice channel (a short-lived LiveKit token). Audio itself runs on LiveKit, not on our server. */
   joinVoice: (s: SpaceRef, channelSlug: string) => api.post<Envelope<VoiceJoinDTO>>(`${base(s)}/channels/${channelSlug}/voice`),
+  setMuted: (s: SpaceRef, channelSlug: string, muted: boolean) => api.put<Envelope<{ muted: boolean }>>(`${base(s)}/channels/${channelSlug}/mute`, { muted }),
   markRead: (s: SpaceRef, channelSlug: string) => api.post<Envelope<{ read: boolean }>>(`${base(s)}/channels/${channelSlug}/read`),
 
   /** private channels (owners/admins) */

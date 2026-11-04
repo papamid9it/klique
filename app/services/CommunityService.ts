@@ -43,6 +43,9 @@ export const CommunityService = {
   list: (params: CommunityListParams = {}) => api.get<Envelope<Paginated<CommunityCardDTO>>>("/api/communities", { ...params }, { ttl: 30 }),
   /** the switcher rail: communities you belong to, with unread + mention counts */
   mine: () => api.get<Envelope<MyCommunityDTO[]>>("/api/me/communities", undefined, { ttl: 20 }),
+  /** everything you can see there: read up to the newest message */
+  markRead: (slug: string) => api.post<Envelope<{ read: boolean }>>(`/api/communities/${slug}/read`),
+  setMuted: (slug: string, muted: boolean) => api.put<Envelope<{ muted: boolean }>>(`/api/communities/${slug}/mute`, { muted }),
   /** header, channels and boards of up to 20 communities in one request (preloading) */
   sidebars: (slugs: string[]) => api.get<Envelope<Record<string, SidebarDTO | null>>>("/api/me/sidebars", { slugs: slugs.join(",") }),
   get: (slug: string) => api.get<Envelope<CommunityDTO>>(`/api/communities/${slug}`, undefined, { ttl: 15 }),

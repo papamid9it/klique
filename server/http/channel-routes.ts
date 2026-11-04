@@ -24,6 +24,7 @@ import {
   removeChannelMember,
   renameCategory,
   searchSpaceMembers,
+  setChannelMuted,
   updateChannel,
   getThread,
   listThreads,
@@ -100,6 +101,14 @@ export const pinsList = withApi<Chan>({ auth: "optional" }, async ({ params, vie
 export const messageDelete = withApi<Msg, "required">({ auth: "required" }, async ({ params, viewer }) => {
   const { space, access } = await resolveSpaceFor(viewer, params.slug, params.subSlug);
   return deleteMessage(viewer, space, access, params.channelSlug, params.messageId);
+});
+
+const muteBody = z.object({ muted: z.boolean() });
+
+export const channelMute = withApi<Chan, "required">({ auth: "required" }, async ({ req, params, viewer }) => {
+  const { muted } = await readJson(req, muteBody);
+  const { space, access } = await resolveSpaceFor(viewer, params.slug, params.subSlug);
+  return setChannelMuted(viewer, space, access, params.channelSlug, muted);
 });
 
 export const channelRead = withApi<Chan, "required">({ auth: "required" }, async ({ params, viewer }) => {

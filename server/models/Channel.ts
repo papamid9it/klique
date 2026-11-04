@@ -197,6 +197,8 @@ export interface IChannelRead {
   channelId: Types.ObjectId;
   communityId: Types.ObjectId;
   lastReadMessageId: Types.ObjectId | null;
+  /** you muted this channel: it stops notifying you and its unread count goes (an @mention still shows a badge) */
+  muted?: boolean;
 }
 
 const ReadSchema = new Schema<IChannelRead>({
@@ -204,6 +206,7 @@ const ReadSchema = new Schema<IChannelRead>({
   channelId: { type: Schema.Types.ObjectId, ref: "Channel", required: true },
   communityId: { type: Schema.Types.ObjectId, ref: "Community", required: true },
   lastReadMessageId: { type: Schema.Types.ObjectId, default: null },
+  muted: { type: Boolean, default: false },
 });
 ReadSchema.index({ userId: 1, channelId: 1 }, { unique: true });
 ReadSchema.index({ userId: 1, communityId: 1 });

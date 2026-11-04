@@ -6,6 +6,14 @@ import { softNavigate } from "@/lib/nav";
 import { useEffect } from "react";
 import { CommunityService } from "@/app/services/CommunityService";
 import { useAuth } from "@/components/providers/AuthProvider";
+import { SpaceService } from "@/app/services/SpaceService";
+import { errorMessage } from "@/app/ApiCore";
+import { absoluteUrl } from "@/components/domain/ShareButton";
+import { useConfirm } from "@/components/providers/ConfirmProvider";
+import { useToast } from "@/components/providers/ToastProvider";
+import { ContextMenu, type MenuEntry } from "@/components/ui/Dropdown";
+import { usePins } from "@/lib/hooks/usePins";
+import { KLIQUE_SLUG } from "@/lib/constants";
 import { CountBadge } from "@/components/ui/CountBadge";
 import { useAppEvent } from "@/lib/appEvents";
 import { Cover } from "@/components/ui/Cover";
@@ -30,6 +38,9 @@ export function CommunityRail({ activeSlug, horizontal, onNavigate }: { activeSl
   // already in a community: switching to another one stays in the browser (everything it needs is preloaded)
   const inWorkspace = /^\/communities\/(?!new$)[^/]+$/.test(pathname);
 
+  const pins = usePins("communities");
+  const toast = useToast();
+  const confirm = useConfirm();
   const { connected } = useRealtime();
   useEffect(() => {
     if (!authed) return;
@@ -63,12 +74,50 @@ export function CommunityRail({ activeSlug, horizontal, onNavigate }: { activeSl
     );
   }
   if (!authed) return null;
-  const items: MyCommunityDTO[] = data ?? [];
+  const items: MyCommunityDTO[] = pins.first(data ?? []);
+  const refresh = () => void reload();
+  const failed = (e: unknown) => toast(errorMessage(e), "error");
+  const copyLink = (link: string, done: string) => void navigator.clipboard.writeText(absoluteUrl(link)).then(() => toast(done, "success"), failed);
+  const menuFor = (c: MyCommunityDTO): MenuEntry[] => {
+    const link = `/communities/${c.slug}`;
+    const manages = c.role === "owner" || c.role === "admin";
+    return [
+      { label: "Mark as read", icon: "check", disabled: !c.unread && !c.unreadCount && !c.mentions, onSelect: () => void CommunityService.markRead(c.slug).then(refresh, failed) },
+      { label: "Invite people", icon: "userplus", onSelect: () => (c.privacy === "private" && manages ? softNavigate(`${link}?settings=invites`) : copyLink(link, "Community link copied. Send it to invite them.")) },
+      { label: pins.has(c.id) ? "Unpin from top" : "Pin to top", icon: "pin", onSelect: () => pins.toggle(c.id) },
+      { label: "Copy link", icon: "link", onSelect: () => copyLink(link, "Link copied") },
+      { type: "sep" },
+      {
+        label: c.muted ? "Unmute community" : "Mute community",
+        icon: "bell",
+        onSelect: () =>
+          void CommunityService.setMuted(c.slug, !c.muted).then(() => {
+            toast(c.muted ? `${c.name} unmuted` : `${c.name} muted`, "success");
+            refresh();
+          }, failed),
+      },
+      ...(manages ? ([{ label: "Community settings", icon: "sliders", onSelect: () => softNavigate(`${link}?settings=overview`) }] as MenuEntry[]) : []),
+      ...(c.role !== "owner" && c.slug !== KLIQUE_SLUG
+        ? ([
+            { type: "sep" },
+            {
+              label: "Leave community",
+              icon: "logout",
+              danger: true,
+              onSelect: async () => {
+                if (await confirm({ title: `Leave ${c.name}?`, body: "You can join again later." })) await SpaceService.leave(c.slug).then(refresh, failed);
+              },
+            },
+          ] as MenuEntry[])
+        : []),
+    ];
+  };
 
   const tiles = items.map((c) => {
     const active = c.slug === activeSlug;
     return (
       <li key={c.id} className={cx("relative", horizontal ? "shrink-0" : "w-full")}>
+        <ContextMenu items={menuFor(c)} label={`${c.name} options`}>
         <Link
           href={`/communities/${c.slug}`}
           onClick={(e) => {
@@ -87,7 +136,7 @@ export function CommunityRail({ activeSlug, horizontal, onNavigate }: { activeSl
           className={cx("group flex flex-col items-center gap-1", horizontal ? "w-14" : "w-full")}
         >
           <span className={cx("relative block overflow-hidden transition-[border-radius,box-shadow]", horizontal ? "size-11" : "size-14", active ? "rounded-[14px]" : "rounded-full group-hover:rounded-[14px]")}>
-            <Cover src={c.coverImage} seed={c.id} interest={c.interest} className="size-full" />
+            <Cover src={c.coverImage} seed={c.id} interest={c.interest} className={cx("size-full", c.muted && "opacity-50")} />
           </span>
           {/* how many unseen messages (channels and your crews' chats); red when some mention you */}
           {(c.unreadCount ?? 0) > 0 || c.mentions > 0 ? (
@@ -97,6 +146,7 @@ export function CommunityRail({ activeSlug, horizontal, onNavigate }: { activeSl
           )}
           {horizontal && <span className={cx("w-full truncate px-1 text-center text-[10px] leading-tight", active ? "font-semibold text-ink" : "text-ink-muted group-hover:text-ink")}>{c.name}</span>}
         </Link>
+        </ContextMenu>
       </li>
     );
   });

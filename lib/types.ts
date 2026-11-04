@@ -882,6 +882,8 @@ export interface ChannelDTO {
   /** how many (other people's messages, capped at 99; 0 when read) */
   unreadCount: number;
   /** the signed-in viewer may post here (server-computed; never trust the UI alone) */
+  /** you muted it */
+  muted?: boolean;
   canPost: boolean;
   /** you're timed out in this community until then (you can read, not post) */
   timedOutUntil?: ISODate | null;
@@ -950,6 +952,8 @@ export interface MyCommunityDTO {
   /** unread messages across its channels you can see, and your crews' chats there (capped at 99) */
   unreadCount: number;
   mentions: number;
+  /** you muted it */
+  muted?: boolean;
   lastActivityAt: ISODate | null;
 }
 

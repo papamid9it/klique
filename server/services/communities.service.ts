@@ -93,6 +93,14 @@ export async function setSuppressEveryone(viewer: IUser, slug: string, on: boole
   return { suppressEveryone: on };
 }
 
+/** Your own mute for a whole community: its chat stops notifying you, and its unread dot goes. */
+export async function setCommunityMuted(viewer: IUser, slug: string, muted: boolean) {
+  const space = await resolveSpace(slug);
+  const r = await Membership.updateOne({ userId: viewer._id, communityId: space.community._id, subcommunityId: null, status: "active" }, { $set: { muted } });
+  if (!r.matchedCount) throw notFound("Join first.");
+  return { muted };
+}
+
 /**
  * The 18+ and explicit flags (policies/adult): 18+ only on a private community, explicit only on an 18+ one, and
  * only set by someone who could enter it themselves (so they're never locked out of their own community).

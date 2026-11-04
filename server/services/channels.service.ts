@@ -179,6 +179,7 @@ function toChannel(c: IChannel, ctx: DtoCtx): ChannelDTO {
     lastMessageAt: c.lastMessageAt ? c.lastMessageAt.toISOString() : null,
     unread: ctx.access.isMember && !!last && (!read || last > read),
     unreadCount: ctx.access.isMember && !!last && (!read || last > read) ? (ctx.unreadCounts?.get(sid(c._id)) ?? 1) : 0,
+    ...(ctx.readBy.get(sid(c._id))?.muted ? { muted: true } : {}),
     canPost: canPostInChannel(c, ctx.access, invited),
     ...(ctx.access.timedOutUntil ? { timedOutUntil: ctx.access.timedOutUntil } : {}),
     ...(ctx.access.needsRules ? { needsRules: true } : {}),
@@ -698,7 +699,7 @@ export async function postMessage(viewer: IUser, space: Space, access: SpaceAcce
   }
   const where = post ? `"${post.title}"` : channel.parentChannelId ? `the thread "${channel.name}"` : `#${channel.name}`;
   // Phones hear about it only when it is for them: an @mention or an answer to their message.
-  const targets = [...new Map([...(mentions ?? []), ...massIds, ...(replyTarget ? [replyTarget.authorId] : [])].map((id) => [sid(id), id])).values()].filter((id) => sid(id) !== sid(viewer._id));
+  const targets = await notMuted([...new Map([...(mentions ?? []), ...massIds, ...(replyTarget ? [replyTarget.authorId] : [])].map((id) => [sid(id), id])).values()].filter((id) => sid(id) !== sid(viewer._id)), channel);
   const said = poll ? pollPreview(poll.question) : previewOf({ body, sticker, stickerUrl, images });
   notify(targets, {
     title: `${viewer.displayName} in ${where}`,
@@ -733,7 +734,7 @@ export async function postWebhookMessage(hook: { _id: Types.ObjectId; name: stri
   const doc = await ChannelMessage.create({ channelId: channel._id, communityId: channel.communityId, authorId: owner._id, body, images: [], mentions, massMention, webhook: shown });
   await Channel.updateOne({ _id: channel._id }, { lastMessageId: doc._id, lastMessageAt: doc.createdAt });
   emitChannel(channel.communityId, channel._id);
-  const targets = [...new Map([...mentions, ...massIds].map((id) => [sid(id), id])).values()];
+  const targets = await notMuted([...new Map([...mentions, ...massIds].map((id) => [sid(id), id])).values()], channel);
   if (targets.length) {
     const community = await Community.findById(channel.communityId).select("slug").lean<{ slug: string }>();
     const sub = channel.subcommunityId ? await Subcommunity.findById(channel.subcommunityId).select("slug").lean<{ slug: string }>() : null;
@@ -1008,6 +1009,36 @@ export async function markRead(viewer: IUser, space: Space, access: SpaceAccess,
   if (!access.isMember) return { read: false };
   await ChannelRead.updateOne({ userId: viewer._id, channelId: channel._id }, { $set: { lastReadMessageId: channel.lastMessageId, communityId: channel.communityId } }, { upsert: true });
   return { read: true };
+}
+
+/** Everything you can see in the community and its groups: read up to the newest message. */
+export async function markCommunityRead(viewer: IUser, space: Space, access: SpaceAccess) {
+  if (!access.isMember) return { read: false };
+  const data = await listChannels(viewer, space, access);
+  const ids = [...data.channels, ...data.groups.flatMap((g) => g.channels)].filter((c) => c.unread || c.mentions > 0).map((c) => c.id);
+  if (!ids.length) return { read: true };
+  const rows = await Channel.find({ _id: { $in: ids } }).select("_id communityId lastMessageId").lean<Pick<IChannel, "_id" | "communityId" | "lastMessageId">[]>();
+  await ChannelRead.bulkWrite(rows.map((c) => ({ updateOne: { filter: { userId: viewer._id, channelId: c._id }, update: { $set: { lastReadMessageId: c.lastMessageId, communityId: c.communityId } }, upsert: true } })));
+  return { read: true };
+}
+
+/** Your own mute for one channel. */
+export async function setChannelMuted(viewer: IUser, space: Space, access: SpaceAccess, channelSlug: string, muted: boolean) {
+  const { channel } = await loadChannel(viewer, space, access, channelSlug);
+  if (!access.isMember) throw forbidden("Join first.");
+  await ChannelRead.updateOne({ userId: viewer._id, channelId: channel._id }, { $set: { muted, communityId: channel.communityId } }, { upsert: true });
+  return { muted };
+}
+
+/** Takes out people who muted this channel or its community, so chat doesn't notify them. */
+async function notMuted(ids: Types.ObjectId[], channel: Pick<IChannel, "_id" | "communityId">): Promise<Types.ObjectId[]> {
+  if (!ids.length) return ids;
+  const [byCommunity, byChannel] = await Promise.all([
+    Membership.find({ userId: { $in: ids }, communityId: channel.communityId, subcommunityId: null, muted: true }).select("userId").lean<{ userId: Types.ObjectId }[]>(),
+    ChannelRead.find({ userId: { $in: ids }, channelId: channel._id, muted: true }).select("userId").lean<{ userId: Types.ObjectId }[]>(),
+  ]);
+  const off = new Set([...byCommunity, ...byChannel].map((r) => sid(r.userId)));
+  return off.size ? ids.filter((id) => !off.has(sid(id))) : ids;
 }
 
 /* ------------------------------------------------------------------ */

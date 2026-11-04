@@ -14,7 +14,9 @@ import { absoluteUrl } from "@/components/domain/ShareButton";
 import { GroupFormModal } from "@/components/domain/space/GroupFormModal";
 import { ConfirmModal } from "@/components/domain/space/parts";
 import { useToast } from "@/components/providers/ToastProvider";
-import { Dropdown, type MenuEntry } from "@/components/ui/Dropdown";
+import { ContextMenu, Dropdown, type MenuEntry } from "@/components/ui/Dropdown";
+import { emitAppEvent } from "@/lib/appEvents";
+import { usePins } from "@/lib/hooks/usePins";
 import { Icon, type IconName } from "@/components/ui/Icon";
 import { crewLeaveWarning } from "@/components/domain/crews/parts";
 import { CountBadge } from "@/components/ui/CountBadge";
@@ -118,6 +120,7 @@ export function ChannelList({
     onNavigate?.();
   }
 
+  const pins = usePins(`channels:${c.slug}`);
   const inviteCommunity = () => (c.privacy === "private" && manage ? go(`${base}?settings=invites`) : void copy(absoluteUrl(base), toast, "Community link copied"));
 
   // site admins only: give or take the "Verified" check (logged in the audit log; Klique HQ keeps it)
@@ -298,13 +301,48 @@ export function ChannelList({
     </>
   );
 
-  const channelMenu = (ch: ChannelDTO, sub: string | null, href: string): MenuEntry[] => [
-    { label: "Edit channel", icon: "edit", onSelect: () => setEditing({ channel: ch, sub, tab: "overview" }) },
-    { label: "Permissions", icon: "lock", onSelect: () => setEditing({ channel: ch, sub, tab: "permissions" }) },
-    { label: "Copy link", icon: "link", onSelect: () => void copy(absoluteUrl(href), toast) },
-    { type: "sep" },
-    { label: "Delete channel", icon: "trash", danger: true, onSelect: () => setDeletingChannel({ channel: ch, sub }) },
-  ];
+  const channelMenu = (ch: ChannelDTO, sub: string | null, href: string, canEdit: boolean): MenuEntry[] => {
+    const space = { slug: c.slug, subSlug: sub ?? undefined };
+    const member = sub ? true : c.viewer.isMember;
+    const refresh = () => {
+      onChanged();
+      emitAppEvent("membership"); // the unread dots on the community rail
+    };
+    return [
+      ...(member
+        ? ([{ label: "Mark as read", icon: "check", disabled: !ch.unread && ch.mentions === 0, onSelect: () => void ChannelService.markRead(space, ch.slug).then(refresh, (e) => toast(errorMessage(e), "error")) }] as MenuEntry[])
+        : []),
+      { label: "Invite people", icon: "userplus", onSelect: () => void copy(absoluteUrl(href), toast, "Channel link copied. Send it to invite them.") },
+      { label: pins.has(ch.id) ? "Unpin from top" : "Pin to top", icon: "pin", onSelect: () => pins.toggle(ch.id) },
+      { label: "Copy link", icon: "link", onSelect: () => void copy(absoluteUrl(href), toast) },
+      ...(member
+        ? ([
+            { type: "sep" },
+            {
+              label: ch.muted ? "Unmute channel" : "Mute channel",
+              icon: "bell",
+              onSelect: () =>
+                void ChannelService.setMuted(space, ch.slug, !ch.muted).then(
+                  () => {
+                    toast(ch.muted ? `#${ch.name} unmuted` : `#${ch.name} muted`, "success");
+                    refresh();
+                  },
+                  (e) => toast(errorMessage(e), "error"),
+                ),
+            },
+          ] as MenuEntry[])
+        : []),
+      ...(canEdit
+        ? ([
+            { type: "sep" },
+            { label: "Edit channel", icon: "edit", onSelect: () => setEditing({ channel: ch, sub, tab: "overview" }) },
+            { label: "Permissions", icon: "lock", onSelect: () => setEditing({ channel: ch, sub, tab: "permissions" }) },
+            { type: "sep" },
+            { label: "Delete channel", icon: "trash", danger: true, onSelect: () => setDeletingChannel({ channel: ch, sub }) },
+          ] as MenuEntry[])
+        : []),
+    ];
+  };
 
   /** The "+" next to a category: create here, or add a category. */
   const addMenu = (categoryId: string | null, sub?: string | null): MenuEntry[] => [
@@ -438,8 +476,8 @@ export function ChannelList({
             )}
           </div>
           <ul className="space-y-0.5">
-            {g.channels.map((ch) => (
-              <ChannelRow key={ch.id} ch={ch} href={`${gBase}&c=${ch.slug}`} active={!view && ch.slug === activeChannel} menu={gManage ? channelMenu(ch, g.slug, `${gBase}&c=${ch.slug}`) : null} onNavigate={onNavigate} />
+            {pins.first(g.channels).map((ch) => (
+              <ChannelRow key={ch.id} ch={ch} pinned={pins.has(ch.id)} href={`${gBase}&c=${ch.slug}`} active={!view && ch.slug === activeChannel} menu={channelMenu(ch, g.slug, `${gBase}&c=${ch.slug}`, gManage)} onNavigate={onNavigate} />
             ))}
           </ul>
           {g.channels.length === 0 && <p className="px-2.5 py-2 text-sm text-ink-muted">{gManage ? "No channels yet. Use + to create one." : "No channels yet."}</p>}
@@ -591,8 +629,8 @@ export function ChannelList({
                 )}
               </div>
               <ul className="space-y-0.5">
-                {shown.map((ch) => (
-                  <ChannelRow key={ch.id} ch={ch} href={`${base}?c=${ch.slug}`} active={!view && ch.slug === activeChannel} menu={chMgr ? channelMenu(ch, null, `${base}?c=${ch.slug}`) : null} onNavigate={onNavigate} />
+                {pins.first(shown).map((ch) => (
+                  <ChannelRow key={ch.id} ch={ch} pinned={pins.has(ch.id)} href={`${base}?c=${ch.slug}`} active={!view && ch.slug === activeChannel} menu={channelMenu(ch, null, `${base}?c=${ch.slug}`, chMgr)} onNavigate={onNavigate} />
                 ))}
               </ul>
             </section>
@@ -605,9 +643,9 @@ export function ChannelList({
   );
 }
 
-function ChannelRow({ ch, href, active, menu, onNavigate }: { ch: ChannelDTO; href: string; active: boolean; menu: MenuEntry[] | null; onNavigate?: () => void }) {
-  return (
-    <li className="group/ch relative">
+function ChannelRow({ ch, href, active, menu, pinned, onNavigate }: { ch: ChannelDTO; href: string; active: boolean; menu: MenuEntry[] | null; pinned?: boolean; onNavigate?: () => void }) {
+  const row = (
+    <>
       <SoftLink
         href={href}
         scroll={false}
@@ -616,13 +654,15 @@ function ChannelRow({ ch, href, active, menu, onNavigate }: { ch: ChannelDTO; hr
         className={cx(
           "flex h-9 items-center gap-2 rounded-control pl-2.5 text-[14px] transition",
           menu ? "pr-9" : "pr-2.5",
-          active ? "bg-raised font-semibold text-ink" : ch.unread || ch.mentions > 0 ? "font-semibold text-ink hover:bg-raised/60" : "font-medium text-ink-muted hover:bg-raised/60 hover:text-ink",
+          active ? "bg-raised font-semibold text-ink" : (ch.unread && !ch.muted) || ch.mentions > 0 ? "font-semibold text-ink hover:bg-raised/60" : "font-medium text-ink-muted hover:bg-raised/60 hover:text-ink",
         )}
       >
         <Icon name={ch.type === "announcement" ? "megaphone" : ch.type === "voice" ? "mic" : "hash"} size={16} className="shrink-0" />
         <span className="truncate">{ch.name}</span>
         {ch.visibility !== "all" && <Icon name="lock" size={12} className="shrink-0 opacity-70" aria-label={ch.visibility === "invite" ? "Invite-only channel" : "Admins only"} />}
-        {!active && <CountBadge n={Math.max(ch.unreadCount ?? 0, ch.mentions)} mention={ch.mentions > 0} className="ml-auto" label={ch.mentions > 0 ? `${ch.unreadCount || ch.mentions} unread, ${ch.mentions} mention you` : `${ch.unreadCount} unread`} />}
+        {pinned && <Icon name="pin" size={12} className="shrink-0 opacity-70" aria-label="Pinned" />}
+        {ch.muted && <span className="shrink-0 font-mono text-[10px] opacity-70">muted</span>}
+        {!active && <CountBadge n={Math.max(ch.muted ? 0 : (ch.unreadCount ?? 0), ch.mentions)} mention={ch.mentions > 0} className="ml-auto" label={ch.mentions > 0 ? `${ch.unreadCount || ch.mentions} unread, ${ch.mentions} mention you` : `${ch.unreadCount} unread`} />}
       </SoftLink>
       {menu && (
         <span className="absolute top-1/2 right-1.5 -translate-y-1/2 opacity-100 transition focus-within:opacity-100 has-[[aria-expanded=true]]:opacity-100 md:opacity-0 md:group-hover/ch:opacity-100">
@@ -637,6 +677,17 @@ function ChannelRow({ ch, href, active, menu, onNavigate }: { ch: ChannelDTO; hr
             )}
           />
         </span>
+      )}
+    </>
+  );
+  return (
+    <li className="group/ch relative">
+      {menu ? (
+        <ContextMenu items={menu} label={`#${ch.name} options`}>
+          {row}
+        </ContextMenu>
+      ) : (
+        row
       )}
     </li>
   );

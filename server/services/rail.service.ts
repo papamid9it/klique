@@ -34,6 +34,8 @@ export async function myCommunities(viewer: IUser): Promise<MyCommunityDTO[]> {
     ChannelMember.find({ userId: viewer._id, communityId: { $in: ids } }).select("channelId").lean<{ channelId: Types.ObjectId }[]>(),
   ]);
   const readBy = new Map(reads.map((r) => [sid(r.channelId), r.lastReadMessageId ? sid(r.lastReadMessageId) : null]));
+  const mutedChannels = new Set(reads.filter((r) => r.muted).map((r) => sid(r.channelId)));
+  const mutedCommunities = new Set(memberships.filter((m) => m.muted && !m.subcommunityId).map((m) => sid(m.communityId)));
   const guestOf = new Set(guest.map((g) => sid(g.channelId)));
 
   const byCommunity = new Map<string, { unread: IChannel[]; last: Date | null; crewUnread?: boolean }>();
@@ -62,7 +64,8 @@ export async function myCommunities(viewer: IUser): Promise<MyCommunityDTO[]> {
         ChannelMessage.countDocuments({ channelId: ch._id, authorId: { $ne: viewer._id }, deletedAt: null, _id: { $gt: after } }, { limit: 99 }),
       ]);
       add(mentionTotals, sid(ch.communityId), n);
-      add(unreadTotals, sid(ch.communityId), u);
+      // muted: only an @mention still counts
+      if (!mutedChannels.has(sid(ch._id))) add(unreadTotals, sid(ch.communityId), u);
     }),
   );
   // ...and your crews' chats there
@@ -90,8 +93,9 @@ export async function myCommunities(viewer: IUser): Promise<MyCommunityDTO[]> {
         privacy: c.privacy,
         verified: !!c.verified || !!c.official,
         role: parentRole.get(sid(c._id))!,
-        unread: slot.unread.length > 0 || !!slot.crewUnread,
-        unreadCount: Math.min(99, unreadTotals.get(sid(c._id)) ?? 0),
+        unread: !mutedCommunities.has(sid(c._id)) && (slot.unread.some((ch) => !mutedChannels.has(sid(ch._id))) || !!slot.crewUnread),
+        unreadCount: mutedCommunities.has(sid(c._id)) ? 0 : Math.min(99, unreadTotals.get(sid(c._id)) ?? 0),
+        ...(mutedCommunities.has(sid(c._id)) ? { muted: true } : {}),
         mentions: Math.min(99, mentionTotals.get(sid(c._id)) ?? 0),
         lastActivityAt: (slot.last ?? null)?.toISOString() ?? null,
       };

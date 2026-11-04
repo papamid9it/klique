@@ -31,6 +31,7 @@ export function Dropdown({
   width = 224,
   label = "Menu",
   className,
+  onClose,
 }: {
   items: MenuEntry[];
   /** render the trigger; spread `props` onto a <button> */
@@ -39,6 +40,7 @@ export function Dropdown({
   width?: number;
   label?: string;
   className?: string;
+  onClose?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
@@ -82,8 +84,9 @@ export function Dropdown({
       setPos(null);
       closeSub();
       if (refocus) anchor.current?.querySelector<HTMLElement>("button, a")?.focus();
+      onClose?.();
     },
-    [closeSub],
+    [closeSub, onClose],
   );
 
   // Place the panel under the trigger, flipping up / sideways when it would leave the screen.
@@ -275,5 +278,42 @@ export function Dropdown({
           host,
         )}
     </span>
+  );
+}
+
+/**
+ * The same menu, opened by right-clicking what's inside (or long-pressing on a phone), right where the pointer is.
+ * It sits on an invisible point at those coordinates, so all the Dropdown's flipping and keyboard handling still apply.
+ */
+export function ContextMenu({ items, label, width = 232, className, children }: { items: MenuEntry[]; label: string; width?: number; className?: string; children: ReactNode }) {
+  const [at, setAt] = useState<{ x: number; y: number; n: number } | null>(null);
+  const opener = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (at) opener.current?.click();
+  }, [at]);
+  return (
+    <div
+      className={className}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        if ((e.target as Element).closest?.('[role="menu"]')) return;
+        setAt((p) => ({ x: e.clientX, y: e.clientY, n: (p?.n ?? 0) + 1 }));
+      }}
+    >
+      {children}
+      {at &&
+        createPortal(
+          <span key={at.n} style={{ position: "fixed", left: at.x, top: at.y, width: 0, height: 0 }}>
+            <Dropdown
+              items={items}
+              label={label}
+              width={width}
+              onClose={() => setAt(null)}
+              trigger={({ props }) => <button {...props} ref={opener} tabIndex={-1} aria-hidden="true" className="block size-0 opacity-0" />}
+            />
+          </span>,
+          document.body,
+        )}
+    </div>
   );
 }

@@ -14,6 +14,8 @@ export interface IMembership {
   status: "active" | "banned";
   /** "Suppress @everyone and @here" in this community (their notification setting) */
   suppressEveryone?: boolean;
+  /** you muted this community: its chat stops notifying you and its unread dot goes (an @mention still shows a badge) */
+  muted?: boolean;
   /** their answers to the community's entry questions when they joined (what each question said, then) */
   answers?: { prompt: string; answer: string }[];
   /**
@@ -41,6 +43,7 @@ const MembershipSchema = new Schema<IMembership>(
     role: { type: String, enum: ["owner", "admin", "member"], default: "member" },
     status: { type: String, enum: ["active", "banned"], default: "active" },
     suppressEveryone: { type: Boolean, default: false },
+    muted: { type: Boolean, default: false },
     answers: { type: [{ _id: false, prompt: { type: String, maxlength: 200 }, answer: { type: String, maxlength: 500 } }], default: [] },
     timeoutUntil: { type: Date, default: null },
     timeoutReason: { type: String, default: null, maxlength: 300 },
