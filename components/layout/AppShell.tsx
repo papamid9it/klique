@@ -54,6 +54,8 @@ function Shell({ children }: { children: ReactNode }) {
   if (pathname === "/admin" || pathname.startsWith("/admin/")) return <>{children}</>;
   // Making a community is a focused, full-screen step (no menus around it)
   if (pathname.replace(/\/$/, "") === "/communities/new") return <>{children}</>;
+  // So are the plans: one decision, nothing around it
+  if (pathname.replace(/\/$/, "") === "/pricing") return <>{children}</>;
 
   if (isWorkspace(pathname)) {
     return (

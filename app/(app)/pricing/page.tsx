@@ -1,6 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import type { ReactNode } from "react";
+import { LogoMark } from "@/components/layout/Logo";
 import { useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
 import { SubscriptionService } from "@/app/services/SubscriptionService";
@@ -29,6 +32,38 @@ const FAQ: { q: string; a: string }[] = [
 ];
 const naira = (n: number) => `₦${n.toLocaleString("en-NG")}`;
 
+/** The plans page is full-screen (no side menus, components/layout/AppShell), like making a community: a way back top-left. */
+function Frame({ children }: { children: ReactNode }) {
+  const router = useRouter();
+  // back to the page they came from in Klique; Home when this is where they landed (a link from elsewhere, typed in)
+  const leave = () => {
+    const nav = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+    const landedHere = !nav || new URL(nav.name).pathname === window.location.pathname;
+    const fromKlique = document.referrer.startsWith(window.location.origin);
+    if (landedHere && !fromKlique) router.push("/");
+    else router.back();
+  };
+  return (
+    <div className="min-h-dvh bg-canvas px-4 pt-4 pb-16 sm:px-8 sm:pt-10">
+      <div className="mb-6 flex items-center sm:fixed sm:top-4 sm:left-4 sm:z-10 sm:mb-0">
+        <Link
+          href="/"
+          onClick={(e) => {
+            e.preventDefault();
+            leave();
+          }}
+          aria-label="Back"
+          className="inline-flex items-center gap-2 rounded-[14px] bg-raised py-1.5 pr-3 pl-1.5 text-sm font-medium text-ink-muted transition hover:bg-surface hover:text-ink"
+        >
+          <LogoMark size={28} />
+          <Icon name="arrow-left" size={14} /> Back
+        </Link>
+      </div>
+      {children}
+    </div>
+  );
+}
+
 /**
  * /pricing: Free, Lite and Pro side by side, from Admin → Plans (prices and limits). Signed in, your plan is
  * marked and the buttons go straight to the Paystack checkout; signed out, they ask you to sign in first.
@@ -52,12 +87,23 @@ export default function PricingPage() {
     }
   }
 
-  if (plans.loading && !plans.data) return <Skeleton className="h-[30rem] w-full rounded-card" />;
-  if (plans.error || !plans.data) return <ErrorState message={plans.error} onRetry={plans.reload} />;
+  if (plans.loading && !plans.data)
+    return (
+      <Frame>
+        <Skeleton className="mx-auto h-[30rem] w-full max-w-5xl rounded-card" />
+      </Frame>
+    );
+  if (plans.error || !plans.data)
+    return (
+      <Frame>
+        <ErrorState message={plans.error} onRetry={plans.reload} />
+      </Frame>
+    );
   const c = plans.data.config;
   const rank = (p: PlanId) => ORDER.indexOf(p);
 
   return (
+    <Frame>
     <div className="mx-auto max-w-5xl">
       <header className="mx-auto mb-8 max-w-xl text-center">
         <p className="eyebrow">Plans</p>
@@ -131,5 +177,6 @@ export default function PricingPage() {
         </div>
       </section>
     </div>
+    </Frame>
   );
 }
