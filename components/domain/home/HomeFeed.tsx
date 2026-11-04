@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Fragment, useEffect, useRef, useState, type RefObject } from "react";
+import { useNewerPosts } from "@/components/domain/feed/NewPosts";
 import { FeedService } from "@/app/services/FeedService";
 import { JoinButton } from "@/components/domain/JoinButton";
 import { SponsoredCard, useAds } from "@/components/domain/ads/Sponsored";
@@ -336,8 +337,6 @@ function planFeed(posts: number, kliques: CrewCardDTO[], events: EventDTO[], ads
  * (ones not already at the top of the page) and once a row of communities to join. The next page loads as you
  * near the bottom, until "You're all caught up". What's loaded is kept, so Back returns to the same spot.
  */
-const NEWER_EVERY_MS = 60_000;
-
 export function HomeFeed({
   moreEvents,
   kliques = [],
@@ -374,46 +373,13 @@ export function HomeFeed({
       refreshRef.current = null;
     };
   }, [refreshRef, load, authed]);
-  // newer posts than the newest one on screen? A look at the first page every minute while the tab is in view
-  // (and straight away on coming back to it), for Home's "New posts" pill. Trending posts from elsewhere don't count.
-  const itemsRef = useRef(items);
-  const onNewerRef = useRef(onNewer);
-  useEffect(() => {
-    itemsRef.current = items;
-    onNewerRef.current = onNewer;
-  });
-  const topId = items?.[0]?.post.id;
-  useEffect(() => onNewerRef.current?.([]), [topId]); // a fresh feed: nothing new any more
-  useEffect(() => {
-    if (!authed) return;
-    let gone = false;
-    let last = Date.now();
-    const check = async () => {
-      if (document.visibilityState !== "visible") return;
-      const list = itemsRef.current;
-      const mine = list?.filter((x) => !x.trending) ?? [];
-      if (!mine.length) return;
-      last = Date.now();
-      const ids = new Set(list!.map((x) => x.post.id));
-      const newest = Math.max(...mine.map((x) => Date.parse(x.post.createdAt)));
-      try {
-        const res = (await FeedService.home(1)).data;
-        if (gone) return;
-        const newer = res.items.filter((x) => !x.trending && !ids.has(x.post.id) && Date.parse(x.post.createdAt) > newest);
-        onNewerRef.current?.(newer.map((x) => x.post.author));
-      } catch {
-        /* offline for a moment: try again next time */
-      }
-    };
-    const t = setInterval(() => void check(), NEWER_EVERY_MS);
-    const back = () => document.visibilityState === "visible" && Date.now() - last > NEWER_EVERY_MS && void check();
-    document.addEventListener("visibilitychange", back);
-    return () => {
-      gone = true;
-      clearInterval(t);
-      document.removeEventListener("visibilitychange", back);
-    };
-  }, [authed]);
+  // newer posts than the newest one on screen (for Home's "New posts" pill); trending posts from elsewhere don't count
+  useNewerPosts(
+    items?.filter((x) => !x.trending).map((x) => x.post) ?? null,
+    async () => (await FeedService.home(1)).data.items.filter((x) => !x.trending).map((x) => x.post),
+    (authors) => onNewer?.(authors),
+    authed,
+  );
   const ads = useAds("home-feed", { count: 3 }, authed);
   // a post opens over the feed at its own link (/p/[id])
   const { opened, setOpened, open, close } = usePostOverlay();
