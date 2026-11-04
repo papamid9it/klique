@@ -35,7 +35,7 @@ export function BackToTop({ hidden }: { hidden?: boolean }) {
         tabIndex={shown ? 0 : -1}
         onClick={() => scrollerOf(self.current).scrollTo({ top: 0, behavior: "smooth" })}
         className={cx(
-          "inline-flex size-10 -translate-y-full items-center lg:size-11 justify-center rounded-full border border-line bg-surface text-ink shadow-[0_6px_20px_-8px_rgba(0,0,0,0.45)] transition duration-200 hover:border-ink-muted",
+          "inline-flex size-10 -translate-y-full items-center lg:size-11 lg:translate-x-[calc(100%+1.5rem)] justify-center rounded-full border border-line bg-surface text-ink shadow-[0_6px_20px_-8px_rgba(0,0,0,0.45)] transition duration-200 hover:border-ink-muted",
           shown ? "pointer-events-auto scale-100 opacity-100" : "scale-90 opacity-0",
         )}
       >
