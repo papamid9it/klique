@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
 import { Suspense, type ReactNode } from "react";
+import { BootSplash } from "@/components/layout/BootSplash";
 import { Providers } from "@/components/providers/Providers";
 import { MOOD_BOOT_SCRIPT } from "@/components/providers/ThemeProvider";
 import "./globals.css";
@@ -28,7 +29,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       </head>
       <body>
         <Providers>
-          <Suspense fallback={<div className="min-h-dvh" aria-busy="true" />}>{children}</Suspense>
+          <Suspense fallback={<BootSplash />}>{children}</Suspense>
         </Providers>
       </body>
     </html>

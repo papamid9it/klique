@@ -21,3 +21,16 @@
 @keyframes kqfloat { 0%, 100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-14px) rotate(1deg); } }
 @keyframes kqline { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 @keyframes kqmarquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+/* the first-load splash (components/layout/BootSplash): fade in after a beat, the mark breathes, a bar slides */
+@keyframes kqbootin { from { opacity: 0; } to { opacity: 1; } }
+@keyframes kqbreathe { 0%, 100% { transform: scale(1); opacity: 0.88; } 50% { transform: scale(1.06); opacity: 1; } }
+@keyframes kqslide { from { transform: translateX(-110%); } to { transform: translateX(310%); } }
+.kq-boot { animation: kqbootin 0.35s ease-out 0.15s both; }
+.kq-boot-mark { animation: kqbreathe 1.8s ease-in-out infinite; }
+.kq-boot-bar { animation: kqslide 1.15s cubic-bezier(0.45, 0, 0.25, 1) infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .kq-boot { animation-delay: 0.15s; animation-duration: 0.01s; }
+  .kq-boot-mark { animation: none; }
+  .kq-boot-bar { animation: none; width: 100%; opacity: 0.5; }
+}

@@ -127,7 +127,7 @@ export const Message = memo(function Message({
             <Avatar name={m.author.displayName} src={m.author.avatarUrl} size={40} />
           ) : (
             <ProfileTrigger handle={m.author.handle} aria-label={`${m.author.displayName}'s profile`}>
-              <Avatar name={m.author.displayName} src={m.author.avatarUrl} frame={m.author.avatarFrame} size={40} />
+              <Avatar name={m.author.displayName} src={m.author.avatarUrl} frame={m.author.avatarFrame} size={40} badge={m.roleBadge ? { icon: m.roleBadge.icon, label: m.roleBadge.name } : null} />
             </ProfileTrigger>
           )
         ) : (

@@ -62,6 +62,8 @@ export interface MemberStanding {
   /** the colour of their highest coloured role (shown on their name), if any */
   color: string | null;
   roles: Pick<RoleDTO, "id" | "name" | "color" | "icon">[];
+  /** the emoji of their highest role that has one (shown on their picture inside the community), if any */
+  badge: { icon: string; name: string } | null;
 }
 
 /** Each person's rank, name colour and roles in the community (one query each for memberships and roles). */
@@ -75,7 +77,8 @@ export async function standings(communityId: Types.ObjectId, userIds: (Types.Obj
   const byId = new Map(roles.map((r) => [sid(r._id), r]));
   for (const m of ms) {
     const mine = (m.roleIds ?? []).flatMap((id) => byId.get(String(id)) ?? []).sort((a, b) => b.position - a.position);
-    out.set(sid(m.userId), { rank: rolePowers(m.role, mine).rank, color: mine.find((r) => r.color)?.color ?? null, roles: mine.map((r) => ({ id: sid(r._id), name: r.name, color: r.color, icon: r.icon })) });
+    const top = mine.find((r) => r.icon);
+    out.set(sid(m.userId), { rank: rolePowers(m.role, mine).rank, color: mine.find((r) => r.color)?.color ?? null, roles: mine.map((r) => ({ id: sid(r._id), name: r.name, color: r.color, icon: r.icon })), badge: top?.icon ? { icon: top.icon, name: top.name } : null });
   }
   return out;
 }

@@ -11,6 +11,7 @@ import { Membership, type IMembership } from "../models/Membership";
 import type { IUser } from "../models/User";
 import { assertCanView, outranks, type Space, type SpaceAccess } from "../policies/access";
 import { loadBriefs } from "../serializers";
+import { standings } from "./roles.service";
 import type { feedCommentSchema, feedPostSchema } from "../validators/schemas";
 import { hiddenUserIds } from "./blocks";
 import { sid } from "./helpers";
@@ -63,6 +64,8 @@ async function toPosts(rows: IFeedPost[], viewer: IUser | null): Promise<FeedPos
     Membership.find({ communityId: { $in: communityIds }, subcommunityId: null, status: "active", userId: { $in: rows.map((r) => r.authorId) } }).select("communityId userId role").lean<Pick<IMembership, "communityId" | "userId" | "role">[]>(),
   ]);
   const byCommunity = new Map(communities.map((c) => [sid(c._id), c]));
+  // role emojis on pictures: only for a page of one community's posts (that's where they show)
+  const badges = communityIds.length === 1 ? await standings(rows[0].communityId, rows.map((r) => r.authorId)) : null;
   const voteOf = new Map(votes.map((v) => [sid(v.postId), v.value]));
   const roleIn = new Map(roles.map((m) => [sid(m.communityId), m.role]));
   const authorRole = new Map(authorRoles.map((m) => [`${sid(m.communityId)}:${sid(m.userId)}`, m.role]));
@@ -79,6 +82,7 @@ async function toPosts(rows: IFeedPost[], viewer: IUser | null): Promise<FeedPos
         id: sid(p._id),
         community: { id: sid(c._id), slug: c.slug, name: c.name, interest: c.interest, coverImage: c.coverImage ?? null, privacy: c.privacy, explicit: !!c.explicit, verified: !!c.verified || !!c.official },
         author,
+        ...(badges?.get(sid(p.authorId))?.badge ? { roleBadge: badges.get(sid(p.authorId))!.badge } : {}),
         caption: p.caption,
         tags: p.tags ?? [],
         refs: refOf(p),
@@ -110,6 +114,7 @@ async function toComments(rows: IFeedComment[], viewer: IUser | null, managerRol
     isManager(managerRole) ? Membership.find({ communityId: rows[0].communityId, subcommunityId: null, status: "active", userId: { $in: rows.map((r) => r.authorId) } }).select("userId role").lean<Pick<IMembership, "userId" | "role">[]>() : [],
   ]);
   const roleOf = new Map(authorRoles.map((m) => [sid(m.userId), m.role]));
+  const badges = await standings(rows[0].communityId, rows.map((r) => r.authorId));
   const me = viewer ? sid(viewer._id) : "";
   return rows.flatMap((c) => {
     const author = authors.get(sid(c.authorId));
@@ -129,6 +134,7 @@ async function toComments(rows: IFeedComment[], viewer: IUser | null, managerRol
         createdAt: c.createdAt.toISOString(),
         editedAt: !gone && c.editedAt ? c.editedAt.toISOString() : null,
         author,
+        ...(badges.get(sid(c.authorId))?.badge ? { roleBadge: badges.get(sid(c.authorId))!.badge } : {}),
         reactions: gone ? [] : (reactions.get(sid(c._id)) ?? []),
         canEdit: !gone && sid(c.authorId) === me,
         canDelete: !gone && (sid(c.authorId) === me || (!!viewer && isSiteAdmin(viewer)) || (isManager(managerRole) && (target === undefined || outranks(managerRole, target)))),

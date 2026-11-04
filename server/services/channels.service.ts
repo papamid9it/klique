@@ -613,6 +613,7 @@ async function toMessages(rows: IChannelMessage[], viewer: IUser | null, access:
         ...(bot ? { bot: true } : {}),
         ...(r.thread && !r.deletedAt ? { thread: { slug: r.thread.slug, name: r.thread.name, count: r.thread.count ?? 0, lastAt: r.thread.lastAt?.toISOString() ?? null, lastBy: r.thread.lastBy ?? null } } : {}),
         ...(!bot && standing.get(sid(r.authorId))?.color ? { color: standing.get(sid(r.authorId))!.color } : {}),
+        ...(!bot && standing.get(sid(r.authorId))?.badge ? { roleBadge: standing.get(sid(r.authorId))!.badge! } : {}),
       },
     ];
   });

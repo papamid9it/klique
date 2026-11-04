@@ -24,6 +24,12 @@ export interface Paginated<T> {
 
 /* ------------------------------ people ------------------------------ */
 
+/** A community role's emoji and name, shown on someone's picture inside that community. */
+export interface RoleBadge {
+  icon: string;
+  name: string;
+}
+
 export interface UserBrief {
   id: Id;
   handle: string;
@@ -298,6 +304,8 @@ export interface FeedPostDTO {
   refs?: TextRefsDTO;
   community: { id: Id; slug: string; name: string; interest: InterestId; coverImage: string | null; privacy: CommunityPrivacy; explicit?: boolean; verified?: boolean };
   author: UserBrief;
+  /** inside its community: the emoji of the author's highest role there that has one (on their picture) */
+  roleBadge?: RoleBadge | null;
   caption: string;
   /** a text-only post's title ("" otherwise; lib/feedText) */
   title: string;
@@ -335,6 +343,8 @@ export interface FeedCommentDTO {
   createdAt: ISODate;
   editedAt: ISODate | null;
   author: UserBrief;
+  /** inside its community: the emoji of the author's highest role there that has one (on their picture) */
+  roleBadge?: RoleBadge | null;
   reactions: ReactionDTO[];
   canDelete: boolean;
   /** your own comment: you may change its text */
@@ -983,6 +993,8 @@ export interface ChannelMessageDTO {
   bot?: boolean;
   /** the author's name colour here (their highest coloured role) */
   color?: string | null;
+  /** the emoji of the author's highest role here that has one (on their picture) */
+  roleBadge?: RoleBadge | null;
   /** a thread started from this message */
   thread?: { slug: string; name: string; count: number; lastAt: ISODate | null; lastBy?: string | null };
   /** only on optimistic client-side rows */

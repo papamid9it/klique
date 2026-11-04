@@ -25,10 +25,50 @@ const TINTS = [
   "bg-[color-mix(in_oklab,var(--ink)_14%,var(--raised))] text-ink",
 ];
 
-export function Avatar({ name, src, size = 40, className, frame }: { name: string; src?: string | null; size?: number; className?: string; frame?: string | null }) {
+export function Avatar({
+  name,
+  src,
+  size = 40,
+  className,
+  frame,
+  badge,
+}: {
+  name: string;
+  src?: string | null;
+  size?: number;
+  className?: string;
+  frame?: string | null;
+  /** a community role's emoji, on the picture's bottom-right edge (inside that community only) */
+  badge?: { icon: string; label: string } | null;
+}) {
   // frames are a profile design: off for now (lib/constants PROFILE_DESIGNS_ENABLED)
-  if (frame && PROFILE_DESIGNS_ENABLED) return <AvatarFrame frame={frame} size={size} render={(inner) => <AvatarPic name={name} src={src} size={inner} className={className} />} />;
-  return <AvatarPic name={name} src={src} size={size} className={className} />;
+  const pic = frame && PROFILE_DESIGNS_ENABLED ? <AvatarFrame frame={frame} size={size} render={(inner) => <AvatarPic name={name} src={src} size={inner} className={className} />} /> : <AvatarPic name={name} src={src} size={size} className={className} />;
+  if (!badge?.icon) return pic;
+  return (
+    <span className="relative inline-block shrink-0 align-top leading-none">
+      {pic}
+      <RoleDot icon={badge.icon} label={badge.label} avatar={size} />
+    </span>
+  );
+}
+
+/**
+ * The role emoji on an avatar, Discord-style: a little disc on the bottom-right edge, half over the picture's rim,
+ * with a ring in the page colour so it stands apart. About 40% of the picture (never under 14px).
+ */
+function RoleDot({ icon, label, avatar }: { icon: string; label: string; avatar: number }) {
+  const d = Math.max(14, Math.round(avatar * 0.4));
+  return (
+    <span
+      role="img"
+      aria-label={label}
+      title={label}
+      style={{ width: d, height: d, fontSize: Math.round(d * 0.66), right: -Math.round(d * 0.2), bottom: -Math.round(d * 0.2) }}
+      className="absolute z-10 inline-flex items-center justify-center rounded-full bg-surface leading-none ring-2 ring-canvas select-none"
+    >
+      {icon}
+    </span>
+  );
 }
 
 function AvatarPic({ name, src, size, className }: { name: string; src?: string | null; size: number; className?: string }) {

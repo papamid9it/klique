@@ -274,7 +274,7 @@ export function PostComments({ post, onCount, pinned, top, focus }: { post: Feed
   const row = (c: FeedCommentDTO, root: string, to: Reply["to"], reply: boolean) => (
     <li key={c.id} id={`comment-${c.id}`} className={cx("-mx-2 flex gap-2.5 rounded-control px-2 py-1 transition-colors duration-700", flash === c.id && "bg-accent/10")}>
       <ProfileTrigger handle={c.author.handle} className="shrink-0 self-start rounded-full">
-        <Avatar name={c.author.displayName} src={c.author.avatarUrl} frame={c.author.avatarFrame} size={reply ? 26 : 32} />
+        <Avatar name={c.author.displayName} src={c.author.avatarUrl} frame={c.author.avatarFrame} size={reply ? 26 : 32} badge={c.roleBadge ? { icon: c.roleBadge.icon, label: c.roleBadge.name } : null} />
       </ProfileTrigger>
       <div className="group min-w-0 flex-1">
         <p className="flex flex-wrap items-baseline gap-x-2 text-[12.5px] text-ink-muted">

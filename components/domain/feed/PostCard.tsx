@@ -134,7 +134,7 @@ export function PostCard({ post: p, onChange, onRemoved, onOpenComments, showCom
           </Link>
         ) : (
           <ProfileTrigger handle={p.author.handle} className="shrink-0 rounded-full">
-            <Avatar name={p.author.displayName} src={p.author.avatarUrl} frame={p.author.avatarFrame} size={32} />
+            <Avatar name={p.author.displayName} src={p.author.avatarUrl} frame={p.author.avatarFrame} size={32} badge={!showCommunity && p.roleBadge ? { icon: p.roleBadge.icon, label: p.roleBadge.name } : null} />
           </ProfileTrigger>
         )}
         <div className="min-w-0 flex-1 leading-tight">
