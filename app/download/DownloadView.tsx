@@ -190,7 +190,7 @@ export function DownloadView({ release }: { release: DesktopRelease & { live: bo
             os="linux"
             here={os === "linux"}
             files={files("linux")}
-            steps={stepsFor("linux", [["appimage", "AppImage, any distro: chmod +x Klique-*.AppImage, then run it."], ["deb", "Ubuntu, Debian, Mint: sudo apt install ./klique_*_amd64.deb"], ["pacman", "Arch, Manjaro: sudo pacman -U --nodeps --nodeps klique-*.pkg.tar.xz (the double --nodeps skips http-parser, which Arch dropped and Klique doesn't need)"], ["rpm", "Fedora: sudo dnf install ./klique-*.rpm"]])}
+            steps={stepsFor("linux", [["appimage", "AppImage, any distro: chmod +x Klique-*.AppImage, then run it."], ["deb", "Ubuntu, Debian, Mint: sudo apt install ./klique_*_amd64.deb"], ["pacman", "Arch, Manjaro: sudo pacman -U klique-*.pkg.tar.xz"], ["rpm", "Fedora: sudo dnf install ./klique-*.rpm"]])}
           />
           {macReady ? (
             <OsCard

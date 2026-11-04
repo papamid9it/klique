@@ -4,13 +4,16 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { Modal } from "@/components/ui/Modal";
-import { domainOf, isExternalHref } from "@/lib/links";
+import { useRouter } from "next/navigation";
+import { domainOf, inAppPath, isExternalHref } from "@/lib/links";
 
 /**
  * "You're leaving Klique": a check before any link to another site opens. It shows where the link really goes
  * (the site, then the whole address) so a link that says one thing and goes somewhere else is easy to spot.
  * Every off-site <a> in the app goes through it (chat, posts, events, ads, profiles); links inside Klique
- * don't. A site you choose to always trust is remembered on this device. Wrap something in
+ * (getklique.app, www., any *.getklique.app, relative links) don't: links to its own pages open in place, with the
+ * router, even when written as a full address or set to open in a new tab. A site you choose to always trust is
+ * remembered on this device. Wrap something in
  * `data-leave-ok` to skip the check (the admin area, our own share buttons).
  */
 
@@ -56,6 +59,11 @@ export function LeaveProvider({ children }: { children: ReactNode }) {
   const [pending, setPending] = useState<Pending | null>(null);
   const [always, setAlways] = useState(false);
   const approved = useRef<HTMLAnchorElement | null>(null);
+  const router = useRouter();
+  const routerRef = useRef(router);
+  useEffect(() => {
+    routerRef.current = router;
+  }, [router]);
 
   const go = useCallback((href: string, newTab: boolean) => {
     if (newTab) window.open(href, "_blank", "noopener,noreferrer");
@@ -66,6 +74,8 @@ export function LeaveProvider({ children }: { children: ReactNode }) {
     (href: string, { newTab = true }: { newTab?: boolean } = {}) => {
       const domain = domainOf(new URL(href, window.location.href).href);
       if (!domain) return;
+      const path = inAppPath(href);
+      if (path) return routerRef.current.push(path); // one of our own pages: open it here
       if (!isExternalHref(href) || isTrusted(domain)) return go(href, newTab);
       setAlways(false);
       setPending({ href, domain, anchor: null, newTab });
@@ -84,13 +94,24 @@ export function LeaveProvider({ children }: { children: ReactNode }) {
         approved.current = null; // this is the Continue click going through
         return;
       }
-      if (!isExternalHref(a.href)) return;
+      const newTab = e.type === "auxclick" || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey;
+      if (!isExternalHref(a.href)) {
+        // one of our own pages written as a link (pasted in chat, a bio…): open it in place, not in a new tab or
+        // a full reload. A deliberate new-tab click (middle, Ctrl/Cmd, Shift) still does what it always does.
+        const path = inAppPath(a.href);
+        if (path && !newTab && (a.target === "_blank" || a.origin !== window.location.origin)) {
+          e.preventDefault();
+          e.stopPropagation();
+          routerRef.current.push(path);
+        }
+        return;
+      }
       const domain = domainOf(a.href);
       if (!domain || isTrusted(domain)) return;
       e.preventDefault();
       e.stopPropagation();
       setAlways(false);
-      setPending({ href: a.href, domain, anchor: a, newTab: e.type === "auxclick" || e.ctrlKey || e.metaKey || e.shiftKey || a.target === "_blank" });
+      setPending({ href: a.href, domain, anchor: a, newTab: newTab || a.target === "_blank" });
     };
     document.addEventListener("click", onClick, true);
     document.addEventListener("auxclick", onClick, true);

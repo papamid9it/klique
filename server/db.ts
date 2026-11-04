@@ -8,6 +8,7 @@ import { migrateRoles } from "./migrations/roles";
 import { migrateHype } from "./migrations/hype";
 import { migrateMood, migrateMoodSystem } from "./migrations/mood";
 import { migrateDm } from "./migrations/dm";
+import { migrateCategories } from "./migrations/categories";
 
 /**
  * One cached connection per server process (survives Next.js dev hot reloads).
@@ -40,6 +41,7 @@ export async function connectDb(): Promise<typeof mongoose> {
         if ((await migrateMood(m.connection)) === "migrated") console.log("[db] everyone on the old default mood is on Paper Mono now");
         if ((await migrateMoodSystem(m.connection)) === "migrated") console.log("[db] the default mood matches each person's device now");
         if ((await migrateDm(m.connection)) === "migrated") console.log("[db] message requests: \"people in my communities\" moved to everyone-as-requests");
+        if ((await migrateCategories(m.connection)) === "migrated") console.log("[db] categories: broad ones added (Music, Faith, Sports, Tech…)");
         return m;
       })
       .catch((err) => {

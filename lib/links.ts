@@ -25,12 +25,60 @@ export function domainOf(href: string): string | null {
   }
 }
 
-/** Off-site: a web link to another host. Relative links, same-site links and mailto:/tel: aren't. */
-export function isExternalHref(href: string): boolean {
-  if (typeof window === "undefined") return /^https?:\/\//i.test(href);
+/** Klique's own domain: getklique.app, www.getklique.app and any *.getklique.app. */
+const OWN_ROOT = "getklique.app";
+const bare = (host: string) => host.toLowerCase().replace(/^www\./, "");
+const appHost = (() => {
+  try {
+    return bare(new URL(process.env.NEXT_PUBLIC_APP_URL ?? "").hostname);
+  } catch {
+    return "";
+  }
+})();
+
+/**
+ * Klique itself: getklique.app with or without www, any *.getklique.app, the site's configured address
+ * (NEXT_PUBLIC_APP_URL) and wherever this page is open (a preview or local copy). Ports don't matter.
+ */
+export function isOwnHost(hostname: string): boolean {
+  const h = bare(hostname);
+  if (!h) return false;
+  if (h === OWN_ROOT || h.endsWith(`.${OWN_ROOT}`) || (appHost && h === appHost)) return true;
+  return typeof window !== "undefined" && h === bare(window.location.hostname);
+}
+
+/**
+ * A link to a page of this app (same site, any of its own addresses) as an in-app path ("/c/lagos?x=1#y"), so it
+ * can open with the router instead of a reload or a new tab; null for anything else. Other *.getklique.app hosts
+ * (downloads…) aren't pages of the app, and /api/ addresses aren't pages either.
+ */
+export function inAppPath(href: string): string | null {
+  if (typeof window === "undefined") return null;
   try {
     const u = new URL(href, window.location.href);
-    return (u.protocol === "http:" || u.protocol === "https:") && u.host !== window.location.host;
+    if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+    const h = bare(u.hostname);
+    const page = h === bare(window.location.hostname) || h === OWN_ROOT || (appHost && h === appHost);
+    if (!page || u.pathname.startsWith("/api/")) return null;
+    return `${u.pathname}${u.search}${u.hash}`;
+  } catch {
+    return null;
+  }
+}
+
+/** Off-site: a web link to another host. Relative links, Klique's own addresses (see isOwnHost) and mailto:/tel: aren't. */
+export function isExternalHref(href: string): boolean {
+  if (typeof window === "undefined") {
+    try {
+      const u = new URL(href);
+      return (u.protocol === "http:" || u.protocol === "https:") && !isOwnHost(u.hostname);
+    } catch {
+      return false;
+    }
+  }
+  try {
+    const u = new URL(href, window.location.href);
+    return (u.protocol === "http:" || u.protocol === "https:") && !isOwnHost(u.hostname);
   } catch {
     return false;
   }
