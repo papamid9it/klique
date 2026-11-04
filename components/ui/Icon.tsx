@@ -21,6 +21,7 @@ const PATHS = {
   pin: <><path d="M12 21s6.5-5.7 6.5-11A6.5 6.5 0 0 0 5.5 10c0 5.3 6.5 11 6.5 11z" /><circle cx="12" cy="10" r="2.3" /></>,
   "arrow-up-right": <path d="M7 17 17 7M8.5 7H17v8.5" />,
   "arrow-left": <path d="M19 12H5M11 6l-6 6 6 6" />,
+  refresh: <><path d="M19.5 11A7.5 7.5 0 0 0 6.2 7.2L4.5 9" /><path d="M4.5 4.5V9H9" /><path d="M4.5 13a7.5 7.5 0 0 0 13.3 3.8l1.7-1.8" /><path d="M19.5 19.5V15H15" /></>,
   download: <><path d="M12 4v11M7 10.5l5 5 5-5" /><path d="M4.5 19.5h15" /></>,
   expand: <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />,
   "zoom-in": <><circle cx="11" cy="11" r="6.5" /><path d="m20.5 20.5-4.7-4.7M11 8v6M8 11h6" /></>,

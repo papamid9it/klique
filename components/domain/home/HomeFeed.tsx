@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState, type RefObject } from "react";
 import { FeedService } from "@/app/services/FeedService";
 import { JoinButton } from "@/components/domain/JoinButton";
 import { SponsoredCard, useAds } from "@/components/domain/ads/Sponsored";
@@ -336,7 +336,7 @@ function planFeed(posts: number, kliques: CrewCardDTO[], events: EventDTO[], ads
  * (ones not already at the top of the page) and once a row of communities to join. The next page loads as you
  * near the bottom, until "You're all caught up". What's loaded is kept, so Back returns to the same spot.
  */
-export function HomeFeed({ moreEvents, kliques = [], communities, onEvent, onCommunity, onDismissKlique }: { moreEvents: EventDTO[]; kliques?: CrewCardDTO[]; communities: CommunityCardDTO[]; onEvent: (e: EventDTO) => void; onCommunity: (c: CommunityCardDTO) => void; onDismissKlique?: (id: string) => void }) {
+export function HomeFeed({ moreEvents, kliques = [], communities, onEvent, onCommunity, onDismissKlique, refreshRef }: { moreEvents: EventDTO[]; kliques?: CrewCardDTO[]; communities: CommunityCardDTO[]; onEvent: (e: EventDTO) => void; onCommunity: (c: CommunityCardDTO) => void; onDismissKlique?: (id: string) => void; /** filled with "load the feed again from the top" for Home's refresh button */ refreshRef?: RefObject<(() => Promise<void>) | null> }) {
   const { status, requireAuth } = useAuth();
   const authed = status === "authed";
   const { items, hasMore, error, load, setItems, sentinel, anchor } = useInfiniteFeed<HomeFeedItem>(
@@ -345,6 +345,13 @@ export function HomeFeed({ moreEvents, kliques = [], communities, onEvent, onCom
     (x) => x.post.id,
     authed,
   );
+  useEffect(() => {
+    if (!refreshRef) return;
+    refreshRef.current = () => (authed ? load(true) : Promise.resolve());
+    return () => {
+      refreshRef.current = null;
+    };
+  }, [refreshRef, load, authed]);
   const ads = useAds("home-feed", { count: 3 }, authed);
   // a post opens over the feed at its own link (/p/[id])
   const { opened, setOpened, open, close } = usePostOverlay();

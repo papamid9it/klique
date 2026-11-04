@@ -1,12 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import ApiClient from "@/app/ApiCore";
 import { CrewService } from "@/app/services/CrewService";
 import { DiscoverService } from "@/app/services/DiscoverService";
 import { EventsRow, HomeFeed, TOP_EVENTS, rankEvents } from "@/components/domain/home/HomeFeed";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { usePlace } from "@/components/providers/PlaceProvider";
+import { scrollerOf } from "@/components/domain/feed/useInfiniteFeed";
+import { Icon } from "@/components/ui/Icon";
 import { ErrorState } from "@/components/ui/States";
+import { cx } from "@/components/ui/cx";
 import { formatEyebrowDate } from "@/lib/format";
 import { useApi, useNow } from "@/lib/hooks/useApi";
 import type { CommunityCardDTO, DiscoverDTO, EventDTO } from "@/lib/types";
@@ -55,12 +59,48 @@ export default function HomePage() {
     });
   const forYou = (kliques.data?.items ?? []).filter((k) => !dismissed.includes(k.id));
 
+  // the refresh button in the top bar, only in the desktop app (a browser has its own reload; phones pull down):
+  // events, kliques and posts again, in place (no page reload), then back to the top. Checked after mount, so the
+  // first render matches the server's.
+  const [inApp, setInApp] = useState(false);
+  useEffect(() => setInApp(!!(window as unknown as { kliqueDesktop?: unknown }).kliqueDesktop), []);
+  const feedRefresh = useRef<(() => Promise<void>) | null>(null);
+  const bar = useRef<HTMLParagraphElement>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const refresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      ApiClient.clearCache(); // Home's events are kept for 30 seconds: refresh means new, so skip that
+      await Promise.all([reload(), kliques.reload(), feedRefresh.current?.() ?? Promise.resolve()]);
+      const s = scrollerOf(bar.current);
+      s.scrollTo({ top: 0, behavior: "smooth" });
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   return (
     <div className="space-y-9">
       {/* the date and place stay pinned at the top while you scroll: a thin bar in the page colour, under the
           phone's top bar (61px) and at the very top on big screens */}
-      <p className="eyebrow sticky top-[61px] z-20 -mx-4 -mt-6 mb-1 bg-canvas px-4 py-2.5 sm:-mx-8 sm:px-8 lg:top-0 lg:-mx-10 lg:-mt-9 lg:px-10" suppressHydrationWarning>
-        {now ? formatEyebrowDate(now) : " "} · {label}
+      <p ref={bar} className="eyebrow sticky top-[61px] z-20 -mx-4 -mt-6 mb-1 flex items-center gap-3 bg-canvas px-4 py-2.5 sm:-mx-8 sm:px-8 lg:top-0 lg:-mx-10 lg:-mt-9 lg:px-10" suppressHydrationWarning>
+        <span className="min-w-0 flex-1 truncate">
+          {now ? formatEyebrowDate(now) : " "} · {label}
+        </span>
+        {inApp && (
+          <button
+            type="button"
+            onClick={() => void refresh()}
+            disabled={refreshing}
+            aria-label="Refresh"
+            title="Refresh"
+            aria-busy={refreshing || undefined}
+            className="-my-2 inline-flex size-8 shrink-0 items-center justify-center rounded-full text-ink-muted transition hover:bg-raised hover:text-ink disabled:cursor-default disabled:opacity-70"
+          >
+            <Icon name="refresh" size={17} className={cx(refreshing && "motion-safe:animate-spin")} />
+          </button>
+        )}
       </p>
       <header>
         {/* a touch of room above, so the sticky date bar never sits over the top of the letters */}
@@ -71,7 +111,7 @@ export default function HomePage() {
 
 
       <div className="mx-auto max-w-[730px]">
-        <HomeFeed moreEvents={events.slice(TOP_EVENTS)} kliques={forYou} onDismissKlique={dismiss} communities={data?.suggestedCommunities ?? []} onEvent={patchEvent} onCommunity={patchCommunity} />
+        <HomeFeed refreshRef={feedRefresh} moreEvents={events.slice(TOP_EVENTS)} kliques={forYou} onDismissKlique={dismiss} communities={data?.suggestedCommunities ?? []} onEvent={patchEvent} onCommunity={patchCommunity} />
       </div>
     </div>
   );

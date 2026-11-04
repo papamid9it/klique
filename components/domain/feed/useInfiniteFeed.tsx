@@ -47,7 +47,7 @@ const cameBack = () => pushedTo !== null && pushedTo !== here();
 const STALE_MS = 10 * 60_000;
 
 /** The element that scrolls `el`: a panel with its own scrollbar (a community), or the page. */
-function scrollerOf(el: HTMLElement | null): HTMLElement | Window {
+export function scrollerOf(el: HTMLElement | null): HTMLElement | Window {
   for (let p = el?.parentElement; p; p = p.parentElement) {
     const y = getComputedStyle(p).overflowY;
     if (y === "auto" || y === "scroll") return p;
