@@ -19,6 +19,8 @@ export interface ICommunityRole {
   builtin: "admin" | null;
   /** the role a bot got when it was added (it can't be given to anyone else or deleted; removing the bot removes it) */
   botAppId?: Types.ObjectId | null;
+  /** a bot's role: when the community allowed it to read messages. It sees nothing older. Null: it can't. */
+  readMessagesSince?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -34,6 +36,7 @@ const CommunityRoleSchema = new Schema<ICommunityRole>(
     selfAssignable: { type: Boolean, default: false },
     builtin: { type: String, enum: ["admin", null], default: null },
     botAppId: { type: Schema.Types.ObjectId, default: null },
+    readMessagesSince: { type: Date, default: null },
   },
   { timestamps: true },
 );

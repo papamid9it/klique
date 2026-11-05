@@ -1,15 +1,18 @@
 import "server-only";
 import { createHash, createHmac, randomBytes } from "node:crypto";
+import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
 import { Types } from "mongoose";
 import { z } from "zod";
-import { ALL_PERMISSIONS, isPermission } from "@/lib/roles";
+import { ALL_PERMISSIONS, isBotPermission, isPermission, READ_MESSAGES } from "@/lib/roles";
 import type { UserBrief } from "@/lib/types";
 import { appUrl } from "../env";
+import { assertPublicHttpUrl, safeLookup } from "../net-guard";
 import { ApiError, badRequest, forbidden, notFound } from "../http/errors";
 import { CARD_LIMITS } from "@/lib/cards";
 import { rateLimit } from "../http/rate-limit";
 import { BotApp, type BotCommand, type IBotApp } from "../models/BotApp";
-import { Channel, type IChannel } from "../models/Channel";
+import { Channel, ChannelMember, type IChannel } from "../models/Channel";
 import { Community, type ICommunity } from "../models/Community";
 import { CommunityRole, type ICommunityRole } from "../models/CommunityRole";
 import { Membership } from "../models/Membership";
@@ -17,7 +20,7 @@ import { ModAction } from "../models/ModAction";
 import { User, type IUser } from "../models/User";
 import { Webhook } from "../models/Webhook";
 import { isSiteAdmin } from "../policies/hosting";
-import { spaceAccess, type Space, type SpaceAccess } from "../policies/access";
+import { canSeeChannel, spaceAccess, type Space, type SpaceAccess } from "../policies/access";
 import { loadBriefs } from "../serializers";
 import { botMessageSchema, cardsSchema } from "./cards";
 import { recountMembers, sid } from "./helpers";
@@ -37,12 +40,16 @@ const hash = (t: string) => createHash("sha256").update(t).digest("hex");
 const newToken = (appId: Types.ObjectId) => `kbt_${sid(appId)}_${randomBytes(30).toString("base64url")}`;
 export const botInviteUrl = (appId: string) => `${appUrl()}/bots/${appId}`;
 
-const httpsUrl = z
-  .string()
-  .trim()
-  .url()
-  .max(500)
-  .refine((u) => u.startsWith("https://") || (process.env.NODE_ENV !== "production" && /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\//.test(u)), "Use an https:// address.");
+const publicEndpoint = (u: string) => {
+  if (process.env.NODE_ENV !== "production" && /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\//.test(u)) return true;
+  try {
+    assertPublicHttpUrl(u);
+    return u.startsWith("https://");
+  } catch {
+    return false;
+  }
+};
+const httpsUrl = z.string().trim().url().max(500).refine(publicEndpoint, "Use a public https:// address on the normal port.");
 export const botCreateSchema = z.object({
   name: z.string().trim().min(2, "Give it a name.").max(32),
   description: z.string().trim().max(300).default(""),
@@ -114,7 +121,7 @@ export async function createBot(viewer: IUser, input: z.infer<typeof botCreateSc
     dmPolicy: "nobody",
     bot: { appId },
   } as never);
-  const app = await BotApp.create({ _id: appId, ownerId: viewer._id, userId: user._id, name: input.name, description: input.description, avatarUrl: input.avatarUrl || null, endpoint: input.endpoint || null, tokenHash: hash(token), signingSecret: randomBytes(24).toString("hex"), permissions: input.permissions.filter(isPermission) });
+  const app = await BotApp.create({ _id: appId, ownerId: viewer._id, userId: user._id, name: input.name, description: input.description, avatarUrl: input.avatarUrl || null, endpoint: input.endpoint || null, tokenHash: hash(token), signingSecret: randomBytes(24).toString("hex"), permissions: input.permissions.filter(isBotPermission) });
   return { bot: await toDto(app.toObject(), true), token };
 }
 
@@ -131,7 +138,7 @@ export async function updateBot(viewer: IUser, id: string, patch: z.infer<typeof
   if (patch.description !== undefined) set.description = patch.description;
   if (patch.avatarUrl !== undefined) set.avatarUrl = patch.avatarUrl || null;
   if (patch.endpoint !== undefined) Object.assign(set, { endpoint: patch.endpoint || null, failures: 0, disabledAt: null });
-  if (patch.permissions !== undefined) set.permissions = patch.permissions.filter(isPermission);
+  if (patch.permissions !== undefined) set.permissions = patch.permissions.filter(isBotPermission);
   await BotApp.updateOne({ _id: a._id }, { $set: set });
   await User.updateOne({ _id: a.userId }, { $set: { ...(set.name ? { displayName: set.name } : {}), ...(set.avatarUrl !== undefined ? { avatarUrl: set.avatarUrl } : {}) } });
   return toDto((await BotApp.findById(a._id).lean<IBotApp>())!, true);
@@ -207,9 +214,10 @@ export async function installBot(viewer: IUser, id: string, slug: string, permis
   if (s.used >= s.cap) throw forbidden(`This community has used all ${s.cap} of its webhook and bot slots (its owner's plan).`);
   const mine = isSiteAdmin(viewer) ? ALL_PERMISSIONS : (access.perms ?? []);
   const give = [...new Set(permissions)].filter((p) => isPermission(p) && a.permissions.includes(p) && mine.includes(p) && p !== "manageWebhooks");
+  const reads = permissions.includes(READ_MESSAGES.id) && a.permissions.includes(READ_MESSAGES.id);
   // its role: just below the installer's highest role (or at the bottom)
   const below = await CommunityRole.findOne({ communityId: c._id, position: { $lt: access.rank ?? 1e9 } }).sort({ position: -1 }).lean<ICommunityRole>();
-  const role = await CommunityRole.create({ communityId: c._id, name: a.name, color: "#5865f2", icon: "🤖", position: below ? Math.max(1, below.position - 1) : 1, permissions: give, selfAssignable: false, botAppId: a._id });
+  const role = await CommunityRole.create({ communityId: c._id, name: a.name, color: "#5865f2", icon: "🤖", position: below ? Math.max(1, below.position - 1) : 1, permissions: give, selfAssignable: false, botAppId: a._id, readMessagesSince: reads ? new Date() : null });
   await Membership.updateOne(
     { userId: a.userId, communityId: c._id, subcommunityId: null },
     { $set: { status: "active", role: "member", roleIds: [role._id], rulesAcceptedAt: new Date(), welcomedAt: new Date() } },
@@ -217,7 +225,7 @@ export async function installBot(viewer: IUser, id: string, slug: string, permis
   );
   await Community.updateOne({ _id: c._id }, { $addToSet: { bots: a._id } });
   await recountMembers(c._id, null);
-  void ModAction.create({ communityId: c._id, actorId: viewer._id, action: "bot.add", targetType: "member", targetId: a.userId, label: `${a.name}${give.length ? ` (${give.join(", ")})` : ""}`, authorId: a.userId }).catch(() => {});
+  void ModAction.create({ communityId: c._id, actorId: viewer._id, action: "bot.add", targetType: "member", targetId: a.userId, label: `${a.name}${give.length || reads ? ` (${[...give, ...(reads ? [READ_MESSAGES.id] : [])].join(", ")})` : ""}`, authorId: a.userId }).catch(() => {});
   void deliver(a, "bot.added", { community: { id: sid(c._id), slug: c.slug, name: c.name }, permissions: give });
   return { community: c.slug };
 }
@@ -245,10 +253,43 @@ export async function uninstallBot(viewer: IUser, slug: string, id: string) {
 }
 
 /** A community's bots (for its settings). */
-export async function communityBots(viewer: IUser, slug: string): Promise<BotDTO[]> {
+export async function communityBots(viewer: IUser, slug: string): Promise<(BotDTO & { readMessages: boolean })[]> {
   const { space } = await resolveSpaceFor(viewer, slug);
-  const rows = await BotApp.find({ _id: { $in: space.community.bots ?? [] } }).lean<IBotApp[]>();
-  return Promise.all(rows.map((r) => toDto(r, false)));
+  const [rows, roles] = await Promise.all([BotApp.find({ _id: { $in: space.community.bots ?? [] } }).lean<IBotApp[]>(), CommunityRole.find({ communityId: space.community._id, botAppId: { $ne: null } }).select("botAppId readMessagesSince").lean<ICommunityRole[]>()]);
+  const reading = new Set(roles.filter((r) => r.readMessagesSince).map((r) => sid(r.botAppId!)));
+  return Promise.all(rows.map(async (r) => ({ ...(await toDto(r, false)), readMessages: reading.has(sid(r._id)) })));
+}
+
+/** Let a bot read messages from now on, or stop it. Allowing it again never opens up what was said in between. */
+export async function setBotReadMessages(viewer: IUser, slug: string, id: string, on: boolean): Promise<{ readMessages: boolean }> {
+  const { space, access } = await resolveSpaceFor(viewer, slug);
+  if (access.role !== "owner" && !isSiteAdmin(viewer) && !access.perms?.includes("manageWebhooks")) throw forbidden("Only the community's owner can change this.");
+  if (!Types.ObjectId.isValid(id)) throw notFound("We couldn't find that bot.");
+  const c = space.community;
+  const role = await CommunityRole.findOne({ communityId: c._id, botAppId: id }).lean<ICommunityRole>();
+  const app = role ? await BotApp.findById(id).select("name userId").lean<Pick<IBotApp, "_id" | "name" | "userId">>() : null;
+  if (!role || !app) throw notFound("That bot isn't in this community.");
+  if (!!role.readMessagesSince !== on) {
+    await CommunityRole.updateOne({ _id: role._id }, { $set: { readMessagesSince: on ? new Date() : null } });
+    void ModAction.create({ communityId: c._id, actorId: viewer._id, action: "bot.add", targetType: "member", targetId: app.userId, label: `${app.name}: ${on ? "can now read messages" : "can no longer read messages"}`, authorId: null }).catch(() => {});
+  }
+  return { readMessages: on };
+}
+
+const historyQuery = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  before: z.string().regex(/^[a-f0-9]{24}$/i).optional(),
+  after: z.string().regex(/^[a-f0-9]{24}$/i).optional(),
+});
+
+/** A bot reads a channel: only if it's allowed to, only a channel it can see, only since it was allowed. */
+export async function botReadMessages(app: IBotApp, bot: IUser, channelId: string, query: unknown) {
+  const q = historyQuery.parse(query);
+  const { space, access, channel } = await botChannel(bot, channelId);
+  const role = await CommunityRole.findOne({ communityId: space.community._id, botAppId: app._id }).select("readMessagesSince").lean<ICommunityRole>();
+  if (!role?.readMessagesSince) throw forbidden("This bot isn't allowed to read messages here. A community owner can turn on Read messages in its settings, under Webhooks.");
+  const ch = await import("./channels.service");
+  return ch.readMessagesAsBot(bot, space, access, channel.slug, role.readMessagesSince, q);
 }
 
 /* ------------------------------ the bot API's side ------------------------------ */
@@ -293,6 +334,45 @@ export async function registerCommands(app: IBotApp, commands: z.infer<typeof co
 
 /* ------------------------------ events ------------------------------ */
 
+/** Only while building locally: a bot running on this computer. Production never allows it. */
+const localBot = (u: string) => process.env.NODE_ENV !== "production" && /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\//.test(u);
+const MAX_BOT_ANSWER = 256 * 1024;
+
+/**
+ * Call a bot's address, which its maker chose, so it can't be trusted: only public https addresses, every address its
+ * name resolves to is checked and the checked one is what we connect to (server/net-guard), no redirects, and a limit
+ * on time and on how much it can send back.
+ */
+function postToBot(endpoint: string, headers: Record<string, string>, body: string, wait: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const local = localBot(endpoint);
+    const url = local ? new URL(endpoint) : assertPublicHttpUrl(endpoint);
+    if (!local && url.protocol !== "https:") return reject(new Error("Not https."));
+    const send = local ? httpRequest : httpsRequest;
+    const req = send(url, { method: "POST", headers: { ...headers, "Content-Length": Buffer.byteLength(body) }, ...(local ? {} : { lookup: safeLookup as never }) }, (res) => {
+      const code = res.statusCode ?? 0;
+      if (code < 200 || code >= 300) {
+        res.destroy();
+        return reject(new Error(`HTTP ${code}`));
+      }
+      const chunks: Buffer[] = [];
+      let size = 0;
+      res.on("data", (c: Buffer) => {
+        size += c.length;
+        if (size > MAX_BOT_ANSWER) return req.destroy(new Error("Answer too big."));
+        chunks.push(c);
+      });
+      res.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+      res.on("error", reject);
+    });
+    // the whole call, not just waiting for a first byte, so a slow drip can't hold it open
+    const timer = setTimeout(() => req.destroy(new Error("Too slow.")), wait);
+    req.on("close", () => clearTimeout(timer));
+    req.on("error", reject);
+    req.end(body);
+  });
+}
+
 /**
  * Send an event to a bot: POST JSON to its endpoint, signed with its signing secret
  * (`X-Klique-Signature: sha256=<hex HMAC of "<timestamp>.<body>">`, `X-Klique-Timestamp`, `X-Klique-Event`).
@@ -304,11 +384,9 @@ export async function deliver(app: Pick<IBotApp, "_id" | "endpoint" | "signingSe
   const body = JSON.stringify({ type, data, sentAt: new Date().toISOString() });
   const sig = createHmac("sha256", app.signingSecret).update(`${ts}.${body}`).digest("hex");
   try {
-    const res = await fetch(app.endpoint, { method: "POST", headers: { "Content-Type": "application/json", "X-Klique-Event": type, "X-Klique-Timestamp": ts, "X-Klique-Signature": `sha256=${sig}`, "User-Agent": "KliqueBot/1" }, body, signal: AbortSignal.timeout(wait), redirect: "error" });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = await postToBot(app.endpoint, { "Content-Type": "application/json", "X-Klique-Event": type, "X-Klique-Timestamp": ts, "X-Klique-Signature": `sha256=${sig}`, "User-Agent": "KliqueBot/1" }, body, wait);
     void BotApp.updateOne({ _id: app._id, failures: { $gt: 0 } }, { $set: { failures: 0 } }).catch(() => {});
     // it answered, even if it had nothing to say (null is kept for "it didn't answer")
-    const text = await res.text();
     try {
       return text ? JSON.parse(text) : {};
     } catch {
@@ -323,14 +401,36 @@ export async function deliver(app: Pick<IBotApp, "_id" | "endpoint" | "signingSe
   }
 }
 
-/** Tell a community's bots something happened there (fire and forget; never the bot that did it). */
-export async function emitBotEvent(communityId: Types.ObjectId | string | null | undefined, type: string, data: Record<string, unknown>, opts: { except?: Types.ObjectId | string | null } = {}) {
-  if (!communityId) return;
+/** A bot's right to hear about a channel: it can see it, and for what people wrote, it may read messages. */
+async function botMayHear(app: IBotApp, communityId: string, channel: IChannel, content: boolean): Promise<boolean> {
+  if (content) {
+    const role = await CommunityRole.findOne({ communityId, botAppId: app._id }).select("readMessagesSince").lean<ICommunityRole>();
+    if (!role?.readMessagesSince) return false;
+  }
+  const bot = await User.findById(app.userId).lean<IUser>();
+  if (!bot) return false;
+  const { access } = await botIn(bot, communityId);
+  // a thread's guests are its channel's
+  const invited = channel.visibility === "invite" && !!(await ChannelMember.exists({ channelId: channel.parentChannelId ?? channel._id, userId: bot._id }));
+  return canSeeChannel(channel, access, invited);
+}
+
+/**
+ * Tell a community's bots something happened there (fire and forget; never the bot that did it). With `channel`, only
+ * bots that can see that channel hear about it, never for a group's channels (bots aren't in groups). With `content`
+ * (it carries what someone wrote), only bots allowed to read messages.
+ */
+export async function emitBotEvent(communityId: Types.ObjectId | string | null | undefined, type: string, data: Record<string, unknown>, opts: { except?: Types.ObjectId | string | null; channel?: IChannel; content?: boolean } = {}) {
+  if (!communityId || opts.channel?.subcommunityId) return;
   try {
     const c = await Community.findById(communityId).select("bots slug name").lean<Pick<ICommunity, "_id" | "bots" | "slug" | "name">>();
     if (!c?.bots?.length) return;
     const apps = await BotApp.find({ _id: { $in: c.bots }, endpoint: { $ne: null }, disabledAt: null }).lean<IBotApp[]>();
-    for (const a of apps) if (!opts.except || sid(a.userId) !== sid(opts.except)) void deliver(a, type, { community: { id: sid(c._id), slug: c.slug, name: c.name }, ...data });
+    for (const a of apps) {
+      if (opts.except && sid(a.userId) === sid(opts.except)) continue;
+      if (opts.channel && !(await botMayHear(a, sid(c._id), opts.channel, !!opts.content).catch(() => false))) continue;
+      void deliver(a, type, { community: { id: sid(c._id), slug: c.slug, name: c.name }, ...data });
+    }
   } catch (e) {
     console.warn("[bots] couldn't send an event:", (e as Error).message);
   }

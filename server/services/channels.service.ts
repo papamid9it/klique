@@ -711,7 +711,7 @@ export async function postMessage(viewer: IUser, space: Space, access: SpaceAcce
   if (post && href) await onPostReply(viewer, post, href, said, targets);
   const out = (await toMessages([doc.toObject()], viewer, access, space))[0];
   // bots in the community hear about it (not the bot that sent it)
-  void import("./bots.service").then((b) => b.emitBotEvent(channel.communityId, "message.create", { channel: { id: sid(channel._id), slug: channel.slug, name: channel.name, threadOf: channel.parentChannelId ? sid(channel.parentChannelId) : null }, message: { id: out.id, body: out.body, author: out.author, replyTo: out.replyTo?.id ?? null, mentions: out.mentions, ...(out.cards ? { cards: out.cards } : {}) } }, { except: viewer._id }));
+  void import("./bots.service").then((b) => b.emitBotEvent(channel.communityId, "message.create", { channel: { id: sid(channel._id), slug: channel.slug, name: channel.name, threadOf: channel.parentChannelId ? sid(channel.parentChannelId) : null }, message: { id: out.id, body: out.body, author: out.author, replyTo: out.replyTo?.id ?? null, mentions: out.mentions, ...(out.cards ? { cards: out.cards } : {}) } }, { except: viewer._id, channel, content: true }));
   return out;
 }
 
@@ -897,6 +897,22 @@ export async function editMessage(viewer: IUser, space: Space, access: SpaceAcce
 }
 
 /**
+ * A bot reads a channel it can see, but nothing older than `since` (when the community let it read messages), and
+ * nothing deleted or hidden. Up to 100 at a time, oldest first: `before` gets older ones, `after` newer ones.
+ */
+export async function readMessagesAsBot(bot: IUser, space: Space, access: SpaceAccess, channelSlug: string, since: Date, q: { limit: number; before?: string; after?: string }) {
+  const { channel } = await loadChannel(bot, space, access, channelSlug);
+  const filter = { channelId: channel._id, deletedAt: null, hiddenAt: null, createdAt: { $gte: since }, ...(q.before ? { _id: { $lt: new Types.ObjectId(q.before) } } : q.after ? { _id: { $gt: new Types.ObjectId(q.after) } } : {}) };
+  const rows = await ChannelMessage.find(filter)
+    .sort({ _id: q.after ? 1 : -1 })
+    .limit(q.limit + 1)
+    .lean<IChannelMessage[]>();
+  const page = rows.slice(0, q.limit);
+  const out = await toMessages(q.after ? page : page.reverse(), bot, access, space);
+  return { messages: out.map((m) => ({ id: m.id, body: m.body, ...(m.cards ? { cards: m.cards } : {}), images: m.images, author: m.author, replyTo: m.replyTo?.id ?? null, mentions: m.mentions, createdAt: m.createdAt, editedAt: m.editedAt })), hasMore: rows.length > q.limit };
+}
+
+/**
  * A button on a card someone pressed: it must really be on that message, and they must be a member who can see the
  * channel. A read-only channel is fine, so an "Accept the rules" button works in an announcements channel.
  */
@@ -1009,7 +1025,7 @@ export async function reactToMessage(viewer: IUser, space: Space, access: SpaceA
   const msg = await ChannelMessage.findOne({ _id: messageId, channelId: channel._id, deletedAt: null }).select("_id authorId").lean<Pick<IChannelMessage, "_id" | "authorId">>();
   if (!msg) throw notFound("We couldn't find that message.");
   const reactions = await toggleReaction("channel", msg._id, viewer._id, kind);
-  void import("./bots.service").then((b) => b.emitBotEvent(channel.communityId, "reaction", { channel: { id: sid(channel._id), slug: channel.slug }, messageId: sid(msg._id), kind, user: { id: sid(viewer._id), handle: viewer.handle }, added: reactions.some((r) => r.kind === kind && r.mine) }, { except: viewer._id }));
+  void import("./bots.service").then((b) => b.emitBotEvent(channel.communityId, "reaction", { channel: { id: sid(channel._id), slug: channel.slug }, messageId: sid(msg._id), kind, user: { id: sid(viewer._id), handle: viewer.handle }, added: reactions.some((r) => r.kind === kind && r.mine) }, { except: viewer._id, channel }));
   // a good reaction earns the author points (once per person per message; bad ones earn nothing and take nothing)
   if (GOOD_REACTIONS.has(kind) && reactions.some((r) => r.mine && r.kind === kind)) awardPointsLater(msg.authorId, "reaction", `channel:${sid(msg._id)}:${sid(viewer._id)}`, viewer._id);
   emitChannel(channel.communityId, channel._id);

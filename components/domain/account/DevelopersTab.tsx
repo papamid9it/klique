@@ -13,7 +13,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { ErrorState } from "@/components/ui/States";
 import { useApi } from "@/lib/hooks/useApi";
-import { PERMISSIONS } from "@/lib/roles";
+import { BOT_PERMISSIONS } from "@/lib/roles";
 import type { Envelope, UserBrief } from "@/lib/types";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 
@@ -237,7 +237,7 @@ function BotModal({ bot, onClose, onSaved }: { bot: Bot | null; onClose: () => v
         <fieldset>
           <legend className="mb-1.5 text-[13px] font-medium">Permissions it asks for</legend>
           <div className="grid gap-2 sm:grid-cols-2">
-            {PERMISSIONS.filter((p) => p.id !== "manageWebhooks").map((p) => (
+            {BOT_PERMISSIONS.map((p) => (
               <label key={p.id} className="flex cursor-pointer items-start gap-2 text-sm">
                 <input type="checkbox" checked={perms.has(p.id)} onChange={(e) => setPerms((s) => { const n = new Set(s); if (e.target.checked) n.add(p.id); else n.delete(p.id); return n; })} className="mt-0.5 size-4 accent-[var(--accent-text)]" />
                 <span>
@@ -247,7 +247,7 @@ function BotModal({ bot, onClose, onSaved }: { bot: Bot | null; onClose: () => v
               </label>
             ))}
           </div>
-          <p className="mt-2 text-xs text-ink-muted">Owners choose which of these to give when they add it. Bots only ever act on people below their role.</p>
+          <p className="mt-2 text-xs text-ink-muted">Owners choose which of these to give when they add it. Bots only ever act on people below their role. Slash commands and buttons work without Read messages, so only ask for it if your bot needs it.</p>
         </fieldset>
         <div className="flex justify-end gap-2">
           <Button onClick={onClose}>Cancel</Button>

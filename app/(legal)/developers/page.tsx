@@ -155,6 +155,7 @@ export default function DevelopersPage() {
         <ul>
           <li><code>GET /api/bot/v1/me</code>: your bot, its commands and the communities it&apos;s in.</li>
           <li><code>GET /api/bot/v1/communities/:communityId/channels</code>: channels it can see.</li>
+          <li><code>GET /api/bot/v1/channels/:channelId/messages</code> <code>?limit=&amp;before=&amp;after=</code>: read a channel, if it has <a href="#reading" className="font-medium text-accent-text underline">Read messages</a>. Up to 100 at a time, oldest first.</li>
           <li><code>POST /api/bot/v1/channels/:channelId/messages</code> <code>{`{ content?, cards?, reply_to? }`}</code>: post words (up to 2,000 characters), cards or both.</li>
           <li><code>PATCH</code> / <code>DELETE /api/bot/v1/channels/:channelId/messages/:messageId</code>: edit its own message (<code>{`{ content?, cards? }`}</code>); delete its own, or anyone&apos;s below it with “Delete messages”.</li>
           <li><code>PUT /api/bot/v1/channels/:channelId/messages/:messageId/reactions/:kind</code>: react (again to take it back).</li>
@@ -167,10 +168,10 @@ export default function DevelopersPage() {
       </Section>
 
       <Section n={8} title="Events">
-        <p>Set an https endpoint in Developers and klique POSTs JSON there:</p>
+        <p>Set a public https address on the normal port (443) in Developers and klique POSTs JSON there. Private addresses and redirects aren&apos;t followed, and answers can be up to 256 KB:</p>
         <Code>{`{ "type": "message.create", "data": { "community": {…}, "channel": {…}, "message": {…} }, "sentAt": "…" }`}</Code>
         <ul>
-          <li><code>message.create</code>, <code>reaction</code>, <code>member.join</code>, <code>member.leave</code>, <code>klique.create</code>, <code>event.create</code>, <code>bot.added</code>, <code>interaction</code> (a slash command) and <code>button</code> (a button on a card).</li>
+          <li><code>message.create</code> (needs <a href="#reading" className="font-medium text-accent-text underline">Read messages</a>), <code>reaction</code>, <code>member.join</code>, <code>member.leave</code>, <code>klique.create</code>, <code>event.create</code>, <code>bot.added</code>, <code>interaction</code> (a slash command) and <code>button</code> (a button on a card).</li>
           <li>Answer within 4 seconds with a 2xx. After 50 failures in a row events stop until you save the endpoint again.</li>
           <li>
             Check every event is really from klique: <code>X-Klique-Signature</code> is <code>sha256=</code> + the hex HMAC-SHA256 of <code>{"`${X-Klique-Timestamp}.${body}`"}</code> with your signing secret. Reject old timestamps.
@@ -181,17 +182,30 @@ const sig = createHmac("sha256", SECRET).update(\`\${req.headers["x-klique-times
 const ok = timingSafeEqual(Buffer.from(\`sha256=\${sig}\`), Buffer.from(req.headers["x-klique-signature"]));`}</Code>
       </Section>
 
-      <Section n={9} title="Slash commands">
+      <Section n={9} title="Reading messages" id="reading">
+        <p>Bots don&apos;t get what people write unless a community allows it. Slash commands, button presses, joins and leaves all work without it, so only ask for <strong>Read messages</strong> if your bot needs it.</p>
+        <ul>
+          <li><strong>It&apos;s the owner&apos;s choice:</strong> it&apos;s off when they add your bot unless they tick it, and they can switch it off any time in community settings, under Webhooks.</li>
+          <li><strong>From then on only:</strong> your bot sees nothing written before it was allowed. If it&apos;s switched off and on again, it doesn&apos;t see what was said in between.</li>
+          <li><strong>Only channels it can see:</strong> a private channel needs your bot added to it. It never sees group chats, or deleted or hidden messages.</li>
+          <li><strong>What changes:</strong> with it, you get <code>message.create</code> events and can read channels. Without it, reading a channel answers 403. <code>GET /api/bot/v1/me</code> shows where you have it.</li>
+          <li><code>reaction</code> events only come from channels your bot can see.</li>
+        </ul>
+        <Code>{`GET /api/bot/v1/channels/CHANNEL_ID/messages?limit=50
+{ "success": true, "data": { "messages": [{ "id": "…", "body": "…", "author": {…}, "createdAt": "…" }], "hasMore": false } }`}</Code>
+      </Section>
+
+      <Section n={10} title="Slash commands">
         <p>Register commands with <code>PUT /api/bot/v1/commands</code>. Members see them when they type “/” in a community where your bot is. When someone uses one, you get an <code>interaction</code> event with the user, channel, command and options. Reply in the HTTP response within 4 seconds to answer in the channel:</p>
         <Code>{`{ "content": "🎲 You rolled a 4" }`}</Code>
         <p>You can answer with <code>cards</code> too.</p>
         <p>Or answer later by posting a message through the API.</p>
       </Section>
 
-      <Section n={10} title="Rules">
+      <Section n={11} title="Rules">
         <ul>
           <li>Follow the <Link href="/terms" className="font-medium text-accent-text underline">Terms of Service</Link>. No spam, no collecting people&apos;s data beyond what the bot needs, no pretending to be klique or its staff.</li>
-          <li>You&apos;re responsible for what your bot does. We may switch off bots that break the rules.</li>
+          <li>You&apos;re responsible for what your bot does and what it keeps. Don&apos;t collect or sell what people write. We may switch off bots that break the rules.</li>
         </ul>
       </Section>
     </LegalDoc>

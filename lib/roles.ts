@@ -26,3 +26,12 @@ export const ROLE_CAP = 50;
 /** a palette to pick from (any #rrggbb works) */
 export const ROLE_COLORS = ["#e74c3c", "#e67e22", "#f1c40f", "#2ecc71", "#1abc9c", "#3498db", "#9b59b6", "#e91e63", "#95a5a6", "#607d8b"];
 export const isPermission = (p: string): p is Permission => (ALL_PERMISSIONS as string[]).includes(p);
+
+/**
+ * Only bots have this one, and it's kept apart from the permissions above (CommunityRole.readMessagesSince), so it never
+ * shows up when people edit roles. Without it a bot gets no messages at all; slash commands and button presses still work.
+ */
+export const READ_MESSAGES = { id: "readMessages", label: "Read messages", hint: "See what people write in the channels it can see, from now on. It can never read older messages or private channels it isn't added to." } as const;
+/** what a bot can ask for */
+export const BOT_PERMISSIONS = [...PERMISSIONS.filter((p) => p.id !== "manageWebhooks"), READ_MESSAGES];
+export const isBotPermission = (p: string) => BOT_PERMISSIONS.some((x) => x.id === p);

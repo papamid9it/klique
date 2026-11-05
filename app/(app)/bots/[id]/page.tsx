@@ -13,7 +13,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { ErrorState } from "@/components/ui/States";
 import { BotTag } from "@/components/domain/space/WebhooksPanel";
 import { useApi } from "@/lib/hooks/useApi";
-import { PERMISSIONS } from "@/lib/roles";
+import { BOT_PERMISSIONS, READ_MESSAGES } from "@/lib/roles";
 import type { Envelope, UserBrief } from "@/lib/types";
 
 const api = new ApiClient();
@@ -35,7 +35,8 @@ export default function BotInvitePage() {
   const [busy, setBusy] = useState(false);
   if (loading && !data) return <Skeleton className="mx-auto mt-10 h-80 max-w-xl rounded-card" />;
   if (error || !data) return <ErrorState message={error} onRetry={reload} />;
-  const chosen = perms ?? new Set(data.bot.permissions);
+  // reading messages is only ever on if you tick it
+  const chosen = perms ?? new Set(data.bot.permissions.filter((p) => p !== READ_MESSAGES.id));
   const places = data.communities.filter((c) => !c.already && !c.full);
   const pick = community || places[0]?.slug || "";
   return (
@@ -83,7 +84,7 @@ export default function BotInvitePage() {
               <fieldset>
                 <legend className="mb-1.5 text-[13px] font-medium">Let it</legend>
                 <div className="space-y-2">
-                  {PERMISSIONS.filter((p) => data.bot.permissions.includes(p.id)).map((p) => (
+                  {BOT_PERMISSIONS.filter((p) => data.bot.permissions.includes(p.id)).map((p) => (
                     <label key={p.id} className="flex cursor-pointer items-start gap-2 text-sm">
                       <input type="checkbox" checked={chosen.has(p.id)} onChange={(e) => setPerms(() => { const n = new Set(chosen); if (e.target.checked) n.add(p.id); else n.delete(p.id); return n; })} className="mt-0.5 size-4 accent-[var(--accent-text)]" />
                       <span>

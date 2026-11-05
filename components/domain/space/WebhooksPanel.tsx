@@ -13,6 +13,7 @@ import { SettingsBlock } from "@/components/ui/SettingsShell";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { relativeStamp } from "@/lib/format";
+import { READ_MESSAGES } from "@/lib/roles";
 import { useApi, useNow } from "@/lib/hooks/useApi";
 import type { Envelope, UserBrief } from "@/lib/types";
 import { ConfirmModal } from "./parts";
@@ -228,8 +229,20 @@ export function WebhooksPanel({ slug }: { slug: string }) {
 /** The community's bots (added with their invite links), each removable. */
 function BotsBlock({ slug }: { slug: string }) {
   const toast = useToast();
-  const { data, reload } = useApi(() => api.get<Envelope<{ id: string; name: string; description: string; avatarUrl: string | null; user: UserBrief | null; commands: { name: string }[] }[]>>(`/api/communities/${slug}/bots`), [slug], { key: `bots:${slug}` });
+  const { data, reload } = useApi(() => api.get<Envelope<{ id: string; name: string; description: string; avatarUrl: string | null; user: UserBrief | null; commands: { name: string }[]; readMessages: boolean }[]>>(`/api/communities/${slug}/bots`), [slug], { key: `bots:${slug}` });
   const [removing, setRemoving] = useState<{ id: string; name: string } | null>(null);
+  const [saving, setSaving] = useState<string | null>(null);
+  const setReads = async (id: string, readMessages: boolean) => {
+    setSaving(id);
+    try {
+      await api.patch(`/api/communities/${slug}/bots/${id}`, { readMessages });
+      await reload();
+    } catch (e) {
+      toast(errorMessage(e), "error");
+    } finally {
+      setSaving(null);
+    }
+  };
   return (
     <SettingsBlock title="Bots" intro="Bots are added with their invite link (a bot's maker shares it). They count towards the same limit as webhooks. Each gets its own role you can adjust in Roles.">
       {!data?.length ? (
@@ -245,6 +258,9 @@ function BotsBlock({ slug }: { slug: string }) {
                   <BotTag />
                 </p>
                 <p className="truncate text-xs text-ink-muted">{b.commands.length ? b.commands.map((c) => `/${c.name}`).join(" ") : b.description || `@${b.user?.handle ?? ""}`}</p>
+                <div className="mt-2 max-w-sm">
+                  <Switch checked={b.readMessages} onChange={(v) => void setReads(b.id, v)} status={saving === b.id ? "saving" : undefined} label="Can read messages" hint={READ_MESSAGES.hint} />
+                </div>
               </div>
               <Button size="sm" variant="ghost" onClick={() => setRemoving({ id: b.id, name: b.name })}>
                 Remove
