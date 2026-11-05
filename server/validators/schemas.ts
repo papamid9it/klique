@@ -665,8 +665,8 @@ const crewFields = {
 
 /** an event's klique (the event is in the address) */
 export const crewCreateSchema = z.object(crewFields);
-/** a community's klique: which community, by slug */
-export const kliqueCreateSchema = z.object({ ...crewFields, community: z.string().trim().min(1).max(80) });
+/** which community it's for, by slug; null is all communities, which also needs a place (it has no community to take one from) */
+export const kliqueCreateSchema = z.object({ ...crewFields, community: z.string().trim().min(1).max(80).nullable(), country: z.string().trim().toUpperCase().max(2).optional(), city: z.string().trim().max(60).optional() });
 
 /* ------------------------------- plans ------------------------------ */
 

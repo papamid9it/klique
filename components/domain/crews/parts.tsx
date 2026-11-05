@@ -108,7 +108,7 @@ export function KliqueCard({ crew, wide, joinable = true, onDismiss }: { crew: C
   const spotsLeft = Math.max(0, crew.maxMembers - crew.memberCount);
   const s = crew.viewer.standing;
   const interest = getInterest(crew.interest);
-  const where = crew.event ? crew.event.title : crew.community ? crew.community.name : crew.area;
+  const where = crew.event ? crew.event.title : crew.community ? crew.community.name : "All communities";
   return (
     <article className={cx("relative flex h-full flex-col overflow-hidden rounded-card border bg-surface", s ? "border-accent-text" : "border-line", wide ? "w-full" : "w-64 shrink-0 snap-start")}>
       <SoftLink href={href} className="block" aria-label={crew.title}>

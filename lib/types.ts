@@ -675,6 +675,12 @@ export interface KliqueListDTO {
   hasMore: boolean;
 }
 
+/** A klique in your Joined list: its chat's unread count and last message (none while you're only asking to join). */
+export interface JoinedKliqueDTO extends CrewCardDTO {
+  unreadCount: number;
+  lastMessage: { author: string; mine: boolean; text: string; at: ISODate } | null;
+}
+
 /** What starting a klique needs to know: where you may start one, and the form's options. */
 export interface KliqueStartDTO {
   /** you may offer "Women only" (your profile says woman) */

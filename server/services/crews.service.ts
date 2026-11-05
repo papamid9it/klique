@@ -5,7 +5,7 @@ import type { z } from "zod";
 import { extractMentionHandles } from "@/lib/mentions";
 import { GOOD_REACTIONS } from "@/lib/points";
 import type { ReactionKind } from "@/lib/reactions";
-import type { ChannelMessageDTO, CrewCardDTO, CrewDTO, CrewStanding, EventCrewsDTO, KliqueListDTO, KliqueStartDTO, MyCrewDTO, ReactionDTO, UserBrief } from "@/lib/types";
+import type { ChannelMessageDTO, CrewCardDTO, CrewDTO, CrewStanding, EventCrewsDTO, JoinedKliqueDTO, KliqueListDTO, KliqueStartDTO, MyCrewDTO, ReactionDTO, UserBrief } from "@/lib/types";
 import { ApiError, badRequest, conflict, forbidden, notFound } from "../http/errors";
 import { rateLimit } from "../http/rate-limit";
 import { mailerConfigured } from "../mailer";
@@ -25,7 +25,7 @@ import type { crewCreateSchema, crewUpdateSchema, kliqueCreateSchema, kliqueList
 import { assertVerified } from "./account.service";
 import { hiddenUserIds } from "./blocks";
 import { escapeRegex, sid } from "./helpers";
-import { parseScope, scopeFilter } from "@/lib/places";
+import { isCountryCode, parseScope, scopeFilter, slugify } from "@/lib/places";
 import { purgeCrewChat } from "./crew-chat-purge";
 import { kliqueBoost, kliqueCreateBlock, kliqueJoinBlock } from "./klique-limits";
 import { logModDelete } from "./admin-audit";
@@ -46,9 +46,13 @@ import { normalizeEmoji } from "./emoji.service";
 /**
  * Kliques (called crews before Nov 2026; the code and collections keep that name): a small plan to do something
  * together, written as a hook, with a cover picture and an interest. The rules, all checked here:
- *  - a klique belongs to an event (going to it together) or to a community (anything its members want to do)
- *  - you can see an event's kliques exactly when you can see the event; a community's when you can see it
- *    (public, or you're in it); 18+ communities' kliques stay inside them
+ *  - a klique belongs to an event (going to it together), to a community (anything its members want to do), or to
+ *    all communities (no event, no community: open to anyone, in a place its host names)
+ *  - you can see an event's kliques exactly when you can see the event. A community's show in the kliques list and
+ *    "Kliques for you" only for its members; its own page and a direct link show them whenever you can see the
+ *    community (public, or you're in it), with a way to join it. 18+ communities' kliques stay inside them
+ *  - interest decides who a klique reaches first, never who may see it: "Kliques for you" only offers an
+ *    all-communities klique to people with that interest
  *  - under-18s never see, start or join kliques; a verified email is needed to start or join one
  *  - to start or join one you must be a member of its community (or of its group, for a group's event);
  *    events outside any community are open to anyone signed in
@@ -139,7 +143,12 @@ async function visibleCrew(viewer: IUser | null, crewId: string): Promise<{ crew
     const community = event.communityId ? await Community.findById(event.communityId).select(COMMUNITY_FIELDS).lean<CommunityBits>() : null;
     return { crew, event, community };
   }
-  const community = crew.communityId ? await Community.findById(crew.communityId).select(COMMUNITY_FIELDS).lean<CommunityBits>() : null;
+  // all communities: no event and no community, so anyone can open it
+  if (!crew.communityId) {
+    await assertOpenToViewer(viewer, crew, null);
+    return { crew, event: null, community: null };
+  }
+  const community = await Community.findById(crew.communityId).select(COMMUNITY_FIELDS).lean<CommunityBits>();
   if (!community || !(await canSeeCommunityKliques(viewer, community))) throw notFound(GONE);
   await assertOpenToViewer(viewer, crew, null);
   return { crew, event: null, community };
@@ -544,19 +553,24 @@ export async function listKliques(viewer: IUser | null, q: z.infer<typeof klique
     viewer && opts.forYou ? CrewMember.find({ userId: viewer._id }).select("crewId").lean<{ crewId: Types.ObjectId }[]>() : [],
   ]);
   const inCommunity = new Set(myMemberships.map((m) => sid(m.communityId)));
-  const communityOk = new Map(communities.map((c) => [sid(c._id), (viewer && isSiteAdmin(viewer)) || (c.privacy === "public" && !c.adult) || inCommunity.has(sid(c._id))]));
+  // a community's kliques are for its members; looking at one community's own list also shows a public one's
+  const communityOk = new Map(communities.map((c) => [sid(c._id), (viewer && isSiteAdmin(viewer)) || inCommunity.has(sid(c._id)) || (!!q.community && c.privacy === "public" && !c.adult)]));
   const already = new Set(mine.map((m) => sid(m.crewId)));
+  const interests = new Set(viewer?.interests ?? []);
   const visible = pool.filter((c) => {
-    if (c.eventId ? !eventOk.get(sid(c.eventId)) : !(c.communityId && communityOk.get(sid(c.communityId)))) return false;
+    if (c.eventId) {
+      if (!eventOk.get(sid(c.eventId))) return false;
+    } else if (c.communityId && !communityOk.get(sid(c.communityId))) return false;
     if (opts.forYou) {
       if (already.has(sid(c._id)) || (viewer && sid(c.hostId) === sid(viewer._id))) return false;
+      // all communities: recommended only to people into it (anyone can still find it in the list)
+      if (!c.eventId && !c.communityId && !interests.has(c.interest)) return false;
       const a = audienceOf(c);
       if ((a === "women" && viewer?.gender !== "woman") || (a === "men" && viewer?.gender !== "man")) return false;
     }
     return true;
   });
 
-  const interests = new Set(viewer?.interests ?? []);
   const boosted = await kliqueBoost(visible.map((c) => c.hostId));
   const now = Date.now();
   const score = (c: ICrew) =>
@@ -601,6 +615,54 @@ export async function crewUnreadCounts(userId: Types.ObjectId, crewIds: Types.Ob
     }),
   );
   return out;
+}
+
+/**
+ * Every klique you're in or asked to join, for the Joined list: ones still to come first, soonest first, with the
+ * chat's unread count and last message (only for ones you're in). A request for a klique that has closed is dropped.
+ */
+export async function joinedKliques(viewer: IUser): Promise<JoinedKliqueDTO[]> {
+  if (isMinor(viewer)) return [];
+  const rows = await CrewMember.find({ userId: viewer._id }).select("crewId status").lean<Pick<ICrewMember, "crewId" | "status">[]>();
+  if (!rows.length) return [];
+  const crews = await Crew.find({ _id: { $in: rows.map((r) => r.crewId) } }).sort({ meetupAt: 1 }).limit(MAX_CREW_LIST).lean<ICrew[]>();
+  const events = await Event.find({ _id: { $in: crews.flatMap((c) => (c.eventId ? [c.eventId] : [])) } }).lean<IEvent[]>();
+  const eventById = new Map(events.map((e) => [sid(e._id), e]));
+  const statusOf = new Map(rows.map((r) => [sid(r.crewId), r.status]));
+  const kept: ICrew[] = [];
+  for (const c of crews) {
+    const e = c.eventId ? (eventById.get(sid(c.eventId)) ?? null) : null;
+    if (c.eventId && (!e || !(await canViewEvent(e, viewer)))) continue;
+    if (statusOf.get(sid(c._id)) === "pending" && kliqueClosed(c, e)) continue;
+    kept.push(c);
+  }
+  // what's still to come goes first; a finished one stays at the end until it deletes itself
+  const over = (c: ICrew) => (kliqueOver(c, c.eventId ? (eventById.get(sid(c.eventId)) ?? null) : null) ? 1 : 0);
+  kept.sort((a, b) => over(a) - over(b) || +a.meetupAt - +b.meetupAt);
+
+  const inIds = kept.filter((c) => statusOf.get(sid(c._id)) === "active").map((c) => c._id);
+  const hidden = await hiddenUserIds(viewer._id);
+  const [cards, unread, latest] = await Promise.all([
+    toCards(kept, viewer, { events }),
+    crewUnreadCounts(viewer._id, inIds),
+    inIds.length
+      ? CrewMessage.aggregate<{ _id: Types.ObjectId; msg: ICrewMessage }>([
+          { $match: { crewId: { $in: inIds }, deletedAt: null, userId: { $nin: hidden } } },
+          { $sort: { _id: -1 } },
+          { $group: { _id: "$crewId", msg: { $first: "$$ROOT" } } },
+        ])
+      : Promise.resolve([]),
+  ]);
+  const authors = await loadBriefs(latest.map((l) => l.msg.userId));
+  const lastBy = new Map(latest.map((l) => [sid(l._id), l.msg]));
+  return cards.map((card) => {
+    const m = lastBy.get(card.id);
+    return {
+      ...card,
+      unreadCount: unread.get(card.id) ?? 0,
+      lastMessage: m ? { author: (authors.get(sid(m.userId)) ?? GHOST).displayName, mine: sid(m.userId) === sid(viewer._id), text: m.pollId ? "📊 Poll" : previewOf({ body: m.body, sticker: m.sticker, stickerUrl: m.stickerUrl, images: m.images }), at: m.createdAt.toISOString() } : null,
+    };
+  });
 }
 
 /**
@@ -659,7 +721,7 @@ export async function myCommunityCrews(viewer: IUser, slug: string): Promise<MyC
 
 type KliqueInput = z.infer<typeof crewCreateSchema>;
 
-async function startKlique(viewer: IUser, input: KliqueInput, where: { event: IEvent | null; community: Pick<ICommunity, "_id" | "country" | "city"> | null }): Promise<CrewDTO> {
+async function startKlique(viewer: IUser, input: KliqueInput, where: { event: IEvent | null; community: Pick<ICommunity, "_id" | "country" | "city"> | null; place?: { country: string; city: string } }): Promise<CrewDTO> {
   const person = personBlock(viewer, "start");
   if (person) throw forbidden(person);
   assertVerified(viewer);
@@ -671,7 +733,7 @@ async function startKlique(viewer: IUser, input: KliqueInput, where: { event: IE
   validateMeetup(input.meetupAt, where.event);
   rateLimit(`crew-create:${sid(viewer._id)}`, 10, DAY_MS);
 
-  const { event, community } = where;
+  const { event, community, place } = where;
   if (event && (await CrewMember.exists({ eventId: event._id, userId: viewer._id }))) throw conflict("You're already in a klique for this event. Leave it to start your own.");
 
   const expiresAt = event ? crewExpiry(event) : meetupExpiry(input.meetupAt);
@@ -688,8 +750,8 @@ async function startKlique(viewer: IUser, input: KliqueInput, where: { event: IE
         audience,
         womenSpots: audience === "mixed" ? input.womenSpots : 0,
         menSpots: audience === "mixed" ? input.menSpots : 0,
-        country: event?.country ?? community?.country ?? viewer.country ?? "NG",
-        city: event?.city ?? community?.city ?? viewer.city ?? "",
+        country: event?.country ?? community?.country ?? place?.country ?? viewer.country ?? "NG",
+        city: event?.city ?? community?.city ?? place?.city ?? viewer.city ?? "",
         area: input.area,
         meetupPoint: input.meetupPoint,
         meetupAt: input.meetupAt,
@@ -727,8 +789,15 @@ export async function createCrew(viewer: IUser, eventId: string, input: KliqueIn
   return startKlique(viewer, input, { event, community: null });
 }
 
-/** A community's klique: anything its members want to do together. */
+/** A community's klique: anything its members want to do together. `community: null` is all communities, in a place. */
 export async function createCommunityKlique(viewer: IUser, input: z.infer<typeof kliqueCreateSchema>): Promise<CrewDTO> {
+  if (input.community === null) {
+    if (isMinor(viewer)) throw forbidden("Kliques are for people 18 and over.");
+    const city = slugify(input.city ?? "");
+    if (!isCountryCode(input.country)) throw new ApiError(400, "Pick a country.", { errors: { country: "Pick a country." } });
+    if (!city) throw new ApiError(400, "Which city is it in?", { errors: { city: "Which city is it in?" } });
+    return startKlique(viewer, input, { event: null, community: null, place: { country: input.country, city } });
+  }
   const community = await Community.findOne({ slug: input.community.toLowerCase() }).select(COMMUNITY_FIELDS).lean<CommunityBits>();
   if (!community || isMinor(viewer)) throw notFound("We couldn't find that community.");
   if (!(await isMemberOf(viewer, community._id))) throw forbidden(`Join ${community.name} to start a klique there.`);

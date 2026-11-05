@@ -22,7 +22,11 @@ import { useApi, useDebounced } from "@/lib/hooks/useApi";
 import { useCategories } from "@/lib/hooks/useCategories";
 import { softNavigate } from "@/lib/nav";
 import { parseScope, scopeLabel, scopeToString } from "@/lib/places";
-import type { CrewCardDTO } from "@/lib/types";
+import { formatDateShort } from "@/lib/format";
+import type { CrewCardDTO, JoinedKliqueDTO } from "@/lib/types";
+import { Cover } from "@/components/ui/Cover";
+import { SoftLink } from "@/components/ui/SoftLink";
+import { Tabs } from "@/components/ui/Tabs";
 
 type When = NonNullable<KliqueFilters["when"]> | "any";
 const WHEN: { id: When; label: string }[] = [
@@ -45,6 +49,7 @@ function useFilters() {
   const interest = sp.get("interest") ?? "";
   const q = sp.get("q") ?? "";
   const hideFull = sp.get("open") === "1";
+  const tab = sp.get("tab") === "joined" ? "joined" : "discover";
   const set = useCallback(
     (patch: Record<string, string>) => {
       const next = new URLSearchParams(window.location.search);
@@ -57,7 +62,7 @@ function useFilters() {
     },
     [router],
   );
-  return { where, community, when, interest, q, hideFull, set };
+  return { where, community, when, interest, q, hideFull, tab, set };
 }
 type Filters = ReturnType<typeof useFilters>;
 
@@ -200,6 +205,57 @@ function FilterControls({ f }: { f: Filters }) {
   );
 }
 
+/** One klique you're in: tapping it opens its chat (or, while you're asking, its details). */
+function JoinedRow({ k }: { k: JoinedKliqueDTO }) {
+  const where = k.event?.title ?? k.community?.name ?? "All communities";
+  const standing = k.viewer.standing;
+  const last = k.lastMessage;
+  return (
+    <SoftLink href={crewHref(k)} className="flex items-center gap-3 rounded-card border border-line bg-surface p-3 transition hover:bg-raised/60">
+      <Cover src={k.coverImage ?? k.host.avatarUrl} seed={k.id} interest={k.interest} className="size-16 shrink-0 overflow-hidden rounded-control" />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <p className="truncate font-semibold">{k.title}</p>
+          {standing === "host" && <span className="shrink-0 rounded-full bg-raised px-2 py-0.5 text-[11px] font-semibold text-accent-text">Hosting</span>}
+          {standing === "pending" && <span className="shrink-0 rounded-full border border-line px-2 py-0.5 text-[11px] font-semibold text-ink-muted">Asked</span>}
+        </div>
+        <p className="truncate text-[13px] text-ink-muted">
+          {where} · {formatDateShort(k.meetupAt)}
+        </p>
+        <p className={cx("truncate text-sm", k.unreadCount ? "font-medium text-ink" : "text-ink-muted")}>
+          {standing === "pending" ? "Waiting for the host to let you in." : last ? `${last.mine ? "You" : last.author}: ${last.text}` : "No messages yet. Say hi."}
+        </p>
+      </div>
+      {k.unreadCount > 0 && <span className="flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full bg-accent px-1.5 text-xs font-bold text-accent-ink">{k.unreadCount > 98 ? "99+" : k.unreadCount}</span>}
+    </SoftLink>
+  );
+}
+
+/** The kliques you're in or asked to join. */
+function JoinedList({ onDiscover }: { onDiscover: () => void }) {
+  const { status } = useAuth();
+  const { data, loading, error, reload } = useApi(status === "authed" ? () => CrewService.joined() : null, [status], { key: "kliques-joined" });
+  useRealtimeEvent(() => void reload(), { filter: (e) => e.type === "crew", debounceMs: 800 });
+  if (!data && loading) return <RowSkeleton rows={3} />;
+  if (error && !data) return <ErrorState message={error} onRetry={reload} />;
+  if (!data?.length) {
+    return (
+      <EmptyState icon="users" title="No kliques yet" action={<Button variant="primary" onClick={onDiscover}>Find a klique</Button>}>
+        Kliques you join or start show up here, with their chats.
+      </EmptyState>
+    );
+  }
+  return (
+    <ul className="max-w-2xl space-y-2">
+      {data.map((k) => (
+        <li key={k.id}>
+          <JoinedRow k={k} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /**
  * /kliques: kliques to join, best for you first (your interests, your city, soonest). A compact header with Start a
  * klique; the filters (place, community, when, what, search) sit in the left panel on big screens and in a sheet
@@ -229,9 +285,11 @@ function KliquesPage() {
 
   return (
     <div>
-      <PagePanel label="Kliques">
-        <FilterControls f={f} />
-      </PagePanel>
+      {f.tab === "discover" && (
+        <PagePanel label="Kliques">
+          <FilterControls f={f} />
+        </PagePanel>
+      )}
 
       <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
@@ -239,16 +297,24 @@ function KliquesPage() {
           <p className="text-sm text-ink-muted">Movies, matches, runs, nights out and events. Join one, or start your own.</p>
         </div>
         <div className="flex gap-2">
-          <Button className="lg:hidden" onClick={() => setSheet(true)}>
-            <Icon name="sliders" size={15} /> Filters{active ? ` · ${active}` : ""}
-          </Button>
+          {f.tab === "discover" && (
+            <Button className="lg:hidden" onClick={() => setSheet(true)}>
+              <Icon name="sliders" size={15} /> Filters{active ? ` · ${active}` : ""}
+            </Button>
+          )}
           <Button variant="primary" onClick={() => requireAuth() && setStarting(true)}>
             <Icon name="plus" size={15} /> Start a klique
           </Button>
         </div>
       </header>
 
-      {!data && loading ? (
+      <div className="mb-5">
+        <Tabs label="Kliques" active={f.tab} onChange={(id) => f.set({ tab: id === "joined" ? "joined" : "" })} items={[{ id: "discover", label: "Discover" }, { id: "joined", label: "Joined" }]} />
+      </div>
+
+      {f.tab === "joined" ? (
+        <JoinedList onDiscover={() => f.set({ tab: "" })} />
+      ) : !data && loading ? (
         <RowSkeleton rows={3} />
       ) : error && !data ? (
         <ErrorState message={error} onRetry={reload} />

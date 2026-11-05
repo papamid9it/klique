@@ -15,10 +15,14 @@ import type { CrewDTO, CrewJoinMode, EventDTO } from "@/lib/types";
 import { fromLagos, lagosInputs } from "./parts";
 import { AudienceFields, audienceInput, checkAudience, type AudienceValue } from "./AudienceFields";
 import { splitFocal } from "@/lib/focal";
+import { PlaceFields } from "@/components/domain/places/PlaceFields";
+import { DEFAULT_COUNTRY, type Place } from "@/lib/places";
 import { useAuth } from "@/components/providers/AuthProvider";
 
 type EventBits = Pick<EventDTO, "id" | "title" | "startsAt" | "neighborhood" | "interest" | "coverImage">;
 type CommunityBits = { slug: string; name: string; interest: string };
+/** the "All communities" choice: no community, open to anyone in a place */
+const ALL = "__all";
 
 /**
  * Start a klique: for an event (going together), or for a community (anything its members want to do; pick
@@ -37,6 +41,7 @@ export function StartCrewModal({ event, community, open, onClose, onCreated }: {
   // your profile picture to start with (change it to anything); without one it starts empty and a picture is required
   const avatar = user?.avatarUrl ? splitFocal(user.avatarUrl).src : "";
   const [coverImage, setCoverImage] = useState(avatar);
+  const [place, setPlace] = useState<Place>({ country: user?.country || DEFAULT_COUNTRY, region: user?.region ?? "", city: user?.city ?? "" });
   const [interest, setInterest] = useState(event?.interest ?? community?.interest ?? "");
   const [area, setArea] = useState("");
   const [meetupPoint, setMeetupPoint] = useState("");
@@ -60,7 +65,8 @@ export function StartCrewModal({ event, community, open, onClose, onCreated }: {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     const next: Record<string, string> = {};
-    if (!event && !communitySlug) next.community = "Pick the community it's for.";
+    if (!event && !communitySlug) next.community = "Pick a community, or All communities.";
+    if (communitySlug === ALL && !place.city.trim()) next.city = "Which city is it in?";
     if (title.trim().length < 8) next.title = "Say what you're doing, e.g. “Who wants to watch Dune at Filmhouse Lekki on Saturday?”";
     if (!coverImage) next.coverImage = "Add a cover picture. Kliques with a picture get far more people.";
     if (!interest) next.interest = "Pick what it's about.";
@@ -77,7 +83,7 @@ export function StartCrewModal({ event, community, open, onClose, onCreated }: {
     setFormError(null);
     const input = { title: title.trim(), interest, coverImage, area: area.trim(), meetupPoint: meetupPoint.trim(), meetupAt: fromLagos(date, time), note: note.trim(), joinMode, ...audienceInput(who) };
     try {
-      const res = event ? await CrewService.create(event.id, input) : await CrewService.createInCommunity(communitySlug, input);
+      const res = event ? await CrewService.create(event.id, input) : communitySlug === ALL ? await CrewService.createInCommunity(null, { ...input, country: place.country, city: place.city }) : await CrewService.createInCommunity(communitySlug, input);
       onCreated(res.data);
     } catch (err) {
       if (isApiError(err) && err.errors) setErrors(err.errors);
@@ -106,8 +112,9 @@ export function StartCrewModal({ event, community, open, onClose, onCreated }: {
       ) : (
         <form onSubmit={submit} className="space-y-4" noValidate>
           {!event && !community && (
-            <SelectField label="Community" value={communitySlug} onChange={(e) => pickCommunity(e.target.value)} error={errors.community} hint={choices.length ? "Only its members can join. Going to an event? Start one from the event's page instead." : "Join a community first: kliques are for its members."}>
+            <SelectField label="Community" value={communitySlug} onChange={(e) => pickCommunity(e.target.value)} error={errors.community} hint={communitySlug === ALL ? "Anyone can see and join it. It's recommended to people into what it's about." : "Only its members can see and join it. Going to an event? Start one from the event's page instead."}>
               <option value="">Pick one…</option>
+              <option value={ALL}>All communities</option>
               {choices.map((c) => (
                 <option key={c.slug} value={c.slug}>
                   {c.name}
@@ -115,6 +122,7 @@ export function StartCrewModal({ event, community, open, onClose, onCreated }: {
               ))}
             </SelectField>
           )}
+          {!event && !community && communitySlug === ALL && <PlaceFields value={place} onChange={setPlace} errors={errors} />}
           <ImageField kind="photo" label="Cover picture" value={coverImage} onChange={setCoverImage} error={errors.coverImage} hint={avatar && coverImage === avatar ? "Your profile picture for now. Tap Change to use the place, the movie poster, the vibe." : "Required. The place, the movie poster, the vibe. No explicit pictures."} reposition={{ aspect: 16 / 9 }} />
           <TextField label="What's the plan?" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} placeholder={event ? `Who's going to ${event.title} from Yaba?` : "Who wants to watch a movie at the cinema on Saturday?"} error={errors.title} hint="Write it like a question to your friends." />
           <SelectField label="What it's about" value={interest} onChange={(e) => setInterest(e.target.value)} error={errors.interest} hint="People into this see it first.">

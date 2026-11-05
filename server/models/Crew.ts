@@ -4,7 +4,8 @@ import { defineModel } from "./define";
 /**
  * A klique (called a "crew" before Nov 2026; the collections keep that name): a small plan to do something
  * together, written as a hook ("Who wants to watch Dune at Filmhouse Lekki on Saturday?"). It belongs to an
- * event (going to it together) or to a community (anything its members want to do). Everything about a klique
+ * event (going to it together), to a community (anything its members want to do), or to all communities (neither
+ * set: open to anyone, in a place its host names). Everything about a klique
  * (the klique, its members, its chat) carries `expiresAt` = a day after it happens, and MongoDB deletes it then
  * by itself (TTL indexes). For an event, each account may start ONE klique and be in one at a time (as host,
  * member, or with a request waiting); how many kliques someone may start or be in overall is a plan limit.
@@ -32,7 +33,7 @@ export interface ICrew {
   audience?: "everyone" | "women" | "men" | "mixed";
   womenSpots?: number;
   menSpots?: number;
-  /** where it happens, for "Kliques for you" (copied from the event, else the community) */
+  /** where it happens, for "Kliques for you" (copied from the event, else the community; all communities: the host picks) */
   country: string;
   city: string;
   /** where they're coming from, e.g. "Yaba" */

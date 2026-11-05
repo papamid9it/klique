@@ -1,6 +1,6 @@
 import ApiClient from "@/app/ApiCore";
 import type { ReactionKind } from "@/lib/reactions";
-import type { ChannelMessageDTO, ChatPage, CrewDTO, CrewJoinMode, Envelope, EventCrewsDTO, KliqueListDTO, KliqueStartDTO, MyCrewDTO, ReactionDTO, UserBrief } from "@/lib/types";
+import type { ChannelMessageDTO, ChatPage, CrewDTO, CrewJoinMode, Envelope, EventCrewsDTO, JoinedKliqueDTO, KliqueListDTO, KliqueStartDTO, MyCrewDTO, ReactionDTO, UserBrief } from "@/lib/types";
 import type { SendInput } from "./ChannelService";
 
 const api = new ApiClient();
@@ -48,8 +48,10 @@ export const CrewService = {
   forYou: (f: KliqueFilters = {}) => api.get<Envelope<KliqueListDTO>>(`/api/kliques/for-you`, filterQuery(f)),
   /** before the Start form: can you, Women only, your communities */
   startInfo: () => api.get<Envelope<KliqueStartDTO>>(`/api/kliques/start`),
-  /** start a community's klique */
-  createInCommunity: (community: string, input: CrewInput) => api.post<Envelope<CrewDTO>>(`/api/kliques`, { ...input, community }),
+  /** start a community's klique; `null` is all communities, with a place */
+  createInCommunity: (community: string | null, input: CrewInput & { country?: string; city?: string }) => api.post<Envelope<CrewDTO>>(`/api/kliques`, { ...input, community }),
+  /** the kliques you're in or asked to join */
+  joined: () => api.get<Envelope<JoinedKliqueDTO[]>>(`/api/kliques/joined`),
   /** `q`: crews coming from an area ("yaba"); `limit`: how many (grows with "Load more") */
   forEvent: (eventId: string, opts: { q?: string; limit?: number } = {}) => api.get<Envelope<EventCrewsDTO>>(`/api/events/${eventId}/crews`, { ...(opts.q ? { q: opts.q } : {}), ...(opts.limit ? { limit: String(opts.limit) } : {}) }),
   create: (eventId: string, input: CrewInput) => api.post<Envelope<CrewDTO>>(`/api/events/${eventId}/crews`, input),

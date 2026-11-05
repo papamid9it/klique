@@ -430,7 +430,7 @@ function Crew({ crew, tab, embedded, onChange, onGone, onRead, onMenu, reload }:
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-[15px] font-semibold tracking-[-0.01em]">{crew.title}</h1>
             <p className="truncate text-xs text-ink-muted">
-              {crew.event?.title ?? crew.community?.name ?? crew.area} · {formatDateShort(crew.meetupAt)}
+              {crew.event?.title ?? crew.community?.name ?? "All communities"} · {formatDateShort(crew.meetupAt)}
             </p>
           </div>
           <span className="hidden sm:block">
