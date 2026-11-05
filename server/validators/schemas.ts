@@ -46,6 +46,7 @@ export const loginSchema = z.object({
 export const forgotPasswordSchema = z.object({ email: emailField });
 export const resetPasswordSchema = z.object({ token: mailToken, password: newPassword });
 export const appCodeSchema = z.object({ code: mailToken, verifier: z.string().trim().min(32).max(200) });
+export const googleIdTokenSchema = z.object({ idToken: z.string().trim().min(20).max(5000) });
 export const verifyEmailSchema = z.object({ token: mailToken });
 export const changePasswordSchema = z.object({
   /** not needed for accounts that signed up with Google and have no password yet */

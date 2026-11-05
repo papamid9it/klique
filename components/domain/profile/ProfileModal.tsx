@@ -144,7 +144,7 @@ function ProfileBody({ handle, onClose, onOpenPerson, tryOn }: { handle: string;
 
           {view.visible ? (
             <div className="mt-5 space-y-4 rounded-card border border-line bg-surface p-4">
-              {p.media?.length > 0 && <ProfileGallery userId={p.id} media={p.media} className="-mx-1 overflow-hidden rounded-card" />}
+              <ProfileGallery userId={p.id} media={p.media ?? []} isSelf={view.isSelf} onNavigate={onClose} />
               {p.bio && (
                 <section>
                   <h3 className="eyebrow mb-1">About me</h3>
@@ -257,7 +257,10 @@ export function ProfileModal({ handle, onClose, onOpenPerson, tryOn }: { handle:
     <dialog
       ref={ref}
       aria-label="Profile"
-      onClose={onClose}
+      // React passes a dialog's close up to its parents: closing a popup opened from here isn't closing the profile
+      onClose={(e) => {
+        if (e.target === ref.current) onClose();
+      }}
       onClick={(e) => {
         if (e.target === ref.current) onClose();
       }}

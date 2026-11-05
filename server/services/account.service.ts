@@ -136,6 +136,13 @@ export async function issueAppCode(userId: IUser["_id"], challenge: string): Pro
   return code;
 }
 
+/** A session from a Google ID token (the phone app's own Google sheet). */
+export async function googleSession(idToken: string): Promise<AuthResult> {
+  const { signInWithIdToken } = await import("./google.service");
+  const { user } = await signInWithIdToken(idToken);
+  return { user: toMe(user, await unreadTotal(user._id)), token: await signSession(String(user._id), user.tokenVersion) };
+}
+
 export async function exchangeAppCode(code: string, verifier: string): Promise<AuthResult> {
   const row = await AuthToken.findOneAndDelete({ tokenHash: sha(code), kind: "app", expiresAt: { $gt: new Date() } }).lean();
   if (!row || !row.meta || sha(verifier) !== row.meta) throw badLink();

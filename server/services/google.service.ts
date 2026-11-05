@@ -1,11 +1,12 @@
 import { joinKlique } from "./klique.service";
 import { randomBytes } from "node:crypto";
-import { SignJWT, createRemoteJWKSet, jwtVerify } from "jose";
+import { SignJWT, decodeJwt, jwtVerify } from "jose";
 import { LIMITS } from "@/lib/constants";
 import { appUrl, authSecret, googleConfig, nativeRedirects } from "../env";
 import { ApiError } from "../http/errors";
 import { User, type IUser } from "../models/User";
 import { assertNotSuspended } from "../policies/account";
+import { profileFromIdToken, type GoogleProfile } from "./google-token";
 
 /**
  * "Continue with Google" using the standard OpenID Connect code flow, written against the plain endpoints
@@ -16,7 +17,6 @@ export const STATE_COOKIE = "klique_oauth";
 const STATE_MINUTES = 10;
 const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
-const JWKS = createRemoteJWKSet(new URL("https://www.googleapis.com/oauth2/v3/certs"));
 
 const redirectUri = () => `${appUrl()}/api/auth/google/callback`;
 
@@ -71,13 +71,6 @@ export async function startGoogle(next: string, native: NativeStart | null = nul
   return { url: `${AUTH_URL}?${params}`, cookie };
 }
 
-interface GoogleProfile {
-  sub: string;
-  email: string;
-  name: string;
-  picture: string | null;
-}
-
 /** Which app (if any) this attempt belongs to, so even a failure can be sent back to it. Null when the cookie is missing or bad. */
 export async function nativeOfAttempt(cookie: string | undefined): Promise<NativeStart | null> {
   if (!cookie) return null;
@@ -115,25 +108,18 @@ export async function finishGoogle(code: string, state: string, cookie: string |
   const tokens = (await res.json()) as { id_token?: string };
   if (!tokens.id_token) throw new ApiError(502, "Google didn't send back an identity.", { code: "google_failed" });
 
-  let claims: Record<string, unknown>;
-  try {
-    const { payload } = await jwtVerify(tokens.id_token, JWKS, { issuer: ["https://accounts.google.com", "accounts.google.com"], audience: clientId });
-    claims = payload;
-  } catch {
-    throw new ApiError(502, "We couldn't verify the sign-in with Google.", { code: "google_failed" });
-  }
-  if (claims.nonce !== saved.nonce) throw new ApiError(400, "That sign-in attempt didn't match. Please try again.", { code: "google_failed" });
-  if (typeof claims.sub !== "string" || typeof claims.email !== "string") throw new ApiError(502, "Google didn't share an email address.", { code: "google_failed" });
-  // An unverified Google email must never be allowed to claim an existing klique account.
-  if (claims.email_verified !== true) throw new ApiError(403, "Your Google email isn't verified.", { code: "google_unverified" });
+  // the nonce is only in the raw token, so it's checked on its own: the rest is the same for every Google sign-in
+  const profile = await profileFromIdToken(tokens.id_token, clientId).catch((e: unknown) => {
+    if (e instanceof ApiError && e.status === 401) throw new ApiError(502, "We couldn't verify the sign-in with Google.", { code: "google_failed" });
+    throw e;
+  });
+  if (decodeJwt(tokens.id_token).nonce !== saved.nonce) throw new ApiError(400, "That sign-in attempt didn't match. Please try again.", { code: "google_failed" });
+  return { profile, next: safeNext(saved.next), native: saved.native && nativeRedirects().includes(saved.native.redirect) ? saved.native : null };
+}
 
-  const email = claims.email.toLowerCase();
-  const name = typeof claims.name === "string" && claims.name.trim() ? claims.name.trim() : email.split("@")[0];
-  return {
-    profile: { sub: claims.sub, email, name: name.slice(0, LIMITS.displayName), picture: typeof claims.picture === "string" && /^https:\/\//.test(claims.picture) ? claims.picture : null },
-    next: safeNext(saved.next),
-    native: saved.native && nativeRedirects().includes(saved.native.redirect) ? saved.native : null,
-  };
+/** Signing in from the phone app's own Google sheet: it sends the ID token Google gave it. */
+export async function signInWithIdToken(idToken: string) {
+  return signInWithGoogle(await profileFromIdToken(idToken, config().clientId));
 }
 
 async function freeHandle(seed: string): Promise<string> {

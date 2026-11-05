@@ -124,6 +124,8 @@ async function deliverPhones(ids: string[], p: PushPayload) {
       const res = await fetch(ENDPOINT, { method: "POST", headers, body: JSON.stringify(messages) });
       const json = (await res.json()) as { data?: { status: string; details?: { error?: string } }[] };
       // phones that uninstalled the app: forget them
+      // a bad key or an app without its Firebase or Apple setup: nothing arrives, so say why in the logs
+      for (const t of json.data ?? []) if (t.status === "error" && t.details?.error !== "DeviceNotRegistered") console.warn("[push] Expo refused a push:", t.details?.error);
       const dead = (json.data ?? []).flatMap((t, idx) => (t.status === "error" && t.details?.error === "DeviceNotRegistered" ? [chunk[idx].token] : []));
       if (dead.length) await PushToken.deleteMany({ token: { $in: dead } });
     } catch (err) {

@@ -1344,6 +1344,8 @@ export interface RealtimeTokenDTO {
 
 /** What the sign-in pages need to know about this server. */
 export interface AuthConfigDTO {
+  /** the phone app's Google sign-in asks for tokens for this; a public id, not a secret */
+  googleClientId: string | null;
   google: boolean;
   /** true when emails are really sent (SMTP configured) and unverified accounts are limited */
   emailVerification: boolean;

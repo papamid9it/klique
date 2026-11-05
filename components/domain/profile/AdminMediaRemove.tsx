@@ -1,12 +1,15 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import ApiClient, { errorMessage } from "@/app/ApiCore";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useToast } from "@/components/providers/ToastProvider";
-import { FeedMedia } from "@/components/domain/feed/FeedMedia";
 import { useMediaViewer } from "@/components/providers/MediaViewerProvider";
-import { cdn } from "@/lib/cdn";
+import { cx } from "@/components/ui/cx";
+import { Icon } from "@/components/ui/Icon";
+import { Modal } from "@/components/ui/Modal";
+import { cdn, videoPoster } from "@/lib/cdn";
 import type { TopicMediaDTO } from "@/lib/types";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 
@@ -54,17 +57,66 @@ export function AdminMediaRemove({ userId, media, onRemoved }: { userId: string;
   );
 }
 
-/** Someone's profile photos and videos to swipe through, with the admin's Delete row under it. */
-export function ProfileGallery({ userId, media, className }: { userId: string; media: TopicMediaDTO[]; className?: string }) {
+/** A square of the gallery: the picture, or a video's still frame with a small play mark on it. */
+function GalleryThumb({ item, width, className }: { item: TopicMediaDTO; width: number; className?: string }) {
+  const still = item.kind === "video" ? (item.poster ?? videoPoster(item.url)) : item.url;
+  return (
+    <span className={cx("relative block aspect-square overflow-hidden bg-raised", className)}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      {still && <img src={cdn(still, { w: width })} alt="" loading="lazy" className="size-full object-cover" />}
+      {item.kind === "video" && (
+        <span className="absolute right-1 bottom-1 inline-flex size-5 items-center justify-center rounded-full bg-black/60 text-white">
+          <Icon name="play" size={11} />
+        </span>
+      )}
+    </span>
+  );
+}
+
+/**
+ * The gallery on a full profile: a slim row with the first few, which opens a popup with all of them in a grid; a tap
+ * there opens one bigger, to zoom in and swipe through (no Download or sticker in a gallery, not even your own). The
+ * admin's Delete row is in the popup. On your own profile with nothing in it yet, the row is the way to add some.
+ */
+export function ProfileGallery({ userId, media, isSelf, onNavigate }: { userId: string; media: TopicMediaDTO[]; isSelf: boolean; onNavigate: () => void }) {
   const [gone, setGone] = useState<string[]>([]);
+  const [open, setOpen] = useState(false);
   const view = useMediaViewer();
   const shown = media.filter((m) => !gone.includes(m.url));
-  if (!shown.length) return null;
+  const row = "flex w-full items-center gap-1.5 rounded-control py-1 text-left hover:bg-raised/60";
+  if (!shown.length) {
+    if (!isSelf) return null;
+    return (
+      <Link href="/settings#gallery" onClick={onNavigate} className={row}>
+        <span className="inline-flex size-12 items-center justify-center rounded-control bg-raised text-ink-muted"><Icon name="image" size={20} /></span>
+        <span className="ml-1.5 flex-1 text-sm font-semibold">Add photos</span>
+        <Icon name="chevron-right" size={16} className="text-ink-muted" />
+      </Link>
+    );
+  }
+  const title = `Gallery · ${shown.length}`;
   return (
     <div>
-      {/* a tap opens it bigger, to zoom in and swipe through (no Download or sticker in a gallery, not even your own) */}
-      <FeedMedia key={shown.length} media={shown} className={className} openLabel="View bigger" zoomHint onOpen={(i) => view(shown, i)} />
-      <AdminMediaRemove userId={userId} media={shown} onRemoved={(url) => setGone((g) => [...g, url])} />
+      <button type="button" onClick={() => setOpen(true)} aria-haspopup="dialog" className={row}>
+        {shown.slice(0, 3).map((m) => <GalleryThumb key={m.url} item={m} width={96} className="size-12 shrink-0 rounded-control" />)}
+        <span className="ml-1.5 flex-1 text-sm font-semibold">{title}</span>
+        <Icon name="chevron-right" size={16} className="text-ink-muted" />
+      </button>
+      <Modal open={open} onClose={() => setOpen(false)} title={title}>
+        <div className="grid grid-cols-3 gap-1.5">
+          {shown.map((m, i) => (
+            <button key={m.url} type="button" onClick={() => view(shown, i)} aria-label={`View ${m.kind === "video" ? "video" : "photo"} ${i + 1} of ${shown.length}`} className="block rounded-control transition-opacity hover:opacity-85">
+              <GalleryThumb item={m} width={320} className="rounded-control" />
+            </button>
+          ))}
+        </div>
+        <AdminMediaRemove userId={userId} media={shown} onRemoved={(url) => setGone((g) => [...g, url])} />
+        {isSelf && (
+          <Link href="/settings#gallery" onClick={onNavigate} className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-control border border-line text-sm font-semibold hover:bg-raised">
+            <Icon name="edit" size={15} /> Manage photos
+          </Link>
+        )}
+      </Modal>
     </div>
   );
 }
