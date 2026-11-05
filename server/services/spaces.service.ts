@@ -1,4 +1,5 @@
 import { isKlique } from "./klique-id";
+import { audienceRefusal } from "@/lib/constants";
 import type { Types } from "mongoose";
 import { deleteUploads } from "./media.service";
 import type {
@@ -122,6 +123,9 @@ export async function joinSpace(
   // groups are private and nobody joins them: a group's owner or admins add people from the community
   if (space.sub) throw forbidden("Groups are private. Ask one of the group's admins to add you.");
   if (access.banned) throw forbidden("You can't join this one.");
+  // before anything else, so an invite link is no way round it either
+  const refusal = audienceRefusal(space.community.audience, viewer.gender);
+  if (refusal) throw forbidden(refusal);
   // how many communities their plan lets them be in (asking to join counts too)
   if (!space.community.official) await assertCanJoinCommunity(viewer, space.community._id);
   // the community's entry questions, when it has them on: answered before anything else (invite links too)
@@ -331,6 +335,10 @@ export async function transferOwnership(viewer: IUser, space: Space, access: Spa
   if (access.role !== "owner") throw forbidden("Only the owner can hand this over.");
   const target = await targetMembership(space, userId);
   if (sid(target.userId) === sid(viewer._id)) throw conflict("You already own this.");
+  if (!space.sub && space.community.audience && space.community.audience !== "everyone") {
+    const next = await User.findById(target.userId).select("gender").lean<Pick<IUser, "gender">>();
+    if (audienceRefusal(space.community.audience, next?.gender)) throw forbidden(`This community is for ${space.community.audience} only, so its owner has to be too.`);
+  }
   await Membership.updateOne({ _id: target._id }, { role: "owner" });
   await Membership.updateOne({ userId: viewer._id, ...spaceFilter(space) }, { role: "admin" });
   if (space.sub) await Subcommunity.updateOne({ _id: space.sub._id }, { ownerId: target.userId });
@@ -439,6 +447,10 @@ export async function decideRequest(
   if (action === "approve") {
     const existing = await Membership.findOne({ userId: req.userId, ...spaceFilter(space) }).lean<IMembership>();
     if (existing?.status === "banned") throw forbidden("That person is banned from here.");
+    if (!space.sub && space.community.audience && space.community.audience !== "everyone") {
+      const asker = await User.findById(req.userId).select("gender").lean<Pick<IUser, "gender">>();
+      if (audienceRefusal(space.community.audience, asker?.gender)) throw forbidden(`This community is for ${space.community.audience} only, so they can't be approved.`);
+    }
     await addMember(space, req.userId); // also marks the request approved
     // their answers to the entry questions go with them
     if (req.answers?.length && !space.sub) await Membership.updateOne({ userId: req.userId, communityId: space.community._id, subcommunityId: null }, { $set: { answers: req.answers } });

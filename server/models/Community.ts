@@ -32,6 +32,8 @@ export interface ICommunity {
   memberEvents?: boolean;
   /** 18+ (private only), and of those, allowing explicit content: who may see them, policies/adult */
   adult?: boolean;
+  /** who it's for (fixed when it's made); women or men only are always private */
+  audience?: "everyone" | "women" | "men";
   /**
    * "Mention @everyone, @here and all roles" (Discord's permission): owners and admins always may; members only when
    * this is on (off by default). Without it the words still send, they just don't ping anyone.
@@ -95,6 +97,7 @@ const CommunitySchema = new Schema<ICommunity>(
     minPointsPost: { type: Number, default: 0, min: 0, max: 1_000_000 },
     memberEvents: { type: Boolean, default: true },
     adult: { type: Boolean, default: false },
+    audience: { type: String, enum: ["everyone", "women", "men"], default: "everyone" },
     verified: { type: Boolean, default: false },
     ownerIcon: { type: String, default: null, maxlength: 16 },
     membersMassMention: { type: Boolean, default: false },

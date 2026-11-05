@@ -1,5 +1,5 @@
 import { readJson, withApi } from "@/server/http/api";
-import { assertAdmin, revokeSessions, setSuspended, userDetail } from "@/server/services/admin.service";
+import { assertAdmin, revokeSessions, setGender, setSuspended, userDetail } from "@/server/services/admin.service";
 import { adminUserUpdateSchema } from "@/server/validators/schemas";
 import type { AdminUserDTO } from "@/lib/types";
 
@@ -15,5 +15,6 @@ export const PATCH = withApi<{ id: string }, "required">({ auth: "required" }, a
   let out: AdminUserDTO | null = null;
   if (input.suspended !== undefined) out = await setSuspended(viewer, params.id, input.suspended, input.reason);
   if (input.signOut) out = await revokeSessions(viewer, params.id);
+  if (input.gender !== undefined) out = await setGender(viewer, params.id, input.gender, input.reason);
   return out;
 });

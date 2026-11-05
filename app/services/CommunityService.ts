@@ -15,6 +15,7 @@ export interface CommunityListParams {
 }
 
 export interface CommunityInput {
+  audience?: "everyone" | "women" | "men";
   name: string;
   description?: string;
   interest: InterestId;

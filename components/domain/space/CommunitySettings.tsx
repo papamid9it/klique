@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { audienceLabel } from "@/lib/constants";
 import { useAutoSave } from "@/lib/hooks/useAutoSave";
 import { useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
@@ -235,7 +236,8 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
             onChange={(v) => void setPrivacy(v)}
             status={privacySave.status}
             label="Private community"
-            hint="When on, only members can see posts, events and members, and new people need approval or an invite."
+            disabled={!!audienceLabel(c.audience)}
+            hint={audienceLabel(c.audience) ? `This is a ${audienceLabel(c.audience)!.toLowerCase()} community, so it stays private. Who it's for can't be changed.` : "When on, only members can see posts, events and members, and new people need approval or an invite."}
           />
         </SettingsBlock>
       )}

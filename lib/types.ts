@@ -244,6 +244,8 @@ export interface CommunityCardDTO {
   /** 18+ (private only), and allowing explicit content */
   adult: boolean;
   explicit: boolean;
+  /** who it's for: everyone, or women or men only (always private; fixed when it's made) */
+  audience: import("./constants").CommunityAudience;
   viewer: ViewerAccess;
 }
 
@@ -1396,6 +1398,7 @@ export interface AdminUserDTO extends UserBrief {
   isAdmin: boolean;
   suspended: boolean;
   suspendedReason: string;
+  gender: "woman" | "man" | "unspecified";
   createdAt: ISODate;
 }
 

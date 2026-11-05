@@ -188,6 +188,7 @@ export function communityCard(c: ICommunity, access: SpaceAccess): CommunityCard
     minPointsPost: c.official ? 0 : (c.minPointsPost ?? 0),
     adult: !!c.adult,
     explicit: !!c.explicit,
+    audience: c.audience ?? "everyone",
     viewer: viewerAccess(access),
   };
 }

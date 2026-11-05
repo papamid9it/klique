@@ -323,6 +323,7 @@ const toAdminUser = (u: IUser): AdminUserDTO => ({
   isAdmin: isSiteAdmin(u),
   suspended: !!u.suspendedAt,
   suspendedReason: u.suspendedReason ?? "",
+  gender: u.gender ?? "unspecified",
   createdAt: u.createdAt.toISOString(),
 });
 
@@ -392,6 +393,14 @@ export async function setSuspended(admin: IUser, userId: string, on: boolean, re
     { returnDocument: "after" },
   ).lean<IUser>();
   await logAction(admin, on ? "user.suspend" : "user.restore", "user", u!._id, `@${u!.handle}`, on ? reason : "", `/?profile=${u!.handle}`);
+  return toAdminUser(u!);
+}
+
+/** Correct someone's gender: the only way to change it once it's set. Logged, with the reason. */
+export async function setGender(admin: IUser, userId: string, gender: "woman" | "man" | "unspecified", reason = ""): Promise<AdminUserDTO> {
+  const before = await findUser(userId);
+  const u = await User.findByIdAndUpdate(userId, { gender }, { returnDocument: "after" }).lean<IUser>();
+  await logAction(admin, "user.gender", "user", u!._id, `@${u!.handle}`, `${before.gender ?? "unspecified"} to ${gender}${reason ? `: ${reason}` : ""}`, `/?profile=${u!.handle}`);
   return toAdminUser(u!);
 }
 

@@ -1,4 +1,5 @@
 import { searchFilter } from "./search-terms";
+import { audienceRefusal } from "@/lib/constants";
 import { parseScope, scopeFilter } from "@/lib/places";
 import { forgetAdultCommunities, isAdult } from "../policies/adult";
 import { deleteUploads } from "./media.service";
@@ -27,6 +28,8 @@ type ListQuery = z.infer<typeof communityListQuery>;
 
 export async function listCommunities(viewer: IUser | null, q: ListQuery): Promise<Paginated<CommunityCardDTO>> {
   let filter: QueryFilter<ICommunity>;
+  // what this person may be shown at all: kept apart so the search and filters below can never replace it
+  let allowed: QueryFilter<ICommunity> = {};
 
   if (q.scope === "joined") {
     if (!viewer) throw unauthorized();
@@ -36,7 +39,11 @@ export async function listCommunities(viewer: IUser | null, q: ListQuery): Promi
     filter = { _id: { $in: ms.map((m) => m.communityId) } };
   } else {
     // Public discovery NEVER includes private communities, whoever is asking.
-    filter = { privacy: "public" };
+    // The one exception: a women-only or men-only community shows to the people it's for, or nobody could find it.
+    // They only see its locked card, and an 18+ one stays out.
+    filter = {};
+    const mine = viewer?.gender === "woman" ? "women" : viewer?.gender === "man" ? "men" : null;
+    allowed = mine ? { $or: [{ privacy: "public" }, { privacy: "private", audience: mine, adult: { $ne: true } }] } : { privacy: "public" };
   }
 
   const where = parseScope(q.where);
@@ -47,7 +54,7 @@ export async function listCommunities(viewer: IUser | null, q: ListQuery): Promi
   }
   if (q.verified) filter.$or = [{ verified: true }, { official: true }];
 
-  const rows = await Community.find(filter)
+  const rows = await Community.find({ $and: [allowed, filter] })
     .sort(q.sort === "new" ? { createdAt: -1 } : { memberCount: -1, createdAt: -1 })
     .skip((q.page - 1) * PAGE_SIZE)
     .limit(PAGE_SIZE + 1)
@@ -121,6 +128,11 @@ export async function createCommunity(viewer: IUser, input: z.infer<typeof commu
   assertVerified(viewer);
   assertPlace(input, true);
   await assertAdultFlags(viewer, { privacy: input.privacy, adult: input.adult, explicit: input.explicit });
+  if (input.audience !== "everyone") {
+    if (input.privacy !== "private") throw new ApiError(422, "Women-only and men-only communities have to be private.", { code: "audience_private" });
+    const refusal = audienceRefusal(input.audience, viewer.gender);
+    if (refusal) throw forbidden(`Only ${input.audience} can start this kind of community. If that's you, set your gender in your profile settings first.`);
+  }
   await assertCanCreateCommunity(viewer);
   rateLimit(`community-create:${sid(viewer._id)}`, 5, 24 * 60 * 60 * 1000);
   const slug = await uniqueCommunitySlug(input.name);
@@ -139,6 +151,7 @@ export async function createCommunity(viewer: IUser, input: z.infer<typeof commu
     coverImage: input.coverImage || null,
     adult: input.adult,
     explicit: input.adult && input.explicit,
+    audience: input.audience,
     ownerId: viewer._id,
   });
   if (input.adult) forgetAdultCommunities();
@@ -154,6 +167,9 @@ export async function updateCommunity(viewer: IUser, slug: string, patch: z.infe
   if (!access.canManage) throw forbidden("Only owners and admins can edit this community.");
   if (patch.privacy && patch.privacy !== space.community.privacy && access.role !== "owner") {
     throw forbidden("Only the owner can change whether a community is public or private.");
+  }
+  if (patch.privacy === "public" && space.community.audience && space.community.audience !== "everyone") {
+    throw new ApiError(422, "A women-only or men-only community has to stay private.", { code: "audience_private" });
   }
 
   const set: Partial<ICommunity> = {};

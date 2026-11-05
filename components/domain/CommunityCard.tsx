@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { ArtCover } from "@/components/ui/Cover";
 import { Cover } from "@/components/ui/Cover";
 import { Icon } from "@/components/ui/Icon";
-import { getInterest } from "@/lib/constants";
+import { getInterest, audienceLabel } from "@/lib/constants";
 import type { CommunityCardDTO } from "@/lib/types";
 import { JoinButton, PointsNeededChip } from "./JoinButton";
 import { MemberCount } from "./CommunityRow";
@@ -51,6 +51,7 @@ export function CommunityCard({ community, onChange, tag }: { community: Communi
           </Link>
           <VerifiedCheck on={c.verified} size={15} />
           {c.privacy === "private" && <Icon name="lock" size={14} className="shrink-0 text-ink-muted" />}
+          {audienceLabel(c.audience) && <span className="shrink-0 rounded-full border border-line px-2 py-0.5 text-[11px] font-medium text-ink-muted">{audienceLabel(c.audience)}</span>}
           {c.official && (
             <span className="inline-flex size-4 shrink-0 items-center justify-center rounded-full bg-accent text-accent-ink" title="Official Klique community">
               <Icon name="check" size={10} />
@@ -59,7 +60,7 @@ export function CommunityCard({ community, onChange, tag }: { community: Communi
           )}
         </h3>
         <p className="mt-1 line-clamp-2 min-h-10 text-[13px] text-ink-muted">
-          {c.locked ? "A private community. Request to join and an admin will take a look." : c.description || `${getInterest(c.interest).name} in ${c.neighborhood || placeShort(c)}.`}
+          {c.locked ? (audienceLabel(c.audience) ? `${audienceLabel(c.audience)}. Request to join and an admin will take a look.` : "A private community. Request to join and an admin will take a look.") : c.description || `${getInterest(c.interest).name} in ${c.neighborhood || placeShort(c)}.`}
         </p>
         {!c.viewer.isMember && <PointsNeededChip need={c.minPointsJoin} className="mt-2" />}
         <div className="mt-4 flex items-center justify-between gap-3 border-t border-line pt-3.5">

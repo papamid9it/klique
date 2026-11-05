@@ -11,7 +11,9 @@ import { SelectField, TextArea, TextField } from "@/components/ui/Field";
 import { ImageField } from "@/components/ui/ImageField";
 import { Icon } from "@/components/ui/Icon";
 import { cx } from "@/components/ui/cx";
-import { LIMITS, isInterestId, type InterestId } from "@/lib/constants";
+import Link from "next/link";
+import { COMMUNITY_AUDIENCES, LIMITS, audienceRefusal, isInterestId, type CommunityAudience, type InterestId } from "@/lib/constants";
+import { useAuth } from "@/components/providers/AuthProvider";
 import type { CommunityPrivacy, GroupPolicy } from "@/lib/types";
 import { usePlanLimit } from "@/components/domain/account/PlanTab";
 
@@ -25,6 +27,8 @@ export function CommunityWizard({ onSubmit, onCancel }: { onSubmit: (input: Comm
   const categories = useCategories();
   const [step, setStep] = useState(0);
   const limit = usePlanLimit();
+  const { user } = useAuth();
+  const [audience, setAudience] = useState<CommunityAudience | null>(null);
   const [privacy, setPrivacy] = useState<CommunityPrivacy>("public");
   const [age, setAge] = useState({ adult: false, explicit: false });
   const [feedPolicy, setFeedPolicy] = useState<GroupPolicy>("off");
@@ -43,7 +47,7 @@ export function CommunityWizard({ onSubmit, onCancel }: { onSubmit: (input: Comm
     setErrors({});
     setGeneral(null);
     try {
-      await onSubmit({ name: name.trim(), description: description.trim(), interest, ...place, neighborhood: neighborhood.trim(), privacy, feedPolicy, coverImage: coverImage.trim() || null, ...(privacy === "private" ? age : {}) });
+      await onSubmit({ name: name.trim(), description: description.trim(), interest, ...place, neighborhood: neighborhood.trim(), privacy, audience: audience ?? "everyone", feedPolicy, coverImage: coverImage.trim() || null, ...(privacy === "private" ? age : {}) });
     } catch (err) {
       if (isApiError(err) && err.errors) {
         setErrors(err.errors);
@@ -71,19 +75,54 @@ export function CommunityWizard({ onSubmit, onCancel }: { onSubmit: (input: Comm
         </ol>
         <h2 className="text-[26px] leading-tight font-bold tracking-[-0.03em]">{step === 0 ? "Create your community" : step === 1 ? "Tell us about it" : "Where is it based?"}</h2>
         <p className="mx-auto mt-2 max-w-sm text-sm text-ink-muted">
-          {step === 0 ? "A community is where your people hang out: channels to chat, events to show up to. Who is it for?" : step === 1 ? "Give it a name and a face. You can change all of this later in settings." : "People nearby find you by place. Online-only? Pick where your core crew lives."}
+          {step === 0 ? "A community is where your people hang out: channels to chat, events to show up to." : step === 1 ? "Give it a name and a face. You can change all of this later in settings." : "People nearby find you by place. Online-only? Pick where your core crew lives."}
         </p>
       </div>
 
       <div className="px-6 py-6 sm:px-9">
         {step === 0 && (
           <div className="space-y-2.5">
-            {(
+            <fieldset className="mb-5">
+              <legend className="mb-2 text-[15px] font-semibold">Who is it for?</legend>
+              <div className="grid grid-cols-3 gap-2">
+                {COMMUNITY_AUDIENCES.map((a) => {
+                  const blocked = !!audienceRefusal(a.id, user?.gender);
+                  return (
+                    <button
+                      key={a.id}
+                      type="button"
+                      aria-pressed={audience === a.id}
+                      disabled={blocked}
+                      onClick={() => {
+                        setAudience(a.id);
+                        if (a.id !== "everyone") setPrivacy("private");
+                      }}
+                      className={cx("h-12 rounded-control border text-sm font-semibold transition disabled:opacity-40", audience === a.id ? "border-accent-text bg-raised" : "border-line hover:bg-raised")}
+                    >
+                      {a.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-2 text-[13px] text-ink-muted">
+                {audience ? `${COMMUNITY_AUDIENCES.find((a) => a.id === audience)!.hint} ` : ""}
+                You can&apos;t change this later.
+              </p>
+              {user?.gender === "unspecified" && (
+                <p className="mt-1 text-[13px] text-ink-muted">
+                  To start a women-only or men-only community, <Link href="/settings#profile" className="font-medium text-accent-text underline">set your gender first</Link>.
+                </p>
+              )}
+            </fieldset>
+            {audience && (
+              <p className="pt-1 text-[15px] font-semibold">How do people get in?</p>
+            )}
+            {audience && (
               [
                 ["public", "globe", "Open to everyone", "Anyone can find it, read it and join straight away."],
                 ["private", "lock", "By approval or invite", "Anyone can find it, but only members see inside. You approve requests or share invite links."],
               ] as const
-            ).map(([id, icon, title, hint]) => (
+            ).filter(([id]) => audience === "everyone" || id === "private").map(([id, icon, title, hint]) => (
               <button
                 key={id}
                 type="button"
@@ -98,7 +137,7 @@ export function CommunityWizard({ onSubmit, onCancel }: { onSubmit: (input: Comm
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-[15px] font-semibold">{title}</span>
-                  <span className="block text-[13px] text-ink-muted">{hint}</span>
+                  <span className="block text-[13px] text-ink-muted">{audience !== "everyone" && id === "private" ? `Only ${audience} can find it or ask to join. You approve requests or share invite links.` : hint}</span>
                 </span>
                 <Icon name="chevron-right" size={18} className="shrink-0 text-ink-muted" />
               </button>

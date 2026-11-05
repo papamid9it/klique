@@ -126,6 +126,22 @@ export function PersonDrawer({ userId, onClose, onChange }: { userId: string | n
               <Button size="sm" href={profileHref(u.handle)}>
                 <Icon name="user" size={14} /> View profile
               </Button>
+              <label className="inline-flex items-center gap-2 text-[13px]">
+                <span className="text-ink-muted">Gender</span>
+                <select
+                  value={u.gender}
+                  disabled={busy}
+                  onChange={(e) => {
+                    const gender = e.target.value as typeof u.gender;
+                    if (window.confirm(`Change @${u.handle}'s gender? People can't change it themselves once it's set, and this is logged.`)) void update({ gender }, "Gender corrected");
+                  }}
+                  className="h-9 rounded-control border border-line bg-raised px-2"
+                >
+                  <option value="unspecified">Not set</option>
+                  <option value="woman">Woman</option>
+                  <option value="man">Man</option>
+                </select>
+              </label>
               <Button size="sm" onClick={() => setSigningOut(true)} disabled={busy}>
                 <Icon name="logout" size={14} /> Sign out everywhere
               </Button>

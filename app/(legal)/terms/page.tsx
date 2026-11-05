@@ -81,6 +81,9 @@ export default function TermsPage() {
           <li>
             <strong>Who can join.</strong> A host can open a klique to everyone, to women only, to men only, or to a set number of women and men. These use the gender on your profile. Only a host whose profile says woman can start a women-only klique (and the same for men). If your profile doesn&apos;t say a gender, you can join kliques open to everyone and spots open to anyone. Setting a false gender to get into a klique breaks these terms.
           </li>
+          <li>
+            <strong>Women-only and men-only spaces.</strong> Kliques and communities can be for women only or men only. Your gender can only be set once on your profile; after that only Klique can correct it. Giving a false gender to get into one of these spaces breaks these terms, and can get you removed or your account closed. Klique doesn&apos;t check anyone&apos;s gender, so these spaces rely on what people say and on their admins.
+          </li>
           <li>Hosts decide who joins (or let people join straight away), and can remove people. Community owners and admins can moderate kliques in their community.</li>
           <li>
             <strong>Meet safely.</strong> Meet in public places, tell someone where you&apos;re going and who with, arrange your own way home, and leave if you feel unsafe. Don&apos;t share more personal information than you need to.

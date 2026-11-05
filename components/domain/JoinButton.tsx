@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { audienceLabel, audienceRefusal } from "@/lib/constants";
 import { errorMessage } from "@/app/ApiCore";
 import { SpaceService } from "@/app/services/SpaceService";
 import { useAuth } from "@/components/providers/AuthProvider";
@@ -91,6 +92,16 @@ export function JoinButton({
     ) : (
       <Button size={size} disabled className="!opacity-100">
         <Icon name="check" size={14} /> Joined
+      </Button>
+    );
+  }
+
+  // not for this person: it says who it's for, instead of a button that can only be refused
+  const refused = user ? audienceRefusal(community.audience, user.gender) : null;
+  if (refused) {
+    return (
+      <Button size={size} disabled title={refused}>
+        <Icon name="lock" size={14} /> {!iconOnly && audienceLabel(community.audience)}
       </Button>
     );
   }

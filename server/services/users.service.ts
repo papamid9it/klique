@@ -32,7 +32,11 @@ export async function updateMe(viewer: IUser, patch: z.infer<typeof profileUpdat
   if (patch.displayName !== undefined) set.displayName = patch.displayName;
   if (patch.bio !== undefined) set.bio = patch.bio;
   if (patch.pronouns !== undefined) set.pronouns = patch.pronouns;
-  if (patch.gender !== undefined) set.gender = patch.gender;
+  // set once, so nobody can switch to get into a women-only or men-only space; after that only Klique can correct it
+  if (patch.gender !== undefined && patch.gender !== (viewer.gender ?? "unspecified")) {
+    if (viewer.gender === "woman" || viewer.gender === "man") throw forbidden("Your gender is set. Contact Klique support if it needs correcting.");
+    set.gender = patch.gender;
+  }
   if (patch.presence !== undefined) set.presence = patch.presence as IUser["presence"];
   assertPlace(patch, false);
   if (patch.country !== undefined) set.country = patch.country;

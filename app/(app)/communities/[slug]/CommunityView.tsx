@@ -46,7 +46,7 @@ import { Button } from "@/components/ui/Button";
 import { Icon, type IconName } from "@/components/ui/Icon";
 import { ChannelListSkeleton, ChatSkeleton, Skeleton } from "@/components/ui/Skeleton";
 import { cx } from "@/components/ui/cx";
-import { slowModeLabel } from "@/lib/constants";
+import { slowModeLabel, audienceLabel, audienceRefusal } from "@/lib/constants";
 import { SlideOver } from "@/components/ui/SlideOver";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 
@@ -274,10 +274,10 @@ function CommunityWorkspace({ slug }: { slug: string }) {
             <span className="mx-auto mb-4 inline-flex size-12 items-center justify-center rounded-full bg-raised text-accent-text">
               <Icon name="lock" size={22} />
             </span>
-            <p className="eyebrow">Private community</p>
+            <p className="eyebrow">{audienceLabel(c.audience) ?? "Private community"}</p>
             <h1 className="mt-2 text-2xl font-semibold tracking-[-0.03em]">{c.name}</h1>
             <p className="mt-1 text-sm text-ink-muted">{placeLabel(c)}</p>
-            <p className="mx-auto mt-4 max-w-sm text-sm text-ink-muted">Channels, events and members are only visible to members. Send a request and an admin will take a look.</p>
+            <p className="mx-auto mt-4 max-w-sm text-sm text-ink-muted">{(user && audienceRefusal(c.audience, user.gender)) || "Channels, events and members are only visible to members. Send a request and an admin will take a look."}</p>
             <div className="mt-5 flex justify-center">
               <JoinButton
                 size="md"
@@ -288,7 +288,7 @@ function CommunityWorkspace({ slug }: { slug: string }) {
                 }}
               />
             </div>
-            <p className="mt-4 text-xs text-ink-muted">Got an invite link? Open it to join straight away.</p>
+            {!(user && audienceRefusal(c.audience, user.gender)) && <p className="mt-4 text-xs text-ink-muted">Got an invite link? Open it to join straight away.</p>}
           </section>
           {user && (
             <div className="mt-3 flex justify-center">

@@ -171,6 +171,23 @@ export const PROFILE_VISIBILITY: { id: ProfileVisibility; label: string; hint: s
   { id: "friends", label: "Friends only", hint: "Only your friends. Everyone else just sees your picture, banner and name." },
   { id: "private", label: "Just me", hint: "Nobody else. People just see your picture, banner and name." },
 ];
+/** Who a community is for, chosen when it's made and fixed after that. Women-only and men-only communities are always private. */
+export type CommunityAudience = "everyone" | "women" | "men";
+export const COMMUNITY_AUDIENCES: { id: CommunityAudience; label: string; hint: string }[] = [
+  { id: "everyone", label: "General", hint: "Anyone can be part of it." },
+  { id: "women", label: "Women only", hint: "Only women can join or ask to join. You approve each one." },
+  { id: "men", label: "Men only", hint: "Only men can join or ask to join. You approve each one." },
+];
+export const audienceLabel = (a?: CommunityAudience) => (a === "women" ? "Women only" : a === "men" ? "Men only" : null);
+/** Why this person can't join a community, or null when they can. */
+export function audienceRefusal(audience: CommunityAudience | undefined, gender: "woman" | "man" | "unspecified" | undefined): string | null {
+  if (!audience || audience === "everyone") return null;
+  const wanted = audience === "women" ? "woman" : "man";
+  if (gender === wanted) return null;
+  const line = `This community is for ${audience} only.`;
+  return gender === "woman" || gender === "man" ? line : `${line} If that's you, set your gender in your profile settings to join.`;
+}
+
 /** What someone sees on a profile they aren't allowed to see more of. */
 export const hiddenProfileText = (reason?: "private" | "members" | "friends") =>
   reason === "members" ? "Only people who share a community with them can see this profile." : reason === "friends" ? "Only their friends can see this profile." : "This profile is private.";

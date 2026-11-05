@@ -126,6 +126,8 @@ export const communityCreateSchema = z.object({
   /** 18+ (private only), and allowing explicit content (18+ only): policies/adult */
   adult: z.boolean().default(false),
   explicit: z.boolean().default(false),
+  /** who it's for; women or men only must be private */
+  audience: z.enum(["everyone", "women", "men"]).default("everyone"),
 });
 
 /** a points minimum to join or post (lib/points); 0 turns it off */
@@ -557,11 +559,13 @@ export const adminEventUpdateSchema = z.object({ cancelled: z.boolean(), note: z
 export const adminUserUpdateSchema = z
   .object({
     suspended: z.boolean().optional(),
+    /** correcting someone's gender: only Klique can, after it's set */
+    gender: z.enum(["woman", "man", "unspecified"]).optional(),
     /** sign them out on every device */
     signOut: z.literal(true).optional(),
     reason: z.string().trim().max(300).default(""),
   })
-  .refine((v) => v.suspended !== undefined || v.signOut, "Nothing to change");
+  .refine((v) => v.suspended !== undefined || v.signOut || v.gender !== undefined, "Nothing to change");
 
 export const adminDraftsQuery = z.object({ status: z.enum(["pending", "approved", "rejected"]).default("pending") });
 

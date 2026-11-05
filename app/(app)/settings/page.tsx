@@ -136,8 +136,10 @@ function ProfileForm({ me, onDraft }: { me: UserMe; onDraft?: (d: ProfileDraft) 
     setInterests((cur) => (cur.includes(id) ? (cur.length <= LIMITS.minInterests ? cur : cur.filter((x) => x !== id)) : cur.length >= LIMITS.maxInterests ? cur : [...cur, id]));
   }
 
+  const genderLocked = me.gender === "woman" || me.gender === "man";
   async function save(e: React.FormEvent) {
     e.preventDefault();
+    if (!genderLocked && gender !== "unspecified" && !window.confirm(`Set your gender to ${gender}? You can't change it yourself after this.`)) return;
     setBusy(true);
     setError(null);
     setFieldErrors({});
@@ -170,7 +172,7 @@ function ProfileForm({ me, onDraft }: { me: UserMe; onDraft?: (d: ProfileDraft) 
       <TextField label="Handle" value={`@${me.handle}`} readOnly hint="Your handle can't be changed." />
       <TextArea label="Bio" value={bio} onChange={(e) => setBio(e.target.value)} maxLength={LIMITS.bio} counter={LIMITS.bio} error={fieldErrors.bio} hint="A line or two about what you're into." />
       <TextField label="Pronouns (optional)" value={pronouns} onChange={(e) => setPronouns(e.target.value)} maxLength={LIMITS.pronouns} error={fieldErrors.pronouns} placeholder="e.g. she/her" hint="Shown after your name on your profile." />
-      <SelectField label="Gender (optional)" value={gender} onChange={(e) => setGender(e.target.value as UserMe["gender"])} hint="Never shown on your profile. Only used for kliques with gender rules (women only, men only, or set numbers of each).">
+      <SelectField label="Gender (optional)" value={gender} disabled={genderLocked} onChange={(e) => setGender(e.target.value as UserMe["gender"])} hint={genderLocked ? "Set, and can't be changed here. Contact Klique support if it needs correcting. Never shown on your profile." : "You can only set this once. Never shown on your profile. Only used for kliques and communities for women or men."}>
         <option value="unspecified">Prefer not to say</option>
         <option value="woman">Woman</option>
         <option value="man">Man</option>
