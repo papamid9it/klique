@@ -30,8 +30,32 @@ async function registration() {
   return (await navigator.serviceWorker.getRegistration("/")) ?? navigator.serviceWorker.register("/sw.js", { scope: "/" });
 }
 
+/**
+ * The desktop app has no browser push (Electron doesn't include it), so it shows notifications itself from the live
+ * connection (DesktopAlerts) while it's running. This is its on/off switch, kept on this device.
+ */
+const DESKTOP_OFF = "klique.desktopAlerts.off";
+export const inDesktopApp = () => typeof window !== "undefined" && !!(window as unknown as { kliqueDesktop?: unknown }).kliqueDesktop;
+function desktopSwitch(on: boolean) {
+  try {
+    if (on) localStorage.removeItem(DESKTOP_OFF);
+    else localStorage.setItem(DESKTOP_OFF, "1");
+  } catch {
+    /* storage blocked: it stays as it was */
+  }
+}
+export function desktopAlertsOn(): boolean {
+  if (!inDesktopApp() || !("Notification" in window) || Notification.permission !== "granted") return false;
+  try {
+    return !localStorage.getItem(DESKTOP_OFF);
+  } catch {
+    return true;
+  }
+}
+
 export const NotificationService = {
   async state(): Promise<WebPushState> {
+    if (inDesktopApp()) return !("Notification" in window) ? "unsupported" : Notification.permission === "denied" ? "denied" : desktopAlertsOn() ? "on" : "off";
     if (!supported()) return "unsupported";
     if (Notification.permission === "denied") return "denied";
     const key = (await api.get<Envelope<{ publicKey: string | null }>>("/api/me/web-push", undefined, { ttl: 300 })).data.publicKey;
@@ -43,6 +67,13 @@ export const NotificationService = {
 
   /** Ask the browser for permission and register this device. Must be called from a click. */
   async enable(): Promise<WebPushState> {
+    if (inDesktopApp()) {
+      if (!("Notification" in window)) return "unsupported";
+      const allowed = await Notification.requestPermission();
+      if (allowed !== "granted") return allowed === "denied" ? "denied" : "off";
+      desktopSwitch(true);
+      return "on";
+    }
     if (!supported()) return "unsupported";
     const permission = await Notification.requestPermission();
     if (permission !== "granted") return permission === "denied" ? "denied" : "off";
@@ -57,6 +88,10 @@ export const NotificationService = {
   },
 
   async disable(): Promise<WebPushState> {
+    if (inDesktopApp()) {
+      desktopSwitch(false);
+      return "off";
+    }
     if (!supported()) return "unsupported";
     const reg = await navigator.serviceWorker.getRegistration("/");
     const sub = await reg?.pushManager.getSubscription();
@@ -69,7 +104,7 @@ export const NotificationService = {
 
   /** Keep the server's copy fresh (browsers rotate subscriptions); call on app start. */
   async refresh() {
-    if (!supported() || Notification.permission !== "granted") return;
+    if (inDesktopApp() || !supported() || Notification.permission !== "granted") return;
     const reg = await navigator.serviceWorker.getRegistration("/");
     const sub = await reg?.pushManager.getSubscription();
     if (!sub) return;

@@ -202,7 +202,11 @@ async function fanOut(userIds: (Types.ObjectId | string)[], payload: PushPayload
   const scrubbed = await explicitScrub(payload, metaIn);
   const p = scrubbed.payload;
   const meta = scrubbed.meta;
-  if (!meta) return deliver(ids, p);
+  const alert = { title: p.title, body: p.body, href: urlFor(p.data) };
+  if (!meta) {
+    publish(ids.map((id) => rtChannel.user(id)), { type: "notify", category: "system", ref: null, inbox: false, alert });
+    return deliver(ids, p);
+  }
   const rows = await User.find({ _id: { $in: ids } }).select("notifyPrefs").lean<Pick<IUser, "_id" | "notifyPrefs">[]>();
   const inApp: string[] = [];
   let push: string[] = [];
@@ -218,10 +222,11 @@ async function fanOut(userIds: (Types.ObjectId | string)[], payload: PushPayload
     push = push.filter((id) => !skip.has(id));
   }
   await Promise.all([inApp.length ? toInbox(inApp, p, meta) : null, push.length ? deliver(push, p) : null]);
-  publish(
-    ids.map((id) => rtChannel.user(id)),
-    { type: "notify", category: meta.category, ref: meta.ref ?? null, inbox: inApp.length > 0 },
-  );
+  const event = { type: "notify" as const, category: meta.category, ref: meta.ref ?? null, inbox: inApp.length > 0 };
+  const alerted = new Set(push);
+  const quiet = ids.filter((id) => !alerted.has(id));
+  if (push.length) publish(push.map((id) => rtChannel.user(id)), { ...event, alert });
+  if (quiet.length) publish(quiet.map((id) => rtChannel.user(id)), event);
 }
 
 /** Send after the response has gone out (and keep serverless functions alive until it's done). */

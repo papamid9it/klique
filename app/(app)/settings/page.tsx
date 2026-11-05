@@ -1,5 +1,6 @@
 "use client";
 
+import { useInDesktopApp } from "@/lib/hooks/useInDesktopApp";
 import { ProfileEffect } from "@/components/ui/ProfileEffect";
 import { themeStyle } from "@/components/ui/profileTheme";
 import { setAutoplay } from "@/lib/autoplay";
@@ -614,6 +615,7 @@ function StyleTab({ me, go }: { me: UserMe; go: (t: Tab) => void }) {
 }
 
 export default function SettingsPage() {
+  const inDesktop = useInDesktopApp();
   const router = useRouter();
   const { user, status, signOut, requireAuth } = useAuth();
   const toast = useToast();
@@ -778,7 +780,7 @@ export default function SettingsPage() {
                 <Block title="What you hear about" intro="Only things addressed to you or waiting on you. Several of the same kind bundle into one line. Ordinary chat never notifies; it shows as unread dots and counts.">
                   <NotificationSettings />
                 </Block>
-                <Block title="This browser" intro="Push to this computer or phone browser. The app on your phone asks separately.">
+                <Block title={inDesktop ? "This computer" : "This browser"} intro={inDesktop ? "Notifications in the Klique desktop app. The app on your phone asks separately." : "Push to this computer or phone browser. The app on your phone asks separately."}>
                   <DeviceSettings />
                 </Block>
               </div>

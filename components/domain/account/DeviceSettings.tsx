@@ -5,6 +5,7 @@ import { errorMessage } from "@/app/ApiCore";
 import { NotificationService, type WebPushState } from "@/app/services/NotificationService";
 import { useToast } from "@/components/providers/ToastProvider";
 import { Switch } from "@/components/ui/Field";
+import { useInDesktopApp } from "@/lib/hooks/useInDesktopApp";
 
 const HINT: Record<WebPushState, string> = {
   on: "You'll get event reminders, new messages and event changes on this device, even when klique isn't open.",
@@ -14,10 +15,13 @@ const HINT: Record<WebPushState, string> = {
   unsupported: "This browser can't show notifications. Try Chrome, Edge, Firefox or Safari.",
 };
 
-/** Settings → My Account → This device: notifications in this browser. */
+const DESKTOP_HINT = "Get event reminders, new messages and event changes on this computer while the Klique app is running, even in the background.";
+
+/** Settings → My Account → This device: notifications in this browser, or in the desktop app. */
 export function DeviceSettings() {
   const toast = useToast();
   const [state, setState] = useState<WebPushState | null>(null);
+  const desktop = useInDesktopApp();
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -41,6 +45,6 @@ export function DeviceSettings() {
   }
 
   return (
-    <Switch label="Notifications on this device" hint={state ? HINT[state] : "Checking…"} checked={state === "on"} disabled={busy || !state || state === "unsupported" || state === "unavailable" || state === "denied"} onChange={(v) => void toggle(v)} />
+    <Switch label="Notifications on this device" hint={!state ? "Checking…" : desktop && (state === "on" || state === "off") ? DESKTOP_HINT : desktop && state === "denied" ? "Notifications are blocked for Klique. Allow them in your computer's settings, then restart the app." : HINT[state]} checked={state === "on"} disabled={busy || !state || state === "unsupported" || state === "unavailable" || state === "denied"} onChange={(v) => void toggle(v)} />
   );
 }

@@ -5,7 +5,7 @@ import { KLIQUE_SLUG } from "@/lib/constants";
 import { SoftLink } from "@/components/ui/SoftLink";
 import { isSamePage, softNavigate } from "@/lib/nav";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { ChannelService } from "@/app/services/ChannelService";
 import { SpaceService } from "@/app/services/SpaceService";
 import { TopicService } from "@/app/services/TopicService";
@@ -95,7 +95,16 @@ export function ChannelList({
   // channels and categories: admins, and roles with "Manage channels"
   const chMgr = manage || !!c.viewer.perms?.includes("manageChannels");
   const sections = useMemo(() => orderChannels(data), [data]);
+  // sections you've closed stay closed on this device until you open them again
+  const foldedKey = `klique.folded.${c.slug}`;
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    try {
+      setCollapsed(new Set(JSON.parse(localStorage.getItem(foldedKey) ?? "[]") as string[]));
+    } catch {
+      setCollapsed(new Set());
+    }
+  }, [foldedKey]);
   const [creating, setCreating] = useState<{ categoryId: string | null; sub?: string | null } | null>(null);
   const [editing, setEditing] = useState<{ channel: ChannelDTO; sub: string | null; tab: "overview" | "permissions" } | null>(null);
   const [deletingChannel, setDeletingChannel] = useState<{ channel: ChannelDTO; sub: string | null } | null>(null);
@@ -111,6 +120,11 @@ export function ChannelList({
     setCollapsed((s) => {
       const n = new Set(s);
       if (!n.delete(id)) n.add(id);
+      try {
+        localStorage.setItem(foldedKey, JSON.stringify([...n]));
+      } catch {
+        /* private window or storage full: it just won't be remembered */
+      }
       return n;
     });
 

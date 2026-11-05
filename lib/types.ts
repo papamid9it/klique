@@ -1336,7 +1336,7 @@ export type RealtimeEvent =
   | { type: "dm"; conversationId: Id }
   | { type: "topic"; communityId: Id; topicId: Id }
   /** something was sent to you (see lib/notifications); `ref` says what changed ("crew:<id>"…) so open pages refresh */
-  | { type: "notify"; category: string; ref: string | null; inbox: boolean }
+  | { type: "notify"; category: string; ref: string | null; inbox: boolean; /** what to show, for people who get pushes for this: the desktop app shows it itself, having no browser push */ alert?: { title: string; body: string; href: string } }
   /** something changed in a crew you're in (someone joined or left, a new chat message…) */
   | { type: "crew"; crewId: Id; chat?: boolean }
   /** your saved stickers changed (on another device, or this one) */
