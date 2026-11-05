@@ -33,6 +33,7 @@ export interface IUser {
   pronouns?: string;
   /** profile photos and short videos, in order (up to 4; how many show, and how many may be videos, is the plan's) */
   media?: { kind: "image" | "video"; url: string; poster: string | null }[];
+  socials?: { platform: string; handle: string }[];
   /** Lite or Pro (lib/plans), until `planUntil`; after that they're on Free. Set by subscriptions.service only. */
   plan?: "free" | "lite" | "pro";
   planUntil?: Date | null;
@@ -96,6 +97,7 @@ const UserSchema = new Schema<IUser>(
     city: { type: String, default: "lagos" },
     neighborhood: { type: String, default: "", maxlength: 60 },
     bio: { type: String, default: "", maxlength: 280 },
+    socials: { type: [{ _id: false, platform: { type: String, required: true }, handle: { type: String, required: true, maxlength: 60 } }], default: [] },
     pronouns: { type: String, default: "", maxlength: 40 },
     gender: { type: String, enum: ["woman", "man", "unspecified"], default: "unspecified" },
     media: {
@@ -108,7 +110,7 @@ const UserSchema = new Schema<IUser>(
     presence: { type: String, enum: PRESENCES.map((p) => p.id), default: "online" },
     interests: { type: [{ type: String }], default: [] },
     mood: { type: String, enum: MOOD_PREFS, default: DEFAULT_PREF },
-    profileVisibility: { type: String, enum: ["public", "members", "private"], default: "public" },
+    profileVisibility: { type: String, enum: ["public", "members", "friends", "private"], default: "public" },
     attendancePublic: { type: Boolean, default: true },
     // new accounts: anyone can send a message request (Nov 2026; was "shared")
     dmPolicy: { type: String, enum: ["everyone", "shared", "nobody"], default: "everyone" },

@@ -55,6 +55,8 @@ export interface UserPrivacy {
 
 export interface UserProfile extends UserBrief {
   bio: string;
+  /** their socials: a username per site (lib/socials), not sent for a profile you can't see */
+  socials?: import("./socials").SocialLink[];
   bannerUrl?: string | null;
   bannerColor?: string | null;
   /** state / region slug ("" when the country has none) */
@@ -126,7 +128,7 @@ export interface ProfileView {
   isSelf: boolean;
   /** false when privacy hides the profile body; `profile` then only has brief fields */
   visible: boolean;
-  hiddenReason?: "private" | "members";
+  hiddenReason?: "private" | "members" | "friends";
   communities: CommunityCardDTO[];
   hostedEvents: EventDTO[];
   /** upcoming RSVPs — empty unless attendance is public or isSelf */

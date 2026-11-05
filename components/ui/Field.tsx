@@ -120,6 +120,25 @@ export function SelectField({ label, hint, error, children, compact, status, ...
 }
 
 /** Accessible switch (role="switch"). */
+/** The on/off control itself, outlined: grey when off, the accent colour when on. */
+export function SwitchButton({ on, onChange, label, id, disabled, busy }: { on: boolean; onChange: (v: boolean) => void; label?: string; id?: string; disabled?: boolean; busy?: boolean }) {
+  return (
+    <button
+      id={id}
+      type="button"
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
+      aria-busy={busy || undefined}
+      disabled={disabled}
+      onClick={() => onChange(!on)}
+      className={cx("relative h-7 w-12 shrink-0 rounded-full border-2 bg-transparent transition-colors disabled:opacity-50", on ? "border-accent-text" : "border-ink-muted")}
+    >
+      <span className={cx("absolute top-[3px] left-[3px] size-[18px] rounded-full transition-[transform,background-color]", on ? "translate-x-5 bg-accent-text" : "bg-ink-muted")} />
+    </button>
+  );
+}
+
 export function Switch({ checked, onChange, label, hint, disabled, status }: { checked: boolean; onChange: (v: boolean) => void; label: string; hint?: string; disabled?: boolean; /** saves by itself: spinner, then "Saved" */ status?: SaveStatus }) {
   const id = useId();
   return (
@@ -132,18 +151,7 @@ export function Switch({ checked, onChange, label, hint, disabled, status }: { c
       </div>
       <span className="mt-0.5 flex shrink-0 items-center gap-2">
       <SaveMark status={status} />
-      <button
-        id={id}
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        aria-busy={status === "saving" || undefined}
-        disabled={disabled || status === "saving"}
-        onClick={() => onChange(!checked)}
-        className={cx("relative mt-0.5 h-6 w-11 shrink-0 rounded-full border transition disabled:opacity-50", checked ? "border-accent bg-accent" : "border-line bg-raised")}
-      >
-        <span className={cx("absolute top-0.5 left-0.5 size-[18px] rounded-full transition-transform", checked ? "translate-x-5 bg-accent-ink" : "bg-ink-muted")} />
-      </button>
+      <SwitchButton id={id} on={checked} onChange={onChange} disabled={disabled || status === "saving"} busy={status === "saving"} />
       </span>
     </div>
   );

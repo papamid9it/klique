@@ -29,20 +29,22 @@ export function useEventActions(event: EventDTO, onChange: (e: EventDTO) => void
     [onChange, toast],
   );
 
-  /** Tapping the active status again cancels it. */
+  /** Saying you're going when you already are just says so: cancelling is its own button, on the event's page. */
   const rsvp = useCallback(
-    (status: RsvpStatus = "going") => {
+    (status: RsvpStatus = "going", already?: string) => {
       if (!requireAuth()) return;
-      if (event.viewer.rsvp === status) return run("rsvp", () => EventService.cancelRsvp(event.id), "RSVP cancelled");
+      if (event.viewer.rsvp === status) return toast(already ?? "You're already going. Open the event to cancel.");
       return run("rsvp", () => EventService.rsvp(event.id, status), status === "going" ? "You're in. See you there." : "Marked as interested");
     },
-    [event.id, event.viewer.rsvp, requireAuth, run],
+    [event.id, event.viewer.rsvp, requireAuth, run, toast],
   );
+
+  const cancelRsvp = useCallback(() => run("rsvp", () => EventService.cancelRsvp(event.id), "RSVP cancelled"), [event.id, run]);
 
   const toggleSave = useCallback(() => {
     if (!requireAuth()) return;
     return run("save", () => (event.viewer.saved ? EventService.unsave(event.id) : EventService.save(event.id)), event.viewer.saved ? "Removed from saved" : "Saved for later");
   }, [event.id, event.viewer.saved, requireAuth, run]);
 
-  return { busy, rsvp, toggleSave };
+  return { busy, rsvp, cancelRsvp, toggleSave };
 }

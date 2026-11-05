@@ -232,7 +232,7 @@ function HostMenu({ event, onEdit, onCancel, onDelete }: { event: EventDTO; onEd
 function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDTO) => void }) {
   const router = useRouter();
   const toast = useToast();
-  const { busy, rsvp, toggleSave } = useEventActions(event, onChange);
+  const { busy, rsvp, cancelRsvp, toggleSave } = useEventActions(event, onChange);
   const attendees = useApi(() => EventService.attendees(event.id), [event.id, event.goingCount, event.interestedCount], { key: `attendees:${event.id}` });
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -411,7 +411,7 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
                   variant={going ? "primary" : "secondary"}
                   size="lg"
                   className="w-full"
-                  onClick={() => rsvp("going")}
+                  onClick={() => rsvp("going", "You're already going. Cancel below if your plans change.")}
                   loading={busy === "rsvp"}
                   disabled={event.isFull && !going}
                   aria-pressed={going}
@@ -426,7 +426,7 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
                 </Button>
                 {going && <ReminderPrompt />}
                 {event.viewer.rsvp && (
-                  <button type="button" onClick={() => rsvp(event.viewer.rsvp!)} className="w-full text-center text-xs text-ink-muted underline hover:text-ink" disabled={busy === "rsvp"}>
+                  <button type="button" onClick={() => void cancelRsvp()} className="h-11 w-full rounded-control border border-danger/60 text-sm font-semibold text-danger transition-colors hover:bg-danger/10 disabled:opacity-50" disabled={busy === "rsvp"}>
                     Cancel my RSVP
                   </button>
                 )}

@@ -13,9 +13,10 @@ import { useToast } from "@/components/providers/ToastProvider";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
+import { SocialRow } from "@/components/ui/SocialIcons";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { UserName } from "@/components/ui/UserName";
-import { LIMITS, type Presence } from "@/lib/constants";
+import { LIMITS, type Presence, hiddenProfileText } from "@/lib/constants";
 import { useApi } from "@/lib/hooks/useApi";
 import type { ProfileView } from "@/lib/types";
 import { PresenceDot, ProfileActions, ProfileBanner } from "./ProfileParts";
@@ -75,12 +76,13 @@ export function ProfileCard({ handle, onClose, onExpand }: { handle: string; onC
         <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[13px] text-ink-muted">
           <span className="font-mono text-xs">@{p.handle}</span>
           {p.pronouns && <span>· {p.pronouns}</span>}
-          <PointsPill n={p.points} />
+          {view.visible && <PointsPill n={p.points} />}
         </p>
+        {view.visible && <SocialRow socials={p.socials} className="mt-2.5" />}
         {view.visible && p.bio && <p className="mt-3 line-clamp-3 text-[13px] leading-relaxed whitespace-pre-wrap">{p.bio}</p>}
         {/* their photos and videos: swipe through */}
         {/* the gallery shows in the full profile only, not on this quick card */}
-        {!view.visible && <p className="mt-3 text-[13px] text-ink-muted">{view.hiddenReason === "members" ? "Only people who share a community with them can see more." : "This profile is private."}</p>}
+        {!view.visible && <p className="mt-3 text-[13px] text-ink-muted">{hiddenProfileText(view.hiddenReason)}</p>}
 
         {view.isSelf ? <SelfActions view={view} onSaved={(presence) => setData((d) => (d ? { ...d, profile: { ...d.profile, presence } } : d))} onClose={onClose} /> : <OtherActions view={view} onFriendship={(friendship) => setData((d) => (d ? { ...d, friendship } : d))} onReload={() => void reload()} onClose={onClose} />}
 

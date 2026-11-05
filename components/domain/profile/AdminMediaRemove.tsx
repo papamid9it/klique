@@ -113,7 +113,7 @@ export function ProfileGallery({ userId, media, isSelf, onNavigate }: { userId: 
         <AdminMediaRemove userId={userId} media={shown} onRemoved={(url) => setGone((g) => [...g, url])} />
         {isSelf && (
           <Link href="/settings#gallery" onClick={onNavigate} className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-control border border-line text-sm font-semibold hover:bg-raised">
-            <Icon name="edit" size={15} /> Manage photos
+            <Icon name="edit" size={15} /> Manage gallery
           </Link>
         )}
       </Modal>

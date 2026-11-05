@@ -40,6 +40,7 @@ import { StylePicker, themeOf, type StyleDraft } from "@/components/domain/accou
 import { UnlockDialog, styleAccess, useHypeWallet } from "@/components/domain/account/Points";
 import { PlanTab } from "@/components/domain/account/PlanTab";
 import { ProfileMediaEditor } from "@/components/domain/account/ProfileMediaEditor";
+import { SocialsEditor } from "@/components/domain/account/SocialsEditor";
 import { AgeSettings } from "@/components/domain/account/AgeSettings";
 import type { StyleKey } from "@/lib/wallet";
 import { UserName } from "@/components/ui/UserName";
@@ -52,14 +53,15 @@ import { MOODS } from "@/lib/moods";
 import type { UserMe } from "@/lib/types";
 import { DevelopersTab } from "@/components/domain/account/DevelopersTab";
 
-type Tab = "account" | "profile" | "gallery" | "style" | "plan" | "developers" | "privacy" | "blocked" | "notifications" | "appearance";
-const GROUPS: { title: string; items: { id: Tab; label: string; icon: "user" | "edit" | "image" | "asterisk" | "coin" | "code" | "shield" | "ban" | "sliders" | "bell" }[] }[] = [
+type Tab = "account" | "profile" | "gallery" | "socials" | "style" | "plan" | "developers" | "privacy" | "blocked" | "notifications" | "appearance";
+const GROUPS: { title: string; items: { id: Tab; label: string; icon: "user" | "edit" | "image" | "link" | "asterisk" | "coin" | "code" | "shield" | "ban" | "sliders" | "bell" }[] }[] = [
   {
     title: "User settings",
     items: [
       { id: "account", label: "My Account", icon: "user" },
       { id: "profile", label: "Profile", icon: "edit" },
       { id: "gallery", label: "Gallery", icon: "image" },
+      { id: "socials", label: "Socials", icon: "link" },
       // profile designs are off for now (PROFILE_DESIGNS_ENABLED)
       ...(PROFILE_DESIGNS_ENABLED ? [{ id: "style" as const, label: "Profile style", icon: "asterisk" as const }] : []),
       { id: "plan", label: "Plan & points", icon: "coin" },
@@ -70,9 +72,9 @@ const GROUPS: { title: string; items: { id: Tab; label: string; icon: "user" | "
   },
   { title: "App settings", items: [{ id: "notifications", label: "Notifications", icon: "bell" }, { id: "appearance", label: "Appearance", icon: "sliders" }] },
 ];
-const TITLES: Record<Tab, string> = { account: "My Account", profile: "Profile", gallery: "Gallery", style: "Profile style", plan: "Plan & points", developers: "Developers", privacy: "Privacy & Safety", blocked: "Blocked people", notifications: "Notifications", appearance: "Appearance" };
+const TITLES: Record<Tab, string> = { account: "My Account", profile: "Profile", gallery: "Gallery", socials: "Socials", style: "Profile style", plan: "Plan & points", developers: "Developers", privacy: "Privacy & Safety", blocked: "Blocked people", notifications: "Notifications", appearance: "Appearance" };
 /** old anchors (#messages, #safety, #mood…) still land somewhere sensible */
-const HASH: Record<string, Tab> = { account: "account", profile: "profile", gallery: "gallery", photos: "gallery", media: "gallery", ...(PROFILE_DESIGNS_ENABLED ? { style: "style" as const, design: "style" as const } : {}), plan: "plan", developers: "developers", bots: "developers", subscription: "plan", hype: "plan", points: "plan", wallet: "plan", rank: "plan", privacy: "privacy", messages: "privacy", safety: "privacy", blocked: "blocked", blocks: "blocked", appearance: "appearance", mood: "appearance", notifications: "notifications" };
+const HASH: Record<string, Tab> = { account: "account", profile: "profile", gallery: "gallery", socials: "socials", photos: "gallery", media: "gallery", ...(PROFILE_DESIGNS_ENABLED ? { style: "style" as const, design: "style" as const } : {}), plan: "plan", developers: "developers", bots: "developers", subscription: "plan", hype: "plan", points: "plan", wallet: "plan", rank: "plan", privacy: "privacy", messages: "privacy", safety: "privacy", blocked: "blocked", blocks: "blocked", appearance: "appearance", mood: "appearance", notifications: "notifications" };
 
 /** A titled block inside a tab: small caps heading, optional intro, then the content. */
 function Block({ title, intro, children }: { title: string; intro?: string; children: React.ReactNode }) {
@@ -747,6 +749,7 @@ export default function SettingsPage() {
             {tab === "account" && <AccountTab me={user} go={select} onSignOut={out} onEverywhere={everywhere} busy={busy} />}
             {tab === "profile" && <ProfileTab me={user} />}
             {tab === "gallery" && <ProfileMediaEditor me={user} />}
+            {tab === "socials" && <SocialsEditor me={user} />}
             {/* designs are the point here: they keep moving (globals.css kq-live) */}
             {tab === "style" && PROFILE_DESIGNS_ENABLED && (
               <div className="kq-live">

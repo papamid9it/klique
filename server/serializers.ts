@@ -1,4 +1,5 @@
 import { activePlan } from "@/lib/plans";
+import type { SocialLink } from "@/lib/socials";
 import { eventEndMs } from "@/lib/event-time";
 import type { Types } from "mongoose";
 import { isAdult } from "./policies/adult";
@@ -76,6 +77,7 @@ const badgeOf = (u: Partial<Pick<IUser, "plan" | "planUntil" | "email">>): UserB
 export const toProfile = (u: IUser): UserProfile => ({
   ...toBrief(u),
   bio: u.bio,
+  socials: (u.socials ?? []) as SocialLink[],
   bannerUrl: u.bannerUrl ?? null,
   bannerColor: u.bannerColor ?? null,
   region: u.region ?? "",

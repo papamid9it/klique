@@ -14,16 +14,35 @@ import { InterestChip } from "@/components/ui/Chip";
 import { cx } from "@/components/ui/cx";
 import { Cover } from "@/components/ui/Cover";
 import { Icon } from "@/components/ui/Icon";
+import { Modal } from "@/components/ui/Modal";
 import { ProfileSkeleton } from "@/components/ui/Skeleton";
-import { getInterest } from "@/lib/constants";
+import { getInterest, hiddenProfileText } from "@/lib/constants";
 import { compactCount, dateChip } from "@/lib/format";
 import { useApi } from "@/lib/hooks/useApi";
 import type { CommunityCardDTO, EventDTO, UserBrief, UserProfile } from "@/lib/types";
 import { longDate, monthYear, PresenceDot, ProfileActions, ProfileBanner, useMutualCommunities, ZoomAvatar } from "./ProfileParts";
 import { PointsPill } from "./ProfileCard";
 import { UserName } from "@/components/ui/UserName";
+import { SocialRow } from "@/components/ui/SocialIcons";
 
 type Tab = "activity" | "friends" | "communities";
+/** the most a list shows on a profile; the rest are behind See all */
+const SHOWN = 5;
+
+function SeeAll({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} className="h-11 w-full rounded-control border border-line text-sm font-semibold transition-colors hover:bg-raised">
+      {label}
+    </button>
+  );
+}
+
+function AllEvents({ handle, kind, onNavigate }: { handle: string; kind: "going" | "hosting"; onNavigate: () => void }) {
+  const { data, loading, error } = useApi(() => ProfileService.events(handle, kind), [handle, kind]);
+  if (loading) return <p className="text-sm text-ink-muted">Loading…</p>;
+  if (error || !data) return <p className="text-sm text-ink-muted">Couldn&apos;t load these. Please try again.</p>;
+  return <>{data.map((e) => <EventListRow key={e.id} e={e} onNavigate={onNavigate} />)}</>;
+}
 
 function CommunityListRow({ c, onNavigate }: { c: CommunityCardDTO; onNavigate: () => void }) {
   return (
@@ -89,6 +108,7 @@ function ProfileBody({ handle, onClose, onOpenPerson, tryOn }: { handle: string;
   const { data: view, loading, status, setData, reload } = useApi(() => ProfileService.get(handle), [handle], { key: `profile:${handle}` });
   const mutual = useMutualCommunities(view);
   const [tab, setTab] = useState<Tab>("activity");
+  const [all, setAll] = useState<"going" | "hosting" | "friends" | "communities" | null>(null);
   // your own friends (for others, the mutual ones come with the profile)
   const myFriends = useApi(view?.isSelf ? () => FriendService.list() : null, [view?.isSelf]);
 
@@ -105,6 +125,7 @@ function ProfileBody({ handle, onClose, onOpenPerson, tryOn }: { handle: string;
   const p = tryOn ? { ...view.profile, ...tryOn } : view.profile;
   const place = [p.neighborhood, placeLabel(p)].filter(Boolean).join(", ");
   const friends = view.isSelf ? (myFriends.data ?? []).map((f) => f.user) : view.mutualFriends;
+  const sharedCommunities = view.isSelf ? view.communities : mutual;
   const tabs: { id: Tab; label: string }[] = view.isSelf
     ? [
         { id: "activity", label: "About" },
@@ -135,8 +156,9 @@ function ProfileBody({ handle, onClose, onOpenPerson, tryOn }: { handle: string;
           <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[13px] text-ink-muted">
             <span className="font-mono">@{p.handle}</span>
             {p.pronouns && <span>· {p.pronouns}</span>}
-            <PointsPill n={p.points} />
+            {view.visible && <PointsPill n={p.points} />}
           </p>
+          {view.visible && <SocialRow socials={p.socials} className="mt-3" />}
 
           <div className="mt-4">
             <ProfileActions view={view} layout="stack" onFriendship={(friendship) => setData((d) => (d ? { ...d, friendship } : d))} onReload={() => void reload()} onNavigate={onClose} />
@@ -180,7 +202,7 @@ function ProfileBody({ handle, onClose, onOpenPerson, tryOn }: { handle: string;
             </div>
           ) : (
             <p className="mt-5 rounded-card border border-line bg-surface p-4 text-[13px] text-ink-muted">
-              {view.hiddenReason === "members" ? "Only people who share a community with them can see this profile." : "This profile is private."}
+              {hiddenProfileText(view.hiddenReason)}
             </p>
           )}
         </div>
@@ -216,28 +238,43 @@ function ProfileBody({ handle, onClose, onOpenPerson, tryOn }: { handle: string;
                 </p>
               )}
               {upcoming.length > 0 && <h3 className="eyebrow pt-1">Going to</h3>}
-              {upcoming.map((e) => (
+              {upcoming.slice(0, SHOWN).map((e) => (
                 <EventListRow key={e.id} e={e} onNavigate={onClose} />
               ))}
+              {upcoming.length > SHOWN && <SeeAll label="See all" onClick={() => setAll("going")} />}
               {view.hostedEvents.length > 0 && <h3 className="eyebrow pt-3">Hosting</h3>}
-              {view.hostedEvents.map((e) => (
+              {view.hostedEvents.slice(0, SHOWN).map((e) => (
                 <EventListRow key={e.id} e={e} onNavigate={onClose} />
               ))}
+              {view.hostedEvents.length > SHOWN && <SeeAll label="See all" onClick={() => setAll("hosting")} />}
               {upcoming.length === 0 && view.hostedEvents.length === 0 && !view.attendanceHidden && <Empty>No recent activity.</Empty>}
             </>
           ) : tab === "friends" ? (
             friends.length ? (
-              friends.map((u) => <PersonListRow key={u.id} u={u} onOpen={onOpenPerson} />)
+              <>
+                {friends.slice(0, SHOWN).map((u) => <PersonListRow key={u.id} u={u} onOpen={onOpenPerson} />)}
+                {friends.length > SHOWN && <SeeAll label={`See all · ${friends.length}`} onClick={() => setAll("friends")} />}
+              </>
             ) : (
               <Empty>{view.isSelf ? "No friends yet. Add people from their profile." : "No mutual friends yet."}</Empty>
             )
-          ) : (view.isSelf ? view.communities : mutual).length ? (
-            (view.isSelf ? view.communities : mutual).map((c) => <CommunityListRow key={c.id} c={c} onNavigate={onClose} />)
+          ) : sharedCommunities.length ? (
+            <>
+              {sharedCommunities.slice(0, SHOWN).map((c) => <CommunityListRow key={c.id} c={c} onNavigate={onClose} />)}
+              {sharedCommunities.length > SHOWN && <SeeAll label={`See all · ${sharedCommunities.length}`} onClick={() => setAll("communities")} />}
+            </>
           ) : (
             <Empty>You don&apos;t share a community yet.</Empty>
           )}
         </div>
       </div>
+      <Modal open={!!all} onClose={() => setAll(null)} title={all === "going" ? "Going to" : all === "hosting" ? "Hosting" : all === "friends" ? (view.isSelf ? "Friends" : "Mutual friends") : view.isSelf ? "Communities" : "Mutual communities"}>
+        <div className="space-y-2.5">
+          {all === "going" || all === "hosting" ? <AllEvents handle={p.handle} kind={all} onNavigate={onClose} /> : null}
+          {all === "friends" ? friends.map((u) => <PersonListRow key={u.id} u={u} onOpen={(h) => { setAll(null); onOpenPerson(h); }} />) : null}
+          {all === "communities" ? sharedCommunities.map((c) => <CommunityListRow key={c.id} c={c} onNavigate={onClose} />) : null}
+        </div>
+      </Modal>
     </div>
   );
 }

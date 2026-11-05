@@ -164,12 +164,16 @@ export const DM_POLICIES: { id: DmPolicy; label: string; hint: string }[] = [
   { id: "nobody", label: "No one new", hint: "Only your friends can start a chat with you." },
 ];
 
-export type ProfileVisibility = "public" | "members" | "private";
+export type ProfileVisibility = "public" | "members" | "friends" | "private";
 export const PROFILE_VISIBILITY: { id: ProfileVisibility; label: string; hint: string }[] = [
-  { id: "public", label: "Public", hint: "Anyone can view your scene card." },
-  { id: "members", label: "Shared communities", hint: "Only people who share a community with you." },
-  { id: "private", label: "Just me", hint: "Your profile is hidden from everyone else." },
+  { id: "public", label: "Public", hint: "Anyone can see your photos, socials and details." },
+  { id: "members", label: "Shared communities", hint: "Only people who share a community with you. Everyone else just sees your picture, banner and name." },
+  { id: "friends", label: "Friends only", hint: "Only your friends. Everyone else just sees your picture, banner and name." },
+  { id: "private", label: "Just me", hint: "Nobody else. People just see your picture, banner and name." },
 ];
+/** What someone sees on a profile they aren't allowed to see more of. */
+export const hiddenProfileText = (reason?: "private" | "members" | "friends") =>
+  reason === "members" ? "Only people who share a community with them can see this profile." : reason === "friends" ? "Only their friends can see this profile." : "This profile is private.";
 
 export const REPORT_REASONS = [
   { id: "spam", label: "Spam or scam" },

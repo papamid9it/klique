@@ -1,7 +1,7 @@
 import { parseScope, scopeFilter } from "@/lib/places";
 import type { Types } from "mongoose";
 import type { z } from "zod";
-import type { Paginated, ProfileView, UserBrief, UserMe } from "@/lib/types";
+import type { EventDTO, Paginated, ProfileView, UserBrief, UserMe } from "@/lib/types";
 import { ApiError, forbidden, notFound } from "../http/errors";
 import { Community, type ICommunity } from "../models/Community";
 import { Membership } from "../models/Membership";
@@ -16,7 +16,7 @@ import type { peopleQuery, profileUpdateSchema } from "../validators/schemas";
 import { blockedByMe, blockedEitherWay, hiddenUserIds, shareCommunity } from "./blocks";
 import { assertPlace, escapeRegex, sid } from "./helpers";
 import { hostedEventsOf, upcomingRsvpEventsOf } from "./events.service";
-import { friendStatus, mutualFriends } from "./friends.service";
+import { areFriends, friendStatus, mutualFriends } from "./friends.service";
 import { messagingEligibility, unreadTotal } from "./messaging.service";
 import { unreadNotificationCount } from "./notifications.service";
 import { assertEffectAvailable } from "./effects.service";
@@ -49,6 +49,7 @@ export async function updateMe(viewer: IUser, patch: z.infer<typeof profileUpdat
   if (patch.avatarUrl !== undefined) set.avatarUrl = patch.avatarUrl || null;
   if (patch.bannerUrl !== undefined) set.bannerUrl = patch.bannerUrl || null;
   if (patch.bannerColor !== undefined) set.bannerColor = patch.bannerColor || null;
+  if (patch.socials !== undefined) set.socials = patch.socials;
   // a profile effect has to be one people can pick; then designs cost Hype: putting on one you haven't unlocked
   // (an animated picture included) is refused
   if (patch.profileEffect && patch.profileEffect !== viewer.profileEffect) await assertEffectAvailable(patch.profileEffect);
@@ -77,6 +78,26 @@ export async function updateMe(viewer: IUser, patch: z.infer<typeof profileUpdat
  * A profile as `viewer` is allowed to see it. Privacy is decided here, on the
  * server — a hidden profile never leaves this function with its body attached.
  */
+/** Whether this viewer may see this person's details, and if not, why. */
+async function profileAccess(viewer: IUser | null, user: IUser, isSelf: boolean): Promise<{ visible: boolean; hiddenReason?: ProfileView["hiddenReason"] }> {
+  if (isSelf) return { visible: true };
+  if (user.profileVisibility === "private") return { visible: false, hiddenReason: "private" };
+  if (user.profileVisibility === "members" && (!viewer || !(await shareCommunity(viewer._id, user._id)))) return { visible: false, hiddenReason: "members" };
+  if (user.profileVisibility === "friends" && (!viewer || !(await areFriends(viewer._id, user._id)))) return { visible: false, hiddenReason: "friends" };
+  return { visible: true };
+}
+
+/** "See all" on a profile: the events they're going to or hosting, under the same rules as the profile itself. */
+export async function profileEvents(viewer: IUser | null, handle: string, kind: "going" | "hosting"): Promise<EventDTO[]> {
+  const user = await User.findOne({ handle: handle.toLowerCase() }).lean<IUser>();
+  if (!user) throw notFound("We couldn't find that person.");
+  const isSelf = !!viewer && sid(viewer._id) === sid(user._id);
+  if (viewer && !isSelf && (await blockedEitherWay(viewer._id, user._id))) throw notFound("We couldn't find that person.");
+  if (!(await profileAccess(viewer, user, isSelf)).visible) return [];
+  if (kind === "hosting") return hostedEventsOf(viewer, user._id, 50);
+  return isSelf || user.attendancePublic ? upcomingRsvpEventsOf(viewer, user._id, 50) : [];
+}
+
 export async function getProfile(viewer: IUser | null, handle: string): Promise<ProfileView> {
   const user = await User.findOne({ handle: handle.toLowerCase() }).lean<IUser>();
   if (!user) throw notFound("We couldn't find that person.");
@@ -87,19 +108,7 @@ export async function getProfile(viewer: IUser | null, handle: string): Promise<
     throw notFound("We couldn't find that person.");
   }
 
-  let visible = true;
-  let hiddenReason: ProfileView["hiddenReason"];
-  if (!isSelf) {
-    if (user.profileVisibility === "private") {
-      visible = false;
-      hiddenReason = "private";
-    } else if (user.profileVisibility === "members") {
-      if (!viewer || !(await shareCommunity(viewer._id, user._id))) {
-        visible = false;
-        hiddenReason = "members";
-      }
-    }
-  }
+  const { visible, hiddenReason } = await profileAccess(viewer, user, isSelf);
 
   const [messaging, iBlocked, friendship, mutual] = await Promise.all([
     messagingEligibility(viewer, user),
@@ -113,7 +122,7 @@ export async function getProfile(viewer: IUser | null, handle: string): Promise<
   if (!visible) {
     return {
       // a hidden profile still wears its banner and name style; only the details stay private
-      profile: { ...toBrief(user), bannerUrl: user.bannerUrl ?? null, bannerColor: user.bannerColor ?? null, bio: "", region: "", neighborhood: "", interests: [], joinedAt: user.createdAt.toISOString(), points: user.points ?? 0, pronouns: user.pronouns ?? "", presence: user.presence ?? "online", profileTheme: null, profileEffect: null, media: [] },
+      profile: { ...toBrief(user), bannerUrl: user.bannerUrl ?? null, bannerColor: user.bannerColor ?? null, bio: "", region: "", neighborhood: "", interests: [], joinedAt: "", points: 0, pronouns: "", presence: "invisible", profileTheme: null, profileEffect: null, media: [] },
       isSelf,
       visible: false,
       hiddenReason,

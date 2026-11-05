@@ -4,6 +4,7 @@ import { DM_POLICIES, LIMITS, PRESENCES, PROFILE_VISIBILITY, REPORT_REASONS, SLO
 import { FRAME_IDS, NAME_EFFECT_IDS } from "@/lib/cosmetics";
 import { MOOD_PREFS } from "@/lib/moods";
 import { REACTION_IDS, STICKER_IDS } from "@/lib/reactions";
+import { SOCIAL_IDS, socialHandle, socialOf, type SocialId } from "@/lib/socials";
 import { FEED_TITLE_MAX, TEXT_BACKGROUND_IDS, TEXT_CARD_MAX } from "@/lib/feedText";
 import { NOTIFY_CATEGORY_IDS } from "@/lib/notifications";
 import { blankToUndef, handle, httpUrl, interestId, objectId, pageQuery, placeDefault, placeOptional, placeRequired, whereParam } from "./common";
@@ -73,6 +74,20 @@ export const profileUpdateSchema = z.object({
   avatarUrl: clearableUrl,
   bannerUrl: clearableUrl,
   bannerColor: z.union([z.string().regex(/^#[0-9a-fA-F]{6}$/), z.literal(""), z.null()]).optional(),
+  /** the whole list; one username per site */
+  socials: z
+    .array(z.object({ platform: z.enum(SOCIAL_IDS), handle: z.string().max(200) }))
+    .max(SOCIAL_IDS.length)
+    .transform((list, ctx) => {
+      const out = new Map<string, { platform: SocialId; handle: string }>();
+      for (const x of list) {
+        const handle = socialHandle(x.platform, x.handle);
+        if (handle) out.set(x.platform, { platform: x.platform, handle });
+        else ctx.addIssue({ code: "custom", message: `That doesn't look like a ${socialOf(x.platform)?.name} username.` });
+      }
+      return [...out.values()];
+    })
+    .optional(),
   avatarFrame: z.union([z.enum(FRAME_IDS as [string, ...string[]]), z.literal(""), z.null()]).optional(),
   nameEffect: z.union([z.enum(NAME_EFFECT_IDS as [string, ...string[]]), z.literal(""), z.null()]).optional(),
   profileTheme: z.object({ primary: z.string().regex(/^#[0-9a-fA-F]{6}$/), accent: z.string().regex(/^#[0-9a-fA-F]{6}$/) }).nullable().optional(),
@@ -701,6 +716,7 @@ export const planConfigSchema = z.object({
   emojiSlots: perPlan(0, 500).optional(),
 });
 /** your profile photos and videos, in order (the plan decides how many: profile-media.service) */
+export const profileEventsQuery = z.object({ kind: z.enum(["going", "hosting"]) });
 export const profileMediaSchema = z.object({ items: z.array(z.object({ kind: z.enum(["image", "video"]), url: mediaUrl, poster: z.union([mediaUrl, z.null()]).default(null) })).max(24, "Up to 24") });
 export const planCheckoutSchema = z.object({ plan: z.enum(["lite", "pro"]) });
 export const planVerifySchema = z.object({ reference: z.string().trim().regex(/^ksb_[a-f0-9]{18}$/) });
