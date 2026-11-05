@@ -49,6 +49,9 @@ function NewAdForm() {
 
   const pricing = useApi(() => CampaignService.pricing(), [], { key: "ad-pricing" });
   const hosted = useApi(authed ? () => EventService.list({ scope: "hosted", page: 1 }) : null, [authed]);
+  // Klique's own events can only be promoted by the Klique team, so nobody else is offered them
+  const hosting = useApi(authed ? () => EventService.hosting() : null, [authed]);
+  const siteAdmin = !!hosting.data?.siteAdmin;
   const mine = useApi(authed ? () => CommunityService.mine() : null, [authed], { key: "my-communities" });
   const original = useApi(authed && copyId ? () => CampaignService.get(copyId) : null, [authed, copyId]);
 
@@ -60,6 +63,9 @@ function NewAdForm() {
   const [body, setBody] = useState("");
   const [imageUrl, setImageUrl] = useState("");
   const [ctaLabel, setCtaLabel] = useState("Learn more");
+  useEffect(() => {
+    if (hosting.data && !hosting.data.siteAdmin && kind === "event") setKind("community");
+  }, [hosting.data, kind]);
   const [url, setUrl] = useState("");
   const [placements, setPlacements] = useState<AdPlacement[]>(["home-feed", "events-list"]);
   const [reach, setReach] = useState<AdReach>("city");
@@ -159,8 +165,8 @@ function NewAdForm() {
       <div className="min-w-0 space-y-7">
         <fieldset className="space-y-2">
           <legend className="mb-2 text-base font-semibold">What do you want to promote?</legend>
-          <div className="grid gap-2 sm:grid-cols-3">
-            {KINDS.map((k) => (
+          <div className={cx("grid gap-2", siteAdmin ? "sm:grid-cols-3" : "sm:grid-cols-2")}>
+            {KINDS.filter((k) => k.id !== "event" || siteAdmin).map((k) => (
               <label key={k.id} className={cx("flex cursor-pointer flex-col gap-1.5 rounded-card border bg-surface p-3.5 transition", kind === k.id ? "border-accent-text" : "border-line hover:border-ink-muted/50")}>
                 <input type="radio" name="kind" className="sr-only" checked={kind === k.id} onChange={() => setKind(k.id)} />
                 <Icon name={k.icon} size={18} className="text-accent-text" />

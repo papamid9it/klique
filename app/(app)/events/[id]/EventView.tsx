@@ -384,7 +384,7 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
                   </Button>
                 )}
                 {/* only Klique's events reach everyone, so only they can be promoted */}
-                {event.community?.official && !event.isPast && !cancelled && (
+                {event.community?.official && event.viewer.isHost && !event.isPast && !cancelled && (
                   <Button href={`/ads/new?event=${event.id}`} variant="secondary" className="w-full">
                     <Icon name="megaphone" size={15} /> Promote this event
                   </Button>
