@@ -380,6 +380,11 @@ export async function canSeeEventInFeeds(event: IEvent, viewer: IUser | null): P
   return activeRole(m) !== null;
 }
 
+/** Can this event's ad be shown to this viewer? It has to open for them, and an 18+ community's events are never advertised. */
+export async function canSeeEventAd(event: IEvent, viewer: IUser | null): Promise<boolean> {
+  return !(await inAdultCommunity(event)) && canViewEvent(event, viewer);
+}
+
 /**
  * Can this viewer open the event's page? Everything they'd see in feeds, plus the events of a public community
  * (its page lists them to visitors so they can decide to join; going needs joining). A private community's and a

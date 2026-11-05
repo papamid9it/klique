@@ -1,5 +1,8 @@
 "use client";
 
+import { SpaceService } from "@/app/services/SpaceService";
+import { errorMessage, isApiError } from "@/app/ApiCore";
+import { useToast } from "@/components/providers/ToastProvider";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { CrewService } from "@/app/services/CrewService";
@@ -51,9 +54,37 @@ export function EventCrews({ event }: { event: EventDTO }) {
   const crewsApi = useEventCrews(event.id);
   const { data, reload } = crewsApi;
   const [starting, setStarting] = useState(false);
+  const [joining, setJoining] = useState(false);
+  const toast = useToast();
   if (event.online) return null;
 
   const total = data && !crewsApi.query ? data.total : null;
+  // not in the community yet: one tap joins it and opens the form (entry questions are answered on its page)
+  const join = data?.joinSpace && !data.joinSpace.sub && !data.joinSpace.ask && !data.joinSpace.requested ? data.joinSpace : null;
+  const joinAndStart = async () => {
+    if (!join || !requireAuth()) return;
+    setJoining(true);
+    try {
+      const res = await SpaceService.join(join.slug);
+      if (res.data.status === "joined" || res.data.status === "already_member") {
+        await reload();
+        setStarting(true);
+      } else {
+        toast(res.data.message, "success");
+        await reload();
+      }
+    } catch (e) {
+      toast(errorMessage(e), "error");
+      if (isApiError(e) && e.status === 400) router.push(`/communities/${join.slug}`);
+    } finally {
+      setJoining(false);
+    }
+  };
+  const joinButton = join ? (
+    <Button variant="primary" size="sm" loading={joining} onClick={() => void joinAndStart()}>
+      <Icon name="plus" size={14} /> Join {join.name} &amp; start a klique
+    </Button>
+  ) : null;
   const startButton = data?.canStart ? (
     <Button variant="primary" size="sm" onClick={() => requireAuth() && setStarting(true)}>
       <Icon name="plus" size={14} /> Start a klique
@@ -67,7 +98,7 @@ export function EventCrews({ event }: { event: EventDTO }) {
           <h2 className="text-base font-semibold">Going together</h2>
           <p className="text-sm text-ink-muted">{total ? `${total} ${total === 1 ? "klique" : "kliques"} heading there. Join one near you.` : "Kliques meet up first and go together."}</p>
         </div>
-        {startButton}
+        {startButton ?? joinButton}
       </div>
 
       {data && !data.canJoin && !data.mine && data.startBlockedReason && data.total > 0 && <p className="mb-2 text-sm text-ink-muted">{data.startBlockedReason}</p>}

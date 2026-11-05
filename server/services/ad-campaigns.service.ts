@@ -2,7 +2,7 @@ import "server-only";
 import { randomBytes } from "node:crypto";
 import { Types } from "mongoose";
 import type { z } from "zod";
-import { AD_PLACEMENTS, adPrice, adStoreProductId, adStoreTier, pricingOf, type AdPlacement, type AdPricing } from "@/lib/ads";
+import { AD_PLACEMENTS, MAX_AD_INTERESTS, adPrice, adStoreProductId, adStoreTier, pricingOf, type AdPlacement, type AdPricing } from "@/lib/ads";
 import { parseScope, scopeLabel } from "@/lib/places";
 import type { AdCampaignDTO, AdCampaignPhase } from "@/lib/types";
 import { adminEmails, appUrl, paystackConfig } from "../env";
@@ -19,6 +19,7 @@ import { GHOST, loadBriefs } from "../serializers";
 import type { adCampaignSchema, adPricingSchema, adStoreVerifySchema } from "../validators/schemas";
 import { assertVerified } from "./account.service";
 import { sid } from "./helpers";
+import { isSiteAdmin } from "../policies/hosting";
 import { isKlique, kliqueId } from "./klique-id";
 import { paystack } from "./promotions.service";
 import { appleSale, googleSale, storeAccountToken, storeBillingStatus, testSalesAllowed } from "./store-billing.service";
@@ -96,6 +97,7 @@ async function toDtos(rows: IAdCampaign[], withUser = false): Promise<AdCampaign
       event: e ? { id: sid(e._id), title: e.title, startsAt: e.startsAt.toISOString(), coverImage: e.coverImage } : null,
       community: k ? { slug: k.slug, name: k.name, coverImage: k.coverImage } : null,
       placements: c.placements,
+      interests: c.interests ?? [],
       reach: c.reach,
       place: c.place,
       placeLabel: placeLabelOf(c),
@@ -147,7 +149,7 @@ async function cleanInput(viewer: IUser, input: z.infer<typeof adCampaignSchema>
   const startOn = input.startOn ? new Date(input.startOn) : null;
   if (startOn && +startOn < Date.now() - DAY_MS) throw badRequest("Pick a start date that hasn't passed.");
 
-  const base: Partial<IAdCampaign> = { kind: input.kind, placements, reach: input.reach, place, days: input.days, startOn, eventId: null, communityId: null };
+  const base: Partial<IAdCampaign> = { kind: input.kind, placements, interests: [], reach: input.reach, place, days: input.days, startOn, eventId: null, communityId: null };
 
   if (input.kind === "event") {
     const e = input.eventId && Types.ObjectId.isValid(input.eventId) ? await Event.findById(input.eventId).lean<IEvent>() : null;
@@ -155,14 +157,20 @@ async function cleanInput(viewer: IUser, input: z.infer<typeof adCampaignSchema>
     let mine = sid(e.hostId) === sid(viewer._id);
     if (!mine && e.communityId) mine = !!(await Membership.exists({ userId: viewer._id, communityId: e.communityId, subcommunityId: null, status: "active", role: { $in: ["owner", "admin"] } }));
     if (!mine) throw forbidden("You can promote events you host, or events in a community you run.");
-    // A community's events are for its members only, so advertising one to everyone would break that: only
-    // Klique's own events (which everyone sees anyway) can be. Communities can advertise themselves instead.
-    if (e.subcommunityId || !e.communityId || String(e.communityId) !== String(await kliqueId())) throw badRequest("Only Klique's own events can be advertised: a community's events are for its members. Promote the community instead, and people who join will see its events.");
+    // Klique's own, or a public community's: whoever sees the ad can open it, and joins the community to go or to
+    // start a klique. A private community's, a group's and an 18+ community's stay with their members.
+    if (e.subcommunityId) throw badRequest("A group's events are for its members, so they can't be advertised.");
+    if (e.review) throw badRequest(e.review === "pending" ? "This event is still waiting for approval." : "This event wasn't approved.");
+    const home = e.communityId ? await Community.findById(e.communityId).select("privacy adult").lean<Pick<ICommunity, "privacy" | "adult">>() : null;
+    const ours = !!e.communityId && String(e.communityId) === String(await kliqueId());
+    if (!home || home.adult || (!ours && home.privacy !== "public")) throw badRequest("Only events in a public community can be advertised. A private or 18+ community's events stay with its members.");
     if (e.cancelled) throw badRequest("This event was cancelled.");
     const daysLeft = Math.ceil((+e.startsAt - Math.max(Date.now(), +(startOn ?? 0))) / DAY_MS);
     if (daysLeft < 1) throw badRequest("This event starts too soon to advertise it.");
     if (input.days > daysLeft) throw badRequest(`The event starts in ${daysLeft} ${daysLeft === 1 ? "day" : "days"}. Pick ${daysLeft} or fewer.`);
-    return { ...base, eventId: e._id, advertiser: "", title: e.title, body: "", imageUrl: e.coverImage, ctaLabel: "See event", url: "" };
+    const interests = [...new Set(input.interests?.length ? input.interests : [e.interest])];
+    if (interests.length > MAX_AD_INTERESTS) throw badRequest(`Pick up to ${MAX_AD_INTERESTS} interests.`);
+    return { ...base, interests, eventId: e._id, advertiser: "", title: e.title, body: "", imageUrl: e.coverImage, ctaLabel: "See event", url: "" };
   }
   if (input.kind === "community") {
     const c = input.communitySlug ? await Community.findOne({ slug: input.communitySlug.toLowerCase() }).lean<ICommunity>() : null;
@@ -203,12 +211,24 @@ function tellAdmins(viewer: IUser, c: Pick<IAdCampaign, "title" | "amount">) {
   );
 }
 
+/** The Klique team promoting Klique's own event: it would only be paying itself, so it's free and needs no review. */
+async function isOwnKliqueAd(viewer: IUser, fields: Partial<IAdCampaign>): Promise<boolean> {
+  if (!isSiteAdmin(viewer) || fields.kind !== "event" || !fields.eventId) return false;
+  const e = await Event.findById(fields.eventId).select("communityId").lean<Pick<IEvent, "communityId">>();
+  return !!e?.communityId && String(e.communityId) === String(await kliqueId());
+}
+
 export async function submitCampaign(viewer: IUser, input: z.infer<typeof adCampaignSchema>): Promise<AdCampaignDTO> {
   assertVerified(viewer);
   rateLimit(`ad-submit:${sid(viewer._id)}`, 10, DAY_MS);
   const pricing = await getAdPricing();
   const fields = await cleanInput(viewer, input, pricing);
-  const amount = adPrice(pricing, fields.placements!, fields.reach!, fields.days!);
+  if (await isOwnKliqueAd(viewer, fields)) {
+    const own = await AdCampaign.create({ ...fields, userId: viewer._id, amount: 0, currency: "NGN", status: "approved", reviewedBy: viewer._id, reviewedAt: new Date() });
+    await startRun(own.toObject(), "manual");
+    return getMyCampaign(viewer, sid(own._id));
+  }
+  const amount = adPrice(pricing, fields.placements!, fields.reach!, fields.days!, fields.interests?.length || 1);
   const doc = await AdCampaign.create({ ...fields, userId: viewer._id, amount, currency: "NGN", status: "pending" });
   tellAdmins(viewer, doc);
   return (await toDtos([doc.toObject()]))[0];
@@ -234,7 +254,12 @@ export async function updateCampaign(viewer: IUser, id: string, input: z.infer<t
   if (!["pending", "changes", "rejected", "approved"].includes(c.status)) throw conflict("This ad is already paid for, so it can't be changed.");
   const pricing = await getAdPricing();
   const fields = await cleanInput(viewer, input, pricing);
-  const amount = adPrice(pricing, fields.placements!, fields.reach!, fields.days!);
+  if (await isOwnKliqueAd(viewer, fields)) {
+    await AdCampaign.updateOne({ _id: c._id }, { $set: { ...fields, amount: 0, status: "approved", reviewNote: "", reviewedBy: viewer._id, reviewedAt: new Date(), paymentRef: null, paymentUrl: null } });
+    await startRun((await AdCampaign.findById(c._id).lean<IAdCampaign>())!, "manual");
+    return getMyCampaign(viewer, id);
+  }
+  const amount = adPrice(pricing, fields.placements!, fields.reach!, fields.days!, fields.interests?.length || 1);
   // a changed ad can cost something else, so the next payment starts a fresh checkout
   await AdCampaign.updateOne({ _id: c._id }, { $set: { ...fields, amount, status: "pending", reviewNote: "", reviewedBy: null, reviewedAt: null, paymentRef: null, paymentUrl: null } });
   tellAdmins(viewer, { title: fields.title ?? c.title, amount });
@@ -289,6 +314,8 @@ async function startRun(c: IAdCampaign, method: "paystack" | "manual" | "apple" 
   const now = Date.now();
   const startsAt = new Date(Math.max(now, +(claimed.startOn ?? 0)));
   const endsAt = new Date(+startsAt + claimed.days * DAY_MS);
+  // an event's ad goes to people into what it's about (an ad sent before you could choose: the event's own interest)
+  const event = claimed.eventId ? await Event.findById(claimed.eventId).select("interest").lean<Pick<IEvent, "interest">>() : null;
   const ad = await Ad.create({
     name: `${claimed.kind === "event" ? "Event" : claimed.kind === "community" ? "Community" : "Ad"}: ${claimed.title} · ${claimed.days}d`,
     kind: claimed.kind === "event" ? "event" : "brand",
@@ -302,7 +329,7 @@ async function startRun(c: IAdCampaign, method: "paystack" | "manual" | "apple" 
     url: claimed.url,
     slots: claimed.placements,
     places: claimed.reach === "world" || !claimed.place ? [] : [claimed.place],
-    interests: [],
+    interests: claimed.interests?.length ? claimed.interests : event?.interest ? [event.interest] : [],
     keywords: [],
     startsAt,
     endsAt,

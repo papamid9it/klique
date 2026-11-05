@@ -9,6 +9,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { errorMessage, isApiError } from "@/app/ApiCore";
+import { SpaceService } from "@/app/services/SpaceService";
 import { EventService } from "@/app/services/EventService";
 import { DateChip, PriceTag } from "@/components/domain/EventCard";
 import { PersonRow } from "@/components/domain/PersonRow";
@@ -38,6 +39,7 @@ import type { EventDTO } from "@/lib/types";
 import { EventCrewsRow } from "@/components/domain/crews/EventCrews";
 import { EventPanel } from "@/components/domain/events/EventPanel";
 import { crewsHref } from "@/components/domain/crews/parts";
+import { canPromoteEvent } from "@/lib/ads";
 import { useAuth } from "@/components/providers/AuthProvider";
 
 /** Lagos (UTC+1) wall-clock parts for form inputs. */
@@ -233,6 +235,8 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
   const router = useRouter();
   const toast = useToast();
   const { busy, rsvp, cancelRsvp, toggleSave } = useEventActions(event, onChange);
+  const { requireAuth: requireJoinAuth } = useAuth();
+  const [joining, setJoining] = useState(false);
   const attendees = useApi(() => EventService.attendees(event.id), [event.id, event.goingCount, event.interestedCount], { key: `attendees:${event.id}` });
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -248,6 +252,25 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
   const canCheckIn = !!now && (event.viewer.isHost || event.viewer.canEdit) && +now >= +new Date(event.startsAt) && +now <= end + 7 * 86_400_000;
 
   const going = event.viewer.rsvp === "going";
+  // one tap: join the community, then go. Entry questions have to be answered on the community's page.
+  async function joinAndGo(slug: string) {
+    if (!requireJoinAuth()) return;
+    setJoining(true);
+    try {
+      const res = await SpaceService.join(slug);
+      if (res.data.status !== "joined" && res.data.status !== "already_member") {
+        toast(res.data.message, "success");
+        router.push(`/communities/${slug}`);
+        return;
+      }
+      await rsvp("going", "You're already going. Cancel below if your plans change.");
+    } catch (e) {
+      toast(errorMessage(e), "error");
+      if (isApiError(e) && e.status === 400) router.push(`/communities/${slug}`);
+    } finally {
+      setJoining(false);
+    }
+  }
   const [partnerAd] = useAds("event-page", { interest: event.interest, exclude: event.id });
   const isHost = event.viewer.isHost;
   // back from paying on Paystack: confirm, then show the new total
@@ -383,8 +406,7 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
                     <Icon name="users" size={15} /> Who came?
                   </Button>
                 )}
-                {/* only Klique's events reach everyone, so only they can be promoted */}
-                {event.community?.official && event.viewer.isHost && !event.isPast && !cancelled && (
+                {canPromoteEvent(event) && (event.viewer.isHost || event.viewer.canEdit) && !cancelled && (
                   <Button href={`/ads/new?event=${event.id}`} variant="secondary" className="w-full">
                     <Icon name="megaphone" size={15} /> Promote this event
                   </Button>
@@ -399,10 +421,16 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
             ) : event.viewer.mustJoin && !event.viewer.rsvp && event.community ? (
               // community events are for members: join first, then go
               <>
-                <p className="text-sm text-ink-muted">This event is for members of {event.community.name}. Join to go and to see their other events.</p>
-                <Button variant="primary" size="lg" className="w-full" href={`/communities/${event.community.slug}`}>
-                  <Icon name="users" size={16} /> Join {event.community.name}
-                </Button>
+                <p className="text-sm text-ink-muted">This event is for members of {event.community.name}. Joining lets you go, join its kliques and see its other events.</p>
+                {event.community.privacy === "public" ? (
+                  <Button variant="primary" size="lg" className="w-full" loading={joining} disabled={event.isFull} onClick={() => void joinAndGo(event.community!.slug)}>
+                    <Icon name="users" size={16} /> Join {event.community.name} &amp; go
+                  </Button>
+                ) : (
+                  <Button variant="primary" size="lg" className="w-full" href={`/communities/${event.community.slug}`}>
+                    <Icon name="users" size={16} /> Join {event.community.name}
+                  </Button>
+                )}
               </>
             ) : (
               <>

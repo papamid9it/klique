@@ -17,8 +17,8 @@ import { Icon } from "@/components/ui/Icon";
 import { ImageField } from "@/components/ui/ImageField";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cx } from "@/components/ui/cx";
-import { AD_PLACEMENTS, AD_REACHES, adPrice, type AdPlacement, type AdReach } from "@/lib/ads";
-import { KLIQUE_SLUG } from "@/lib/constants";
+import { AD_PLACEMENTS, AD_REACHES, MAX_AD_INTERESTS, adInterestFactor, adPrice, canPromoteEvent, type AdPlacement, type AdReach } from "@/lib/ads";
+import { getInterest, KLIQUE_SLUG, visibleCategories } from "@/lib/constants";
 import { formatPrice } from "@/lib/format";
 import { useApi } from "@/lib/hooks/useApi";
 import { cityName, countryName } from "@/lib/places";
@@ -26,7 +26,7 @@ import type { AdCampaignInput } from "@/lib/types";
 
 type Kind = "event" | "community" | "brand";
 const KINDS: { id: Kind; title: string; hint: string; icon: "calendar" | "users" | "megaphone" }[] = [
-  { id: "event", title: "A Klique event", hint: "One of Klique's own events (the ones everyone sees). Other events are for their community's members.", icon: "calendar" },
+  { id: "event", title: "An event", hint: "One you host in a public community. People who see it join the community to go.", icon: "calendar" },
   { id: "community", title: "A community", hint: "One you own or run, so more people join.", icon: "users" },
   { id: "brand", title: "Your own ad", hint: "A picture, a headline and a link: a business, a product, a shop.", icon: "megaphone" },
 ];
@@ -49,9 +49,6 @@ function NewAdForm() {
 
   const pricing = useApi(() => CampaignService.pricing(), [], { key: "ad-pricing" });
   const hosted = useApi(authed ? () => EventService.list({ scope: "hosted", page: 1 }) : null, [authed]);
-  // Klique's own events can only be promoted by the Klique team, so nobody else is offered them
-  const hosting = useApi(authed ? () => EventService.hosting() : null, [authed]);
-  const siteAdmin = !!hosting.data?.siteAdmin;
   const mine = useApi(authed ? () => CommunityService.mine() : null, [authed], { key: "my-communities" });
   const original = useApi(authed && copyId ? () => CampaignService.get(copyId) : null, [authed, copyId]);
 
@@ -63,10 +60,8 @@ function NewAdForm() {
   const [body, setBody] = useState("");
   const [imageUrl, setImageUrl] = useState("");
   const [ctaLabel, setCtaLabel] = useState("Learn more");
-  useEffect(() => {
-    if (hosting.data && !hosting.data.siteAdmin && kind === "event") setKind("community");
-  }, [hosting.data, kind]);
   const [url, setUrl] = useState("");
+  const [adInterests, setAdInterests] = useState<string[]>([]);
   const [placements, setPlacements] = useState<AdPlacement[]>(["home-feed", "events-list"]);
   const [reach, setReach] = useState<AdReach>("city");
   const [days, setDays] = useState("7");
@@ -92,14 +87,14 @@ function NewAdForm() {
     setCtaLabel(o.ctaLabel);
     setUrl(o.kind === "brand" ? o.url : "");
     setPlacements(o.placements as AdPlacement[]);
+    setAdInterests(o.interests ?? []);
     setReach(o.reach);
     setDays(String(o.days));
     setStartOn(editId ? toDateInput(o.startOn) : "");
   }, [o, editId]);
 
   // what can be promoted
-  // only Klique's events reach everyone; a community's events are for its members, so they can't be advertised
-  const events = (hosted.data?.items ?? []).filter((e) => e.community?.official && !e.subcommunity && !e.isPast);
+  const events = (hosted.data?.items ?? []).filter(canPromoteEvent);
   const extraEvent = useApi(eventId && !events.some((e) => e.id === eventId) ? () => EventService.get(eventId) : null, [eventId, events.length]);
   const eventChoices = extraEvent.data && !events.some((e) => e.id === extraEvent.data!.id) ? [extraEvent.data, ...events] : events;
   const communities = (mine.data ?? []).filter((c) => (c.role === "owner" || c.role === "admin") && c.privacy === "public" && c.slug !== KLIQUE_SLUG); // everyone is already in Klique
@@ -113,8 +108,15 @@ function NewAdForm() {
 
   const p = pricing.data;
   const nDays = Math.max(0, Math.round(Number(days) || 0));
-  const total = p ? adPrice(p, placements, reach, nDays) : 0;
-  const perDay = p ? adPrice(p, placements, reach, 1) : 0;
+  // an event's ad starts with the event's own interest; more can be added, and each costs more
+  const eventInterest = kind === "event" ? (pickedEvent?.interest ?? "") : "";
+  const interestsChosen = kind !== "event" ? [] : adInterests.length ? adInterests : eventInterest ? [eventInterest] : [];
+  const nInterests = Math.max(1, interestsChosen.length);
+  const toggleInterest = (id: string) => setAdInterests(interestsChosen.includes(id) ? (interestsChosen.length > 1 ? interestsChosen.filter((x) => x !== id) : interestsChosen) : interestsChosen.length < MAX_AD_INTERESTS ? [...interestsChosen, id] : interestsChosen);
+  // the Klique team promoting Klique's own event would only be paying itself: free, and it starts straight away
+  const ownKlique = kind === "event" && !!user?.isAdmin && !!pickedEvent?.community?.official;
+  const total = p && !ownKlique ? adPrice(p, placements, reach, nDays, nInterests) : 0;
+  const perDay = p && !ownKlique ? adPrice(p, placements, reach, 1, nInterests) : 0;
 
   const pc = pickedCommunity.data;
   const preview =
@@ -141,6 +143,7 @@ function NewAdForm() {
       ctaLabel: kind === "brand" ? ctaLabel : undefined,
       url: kind === "brand" ? url : undefined,
       placements,
+      ...(kind === "event" ? { interests: interestsChosen } : {}),
       reach,
       place,
       days: nDays,
@@ -150,7 +153,7 @@ function NewAdForm() {
     try {
       if (editId) await CampaignService.update(editId, input);
       else await CampaignService.submit(input);
-      toast(editId ? "Changes sent for review" : "Sent for review. We'll notify you.", "success");
+      toast(ownKlique ? "Your ad is running" : editId ? "Changes sent for review" : "Sent for review. We'll notify you.", "success");
       router.push("/ads");
     } catch (err) {
       setFormError(errorMessage(err));
@@ -165,8 +168,8 @@ function NewAdForm() {
       <div className="min-w-0 space-y-7">
         <fieldset className="space-y-2">
           <legend className="mb-2 text-base font-semibold">What do you want to promote?</legend>
-          <div className={cx("grid gap-2", siteAdmin ? "sm:grid-cols-3" : "sm:grid-cols-2")}>
-            {KINDS.filter((k) => k.id !== "event" || siteAdmin).map((k) => (
+          <div className="grid gap-2 sm:grid-cols-3">
+            {KINDS.map((k) => (
               <label key={k.id} className={cx("flex cursor-pointer flex-col gap-1.5 rounded-card border bg-surface p-3.5 transition", kind === k.id ? "border-accent-text" : "border-line hover:border-ink-muted/50")}>
                 <input type="radio" name="kind" className="sr-only" checked={kind === k.id} onChange={() => setKind(k.id)} />
                 <Icon name={k.icon} size={18} className="text-accent-text" />
@@ -178,7 +181,7 @@ function NewAdForm() {
         </fieldset>
 
         {kind === "event" && (
-          <SelectField label="Event" value={eventId} onChange={(e) => setEventId(e.target.value)} hint={eventChoices.length ? "Upcoming Klique events you host." : "Only Klique's own events can be advertised: a community's events are for its members. Promote your community instead, and people who join will see its events."}>
+          <SelectField label="Event" value={eventId} onChange={(e) => { setEventId(e.target.value); setAdInterests([]); }} hint={eventChoices.length ? "Upcoming events you host." : "Events you host in a public community show up here. A private community's, a group's and an 18+ community's events can't be advertised."}>
             <option value="">Pick an event</option>
             {eventChoices.map((e) => (
               <option key={e.id} value={e.id}>
@@ -186,6 +189,22 @@ function NewAdForm() {
               </option>
             ))}
           </SelectField>
+        )}
+        {kind === "event" && pickedEvent && (
+          <fieldset>
+            <legend className="mb-1 text-sm font-semibold">Who should see it?</legend>
+            <p className="mb-2 text-xs text-ink-muted">People into these, in the place you choose below. Up to {MAX_AD_INTERESTS}.{p && p.interestExtra > 0 ? ` Each one after the first adds ${Math.round(p.interestExtra * 100)}%.` : ""}</p>
+            <div className="flex flex-wrap gap-1.5">
+              {[...interestsChosen.filter((id) => !visibleCategories().some((c) => c.id === id)).map((id) => getInterest(id)), ...visibleCategories()].map((c) => {
+                const on = interestsChosen.includes(c.id);
+                return (
+                  <button key={c.id} type="button" aria-pressed={on} disabled={!on && interestsChosen.length >= MAX_AD_INTERESTS} onClick={() => toggleInterest(c.id)} className={cx("rounded-full border px-3 py-1.5 text-[13px] font-medium transition disabled:opacity-40", on ? "border-transparent bg-accent text-accent-ink" : "border-line hover:bg-raised")}>
+                    {c.name}
+                  </button>
+                );
+              })}
+            </div>
+          </fieldset>
         )}
         {kind === "community" && (
           <div className="space-y-4">
@@ -263,12 +282,15 @@ function NewAdForm() {
             <span className="text-ink-muted">Days</span>
             <span className="font-mono">× {nDays}</span>
           </p>
+          {kind === "event" && nInterests > 1 && p && (
+            <p className="text-xs text-ink-muted">Includes {nInterests} interests (× {adInterestFactor(p, nInterests).toFixed(1)}).</p>
+          )}
           <p className="flex justify-between border-t border-line pt-2 text-base font-semibold">
             <span>Total</span>
             <span className="font-mono">{formatPrice(total, "NGN")}</span>
           </p>
           <p className="text-xs text-ink-muted">
-            Shown {placeName === "everywhere" ? "everywhere" : `in ${placeName}`}. You only pay after an admin approves it.
+            Shown {placeName === "everywhere" ? "everywhere" : `in ${placeName}`}. {ownKlique ? "Klique's own events are free and start straight away." : "You only pay after an admin approves it."}
           </p>
           {formError && (
             <p role="alert" className="text-sm font-medium text-danger">
@@ -276,7 +298,7 @@ function NewAdForm() {
             </p>
           )}
           <Button type="submit" variant="primary" className="w-full" loading={busy} disabled={!placements.length || !nDays}>
-            {editId ? "Send changes for review" : "Send for review"}
+            {ownKlique ? "Start ad" : editId ? "Send changes for review" : "Send for review"}
           </Button>
           <Button href="/ads" variant="ghost" className="w-full">
             Cancel

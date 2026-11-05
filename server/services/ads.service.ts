@@ -10,7 +10,7 @@ import { Community, type ICommunity } from "../models/Community";
 import { Membership } from "../models/Membership";
 import { Report } from "../models/Safety";
 import type { IUser } from "../models/User";
-import { canSeeEventInFeeds } from "../policies/access";
+import { canSeeEventAd } from "../policies/access";
 import { kliqueId } from "./klique-id";
 import { Promotion, type IPromotion } from "../models/Promotion";
 import { loadBriefs, toEvents } from "../serializers";
@@ -60,12 +60,12 @@ export async function serveAds(
   const rows = await Ad.find({ status: "active", slots: q.slot }).lean<IAd[]>();
   let eligible = rows.filter((a) => isLive(a, now) && matches(a, { where: q.where, interest: q.interest, q: q.slot === "search" ? (q.search ?? "") : undefined, viewer }));
 
-  // Promoted events must still be on, in this viewer's feeds (Klique's, or a community they're in), and not the
-  // page they're already on.
+  // Promoted events must still be on, open for this viewer (Klique's, a public community's, or one they're in: an ad
+  // is how a community's event reaches new people, who join to go), and not the page they're already on.
   const eventIds = eligible.filter((a) => a.kind === "event" && a.eventId).map((a) => a.eventId!);
   const events = eventIds.length ? await Event.find({ _id: { $in: eventIds }, cancelled: false, review: null, startsAt: { $gt: now } }).lean<IEvent[]>() : [];
   const visible = new Map<string, IEvent>();
-  for (const e of events) if (await canSeeEventInFeeds(e, viewer)) visible.set(sid(e._id), e);
+  for (const e of events) if (await canSeeEventAd(e, viewer)) visible.set(sid(e._id), e);
   // Sponsored communities: still public, and not one this viewer is already in.
   const commIds = eligible.filter((a) => a.kind === "community" && a.communityId).map((a) => a.communityId!);
   const comms = commIds.length ? await Community.find({ _id: { $in: commIds }, privacy: "public" }).lean<ICommunity[]>() : [];

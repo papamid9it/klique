@@ -433,6 +433,7 @@ export async function listEventCrews(viewer: IUser | null, eventId: string, opts
     mine: mineCard?.id ?? (mineRow ? sid(mineRow.crewId) : null),
     canStart: reason === null,
     startBlockedReason: reason,
+    joinSpace: viewer ? await spaceNeed(viewer, event) : null,
     canJoin,
   };
 }

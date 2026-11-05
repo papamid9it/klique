@@ -1,3 +1,4 @@
+import type { EventDTO } from "./types";
 /**
  * Ad pricing and the words for each step, shared by the site admin's settings, the "Advertise" form and the
  * server (which always recomputes the price itself). Prices are per day, per placement, in naira; how far an
@@ -31,7 +32,12 @@ export interface AdPricing {
   reach: Record<AdReach, number>;
   minDays: number;
   maxDays: number;
+  /** an event's ad: what each interest after the first adds, as a share of the price (0.3 is 30% more each) */
+  interestExtra: number;
 }
+
+/** The most interests one event's ad can target: past this it isn't really targeting anyone. */
+export const MAX_AD_INTERESTS = 5;
 
 export const DEFAULT_AD_PRICING: AdPricing = {
   currency: "NGN",
@@ -39,12 +45,16 @@ export const DEFAULT_AD_PRICING: AdPricing = {
   reach: { city: 1, country: 2, world: 3 },
   minDays: 1,
   maxDays: 30,
+  interestExtra: 0.3,
 };
 
-/** Total in naira for these placements, this reach, this many days (rounded to ₦100). */
-export function adPrice(p: AdPricing, placements: AdPlacement[], reach: AdReach, days: number): number {
+/** What this many interests multiply an ad's price by. */
+export const adInterestFactor = (p: AdPricing, interests: number) => 1 + (p.interestExtra ?? 0) * (Math.max(1, interests) - 1);
+
+/** Total in naira for these placements, this reach, this many days and interests (rounded to ₦100). */
+export function adPrice(p: AdPricing, placements: AdPlacement[], reach: AdReach, days: number, interests = 1): number {
   const perDay = [...new Set(placements)].reduce((sum, id) => sum + (p.perDay[id] ?? 0), 0);
-  return Math.round((perDay * (p.reach[reach] ?? 1) * days) / 100) * 100;
+  return Math.round((perDay * (p.reach[reach] ?? 1) * days * adInterestFactor(p, interests)) / 100) * 100;
 }
 
 /**
@@ -65,5 +75,15 @@ export function pricingOf(stored: unknown): AdPricing {
     reach: { ...DEFAULT_AD_PRICING.reach, ...(s.reach ?? {}) },
     minDays: s.minDays ?? DEFAULT_AD_PRICING.minDays,
     maxDays: s.maxDays ?? DEFAULT_AD_PRICING.maxDays,
+    interestExtra: s.interestExtra ?? DEFAULT_AD_PRICING.interestExtra,
   };
+}
+
+/**
+ * Can this event be advertised? Klique's own, or one in a public community: people who see the ad can open it and join
+ * to go. A private community's, a group's and an 18+ community's stay with their members.
+ */
+export function canPromoteEvent(e: Pick<EventDTO, "community" | "subcommunity" | "isPast" | "review"> & { cancelled?: boolean }): boolean {
+  if (!e.community || e.subcommunity || e.isPast || e.review || e.cancelled || e.community.adult) return false;
+  return !!e.community.official || e.community.privacy === "public";
 }

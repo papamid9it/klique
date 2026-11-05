@@ -183,6 +183,11 @@ export function AdPricingForm() {
             ))}
           </div>
         </Panel>
+        <Panel title="Event ads: extra interests">
+          <div className="p-4">
+            <TextField label="Each interest after the first adds (%)" hint="People can pick up to 5 interests for an event's ad. At 30%, three interests cost 60% more." type="number" inputMode="numeric" min={0} value={String(Math.round((p.interestExtra ?? 0) * 100))} onChange={(e) => set({ ...p, interestExtra: Math.max(0, Number(e.target.value) || 0) / 100 })} />
+          </div>
+        </Panel>
         <Panel title="How long an ad can run">
           <div className="grid grid-cols-2 gap-3 p-4">
             <TextField label="Shortest (days)" type="number" min={1} value={String(p.minDays)} onChange={(e) => set({ ...p, minDays: Math.max(1, Math.round(Number(e.target.value) || 1)) })} />

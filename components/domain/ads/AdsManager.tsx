@@ -55,8 +55,18 @@ export function totalsOf(list: AdCampaignDTO[]) {
 
 /* ------------------------------ the panel ------------------------------ */
 
-/** Ads Manager's left panel: who's advertising, a summary, the sections, and Create ad. */
+/**
+ * Going to a section. On Ads Manager's own page the tabs swap without a page load; from Create ad it's another page,
+ * where only changing the address would leave you looking at the same form.
+ */
+function useAdsNav(tab: AdsTab) {
+  const router = useRouter();
+  return (href: string) => (tab === "create" ? router.push(href) : softNavigate(href));
+}
+
+/** Ads Manager's left panel: who's advertising, a summary and the sections. */
 export function AdsPanel({ tab }: { tab: AdsTab }) {
+  const go = useAdsNav(tab);
   const { user } = useAuth();
   const { data } = useMyAds();
   const t = totalsOf(data ?? []);
@@ -76,10 +86,6 @@ export function AdsPanel({ tab }: { tab: AdsTab }) {
         </div>
       </div>
 
-      <Button variant="primary" href="/ads/new" className="w-full">
-        <Icon name="plus" size={15} /> Create ad
-      </Button>
-
       <nav aria-label="Ads Manager">
         <ul className="space-y-0.5">
           {NAV.map((n) => {
@@ -87,7 +93,7 @@ export function AdsPanel({ tab }: { tab: AdsTab }) {
             const count = n.id === "ads" ? t.action || null : null;
             return (
               <li key={n.id}>
-                <Link href={hrefOf(n.id)} scroll={false} onClick={(e) => { e.preventDefault(); softNavigate(hrefOf(n.id)); }} aria-current={on ? "page" : undefined} className={cx("flex h-10 items-center gap-3 rounded-control px-3 text-[14px] font-medium transition", on ? "bg-raised text-ink" : "text-ink-muted hover:bg-raised/60 hover:text-ink")}>
+                <Link href={hrefOf(n.id)} scroll={false} onClick={(e) => { e.preventDefault(); go(hrefOf(n.id)); }} aria-current={on ? "page" : undefined} className={cx("flex h-10 items-center gap-3 rounded-control px-3 text-[14px] font-medium transition", on ? "bg-raised text-ink" : "text-ink-muted hover:bg-raised/60 hover:text-ink")}>
                   <Icon name={n.icon} size={17} />
                   {n.label}
                   {count && <span className="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-accent px-1.5 text-[11px] font-bold text-accent-ink">{count}</span>}
@@ -122,11 +128,12 @@ export function AdsPanel({ tab }: { tab: AdsTab }) {
 
 /** On phones: the sections as a row of tabs, with Create ad. */
 export function AdsMobileBar({ tab }: { tab: AdsTab }) {
+  const go = useAdsNav(tab);
   return (
     <div className="flex items-center gap-2">
       <div className="no-bar flex min-w-0 flex-1 gap-1.5 overflow-x-auto">
         {NAV.map((n) => (
-          <button key={n.id} type="button" onClick={() => softNavigate(hrefOf(n.id))} className={cx("h-9 shrink-0 rounded-full border px-3.5 text-[13px] font-semibold", tab === n.id ? "border-transparent bg-accent text-accent-ink" : "border-line bg-surface text-ink-muted")}>
+          <button key={n.id} type="button" onClick={() => go(hrefOf(n.id))} className={cx("h-9 shrink-0 rounded-full border px-3.5 text-[13px] font-semibold", tab === n.id ? "border-transparent bg-accent text-accent-ink" : "border-line bg-surface text-ink-muted")}>
             {n.label}
           </button>
         ))}

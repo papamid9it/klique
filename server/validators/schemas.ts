@@ -1,3 +1,4 @@
+import { MAX_AD_INTERESTS } from "@/lib/ads";
 import { z } from "zod";
 import { DATE_FILTERS } from "@/lib/dates";
 import { DM_POLICIES, LIMITS, PRESENCES, PROFILE_VISIBILITY, REPORT_REASONS, SLOW_MODE_STEPS } from "@/lib/constants";
@@ -814,6 +815,8 @@ export const adCampaignSchema = z.object({
   ctaLabel: z.string().trim().max(24).optional(),
   url: z.string().trim().max(1000).optional(),
   placements: z.array(z.string()).min(1, "Pick at least one placement").max(10),
+  /** an event's ad: who it reaches, as well as where. Empty: the event's own interest */
+  interests: z.array(interestId).max(MAX_AD_INTERESTS, `Pick up to ${MAX_AD_INTERESTS} interests.`).optional(),
   reach: z.enum(["city", "country", "world"]),
   place: z.string().trim().max(120).nullable().optional(),
   days: z.number().int().min(1).max(365),
@@ -826,6 +829,7 @@ export const adPricingSchema = z.object({
   reach: z.partialRecord(z.enum(["city", "country", "world"]), z.number().min(0.1).max(100)).optional(),
   minDays: z.number().int().min(1).max(365).optional(),
   maxDays: z.number().int().min(1).max(365).optional(),
+  interestExtra: z.number().min(0).max(5).optional(),
 });
 
 export const adReviewSchema = z.object({ action: z.enum(["approve", "changes", "reject", "mark-paid"]), note: z.string().trim().max(500).default("") });

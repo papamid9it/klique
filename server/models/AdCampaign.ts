@@ -22,6 +22,8 @@ export interface IAdCampaign {
   ctaLabel: string;
   url: string;
   placements: AdPlacement[];
+  /** an event's ad: the interests it targets */
+  interests?: string[];
   reach: AdReach;
   /** for city/country reach: "city:NG:lagos" or "country:NG" */
   place: string | null;
@@ -64,6 +66,7 @@ const AdCampaignSchema = new Schema<IAdCampaign>(
     ctaLabel: { type: String, default: "Learn more", maxlength: 24 },
     url: { type: String, default: "", maxlength: 1000 },
     placements: { type: [String], enum: AD_PLACEMENTS.map((p) => p.id), default: [] },
+    interests: { type: [String], default: [] },
     reach: { type: String, enum: AD_REACHES.map((r) => r.id), default: "city" },
     place: { type: String, default: null },
     days: { type: Number, required: true, min: 1, max: 365 },

@@ -290,7 +290,15 @@ function Crew({ crew, tab, embedded, onChange, onGone, onRead, onMenu, reload }:
                 <p className="text-xs text-ink-muted">This klique is full.</p>
               </>
           ) : v.joinSpace ? (
-              <JoinSpaceButton space={v.joinSpace} crewOpen={crew.joinMode === "open"} />
+              <JoinSpaceButton
+                space={v.joinSpace}
+                crewOpen={crew.joinMode === "open"}
+                onJoined={async () => {
+                  await reload();
+                  if (crew.joinMode === "approval") setAsking(true);
+                  else onChange((await CrewService.join(crew.id, "")).data);
+                }}
+              />
             ) : (
               v.joinBlockedReason && <p className="text-xs text-ink-muted">{v.joinBlockedReason}</p>
             )}
@@ -559,8 +567,9 @@ function RequestsPage({ crew, busy, onBack, onDecide, onAll }: { crew: CrewDTO; 
  * Join (or ask to join) the community or group a crew belongs to, right from the crew. The crew page reloads
  * itself afterwards (SpaceService tells the app memberships changed), and its own Join button appears.
  */
-function JoinSpaceButton({ space, crewOpen }: { space: NonNullable<CrewDTO["viewer"]["joinSpace"]>; crewOpen: boolean }) {
+function JoinSpaceButton({ space, crewOpen, onJoined }: { space: NonNullable<CrewDTO["viewer"]["joinSpace"]>; crewOpen: boolean; /** straight on to the klique */ onJoined: () => Promise<void> }) {
   const toast = useToast();
+  const router = useRouter();
   const { requireAuth } = useAuth();
   const [busy, setBusy] = useState(false);
   if (space.requested)
@@ -574,16 +583,19 @@ function JoinSpaceButton({ space, crewOpen }: { space: NonNullable<CrewDTO["view
     setBusy(true);
     try {
       const res = await SpaceService.join(space.slug, space.sub ?? undefined);
-      toast(res.data.status === "joined" || res.data.status === "already_member" ? `You joined ${space.name}. ${crewOpen ? "Now join the klique." : "Now ask to join the klique."}` : res.data.message, "success");
+      if (res.data.status === "joined" || res.data.status === "already_member") await onJoined();
+      else toast(res.data.message, "success");
     } catch (e) {
       toast(errorMessage(e), "error");
+      // entry questions are answered on the community's page
+      if (isApiError(e) && e.status === 400 && !space.sub) router.push(`/communities/${space.slug}`);
     } finally {
       setBusy(false);
     }
   }
   return (
     <Button size="sm" variant="primary" loading={busy} onClick={() => void go()}>
-      {space.ask ? "Ask to join" : "Join"} {space.name}
+      {space.ask ? `Ask to join ${space.name}` : `Join ${space.name} & ${crewOpen ? "join klique" : "ask to join klique"}`}
     </Button>
   );
 }

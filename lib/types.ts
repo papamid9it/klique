@@ -721,6 +721,8 @@ export interface EventCrewsDTO {
   startBlockedReason: string | null;
   /** you could join a crew here (signed in, verified, a member of the event's community or group) */
   canJoin: boolean;
+  /** the community to join first, when that's what stands between you and its kliques */
+  joinSpace?: { slug: string; sub: string | null; name: string; ask: boolean; requested: boolean } | null;
 }
 
 /** Where the signed-in person may host events. */
@@ -1774,6 +1776,8 @@ export interface AdCampaignDTO {
   event: { id: Id; title: string; startsAt: ISODate; coverImage: string | null } | null;
   community: { slug: string; name: string; coverImage: string | null } | null;
   placements: string[];
+  /** an event's ad: the interests it targets */
+  interests: string[];
   reach: "city" | "country" | "world";
   place: string | null;
   placeLabel: string;
@@ -1809,6 +1813,7 @@ export interface AdCampaignInput {
   ctaLabel?: string;
   url?: string;
   placements: string[];
+  interests?: string[];
   reach: "city" | "country" | "world";
   place?: string | null;
   days: number;
