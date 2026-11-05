@@ -87,7 +87,7 @@ export function TopicFormModal({ slug, communityName, board, topic, onClose, onS
           {image ? (
             <div className="relative w-fit overflow-hidden rounded-control border border-line bg-raised">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={cdn(image.url, { w: 480 })} alt="The post's picture" className="max-h-48 w-auto object-contain" onError={(e) => (e.currentTarget.style.visibility = "hidden")} />
+              <img loading="lazy" src={cdn(image.url, { w: 480 })} alt="The post's picture" className="max-h-48 w-auto object-contain" onError={(e) => (e.currentTarget.style.visibility = "hidden")} />
               <button type="button" onClick={() => setImage(null)} aria-label="Remove the picture" className="absolute top-1.5 right-1.5 inline-flex size-6 items-center justify-center rounded-full bg-black/70 text-white hover:bg-black">
                 <Icon name="x" size={12} />
               </button>

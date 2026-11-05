@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 /**
  * The first frame of an animated picture (a GIF avatar or banner), for people who want things still: the picture is
- * drawn once onto a canvas, which doesn't animate. Same size and fit as the <img> it stands in for.
+ * drawn once onto a canvas, which doesn't animate. Same size and fit as the <img loading="lazy"> it stands in for.
  */
 export function StillImage({ src, className, style, onError }: { src: string; className?: string; style?: React.CSSProperties; onError?: () => void }) {
   const canvas = useRef<HTMLCanvasElement>(null);

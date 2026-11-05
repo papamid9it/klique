@@ -171,7 +171,7 @@ function Hit({ h, words, now }: { h: SearchHitDTO; words: string[]; now: Date | 
     <li className="flex items-start gap-3 rounded-card border border-line bg-surface p-3">
       {h.image ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={h.image} alt="" className="size-11 shrink-0 rounded-[10px] object-cover" />
+        <img loading="lazy" src={h.image} alt="" className="size-11 shrink-0 rounded-[10px] object-cover" />
       ) : (
         <Avatar name={h.author?.displayName ?? "?"} src={h.author?.avatarUrl} size={36} />
       )}

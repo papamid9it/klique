@@ -50,7 +50,7 @@ export function EmojiPicker({ community, onPick, onClose, className }: { communi
                     className="inline-flex size-9 items-center justify-center rounded-control hover:bg-raised disabled:cursor-not-allowed"
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={e.animated ? e.url : cdn(e.url, { w: 64 })} alt={`:${e.name}:`} className="size-7 object-contain" />
+                    <img loading="lazy" src={e.animated ? e.url : cdn(e.url, { w: 64 })} alt={`:${e.name}:`} className="size-7 object-contain" />
                   </button>
                 ))}
               </div>

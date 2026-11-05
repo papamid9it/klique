@@ -32,7 +32,7 @@ import {
 import { toEvents } from "../serializers";
 import type { eventCreateSchema, eventListQuery, eventOverviewQuery, eventUpdateSchema } from "../validators/schemas";
 import { hiddenUserIds } from "./blocks";
-import { assertPlace, escapeRegex, PAGE_SIZE, recountRsvps, sid } from "./helpers";
+import { assertPlace, PAGE_SIZE, recountRsvps, sid } from "./helpers";
 import { notify } from "./push.service";
 import { resolveSpaceFor } from "./spaces.service";
 import { purgeCrews, syncCrewExpiry } from "./crews.service";

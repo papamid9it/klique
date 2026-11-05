@@ -93,7 +93,7 @@ function AdminEventsPageContent() {
                   <div className="size-11 shrink-0 overflow-hidden rounded-control border border-line bg-raised">
                     {e.coverImage ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={e.coverImage} alt="" className="size-full object-cover" />
+                      <img loading="lazy" src={e.coverImage} alt="" className="size-full object-cover" />
                     ) : (
                       <span className="flex size-full items-center justify-center text-ink-muted">
                         <Icon name="calendar" size={16} />

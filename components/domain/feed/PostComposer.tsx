@@ -114,7 +114,7 @@ export function PostComposer({ slug, communityName, explicitAllowed, onClose, on
               {media.map((m, i) => (
                 <li key={`${m.url}${i}`} className="relative size-24 overflow-hidden rounded-control border border-line bg-raised">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={m.kind === "video" ? (m.poster ?? "") : cdn(m.url, { w: 200 })} alt="" className="size-full object-cover" onError={(e) => (e.currentTarget.style.visibility = "hidden")} />
+                  <img loading="lazy" src={m.kind === "video" ? (m.poster ?? "") : cdn(m.url, { w: 200 })} alt="" className="size-full object-cover" onError={(e) => (e.currentTarget.style.visibility = "hidden")} />
                   {m.kind === "video" && (
                     <span className="absolute inset-0 flex items-center justify-center bg-black/30 text-white">
                       <Icon name="video" size={22} />

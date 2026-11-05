@@ -84,7 +84,7 @@ function ReportCard({ r, onDone }: { r: ReportDTO; onDone: (id: string) => void 
               {r.target.images.slice(0, 4).map((src) => (
                 <a key={src} href={src} target="_blank" rel="noreferrer" className="block size-20 overflow-hidden rounded-control border border-line">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={src} alt="" className="size-full object-cover" />
+                  <img loading="lazy" src={src} alt="" className="size-full object-cover" />
                 </a>
               ))}
             </div>

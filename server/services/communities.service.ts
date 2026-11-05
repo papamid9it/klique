@@ -19,7 +19,7 @@ import { spaceAccess } from "../policies/access";
 import { ensureDefaultChannels } from "./channels.service";
 import { toCommunityCards, toCommunityDetail } from "../serializers";
 import type { communityCreateSchema, communityListQuery, communityUpdateSchema } from "../validators/schemas";
-import { assertPlace, escapeRegex, PAGE_SIZE, purgeSpaceData, recountMembers, sid, uniqueCommunitySlug } from "./helpers";
+import { assertPlace, PAGE_SIZE, purgeSpaceData, recountMembers, sid, uniqueCommunitySlug } from "./helpers";
 import { resolveSpace } from "./spaces.service";
 import { countVisibleSubs } from "./subcommunities.service";
 import { assertCanCreateCommunity } from "./space-limits";

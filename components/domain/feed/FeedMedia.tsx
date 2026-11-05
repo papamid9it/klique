@@ -327,7 +327,7 @@ export function FeedMedia({ media, className, onOpen, onDoubleTap, fill, withSou
               {back && wanted(k) && (
                 // blurred copy fills the box around a picture that doesn't match its shape
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={cdn(back, { w: 200 })} alt="" aria-hidden="true" decoding="async" className="absolute inset-0 size-full scale-125 object-cover opacity-70 blur-3xl" />
+                <img loading="lazy" src={cdn(back, { w: 200 })} alt="" aria-hidden="true" decoding="async" className="absolute inset-0 size-full scale-125 object-cover opacity-70 blur-3xl" />
               )}
               {m.kind === "video" ? (
                 // a div, not a button: the sound button sits inside it
@@ -373,7 +373,7 @@ export function FeedMedia({ media, className, onOpen, onDoubleTap, fill, withSou
                       </span>
                     )}
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
+                    <img loading="lazy"
                       src={cdn(m.url, { w: 1280 })}
                       alt={`Picture ${k + 1} of ${media.length}`}
                       decoding="async"

@@ -82,7 +82,7 @@ export function ImageField({
         <div className={cx("relative flex shrink-0 items-center justify-center overflow-hidden border border-line bg-raised", shape === "round" ? "size-20 rounded-full" : "h-24 w-40 rounded-control")}>
           {value ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={shape === "round" ? cdn(value, { w: 160, h: 160, fit: "face" }) : cdn(value, { w: 400 })} alt="" style={focalStyle(splitFocal(value).focal)} className="size-full object-cover" onError={(e) => (e.currentTarget.style.visibility = "hidden")} />
+            <img loading="lazy" src={shape === "round" ? cdn(value, { w: 160, h: 160, fit: "face" }) : cdn(value, { w: 400 })} alt="" style={focalStyle(splitFocal(value).focal)} className="size-full object-cover" onError={(e) => (e.currentTarget.style.visibility = "hidden")} />
           ) : (
             (fallback ?? <Icon name="image" size={22} className="text-ink-muted" />)
           )}

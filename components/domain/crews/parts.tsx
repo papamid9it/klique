@@ -62,7 +62,7 @@ export function Faces({ people, total, size = 22 }: { people: UserBrief[]; total
           >
             {p.avatarUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={cdn(splitFocal(p.avatarUrl).src, { w: size * 2, h: size * 2, fit: "face" })} alt="" className="size-full object-cover" />
+              <img loading="lazy" src={cdn(splitFocal(p.avatarUrl).src, { w: size * 2, h: size * 2, fit: "face" })} alt="" className="size-full object-cover" />
             ) : (
               <span aria-hidden="true" className="leading-none">
                 {initial}

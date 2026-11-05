@@ -108,7 +108,7 @@ export function ArtCover({ seed, interest, className, glyph = true }: { seed: st
   );
 }
 
-/** An <img> that gracefully falls back to ArtCover. Fills its parent. */
+/** An <img loading="lazy"> that gracefully falls back to ArtCover. Fills its parent. */
 export function Cover({
   src,
   seed,

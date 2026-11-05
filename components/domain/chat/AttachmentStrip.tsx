@@ -12,7 +12,7 @@ export function AttachmentStrip({ urls, progress, error, onRemove }: { urls: str
         {urls.map((u, i) => (
           <li key={u} className="relative size-16 overflow-hidden rounded-control border border-line bg-raised">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={cdn(u, { w: 128, h: 128, fit: "fill" })} alt={`Attached picture ${i + 1}`} className="size-full object-cover" />
+            <img loading="lazy" src={cdn(u, { w: 128, h: 128, fit: "fill" })} alt={`Attached picture ${i + 1}`} className="size-full object-cover" />
             <button type="button" onClick={() => onRemove(u)} aria-label={`Remove picture ${i + 1}`} className="absolute top-0.5 right-0.5 inline-flex size-5 items-center justify-center rounded-full bg-black/70 text-white hover:bg-black">
               <Icon name="x" size={11} />
             </button>

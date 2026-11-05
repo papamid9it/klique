@@ -32,7 +32,7 @@ function Visual({ n, icon }: { n: NotificationDTO; icon: IconName }) {
   }
   if (n.image) {
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={cdn(n.image, { w: 96, h: 96, fit: "fill" })} alt="" className="size-11 shrink-0 rounded-control object-cover" />;
+    return <img loading="lazy" src={cdn(n.image, { w: 96, h: 96, fit: "fill" })} alt="" className="size-11 shrink-0 rounded-control object-cover" />;
   }
   return (
     <span className={cx("inline-flex size-11 shrink-0 items-center justify-center rounded-full", n.read ? "bg-raised text-ink-muted" : "bg-accent text-accent-ink")}>
@@ -177,7 +177,7 @@ export function NotificationRow({ n, now, icon, kind, onOpen, onPatch, onRemove 
         </div>
         {n.image && n.actors.length > 0 && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={cdn(n.image, { w: 112, h: 112, fit: "fill" })} alt="" className="size-14 shrink-0 rounded-control object-cover" />
+          <img loading="lazy" src={cdn(n.image, { w: 112, h: 112, fit: "fill" })} alt="" className="size-14 shrink-0 rounded-control object-cover" />
         )}
         {!n.read && <span className="mt-2 size-2.5 shrink-0 rounded-full bg-accent" aria-label="New" />}
       </div>

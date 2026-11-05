@@ -110,7 +110,7 @@ export function ImagePositioner({ open, url, aspect, round, title = "Position yo
           className={cx("relative cursor-grab touch-none overflow-hidden border border-line bg-raised select-none active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-accent-text focus-visible:outline-none", round ? "rounded-full" : "rounded-control")}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={cdn(src, { w: 1200 })} alt="" draggable={false} onLoad={(e) => setNatural({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })} style={focalStyle(f)} className="pointer-events-none size-full object-cover" />
+          <img loading="lazy" src={cdn(src, { w: 1200 })} alt="" draggable={false} onLoad={(e) => setNatural({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })} style={focalStyle(f)} className="pointer-events-none size-full object-cover" />
           {/* rule-of-thirds guide while positioning */}
           <span aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,transparent_33.2%,rgb(255_255_255/0.35)_33.3%,transparent_33.5%,transparent_66.5%,rgb(255_255_255/0.35)_66.6%,transparent_66.8%),linear-gradient(to_bottom,transparent_33.2%,rgb(255_255_255/0.35)_33.3%,transparent_33.5%,transparent_66.5%,rgb(255_255_255/0.35)_66.6%,transparent_66.8%)]" />
         </div>

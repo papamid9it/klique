@@ -49,7 +49,7 @@ export function AdminMediaRemove({ userId, media, onRemoved }: { userId: string;
           className="inline-flex items-center gap-1 rounded-full border border-danger/50 py-0.5 pr-2 pl-0.5 text-danger hover:bg-danger/10"
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={cdn(m.kind === "video" ? (m.poster ?? m.url) : m.url, { w: 48 })} alt="" className="size-4 rounded-full object-cover" />
+          <img loading="lazy" src={cdn(m.kind === "video" ? (m.poster ?? m.url) : m.url, { w: 48 })} alt="" className="size-4 rounded-full object-cover" />
           Delete {i + 1}
         </button>
       ))}

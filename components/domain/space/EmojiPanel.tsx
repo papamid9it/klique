@@ -95,7 +95,7 @@ export function EmojiPanel({ slug }: { slug: string }) {
         {pending && (
           <div className="mt-4 flex flex-wrap items-center gap-3 rounded-control border border-line bg-raised p-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={pending.url} alt="" className="size-10 object-contain" />
+            <img loading="lazy" src={pending.url} alt="" className="size-10 object-contain" />
             <label className="flex items-center gap-1 text-sm">
               :
               <input value={pending.name} onChange={(e) => setPending({ ...pending, name: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 32) })} aria-label="Emoji name" className="h-9 w-40 rounded-control border border-line bg-surface px-2 font-mono text-sm" />:
@@ -115,7 +115,7 @@ export function EmojiPanel({ slug }: { slug: string }) {
             {data.items.map((e) => (
               <li key={e.id} className="flex items-center gap-2 rounded-control border border-line bg-surface p-2">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={e.animated ? e.url : cdn(e.url, { w: 64 })} alt="" className="size-8 shrink-0 object-contain" />
+                <img loading="lazy" src={e.animated ? e.url : cdn(e.url, { w: 64 })} alt="" className="size-8 shrink-0 object-contain" />
                 <span className="min-w-0 flex-1 truncate font-mono text-[13px]">:{e.name}:</span>
                 <button type="button" onClick={() => void remove(e)} aria-label={`Delete :${e.name}:`} className="inline-flex size-7 items-center justify-center rounded-full text-ink-muted hover:bg-raised hover:text-danger">
                   <Icon name="trash" size={13} />

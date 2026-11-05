@@ -1,7 +1,7 @@
 "use client";
 
 import { ProfileTrigger } from "@/components/providers/ProfileCardProvider";
-import { Fragment, memo, useState, type ReactNode } from "react";
+import { memo, useState, type ReactNode } from "react";
 import { OverflowMenu, type OverflowItem } from "@/components/domain/OverflowMenu";
 import { Icon } from "@/components/ui/Icon";
 import { Avatar } from "@/components/ui/Avatar";

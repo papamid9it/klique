@@ -137,7 +137,7 @@ export function AttachedSticker({ choice, onRemove }: { choice: StickerChoice | 
       <span className="relative inline-flex size-16 items-center justify-center rounded-control border border-line bg-raised">
         {choice.stickerUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={stickerThumb(choice.stickerUrl)} alt="Attached sticker" className="max-h-full max-w-full object-contain p-1" />
+          <img loading="lazy" src={stickerThumb(choice.stickerUrl)} alt="Attached sticker" className="max-h-full max-w-full object-contain p-1" />
         ) : (
           <span role="img" aria-label={`${s?.label ?? "Attached"} sticker`} className="text-[34px] leading-none">
             {s?.emoji}

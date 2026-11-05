@@ -75,7 +75,7 @@ function AdminCommunitiesPageContent() {
                   <div className="size-11 shrink-0 overflow-hidden rounded-control border border-line bg-raised">
                     {c.coverImage ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={c.coverImage} alt="" className="size-full object-cover" />
+                      <img loading="lazy" src={c.coverImage} alt="" className="size-full object-cover" />
                     ) : (
                       <span className="flex size-full items-center justify-center text-ink-muted">
                         <Icon name="hash" size={16} />

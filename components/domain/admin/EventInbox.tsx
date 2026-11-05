@@ -538,7 +538,7 @@ function QueueRow({ d, checked, onCheck, onSaved, onOpen }: { d: DraftDTO; check
       <button type="button" onClick={onOpen} className="hidden size-14 overflow-hidden rounded-control border border-line bg-raised lg:block" aria-label={`Edit ${d.title}`}>
         {d.coverImage ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={d.coverImage} alt="" className="size-full object-cover" />
+          <img loading="lazy" src={d.coverImage} alt="" className="size-full object-cover" />
         ) : (
           <span className="flex size-full items-center justify-center text-ink-muted">
             <Icon name="image" size={18} />

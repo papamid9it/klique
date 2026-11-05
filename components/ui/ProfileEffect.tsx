@@ -189,7 +189,7 @@ export function ProfileEffect({ id, spec, paused, className }: { id?: string | n
         <FirstFrame src={e.fileUrl} className={`${cover} object-cover`} />
       ) : (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={e.fileUrl} alt="" className={`${cover} object-cover`} />
+        <img loading="lazy" src={e.fileUrl} alt="" className={`${cover} object-cover`} />
       )}
     </span>
   );
