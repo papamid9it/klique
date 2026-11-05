@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Switch } from "@/components/ui/Field";
 import { Suspense, useCallback, useEffect, useState, type ReactNode } from "react";
 import { CrewService, type KliqueFilters } from "@/app/services/CrewService";
-import { KliqueCard, crewHref } from "@/components/domain/crews/parts";
+import { Faces, KliqueCard, crewHref, goingLine } from "@/components/domain/crews/parts";
 import { StartCrewModal } from "@/components/domain/crews/StartCrewModal";
 import { ScopeButton } from "@/components/domain/places/ScopeButton";
 import { PagePanel } from "@/components/layout/PagePanel";
@@ -205,14 +205,34 @@ function FilterControls({ f }: { f: Filters }) {
   );
 }
 
+type JoinedShow = "all" | "host" | "member" | "pending" | "past";
+const JOINED_SHOW: { id: JoinedShow; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "host", label: "Hosting" },
+  { id: "member", label: "Going" },
+  { id: "pending", label: "Asked" },
+  { id: "past", label: "Past" },
+];
+const inShow = (k: JoinedKliqueDTO, show: JoinedShow) => (show === "all" ? true : show === "past" ? k.closed : !k.closed && k.viewer.standing === show);
+
+/** "In 2 days", "In 3 hours", "Started" */
+function untilLabel(k: Pick<CrewCardDTO, "meetupAt" | "closed">) {
+  if (k.closed) return "Started";
+  const hours = (new Date(k.meetupAt).getTime() - Date.now()) / 3_600_000;
+  if (hours < 1) return "Very soon";
+  if (hours < 24) return `In ${Math.round(hours)} ${Math.round(hours) === 1 ? "hour" : "hours"}`;
+  const days = Math.round(hours / 24);
+  return `In ${days} ${days === 1 ? "day" : "days"}`;
+}
+
 /** One klique you're in: tapping it opens its chat (or, while you're asking, its details). */
 function JoinedRow({ k }: { k: JoinedKliqueDTO }) {
   const where = k.event?.title ?? k.community?.name ?? "All communities";
   const standing = k.viewer.standing;
   const last = k.lastMessage;
   return (
-    <SoftLink href={crewHref(k)} className="flex items-center gap-3 rounded-card border border-line bg-surface p-3 transition hover:bg-raised/60">
-      <Cover src={k.coverImage ?? k.host.avatarUrl} seed={k.id} interest={k.interest} className="size-16 shrink-0 overflow-hidden rounded-control" />
+    <SoftLink href={crewHref(k)} className={cx("flex items-center gap-3.5 rounded-card border border-line bg-surface p-3 transition hover:bg-raised/60", k.closed && "opacity-70")}>
+      <Cover src={k.coverImage ?? k.host.avatarUrl} seed={k.id} interest={k.interest} className="size-[72px] shrink-0 overflow-hidden rounded-control" />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <p className="truncate font-semibold">{k.title}</p>
@@ -220,39 +240,144 @@ function JoinedRow({ k }: { k: JoinedKliqueDTO }) {
           {standing === "pending" && <span className="shrink-0 rounded-full border border-line px-2 py-0.5 text-[11px] font-semibold text-ink-muted">Asked</span>}
         </div>
         <p className="truncate text-[13px] text-ink-muted">
-          {where} · {formatDateShort(k.meetupAt)}
+          {where} · {formatDateShort(k.meetupAt)} · {k.area}
         </p>
         <p className={cx("truncate text-sm", k.unreadCount ? "font-medium text-ink" : "text-ink-muted")}>
           {standing === "pending" ? "Waiting for the host to let you in." : last ? `${last.mine ? "You" : last.author}: ${last.text}` : "No messages yet. Say hi."}
         </p>
+      </div>
+      <div className="hidden shrink-0 flex-col items-end gap-1.5 sm:flex">
+        <span className="text-xs font-medium text-ink-muted">{untilLabel(k)}</span>
+        <span className="flex items-center gap-1.5 text-xs text-ink-muted">
+          <Faces people={k.faces} total={k.memberCount} size={22} />
+          {k.memberCount}/{k.maxMembers}
+        </span>
       </div>
       {k.unreadCount > 0 && <span className="flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full bg-accent px-1.5 text-xs font-bold text-accent-ink">{k.unreadCount > 98 ? "99+" : k.unreadCount}</span>}
     </SoftLink>
   );
 }
 
-/** The kliques you're in or asked to join. */
-function JoinedList({ onDiscover }: { onDiscover: () => void }) {
+/** Your soonest klique, big: when it is, where, who's going, and the way into its chat. */
+function NextUp({ k }: { k: JoinedKliqueDTO }) {
+  return (
+    <section className="overflow-hidden rounded-card border border-line bg-surface">
+      <Cover src={k.coverImage ?? k.host.avatarUrl} seed={k.id} interest={k.interest} className="aspect-[16/9]">
+        <span className="absolute top-2 left-2 rounded-full bg-black/70 px-2.5 py-1 text-xs font-semibold text-white backdrop-blur">{untilLabel(k)}</span>
+      </Cover>
+      <div className="space-y-2 p-4">
+        <h2 className="text-xs font-semibold text-ink-muted">Next up</h2>
+        <p className="font-semibold">{k.title}</p>
+        <p className="text-[13px] text-ink-muted">
+          {formatDateShort(k.meetupAt)} · {k.area}
+        </p>
+        <p className="flex items-center gap-2 text-[13px] text-ink-muted">
+          <Faces people={k.faces} total={k.memberCount} size={24} />
+          <span className="min-w-0">{goingLine(k)}</span>
+        </p>
+        <Button variant="primary" href={crewHref(k)} className="mt-1 w-full">
+          Open chat
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+/** A few kliques to join, right beside the ones you're in. */
+function JoinedSuggestions({ where, onDiscover }: { where: string; onDiscover: () => void }) {
+  const { data } = useApi(() => CrewService.forYou({ where, limit: 3 }), [where], { key: `kliques-joined-for-you:${where}` });
+  const items = data?.items ?? [];
+  if (!items.length) return null;
+  return (
+    <section className="rounded-card border border-line bg-surface p-4">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <h2 className="font-semibold">Kliques for you</h2>
+        <button type="button" onClick={onDiscover} className="text-[13px] font-medium text-accent-text hover:underline">
+          See all
+        </button>
+      </div>
+      <ul className="space-y-1">
+        {items.map((k) => (
+          <li key={k.id}>
+            <SoftLink href={crewHref(k)} className="-mx-2 flex items-center gap-3 rounded-control p-2 transition hover:bg-raised/60">
+              <Cover src={k.coverImage ?? k.host.avatarUrl} seed={k.id} interest={k.interest} className="size-12 shrink-0 overflow-hidden rounded-control" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium">{k.title}</span>
+                <span className="block truncate text-xs text-ink-muted">
+                  {formatDateShort(k.meetupAt)} · {k.area}
+                </span>
+              </span>
+            </SoftLink>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/** The kliques you're in or asked to join, with a filter panel, what's next, and more to join. */
+function JoinedList({ where, onDiscover }: { where: string; onDiscover: () => void }) {
   const { status } = useAuth();
+  const [show, setShow] = useState<JoinedShow>("all");
   const { data, loading, error, reload } = useApi(status === "authed" ? () => CrewService.joined() : null, [status], { key: "kliques-joined" });
   useRealtimeEvent(() => void reload(), { filter: (e) => e.type === "crew", debounceMs: 800 });
-  if (!data && loading) return <RowSkeleton rows={3} />;
-  if (error && !data) return <ErrorState message={error} onRetry={reload} />;
-  if (!data?.length) {
-    return (
+  const all = data ?? [];
+  const shown = all.filter((k) => inShow(k, show));
+  const next = all.find((k) => !k.closed && k.viewer.standing !== "pending");
+  const count = (id: JoinedShow) => all.filter((k) => inShow(k, id)).length;
+
+  const list =
+    !data && loading ? (
+      <RowSkeleton rows={3} />
+    ) : error && !data ? (
+      <ErrorState message={error} onRetry={reload} />
+    ) : !all.length ? (
       <EmptyState icon="users" title="No kliques yet" action={<Button variant="primary" onClick={onDiscover}>Find a klique</Button>}>
         Kliques you join or start show up here, with their chats.
       </EmptyState>
+    ) : !shown.length ? (
+      <p className="rounded-card border border-line bg-surface p-6 text-center text-sm text-ink-muted">Nothing here right now.</p>
+    ) : (
+      <ul className="space-y-2">
+        {shown.map((k) => (
+          <li key={k.id}>
+            <JoinedRow k={k} />
+          </li>
+        ))}
+      </ul>
     );
-  }
+
   return (
-    <ul className="max-w-2xl space-y-2">
-      {data.map((k) => (
-        <li key={k.id}>
-          <JoinedRow k={k} />
-        </li>
-      ))}
-    </ul>
+    <>
+      <PagePanel label="Your kliques">
+        <div className="space-y-0.5 px-1">
+          {JOINED_SHOW.map((o) => (
+            <button key={o.id} type="button" aria-pressed={show === o.id} className={cx(option(show === o.id), "justify-between")} onClick={() => setShow(o.id)}>
+              {o.label}
+              <span className="text-xs text-ink-muted">{count(o.id)}</span>
+            </button>
+          ))}
+        </div>
+      </PagePanel>
+
+      {/* phones and tablets have no left panel */}
+      <div className="mb-4 flex gap-2 overflow-x-auto lg:hidden">
+        {JOINED_SHOW.map((o) => (
+          <button key={o.id} type="button" aria-pressed={show === o.id} onClick={() => setShow(o.id)} className={cx("h-9 shrink-0 rounded-full border px-3.5 text-[13px] font-medium transition", show === o.id ? "border-ink bg-ink text-canvas" : "border-line text-ink-muted")}>
+            {o.label} · {count(o.id)}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="min-w-0">{list}</div>
+        <aside className="min-w-0 space-y-4 xl:sticky xl:top-4">
+          {next && <NextUp k={next} />}
+          <JoinedSuggestions where={where} onDiscover={onDiscover} />
+          <p className="px-1 text-xs leading-relaxed text-ink-muted">Meet in public, and tell someone where you&apos;re going. A klique and its chat disappear a day after it happens.</p>
+        </aside>
+      </div>
+    </>
   );
 }
 
@@ -313,7 +438,7 @@ function KliquesPage() {
       </div>
 
       {f.tab === "joined" ? (
-        <JoinedList onDiscover={() => f.set({ tab: "" })} />
+        <JoinedList where={f.where} onDiscover={() => f.set({ tab: "" })} />
       ) : !data && loading ? (
         <RowSkeleton rows={3} />
       ) : error && !data ? (
