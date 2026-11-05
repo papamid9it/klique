@@ -10,6 +10,7 @@ import { formatTime } from "@/lib/format";
 import type { ChannelMessageDTO, MentionDTO } from "@/lib/types";
 import type { ReactionKind } from "@/lib/reactions";
 import { ChatImages } from "./ChatImages";
+import { Cards } from "./Cards";
 import { Embeds } from "./Embeds";
 import { ReplyQuote } from "./ReplyQuote";
 import { EditedTag, MessageEditor } from "./MessageEditor";
@@ -80,7 +81,10 @@ export const Message = memo(function Message({
   onSaveSticker,
   onThread,
   onOpenThread,
+  onCardPress,
 }: {
+  /** press a button on a bot's card; left out when you can't (not a member) */
+  onCardPress?: (m: ChannelMessageDTO, buttonId: string) => Promise<void>;
   m: ChannelMessageDTO;
   /** first message of a run by the same person: show avatar, name and time */
   showHead: boolean;
@@ -185,7 +189,7 @@ export const Message = memo(function Message({
             ) : (
               <>
                 {m.pollId && <PollCard id={m.pollId} />}
-                {!m.body && !m.images.length && !m.sticker && !m.stickerUrl && !m.pollId ? (
+                {!m.body && !m.images.length && !m.sticker && !m.stickerUrl && !m.pollId && !m.cards?.length ? (
                   // nothing to show: a sticker whose picture didn't save (sent while the app was updating)
                   <p className="text-sm text-ink-muted italic">Sticker unavailable</p>
                 ) : (
@@ -195,6 +199,7 @@ export const Message = memo(function Message({
                   </p>
                 )}
                 <ChatImages images={m.images} mine={mine} />
+                {!!m.cards?.length && <Cards cards={m.cards} onPress={onCardPress ? (id) => onCardPress(m, id) : undefined} />}
                 {!m.pending && <Embeds body={m.body} />}
               </>
             )}

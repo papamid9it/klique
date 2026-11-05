@@ -6,6 +6,7 @@ import { ALL_PERMISSIONS, isPermission } from "@/lib/roles";
 import type { UserBrief } from "@/lib/types";
 import { appUrl } from "../env";
 import { ApiError, badRequest, forbidden, notFound } from "../http/errors";
+import { CARD_LIMITS } from "@/lib/cards";
 import { rateLimit } from "../http/rate-limit";
 import { BotApp, type BotCommand, type IBotApp } from "../models/BotApp";
 import { Channel, type IChannel } from "../models/Channel";
@@ -18,6 +19,7 @@ import { Webhook } from "../models/Webhook";
 import { isSiteAdmin } from "../policies/hosting";
 import { spaceAccess, type Space, type SpaceAccess } from "../policies/access";
 import { loadBriefs } from "../serializers";
+import { botMessageSchema, cardsSchema } from "./cards";
 import { recountMembers, sid } from "./helpers";
 import { resolveSpaceFor } from "./spaces.service";
 import { getPlanConfig, planOf } from "./subscriptions.service";
@@ -305,11 +307,12 @@ export async function deliver(app: Pick<IBotApp, "_id" | "endpoint" | "signingSe
     const res = await fetch(app.endpoint, { method: "POST", headers: { "Content-Type": "application/json", "X-Klique-Event": type, "X-Klique-Timestamp": ts, "X-Klique-Signature": `sha256=${sig}`, "User-Agent": "KliqueBot/1" }, body, signal: AbortSignal.timeout(wait), redirect: "error" });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     void BotApp.updateOne({ _id: app._id, failures: { $gt: 0 } }, { $set: { failures: 0 } }).catch(() => {});
+    // it answered, even if it had nothing to say (null is kept for "it didn't answer")
     const text = await res.text();
     try {
-      return text ? JSON.parse(text) : null;
+      return text ? JSON.parse(text) : {};
     } catch {
-      return null;
+      return {};
     }
   } catch {
     void (async () => {
@@ -363,13 +366,55 @@ export async function runCommand(viewer: IUser, slug: string, channelSlug: strin
   rateLimit(`slash:${sid(viewer._id)}`, 20, 60_000);
   const user = (await loadBriefs([viewer._id])).get(sid(viewer._id));
   const reply = (await deliver(app, "interaction", { community: { id: sid(space.community._id), slug: space.community.slug, name: space.community.name }, channel: { id: sid(channel._id), slug: channel.slug, name: channel.name }, user, command: cmd.name, options: input.options, text: input.text })) as { content?: unknown } | null;
-  if (reply && typeof reply.content === "string" && reply.content.trim()) {
+  const said = botMessageSchema.safeParse(reply);
+  if (said.success) {
     const bot = await User.findById(app.userId).lean<IUser>();
     if (bot) {
       const botAccess = await spaceAccess(space, bot);
-      await ch.postMessage(bot, space, botAccess, channel.slug, { body: reply.content.slice(0, 2000) });
+      await ch.postMessage(bot, space, botAccess, channel.slug, { body: said.data.content ?? "", cards: said.data.cards });
       return { answered: true };
     }
   }
   return { answered: false, message: app.endpoint ? `${app.name} didn't answer straight away. It may reply in a moment.` : `${app.name} isn't listening right now.` };
+}
+
+/* ------------------------------ card buttons ------------------------------ */
+
+export const buttonPressSchema = z.object({ buttonId: z.string().trim().min(1).max(CARD_LIMITS.buttonId) });
+
+const buttonAnswer = z.object({ notice: z.string().trim().min(1).max(200).optional(), update: z.object({ content: z.string().trim().max(2000).optional(), cards: cardsSchema.optional() }).optional() });
+
+/**
+ * Someone pressed a button on a bot's card: the bot gets a "button" event and has 4 seconds to answer. It can answer
+ * with `{ notice }` (shown only to whoever pressed it), `{ update: { content?, cards? } }` (changes that message),
+ * `{ content?, cards? }` (posts a new one), any mix of these, or nothing (it can act later through the API).
+ */
+export async function pressCardButton(viewer: IUser, slug: string, channelSlug: string, messageId: string, buttonId: string): Promise<{ notice: string | null }> {
+  if (!/^[a-f0-9]{24}$/i.test(messageId)) throw notFound("That button isn't there any more.");
+  const { space, access } = await resolveSpaceFor(viewer, slug);
+  const ch = await import("./channels.service");
+  const { channel, message, button } = await ch.findCardButton(viewer, space, access, channelSlug, messageId, buttonId);
+  const app = await BotApp.findOne({ userId: message.authorId }).lean<IBotApp>();
+  if (!app || app.disabledAt || !(space.community.bots ?? []).some((b) => sid(b) === sid(app._id))) throw notFound("That bot isn't in this community any more.");
+  if (!app.endpoint) return { notice: `${app.name} isn't listening right now.` };
+  rateLimit(`card-button:${sid(viewer._id)}`, 30, 60_000);
+  const user = (await loadBriefs([viewer._id])).get(sid(viewer._id));
+  const reply = await deliver(app, "button", { community: { id: sid(space.community._id), slug: space.community.slug, name: space.community.name }, channel: { id: sid(channel._id), slug: channel.slug, name: channel.name }, user, message: { id: sid(message._id) }, button: { id: button.id, label: button.label } });
+  if (reply === null) return { notice: `${app.name} didn't answer. Try again in a moment.` };
+
+  const answer = buttonAnswer.safeParse(reply);
+  const said = botMessageSchema.safeParse(reply);
+  if (!answer.success || (!answer.data.notice && !answer.data.update && !said.success)) return { notice: null };
+  const bot = await User.findById(app.userId).lean<IUser>();
+  if (!bot) return { notice: null };
+  const botAccess = await spaceAccess(space, bot);
+  try {
+    if (answer.data.update) await ch.editMessage(bot, space, botAccess, channel.slug, sid(message._id), answer.data.update.content, answer.data.update.cards);
+    if (said.success) await ch.postMessage(bot, space, botAccess, channel.slug, { body: said.data.content ?? "", cards: said.data.cards });
+  } catch (e) {
+    // AutoMod, slow mode or its own permissions stopped it: that's the bot's answer failing, not the person's press
+    if (e instanceof ApiError) return { notice: answer.data.notice ?? `${app.name} couldn't answer.` };
+    throw e;
+  }
+  return { notice: answer.data.notice ?? null };
 }

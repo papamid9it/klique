@@ -13,7 +13,9 @@ import { User, type IUser } from "../models/User";
 import { Webhook, type IWebhook } from "../models/Webhook";
 import { isSiteAdmin } from "../policies/hosting";
 import { loadBriefs } from "../serializers";
+import { webhookCardsSchema } from "./cards";
 import { postWebhookMessage } from "./channels.service";
+import { githubMessage, type GithubPayload } from "./github-webhook";
 import { sid } from "./helpers";
 import { keyFromUrl } from "./r2";
 import { resolveSpaceFor } from "./spaces.service";
@@ -22,11 +24,11 @@ import { getPlanConfig, planOf } from "./subscriptions.service";
 
 /**
  * Channel webhooks (bots): a secret link that posts messages into one channel of a community, for outside tools
- * (Zapier, GitHub, a script). Discord-style body: { content, username?, avatar_url? }.
+ * (Zapier, GitHub, a script). Discord-style body: { content?, cards?, username?, avatar_url? }.
  *  - made, renewed and deleted by the community's OWNER only (and site admins), not its admins. How many a community can have is set by its
  *    OWNER's plan (lib/plans `webhooks`: Free 2, Lite 5, Pro 10; Admin → Plans); site admins have no limit. If the
  *    owner goes down a plan, the ones already there keep working; no new ones until it's under the number again
- *  - never in 18+ communities; text only, up to 2000 characters; 30 messages a minute
+ *  - never in 18+ communities; up to 2000 characters of text, and cards (lib/cards) whose buttons are links; 30 messages a minute
  *  - its messages show its name and picture with a BOT tag; @everyone / @here only ping if the owner allowed it
  *  - the secret is shown once (and on renewing); only its hash is kept. Making and deleting one is in the mod log.
  *  - webhooks belong to the community: if it changes owner they keep working (the new owner manages them); they
@@ -63,11 +65,14 @@ export const webhookCreateSchema = z.object({
   allowMassMention: z.boolean().optional().default(false),
 });
 export const webhookUpdateSchema = z.object({ regenerate: z.boolean().optional(), allowMassMention: z.boolean().optional(), name: z.string().trim().min(1).max(40).optional() });
-export const webhookRunSchema = z.object({
-  content: z.string({ error: "Send some text as `content`." }).trim().min(1, "`content` is empty.").max(2000, "`content` can be up to 2000 characters."),
-  username: z.string().trim().max(40).optional(),
-  avatar_url: z.string().trim().max(600).optional(),
-});
+export const webhookRunSchema = z
+  .object({
+    content: z.string({ error: "`content` must be text." }).trim().max(2000, "`content` can be up to 2000 characters.").optional(),
+    cards: webhookCardsSchema.optional(),
+    username: z.string().trim().max(40).optional(),
+    avatar_url: z.string().trim().max(600).optional(),
+  })
+  .refine((m) => !!m.content || !!m.cards?.length, "Send some text as `content`, or `cards`.");
 
 const hash = (token: string) => createHash("sha256").update(token).digest("hex");
 const newToken = () => randomBytes(32).toString("base64url");
@@ -170,14 +175,34 @@ export async function purgeWebhooks(where: { channelId?: Types.ObjectId; communi
   await Webhook.deleteMany(where);
 }
 
-/** An outside tool posts through the secret link. */
-export async function runWebhook(id: string, token: string, input: z.infer<typeof webhookRunSchema>): Promise<{ id: string }> {
+/** The webhook this secret link belongs to. */
+async function hookFromLink(id: string, token: string): Promise<IWebhook> {
   if (!Types.ObjectId.isValid(id) || !token) throw notFound("Unknown webhook.");
   const hook = await Webhook.findById(id).lean<IWebhook>();
   const a = Buffer.from(hook?.tokenHash ?? "0".repeat(64), "hex");
   const b = Buffer.from(hash(token), "hex");
   if (!hook || a.length !== b.length || !timingSafeEqual(a, b)) throw notFound("Unknown webhook.");
-  await rateLimitShared(`hook:${id}`, PER_MINUTE, 60_000);
+  return hook;
+}
+
+/** An outside tool posts through the secret link. */
+export async function runWebhook(id: string, token: string, input: z.infer<typeof webhookRunSchema>): Promise<{ id: string }> {
+  return postThroughHook(await hookFromLink(id, token), input);
+}
+
+/**
+ * GitHub posts through the same link with /github on the end. Its words come from anyone who can open an issue, so
+ * these messages never ping @everyone or @here, whatever the webhook is allowed.
+ */
+export async function runGithubWebhook(id: string, token: string, event: string, payload: GithubPayload): Promise<{ id: string } | { ignored: true }> {
+  const hook = await hookFromLink(id, token);
+  const content = githubMessage(event, payload);
+  if (!content) return { ignored: true };
+  return postThroughHook({ ...hook, allowMassMention: false }, { content });
+}
+
+async function postThroughHook(hook: IWebhook, input: z.infer<typeof webhookRunSchema>): Promise<{ id: string }> {
+  await rateLimitShared(`hook:${sid(hook._id)}`, PER_MINUTE, 60_000);
   const [community, channel] = await Promise.all([Community.findById(hook.communityId).lean<ICommunity>(), Channel.findById(hook.channelId).lean<IChannel>()]);
   if (!community || !channel || channel.type === "voice") throw notFound("This webhook's channel is gone.");
   if (community.adult) throw forbidden("Webhooks don't work in 18+ communities.");
@@ -185,7 +210,7 @@ export async function runWebhook(id: string, token: string, input: z.infer<typeo
   const owner = await User.findById(community.ownerId).lean<IUser>();
   if (!owner || owner.suspendedAt) throw forbidden("This webhook is switched off.");
   const name = input.username && !fakeName(input.username) ? input.username : undefined;
-  const out = await postWebhookMessage(hook, owner, channel, input.content, name, ownUpload(input.avatar_url));
+  const out = await postWebhookMessage(hook, owner, channel, input.content ?? "", name, ownUpload(input.avatar_url), input.cards);
   void Webhook.updateOne({ _id: hook._id }, { $set: { lastUsedAt: new Date() } }).catch(() => {});
   return out;
 }

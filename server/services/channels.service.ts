@@ -68,6 +68,7 @@ import { logModDelete } from "./admin-audit";
 import { Webhook } from "../models/Webhook";
 import { assertNotTimedOut, assertPerm, can } from "../policies/access";
 import { standings } from "./roles.service";
+import { cardPreview, cardWords, type CardButton, type MessageCard } from "@/lib/cards";
 import { checkAutoMod } from "./automod.service";
 import { normalizeEmoji } from "./emoji.service";
 import { EMOJI_TOKEN } from "@/lib/emoji-tokens";
@@ -612,6 +613,7 @@ async function toMessages(rows: IChannelMessage[], viewer: IUser | null, access:
         massMention: r.deletedAt ? null : (r.massMention ?? null),
         pollId: r.deletedAt || !r.pollId ? null : sid(r.pollId),
         ...(bot ? { bot: true } : {}),
+        ...(r.cards?.length && !r.deletedAt ? { cards: r.cards } : {}),
         ...(r.thread && !r.deletedAt ? { thread: { slug: r.thread.slug, name: r.thread.name, count: r.thread.count ?? 0, lastAt: r.thread.lastAt?.toISOString() ?? null, lastBy: r.thread.lastBy ?? null } } : {}),
         ...(!bot && standing.get(sid(r.authorId))?.color ? { color: standing.get(sid(r.authorId))!.color } : {}),
         ...(!bot && standing.get(sid(r.authorId))?.badge ? { roleBadge: standing.get(sid(r.authorId))!.badge! } : {}),
@@ -647,7 +649,7 @@ export async function listMessages(viewer: IUser | null, space: Space, access: S
   return { items: await toMessages(page, viewer, access, space), hasMore: rows.length > PAGE };
 }
 
-export async function postMessage(viewer: IUser, space: Space, access: SpaceAccess, channelSlug: string, input: { body: string; sticker?: string; stickerUrl?: string; images?: string[]; replyToId?: string; poll?: z.infer<typeof pollInput> }): Promise<ChannelMessageDTO> {
+export async function postMessage(viewer: IUser, space: Space, access: SpaceAccess, channelSlug: string, input: { body: string; sticker?: string; stickerUrl?: string; images?: string[]; replyToId?: string; poll?: z.infer<typeof pollInput>; /** only bots: the chat routes don't accept these from people */ cards?: MessageCard[] }): Promise<ChannelMessageDTO> {
   assertNotTimedOut(access);
   const { sticker, images = [], replyToId } = input;
   const stickerUrl = input.stickerUrl && !sticker ? assertStickerUrl(input.stickerUrl) : null;
@@ -661,7 +663,7 @@ export async function postMessage(viewer: IUser, space: Space, access: SpaceAcce
   }
   rateLimit(`chat:${sid(viewer._id)}`, 20, 15_000);
   // AutoMod: the community's rules (blocks throw with the reason)
-  await checkAutoMod(space, viewer, access, { text: input.poll ? `${input.poll.question} ${input.poll.answers.map((a) => a.text).join(" ")}` : body, channelId: channel._id, where: `#${channel.name}` });
+  await checkAutoMod(space, viewer, access, { text: input.poll ? `${input.poll.question} ${input.poll.answers.map((a) => a.text).join(" ")}` : [body, cardWords(input.cards)].filter(Boolean).join("\n"), channelId: channel._id, where: `#${channel.name}` });
   await assertSlowMode(viewer, access, channel);
 
   const mentions = await resolveMentions(viewer, channel, body);
@@ -683,7 +685,7 @@ export async function postMessage(viewer: IUser, space: Space, access: SpaceAcce
   const poll = input.poll ? await createPoll(viewer, { scope: "channel", targetId: channel._id, communityId: channel.communityId }, input.poll) : null;
   const doc = poll
     ? await ChannelMessage.create({ channelId: channel._id, communityId: channel.communityId, authorId: viewer._id, body: "", images: [], pollId: poll._id, replyToId: replyTarget?._id ?? null, mentions: [] })
-    : await ChannelMessage.create({ channelId: channel._id, communityId: channel.communityId, authorId: viewer._id, body, sticker: sticker ?? null, stickerUrl, images, replyToId: replyTarget?._id ?? null, mentions, massMention });
+    : await ChannelMessage.create({ channelId: channel._id, communityId: channel.communityId, authorId: viewer._id, body, sticker: sticker ?? null, stickerUrl, images, replyToId: replyTarget?._id ?? null, mentions, massMention, ...(input.cards?.length ? { cards: input.cards } : {}) });
   noteStickerUse(viewer._id, stickerUrl);
   await Promise.all([
     Channel.updateOne({ _id: channel._id }, { lastMessageId: doc._id, lastMessageAt: doc.createdAt }),
@@ -700,7 +702,7 @@ export async function postMessage(viewer: IUser, space: Space, access: SpaceAcce
   const where = post ? `"${post.title}"` : channel.parentChannelId ? `the thread "${channel.name}"` : `#${channel.name}`;
   // Phones hear about it only when it is for them: an @mention or an answer to their message.
   const targets = await notMuted([...new Map([...(mentions ?? []), ...massIds, ...(replyTarget ? [replyTarget.authorId] : [])].map((id) => [sid(id), id])).values()].filter((id) => sid(id) !== sid(viewer._id)), channel);
-  const said = poll ? pollPreview(poll.question) : previewOf({ body, sticker, stickerUrl, images });
+  const said = poll ? pollPreview(poll.question) : previewOf({ body, sticker, stickerUrl, images, cards: input.cards });
   notify(targets, {
     title: `${viewer.displayName} in ${where}`,
     body: said,
@@ -709,17 +711,17 @@ export async function postMessage(viewer: IUser, space: Space, access: SpaceAcce
   if (post && href) await onPostReply(viewer, post, href, said, targets);
   const out = (await toMessages([doc.toObject()], viewer, access, space))[0];
   // bots in the community hear about it (not the bot that sent it)
-  void import("./bots.service").then((b) => b.emitBotEvent(channel.communityId, "message.create", { channel: { id: sid(channel._id), slug: channel.slug, name: channel.name, threadOf: channel.parentChannelId ? sid(channel.parentChannelId) : null }, message: { id: out.id, body: out.body, author: out.author, replyTo: out.replyTo?.id ?? null, mentions: out.mentions } }, { except: viewer._id }));
+  void import("./bots.service").then((b) => b.emitBotEvent(channel.communityId, "message.create", { channel: { id: sid(channel._id), slug: channel.slug, name: channel.name, threadOf: channel.parentChannelId ? sid(channel.parentChannelId) : null }, message: { id: out.id, body: out.body, author: out.author, replyTo: out.replyTo?.id ?? null, mentions: out.mentions, ...(out.cards ? { cards: out.cards } : {}) } }, { except: viewer._id }));
   return out;
 }
 
 /**
  * A channel webhook posts a message (server/services/webhooks.service checked the secret, the channel and limits):
- * text only, through the same pipeline as people's messages (live update, @mentions, unread counts), shown under
+ * words and cards, through the same pipeline as people's messages (live update, @mentions, unread counts), shown under
  * the webhook's name with a BOT tag. @everyone / @here only ping when the webhook is allowed to; @handle mentions
  * resolve like the community owner's would (the message is filed under the owner).
  */
-export async function postWebhookMessage(hook: { _id: Types.ObjectId; name: string; avatarUrl: string | null; allowMassMention: boolean }, owner: IUser, channel: IChannel, body: string, name?: string, avatarUrl?: string | null): Promise<{ id: string }> {
+export async function postWebhookMessage(hook: { _id: Types.ObjectId; name: string; avatarUrl: string | null; allowMassMention: boolean }, owner: IUser, channel: IChannel, body: string, name?: string, avatarUrl?: string | null, cards?: MessageCard[]): Promise<{ id: string }> {
   const mentions = await resolveMentions(owner, channel, body);
   const massWanted = hook.allowMassMention && !channel.topicId ? extractMassMention(body) : null;
   let massMention: "everyone" | "here" | null = null;
@@ -731,14 +733,14 @@ export async function postWebhookMessage(hook: { _id: Types.ObjectId; name: stri
     if (massWanted === "here") for (const id of massIds) if (!mentions.some((m) => sid(m) === sid(id))) mentions.push(id);
   }
   const shown = { id: hook._id, name: (name || hook.name).slice(0, 80), avatarUrl: avatarUrl ?? hook.avatarUrl ?? null };
-  const doc = await ChannelMessage.create({ channelId: channel._id, communityId: channel.communityId, authorId: owner._id, body, images: [], mentions, massMention, webhook: shown });
+  const doc = await ChannelMessage.create({ channelId: channel._id, communityId: channel.communityId, authorId: owner._id, body, images: [], mentions, massMention, webhook: shown, ...(cards?.length ? { cards } : {}) });
   await Channel.updateOne({ _id: channel._id }, { lastMessageId: doc._id, lastMessageAt: doc.createdAt });
   emitChannel(channel.communityId, channel._id);
   const targets = await notMuted([...new Map([...mentions, ...massIds].map((id) => [sid(id), id])).values()], channel);
   if (targets.length) {
     const community = await Community.findById(channel.communityId).select("slug").lean<{ slug: string }>();
     const sub = channel.subcommunityId ? await Subcommunity.findById(channel.subcommunityId).select("slug").lean<{ slug: string }>() : null;
-    notify(targets, { title: `${shown.name} in #${channel.name}`, body: previewOf({ body, sticker: null, stickerUrl: null, images: [] }), data: { type: "channel", communitySlug: community?.slug ?? "", channelSlug: channel.slug, ...(sub ? { subSlug: sub.slug } : {}) } }, { category: "mentions", groupKey: `chat:${sid(channel._id)}`, many: (n) => `${n} mentions in #${channel.name}`, ref: `channel:${sid(channel._id)}` });
+    notify(targets, { title: `${shown.name} in #${channel.name}`, body: previewOf({ body, sticker: null, stickerUrl: null, images: [], cards }), data: { type: "channel", communitySlug: community?.slug ?? "", channelSlug: channel.slug, ...(sub ? { subSlug: sub.slug } : {}) } }, { category: "mentions", groupKey: `chat:${sid(channel._id)}`, many: (n) => `${n} mentions in #${channel.name}`, ref: `channel:${sid(channel._id)}` });
   }
   return { id: sid(doc._id) };
 }
@@ -872,7 +874,7 @@ async function assertSlowMode(viewer: IUser, access: SpaceAccess, channel: IChan
 }
 
 /** Authors can change the text of their own messages while they can still post in the channel. */
-export async function editMessage(viewer: IUser, space: Space, access: SpaceAccess, channelSlug: string, messageId: string, body: string): Promise<ChannelMessageDTO> {
+export async function editMessage(viewer: IUser, space: Space, access: SpaceAccess, channelSlug: string, messageId: string, newBody?: string, cards?: MessageCard[]): Promise<ChannelMessageDTO> {
   const { channel, invited } = await loadChannel(viewer, space, access, channelSlug);
   const msg = await ChannelMessage.findOne({ _id: messageId, channelId: channel._id }).lean<IChannelMessage>();
   if (!msg || msg.deletedAt) throw notFound("We couldn't find that message.");
@@ -881,13 +883,32 @@ export async function editMessage(viewer: IUser, space: Space, access: SpaceAcce
   if (msg.pollId) throw forbidden("Polls can't be edited. Delete it and start another.");
   if (!canPostInChannel(channel, access, invited)) throw forbidden("You can't post here any more, so you can't edit this.");
   rateLimit(`chat-edit:${sid(viewer._id)}`, 30, 60_000);
-  if (body.trim() !== msg.body.trim()) await checkAutoMod(space, viewer, access, { text: body, channelId: null, where: `#${channel.name} (an edit)` });
+  const body = newBody ?? msg.body;
+  const nextCards = cards ?? msg.cards ?? [];
+  if (!body.trim() && !nextCards.length && !msg.images?.length) throw badRequest("A message needs something in it.");
+  const changedCards = cards !== undefined && cardWords(cards) !== cardWords(msg.cards);
+  if (body.trim() !== msg.body.trim() || changedCards) await checkAutoMod(space, viewer, access, { text: [body, changedCards ? cardWords(cards) : ""].filter(Boolean).join("\n"), channelId: null, where: `#${channel.name} (an edit)` });
   const next = (await normalizeEmoji(viewer, channel.communityId, body)).trim();
   const mentions = await resolveMentions(viewer, channel, next);
   const editedAt = next === msg.body ? msg.editedAt : new Date();
-  await ChannelMessage.updateOne({ _id: msg._id }, { $set: { body: next, mentions, editedAt } });
+  await ChannelMessage.updateOne({ _id: msg._id }, { $set: { body: next, mentions, editedAt, ...(cards !== undefined ? { cards } : {}) } });
   emitChannel(channel.communityId, channel._id);
-  return (await toMessages([{ ...msg, body: next, mentions, editedAt }], viewer, access, space))[0];
+  return (await toMessages([{ ...msg, body: next, mentions, editedAt, cards: nextCards }], viewer, access, space))[0];
+}
+
+/**
+ * A button on a card someone pressed: it must really be on that message, and they must be a member who can see the
+ * channel. A read-only channel is fine, so an "Accept the rules" button works in an announcements channel.
+ */
+export async function findCardButton(viewer: IUser, space: Space, access: SpaceAccess, channelSlug: string, messageId: string, buttonId: string): Promise<{ channel: IChannel; message: IChannelMessage; button: CardButton }> {
+  assertNotTimedOut(access);
+  if (access.banned || !access.isMember) throw forbidden("Join to use this.");
+  const { channel } = await loadChannel(viewer, space, access, channelSlug);
+  const message = await ChannelMessage.findOne({ _id: messageId, channelId: channel._id, deletedAt: null, hiddenAt: null }).lean<IChannelMessage>();
+  const button = message?.cards?.flatMap((c) => c.buttons ?? []).find((b) => b.id === buttonId);
+  if (!message || !button) throw notFound("That button isn't there any more.");
+  if (button.disabled) throw forbidden("That button is switched off.");
+  return { channel, message, button };
 }
 
 export async function deleteMessage(viewer: IUser, space: Space, access: SpaceAccess, channelSlug: string, messageId: string) {
@@ -908,7 +929,7 @@ export async function deleteMessage(viewer: IUser, space: Space, access: SpaceAc
       if (author && author.rank >= (access.rank ?? 0)) throw forbidden("You can't remove a message from someone at or above your rank.");
     }
   }
-  await ChannelMessage.updateOne({ _id: msg._id }, { body: "", mentions: [], images: [], sticker: null, stickerUrl: null, pinnedAt: null, pinnedById: null, deletedAt: new Date(), deletedById: viewer._id });
+  await ChannelMessage.updateOne({ _id: msg._id }, { body: "", mentions: [], images: [], cards: [], sticker: null, stickerUrl: null, pinnedAt: null, pinnedById: null, deletedAt: new Date(), deletedById: viewer._id });
   deleteUploads(msg.images ?? []); // its photos and videos go with it
   await deletePoll(msg.pollId);
   emitChannel(channel.communityId, channel._id);
@@ -916,7 +937,7 @@ export async function deleteMessage(viewer: IUser, space: Space, access: SpaceAc
     await Topic.updateOne({ _id: channel.topicId, commentCount: { $gt: 0 } }, { $inc: { commentCount: -1 } });
     emitTopic(channel.communityId, channel.topicId);
   }
-  if (!own) await logModDelete(viewer, { communityId: channel.communityId, authorId: msg.authorId }, "channelMessage", msg._id, `Message in ${space.community.name} #${channel.name}: ${msg.body.slice(0, 80)}`);
+  if (!own) await logModDelete(viewer, { communityId: channel.communityId, authorId: msg.authorId }, "channelMessage", msg._id, `Message in ${space.community.name} #${channel.name}: ${(msg.body || cardPreview(msg.cards)).slice(0, 80)}`);
   return { deleted: true };
 }
 

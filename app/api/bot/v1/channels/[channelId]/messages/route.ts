@@ -1,13 +1,16 @@
 import { z } from "zod";
 import { botJson, botRoute } from "@/server/http/bot-api";
 import { botChannel } from "@/server/services/bots.service";
+import { cardsSchema } from "@/server/services/cards";
 import { postMessage } from "@/server/services/channels.service";
 
-const body = z.object({ content: z.string().trim().min(1).max(2000), reply_to: z.string().regex(/^[a-f0-9]{24}$/i).optional() });
+const body = z
+  .object({ content: z.string().trim().max(2000).optional(), cards: cardsSchema.optional(), reply_to: z.string().regex(/^[a-f0-9]{24}$/i).optional() })
+  .refine((m) => !!m.content || !!m.cards?.length, "Send `content`, `cards` or both.");
 
-/** Post a message in a channel (or thread). */
+/** Post a message in a channel (or thread): words, cards or both. */
 export const POST = botRoute<{ channelId: string }>(async ({ req, params, bot }) => {
-  const { content, reply_to } = await botJson(req, body);
+  const { content, cards, reply_to } = await botJson(req, body);
   const { space, access, channel } = await botChannel(bot, params.channelId);
-  return postMessage(bot, space, access, channel.slug, { body: content, replyToId: reply_to });
+  return postMessage(bot, space, access, channel.slug, { body: content ?? "", cards, replyToId: reply_to });
 });

@@ -1,5 +1,5 @@
 import { searchFilter } from "./search-terms";
-import type { QueryFilter, Types } from "mongoose";
+import { Types, type QueryFilter } from "mongoose";
 import { EVENT_FALLBACK_MS, eventEnded } from "@/lib/event-time";
 import { assertCanHostInSpace, assertCanHostPublic, canHostInSpace, isSiteAdmin } from "../policies/hosting";
 import { deleteUploads } from "./media.service";
@@ -520,38 +520,57 @@ export async function setSaved(viewer: IUser, id: string, saved: boolean): Promi
   return getEvent(viewer, id);
 }
 
-/** Counts are public; names only for signed-in viewers and only for people who made attendance public. */
-export async function getAttendees(viewer: IUser | null, id: string): Promise<AttendeesDTO> {
+const ATTENDEE_PAGE = 24;
+const ATTENDEE_SCAN = 60;
+
+/**
+ * Counts are public; names only for signed-in viewers and only for people who made attendance public.
+ * A page at a time, oldest first: pass the last page's `nextCursor` as `after` to carry on.
+ */
+export async function getAttendees(viewer: IUser | null, id: string, after?: string | null): Promise<AttendeesDTO> {
   const event = await loadVisibleEvent(viewer, id);
   const base = { goingCount: event.goingCount, interestedCount: event.interestedCount };
-  if (!viewer) return { ...base, people: [], namesHidden: event.goingCount > 0 };
+  if (!viewer) return { ...base, people: [], namesHidden: event.goingCount > 0, nextCursor: null };
 
   const hidden = await hiddenUserIds(viewer._id);
-  const rsvps = await Rsvp.find({ eventId: event._id, status: "going", userId: { $nin: hidden } })
-    .sort({ createdAt: 1 })
-    .limit(60)
+  const rsvps = await Rsvp.find({
+    eventId: event._id,
+    status: "going",
+    userId: { $nin: hidden },
+    ...(after && Types.ObjectId.isValid(after) ? { _id: { $gt: new Types.ObjectId(after) } } : {}),
+  })
+    .sort({ _id: 1 })
+    .limit(ATTENDEE_SCAN)
     .select("userId")
-    .lean<{ userId: Types.ObjectId }[]>();
+    .lean<{ _id: Types.ObjectId; userId: Types.ObjectId }[]>();
 
   const users = await User.find({
     _id: { $in: rsvps.map((r) => r.userId) },
     $or: [{ attendancePublic: true }, { _id: viewer._id }],
   })
     .select("handle displayName avatarUrl avatarFrame nameEffect plan planUntil email country city")
-    .limit(24)
     .lean<IUser[]>();
 
-  const people: UserBrief[] = users.map((u) => ({
-    id: sid(u._id),
-    handle: u.handle,
-    displayName: u.displayName,
-    avatarUrl: u.avatarUrl,
-    avatarFrame: u.avatarFrame ?? null,
-    nameEffect: u.nameEffect ?? null,
-    country: u.country ?? "NG",
-    city: u.city,
-  }));
-  return { ...base, people, namesHidden: event.goingCount > people.length };
+  // in the order they said they were going, skipping anyone who keeps it private
+  const byId = new Map(users.map((u) => [sid(u._id), u]));
+  const showable = rsvps.filter((r) => byId.has(sid(r.userId)));
+  const page = showable.slice(0, ATTENDEE_PAGE);
+  const lastRead = showable.length > ATTENDEE_PAGE ? page[page.length - 1] : rsvps.length === ATTENDEE_SCAN ? rsvps[rsvps.length - 1] : null;
+
+  const people: UserBrief[] = page.map((r) => {
+    const u = byId.get(sid(r.userId))!;
+    return {
+      id: sid(u._id),
+      handle: u.handle,
+      displayName: u.displayName,
+      avatarUrl: u.avatarUrl,
+      avatarFrame: u.avatarFrame ?? null,
+      nameEffect: u.nameEffect ?? null,
+      country: u.country ?? "NG",
+      city: u.city,
+    };
+  });
+  return { ...base, people, namesHidden: event.goingCount > people.length, nextCursor: lastRead ? sid(lastRead._id) : null };
 }
 
 /* ------------------------------------------------------------------ */

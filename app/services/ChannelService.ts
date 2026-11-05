@@ -76,6 +76,7 @@ export const ChannelService = {
   messages: (s: SpaceRef, channelSlug: string, cursor: { before?: string; after?: string } = {}) => api.get<Envelope<ChatPage>>(`${base(s)}/channels/${channelSlug}/messages`, { ...cursor }),
   send: (s: SpaceRef, channelSlug: string, input: SendInput) => api.post<Envelope<ChannelMessageDTO>>(`${base(s)}/channels/${channelSlug}/messages`, input),
   /** Toggle a reaction (like, love, laugh…) on a message. Returns that message's fresh counts. */
+  pressButton: (s: SpaceRef, channelSlug: string, messageId: string, buttonId: string) => api.post<Envelope<{ notice: string | null }>>(`${base(s)}/channels/${channelSlug}/messages/${messageId}/buttons`, { buttonId }),
   react: (s: SpaceRef, channelSlug: string, messageId: string, kind: ReactionKind) => api.post<Envelope<ReactionDTO[]>>(`${base(s)}/channels/${channelSlug}/messages/${messageId}/reactions`, { kind }),
   /** Fresh reaction counts for messages already on screen, keyed by message id. */
   reactions: (s: SpaceRef, channelSlug: string, ids: string[]) => api.get<Envelope<Record<string, ReactionDTO[]>>>(`${base(s)}/channels/${channelSlug}/reactions`, { ids: ids.join(",") }),

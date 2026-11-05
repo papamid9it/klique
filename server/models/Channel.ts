@@ -1,3 +1,4 @@
+import type { MessageCard } from "@/lib/cards";
 import { Schema, model, models, type Model, type Types } from "mongoose";
 import { defineModel } from "./define";
 
@@ -154,6 +155,8 @@ export interface IChannelMessage {
   thread?: { channelId: Types.ObjectId; slug: string; name: string; count: number; lastAt: Date | null; lastBy?: string | null } | null;
   /** posted by a channel webhook (a bot): shown with its name and picture and a "BOT" tag; authorId is the community's owner */
   webhook?: { id: Types.ObjectId; name: string; avatarUrl: string | null } | null;
+  /** cards a bot or webhook posted (lib/cards; checked by server/services/cards) */
+  cards?: MessageCard[] | null;
   createdAt: Date;
 }
 
@@ -177,6 +180,7 @@ const MessageSchema = new Schema<IChannelMessage>(
     deletedById: { type: Schema.Types.ObjectId, default: null },
     thread: { type: new Schema({ channelId: Schema.Types.ObjectId, slug: String, name: String, count: { type: Number, default: 0 }, lastAt: { type: Date, default: null }, lastBy: { type: String, default: null } }, { _id: false }), default: null },
     webhook: { type: new Schema({ id: { type: Schema.Types.ObjectId }, name: { type: String, maxlength: 80 }, avatarUrl: { type: String, default: null } }, { _id: false }), default: null },
+    cards: { type: [Schema.Types.Mixed], default: undefined },
     hiddenAt: { type: Date, default: null },
   },
   { timestamps: { createdAt: true, updatedAt: false } },

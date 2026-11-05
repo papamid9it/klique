@@ -2,6 +2,7 @@
  * API contract shared by the backend (server/serializers) and every client
  * (this web app today; mobile / desktop later). Pure types — no runtime code.
  */
+import type { MessageCard } from "./cards";
 import type { CityId, DmPolicy, InterestId, Presence, ProfileVisibility, ReportReason } from "./constants";
 import type { MoodPref } from "./moods";
 
@@ -736,6 +737,8 @@ export interface AttendeesDTO {
   /** empty when the viewer may not see names */
   people: UserBrief[];
   namesHidden: boolean;
+  /** pass as `after` for the next people; null when there are no more */
+  nextCursor: string | null;
 }
 
 /* ---------------------------- discovery ----------------------------- */
@@ -1033,6 +1036,8 @@ export interface ChannelMessageDTO {
   pollId?: Id | null;
   /** posted by a channel webhook (a bot): `author` is its name and picture, with no profile behind it */
   bot?: boolean;
+  /** cards a bot or webhook posted (the message may have no text then) */
+  cards?: MessageCard[];
   /** the author's name colour here (their highest coloured role) */
   color?: string | null;
   /** the emoji of the author's highest role here that has one (on their picture) */

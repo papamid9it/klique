@@ -152,8 +152,8 @@ export function useChat(source: ChatSource) {
             prev.map((m) => {
               const f = byId.get(m.id);
               // edits, deletions, pins, and a thread's reply count and last reply
-              if (!f || (f.editedAt === m.editedAt && f.deleted === m.deleted && f.pinned === m.pinned && JSON.stringify(f.thread ?? null) === JSON.stringify(m.thread ?? null))) return m;
-              return { ...m, body: f.body, mentions: f.mentions, mentionsMe: f.mentionsMe, editedAt: f.editedAt, deleted: f.deleted, pinned: f.pinned, canEdit: f.canEdit, canDelete: f.canDelete, canPin: f.canPin, thread: f.thread };
+              if (!f || (f.editedAt === m.editedAt && f.deleted === m.deleted && f.pinned === m.pinned && JSON.stringify(f.thread ?? null) === JSON.stringify(m.thread ?? null) && JSON.stringify(f.cards ?? null) === JSON.stringify(m.cards ?? null))) return m;
+              return { ...m, body: f.body, mentions: f.mentions, mentionsMe: f.mentionsMe, editedAt: f.editedAt, deleted: f.deleted, pinned: f.pinned, canEdit: f.canEdit, canDelete: f.canDelete, canPin: f.canPin, thread: f.thread, cards: f.cards };
             }),
           );
         }

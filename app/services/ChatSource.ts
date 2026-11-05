@@ -23,6 +23,8 @@ export interface ChatSource {
   pins?(): Promise<Envelope<ChannelMessageDTO[]>>;
   /** the channel's threads (to keep "N replies" on their messages up to date, however old the message) */
   threads?(): Promise<Envelope<ThreadDTO[]>>;
+  /** press a button on a bot's card (only community channels have bots) */
+  pressButton?(messageId: string, buttonId: string): Promise<Envelope<{ notice: string | null }>>;
   /** this live ping means something changed in this chat */
   isLive(e: RealtimeEvent): boolean;
   /** this chat for "X is typing…" */
@@ -42,6 +44,7 @@ export function channelSource(space: SpaceRef, channelSlug: string, channelId?: 
     mentionable: (q) => ChannelService.mentionable(space, channelSlug, q),
     pin: (id, pinned) => ChannelService.pin(space, channelSlug, id, pinned),
     pins: () => ChannelService.pins(space, channelSlug),
+    ...(space.sub ? {} : { pressButton: (id: string, buttonId: string) => ChannelService.pressButton(space, channelSlug, id, buttonId) }),
     // a group's channels and threads themselves have no thread list
     ...(space.sub || channelSlug.startsWith("t-") ? {} : { threads: () => ChannelService.threads(space, channelSlug) }),
     isLive: (e) => e.type === "channel" && (!channelId || e.channelId === channelId),

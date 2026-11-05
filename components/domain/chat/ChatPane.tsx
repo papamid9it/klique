@@ -17,6 +17,7 @@ import { formatDateShort, formatTime } from "@/lib/format";
 import { useApi, useNow } from "@/lib/hooks/useApi";
 import { cx } from "@/components/ui/cx";
 import { LIMITS, slowModeLabel } from "@/lib/constants";
+import { cardPreview } from "@/lib/cards";
 import { useChat, type SendError } from "@/lib/hooks/useChat";
 import { useAttachments } from "@/lib/hooks/useAttachments";
 import { useStickers } from "@/lib/hooks/useStickers";
@@ -92,6 +93,15 @@ export function ChatPane({
   const toast = useToast();
   const [src] = useState(() => source ?? channelSource(space!, channel.slug, channel.id));
   const chat = useChat(src);
+  const pressCard = async (m: ChannelMessageDTO, buttonId: string) => {
+    try {
+      const res = await src.pressButton!(m.id, buttonId);
+      if (res.data.notice) toast(res.data.notice);
+      await chat.reload();
+    } catch (e) {
+      toast(errorMessage(e), "error");
+    }
+  };
   const { items, hasOlder, loading, loadingOlder, loadOlder } = chat;
 
   const scroller = useRef<HTMLDivElement>(null);
@@ -265,7 +275,7 @@ export function ChatPane({
                           <span className="h-px flex-1 bg-line" />
                         </li>
                       )}
-                      <Message m={m} showHead={showHead} mine={!!user && m.author.id === user.id} meId={user?.id ?? null} onDelete={(msg) => (shiftHeld() ? void chat.remove(msg.id).then((err) => err && toast(err, "error")) : setDeleting(msg))} onEdit={(msg, body) => chat.edit(msg.id, body)} onReport={user ? setReporting : undefined} onReply={isMember && channel.canPost ? setReplyTo : undefined} onPin={(msg, pinned) => void chat.pin(msg.id, pinned).then((err) => (err ? toast(err, "error") : setPinTick((n) => n + 1)))} onJump={jump} canReact={isMember && !!user} onReact={(msg, kind) => void chat.react(msg.id, kind).then((err) => err && toast(err, "error"))} onSaveSticker={user ? saveSticker : undefined} onOpenThread={onOpenThread} onThread={onOpenThread && space && !space.sub && isMember && !channel.thread ? (msg) => onOpenThread(msg.thread ? msg.thread.slug : draftThread({ space, channelSlug: channel.slug, messageId: msg.id, author: msg.author.displayName, body: msg.body })) : undefined} />
+                      <Message m={m} showHead={showHead} mine={!!user && m.author.id === user.id} meId={user?.id ?? null} onDelete={(msg) => (shiftHeld() ? void chat.remove(msg.id).then((err) => err && toast(err, "error")) : setDeleting(msg))} onEdit={(msg, body) => chat.edit(msg.id, body)} onReport={user ? setReporting : undefined} onReply={isMember && channel.canPost ? setReplyTo : undefined} onPin={(msg, pinned) => void chat.pin(msg.id, pinned).then((err) => (err ? toast(err, "error") : setPinTick((n) => n + 1)))} onJump={jump} canReact={isMember && !!user} onReact={(msg, kind) => void chat.react(msg.id, kind).then((err) => err && toast(err, "error"))} onSaveSticker={user ? saveSticker : undefined} onOpenThread={onOpenThread} onCardPress={src.pressButton && isMember ? pressCard : undefined} onThread={onOpenThread && space && !space.sub && isMember && !channel.thread ? (msg) => onOpenThread(msg.thread ? msg.thread.slug : draftThread({ space, channelSlug: channel.slug, messageId: msg.id, author: msg.author.displayName, body: msg.body })) : undefined} />
                     </div>
                   );
                 })}
@@ -343,7 +353,7 @@ function PinnedBar({ source, tick, items, onJump, onUnpin }: { source: ChatSourc
       <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex w-full items-center gap-2 px-4 py-2 text-left text-[13px] sm:px-6">
         <Icon name="pushpin" size={14} className="shrink-0 text-accent-text" />
         <span className="shrink-0 font-semibold">{pins.length} pinned</span>
-        <span className="min-w-0 flex-1 truncate text-ink-muted">{top.author.displayName}: {top.body || (top.sticker || top.stickerUrl ? "Sticker" : "Photo")}</span>
+        <span className="min-w-0 flex-1 truncate text-ink-muted">{top.author.displayName}: {top.body || cardPreview(top.cards) || (top.sticker || top.stickerUrl ? "Sticker" : "Photo")}</span>
         <Icon name="chevron-down" size={14} className={cx("shrink-0 text-ink-muted transition", open && "rotate-180")} />
       </button>
       {open && (
@@ -353,7 +363,7 @@ function PinnedBar({ source, tick, items, onJump, onUnpin }: { source: ChatSourc
               <button type="button" onClick={() => (setOpen(false), onJump(p.id))} className="flex min-w-0 flex-1 items-center gap-2 text-left text-[13px]">
                 <Avatar name={p.author.displayName} src={p.author.avatarUrl} frame={p.author.avatarFrame} size={22} />
                 <span className="shrink-0 font-semibold">{p.author.displayName}</span>
-                <span className="truncate text-ink-muted">{p.body || (p.sticker || p.stickerUrl ? "Sticker" : "Photo")}</span>
+                <span className="truncate text-ink-muted">{p.body || cardPreview(p.cards) || (p.sticker || p.stickerUrl ? "Sticker" : "Photo")}</span>
               </button>
               {p.canPin && (
                 <button type="button" onClick={() => onUnpin(p.id)} className="shrink-0 rounded-full px-2 py-1 text-[12px] font-semibold text-ink-muted hover:bg-line hover:text-ink">
@@ -539,7 +549,7 @@ function Composer({
     const images = attach.urls;
     const chosen = sticker;
     if ((!body && !images.length && !chosen) || !user || attach.uploading || slow.left > 0) return;
-    const reply = replyTo ? { id: replyTo.id, authorName: replyTo.author.displayName, snippet: replyTo.body.slice(0, 120) || (replyTo.sticker || replyTo.stickerUrl ? "Sticker" : replyTo.images.length ? "Photo" : "Message"), deleted: false } : null;
+    const reply = replyTo ? { id: replyTo.id, authorName: replyTo.author.displayName, snippet: replyTo.body.slice(0, 120) || cardPreview(replyTo.cards).slice(0, 120) || (replyTo.sticker || replyTo.stickerUrl ? "Sticker" : replyTo.images.length ? "Photo" : "Message"), deleted: false } : null;
     setText("");
     typing.stopped();
     attach.clear();
@@ -727,7 +737,7 @@ function Composer({
           )}
         </p>
       )}
-      {replyTo && <ReplyingTo name={replyTo.author.displayName} snippet={replyTo.body.slice(0, 80) || (replyTo.sticker || replyTo.stickerUrl ? "Sticker" : "Photo")} onCancel={onClearReply} />}
+      {replyTo && <ReplyingTo name={replyTo.author.displayName} snippet={replyTo.body.slice(0, 80) || cardPreview(replyTo.cards).slice(0, 80) || (replyTo.sticker || replyTo.stickerUrl ? "Sticker" : "Photo")} onCancel={onClearReply} />}
       <AttachedSticker choice={sticker} onRemove={() => setSticker(null)} />
       <AttachmentStrip urls={attach.urls} progress={attach.progress} error={attach.error} onRemove={attach.remove} />
       <div className="flex items-end gap-2 rounded-card border border-line bg-surface p-2 focus-within:border-accent-text">

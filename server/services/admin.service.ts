@@ -1,4 +1,5 @@
 import "server-only";
+import { cardWords } from "@/lib/cards";
 import { forgetAdultCommunities } from "../policies/adult";
 import { unhideAfterReview } from "./safety.service";
 import { Payment, Payout } from "../models/Money";
@@ -103,7 +104,7 @@ async function describeTarget(r: IReport, briefs: Map<string, UserBrief>): Promi
       if (!m) return none;
       const [ch, c] = await Promise.all([Channel.findById(m.channelId).select("slug name topicId").lean<Pick<IChannel, "slug" | "name" | "topicId">>(), Community.findById(m.communityId).select("slug name").lean<Pick<ICommunity, "slug" | "name">>()]);
       const author = (await loadBriefs([m.authorId])).get(sid(m.authorId)) ?? null;
-      return { title: ch?.topicId ? `Reply to the post "${ch.name}" in ${c?.name ?? "a community"}` : `Message in ${c?.name ?? "a community"} #${ch?.name ?? "channel"}`, body: m.deletedAt ? "" : m.body, images: m.deletedAt ? [] : [...(m.images ?? []), ...(m.stickerUrl ? [m.stickerUrl] : [])], author, href: c && ch ? (ch.topicId ? `/communities/${c.slug}?view=topics&t=${sid(ch.topicId)}` : `/communities/${c.slug}?c=${ch.slug}`) : null, gone: !!m.deletedAt, removable: !m.deletedAt };
+      return { title: ch?.topicId ? `Reply to the post "${ch.name}" in ${c?.name ?? "a community"}` : `Message in ${c?.name ?? "a community"} #${ch?.name ?? "channel"}`, body: m.deletedAt ? "" : [m.body, cardWords(m.cards)].filter(Boolean).join("\n"), images: m.deletedAt ? [] : [...(m.images ?? []), ...(m.stickerUrl ? [m.stickerUrl] : []), ...(m.cards ?? []).flatMap((x) => [x.image, x.thumbnail].filter((u): u is string => !!u))], author, href: c && ch ? (ch.topicId ? `/communities/${c.slug}?view=topics&t=${sid(ch.topicId)}` : `/communities/${c.slug}?c=${ch.slug}`) : null, gone: !!m.deletedAt, removable: !m.deletedAt };
     }
     case "klique": {
       const k = await Crew.findById(r.targetId).lean<ICrew>();

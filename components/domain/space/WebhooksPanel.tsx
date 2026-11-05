@@ -148,6 +148,17 @@ export function WebhooksPanel({ slug }: { slug: string }) {
         <pre className="overflow-x-auto rounded-control border border-line bg-raised p-3 font-mono text-[12px] leading-relaxed">{`curl -X POST "YOUR_WEBHOOK_LINK" \\
   -H "Content-Type: application/json" \\
   -d '{"content": "New event tonight at 8pm!", "username": "Event bot"}'`}</pre>
+        <h4 className="mt-4 text-sm font-semibold">Connect GitHub</h4>
+        <ol className="mt-1 list-decimal space-y-1 pl-5 text-sm text-ink-muted">
+          <li>In your repo on GitHub, open Settings, then Webhooks, then Add webhook.</li>
+          <li>For Payload URL, paste the webhook&apos;s link with <code>/github</code> added to the end.</li>
+          <li>Choose which updates to send, then save. A message here confirms it&apos;s connected.</li>
+        </ol>
+        <p className="mt-2 text-xs text-ink-muted">Pushes, pull requests, issues, comments, releases, stars and forks can show up here. These messages never ping @everyone or @here.{" "}
+          <a href="/developers#github" className="font-medium text-accent-text underline">
+            Full guide
+          </a>
+        </p>
         <p className="mt-2 text-xs text-ink-muted">Keep the link secret: anyone with it can post as this webhook. If it leaks, press New link and the old one stops working. Only you, the owner, can manage webhooks. They belong to the community, so they keep working if you hand it to a new owner.</p>
       </SettingsBlock>
 
@@ -166,7 +177,20 @@ export function WebhooksPanel({ slug }: { slug: string }) {
       <Modal open={!!shown} onClose={() => setShown(null)} title={`${shown?.name ?? "Webhook"}'s link`} description="Copy it now: for safety it won't be shown again. Paste it into the other app." size="sm">
         <div className="space-y-3">
           <input readOnly value={shown?.url ?? ""} onFocus={(e) => e.currentTarget.select()} className="h-10 w-full rounded-control border border-line bg-raised px-3 font-mono text-[12px]" aria-label="Webhook link" />
-          <div className="flex justify-end gap-2">
+          <p className="text-xs text-ink-muted">Connecting GitHub? Use Copy GitHub link, and paste it as the Payload URL in your repo&apos;s webhook settings.</p>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(`${shown?.url ?? ""}/github`);
+                  toast("GitHub link copied", "success");
+                } catch {
+                  toast("Couldn't copy. Copy the link and add /github to the end.", "error");
+                }
+              }}
+            >
+              <Icon name="copy" size={14} /> Copy GitHub link
+            </Button>
             <Button
               variant="primary"
               onClick={async () => {
