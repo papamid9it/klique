@@ -668,13 +668,15 @@ export interface SubscriptionDTO {
   /** "active" renews; "non_renewing" was cancelled (lasts to `until`); "attention": a renewal failed */
   status: "active" | "non_renewing" | "attention" | "ended" | null;
   /** paid on Paystack, or free time (leftover Hype, an admin's gift) */
-  source: "paystack" | "hype" | "grant" | null;
+  source: "paystack" | "hype" | "grant" | "store" | null;
   /** it renews by itself next month (so it can be cancelled) */
   renews: boolean;
   /** site admins have everything free */
   siteAdmin: boolean;
   /** Paystack is set up, so plans can be bought */
   canBuy: boolean;
+  /** buying in the phone app: the store products, and what ties a purchase to this person */
+  store: { apple: boolean; google: boolean; products: Record<"lite" | "pro", string>; accountToken: string };
   config: import("./plans").PlanConfig;
   /** kliques started this month, and kliques you're in now (not hosting) */
   usage: { started: number; inNow: number };

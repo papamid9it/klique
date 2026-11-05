@@ -108,3 +108,21 @@ export function activePlan(u: { plan?: PlanId | null; planUntil?: Date | string 
   if (!u.plan || u.plan === "free" || !u.planUntil) return "free";
   return +new Date(u.planUntil) > now ? u.plan : "free";
 }
+
+/**
+ * Lite and Pro in the phone app: 30 days bought through Apple or Google, which don't renew by themselves. The store
+ * products with these ids have to exist in App Store Connect (as non-renewing subscriptions) and Play Console.
+ */
+export const PLAN_STORE_PRODUCTS: Record<PaidPlan, string> = { lite: "plan_lite_30d", pro: "plan_pro_30d" };
+export const planFromStoreProduct = (id: string): PaidPlan | null => (id === PLAN_STORE_PRODUCTS.lite ? "lite" : id === PLAN_STORE_PRODUCTS.pro ? "pro" : null);
+const PLAN_DAY_MS = 24 * 60 * 60 * 1000;
+/**
+ * What a 30-day purchase gives. More of the same plan adds on to the time left. A higher plan starts today. A lower
+ * plan while on a higher one (the app doesn't offer it, but a purchase can't be undone) keeps the higher plan and adds the days.
+ */
+export function planAfterPurchase(current: { plan: PlanId; until: Date | null }, bought: PaidPlan, now: Date): { plan: PaidPlan; until: Date } {
+  const left = current.plan !== "free" && current.until && +current.until > +now ? +current.until : null;
+  const rank = (p: PlanId) => (p === "pro" ? 2 : p === "lite" ? 1 : 0);
+  if (left && rank(current.plan) >= rank(bought)) return { plan: current.plan as PaidPlan, until: new Date(left + 30 * PLAN_DAY_MS) };
+  return { plan: bought, until: new Date(+now + 30 * PLAN_DAY_MS) };
+}

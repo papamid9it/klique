@@ -16,7 +16,7 @@ export interface ISubscription {
   userId: Types.ObjectId;
   plan: "lite" | "pro";
   status: SubscriptionStatus;
-  source: "paystack" | "hype" | "grant";
+  source: "paystack" | "hype" | "grant" | "store";
   currentPeriodEnd: Date;
   /** naira a month, when they signed up */
   amount: number;
@@ -33,7 +33,7 @@ const SubscriptionSchema = new Schema<ISubscription>(
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true, unique: true },
     plan: { type: String, enum: ["lite", "pro"], required: true },
     status: { type: String, enum: ["active", "non_renewing", "attention", "ended"], default: "active" },
-    source: { type: String, enum: ["paystack", "hype", "grant"], default: "paystack" },
+    source: { type: String, enum: ["paystack", "hype", "grant", "store"], default: "paystack" },
     currentPeriodEnd: { type: Date, required: true },
     amount: { type: Number, default: 0 },
     paystack: {
@@ -96,3 +96,25 @@ KliqueStartSchema.index({ userId: 1, createdAt: -1 });
 KliqueStartSchema.index({ createdAt: 1 }, { expireAfterSeconds: 62 * 24 * 60 * 60 });
 
 export const KliqueStart: Model<IKliqueStart> = defineModel<IKliqueStart>("KliqueStart", KliqueStartSchema);
+
+/** One Lite or Pro purchase from the phone app. The unique ref stops one store purchase counting twice. */
+export interface IPlanStorePurchase {
+  _id: Types.ObjectId;
+  ref: string;
+  userId: Types.ObjectId;
+  plan: "lite" | "pro";
+  platform: "apple" | "google";
+  until: Date;
+  createdAt: Date;
+}
+const PlanStorePurchaseSchema = new Schema<IPlanStorePurchase>(
+  {
+    ref: { type: String, required: true, unique: true },
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    plan: { type: String, enum: ["lite", "pro"], required: true },
+    platform: { type: String, enum: ["apple", "google"], required: true },
+    until: { type: Date, required: true },
+  },
+  { timestamps: { createdAt: true, updatedAt: false } },
+);
+export const PlanStorePurchase: Model<IPlanStorePurchase> = defineModel<IPlanStorePurchase>("PlanStorePurchase", PlanStorePurchaseSchema);

@@ -123,7 +123,7 @@ export function PlanTab() {
                   ? `Your last renewal didn't go through. Paystack will try again; your plan lasts until ${formatDateLong(s.until!)}.`
                   : s.renews
                     ? `Renews on ${formatDateLong(s.until!)}.`
-                    : `Until ${formatDateLong(s.until!)}${s.source === "hype" ? " (from your leftover Hype)" : s.source === "grant" ? " (a gift from Klique)" : ""}.`}
+                    : `Until ${formatDateLong(s.until!)}${s.source === "hype" ? " (from your leftover Hype)" : s.source === "grant" ? " (a gift from Klique)" : s.source === "store" ? " (bought in the Klique app)" : ""}.`}
         </p>
         {!s.siteAdmin && (
           <dl className="mt-4 grid gap-3 sm:grid-cols-2">

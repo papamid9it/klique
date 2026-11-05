@@ -32,6 +32,12 @@ export function storeAccountToken(campaignId: string): string {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-a${h.slice(17, 20)}-${h.slice(20, 32)}`;
 }
 
+/** Ties a Lite or Pro purchase to one person, the same way. */
+export function planStoreToken(userId: string): string {
+  const h = createHash("sha256").update(`klique-plan:${userId}`).digest("hex");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-a${h.slice(17, 20)}-${h.slice(20, 32)}`;
+}
+
 /* ------------------------------- Apple ------------------------------- */
 
 async function appleToken(): Promise<string> {
@@ -60,7 +66,7 @@ export async function appleSale(transactionId: string): Promise<StoreSale> {
   if (!res.ok) throw new ApiError(503, "We couldn't reach Apple. Your payment is safe: try again in a minute.");
   // this came straight from Apple over HTTPS, so reading it is enough
   const t = decodeJwt(((await res.json()) as { signedTransactionInfo: string }).signedTransactionInfo) as { transactionId: string; productId: string; bundleId: string; appAccountToken?: string; type: string; revocationDate?: number };
-  if (t.bundleId !== APP_ID || t.type !== "Consumable") throw new ApiError(402, "That purchase isn't for this app.", { code: "store_unknown" });
+  if (t.bundleId !== APP_ID || (t.type !== "Consumable" && t.type !== "Non-Renewing Subscription")) throw new ApiError(402, "That purchase isn't for this app.", { code: "store_unknown" });
   return { id: t.transactionId, productId: t.productId, accountToken: t.appAccountToken ?? null, test, refunded: !!t.revocationDate, pending: false };
 }
 

@@ -2,20 +2,21 @@ import "server-only";
 import { randomBytes } from "node:crypto";
 import type { Types } from "mongoose";
 import type { z } from "zod";
-import { PLAN_NAMES, activePlan, planConfigOf, type PaidPlan, type PlanConfig, type PlanId } from "@/lib/plans";
+import { PLAN_NAMES, PLAN_STORE_PRODUCTS, activePlan, planAfterPurchase, planConfigOf, planFromStoreProduct, type PaidPlan, type PlanConfig, type PlanId } from "@/lib/plans";
 import type { SubscriptionDTO } from "@/lib/types";
 import { appUrl, paystackConfig } from "../env";
-import { badRequest, notFound } from "../http/errors";
+import { ApiError, badRequest, notFound } from "../http/errors";
 import { rateLimit } from "../http/rate-limit";
 import { AppSetting } from "../models/AppSetting";
 import { CrewMember } from "../models/Crew";
-import { KliqueStart, Subscription, SubscriptionCheckout, type ISubscription, type ISubscriptionCheckout } from "../models/Subscription";
+import { KliqueStart, PlanStorePurchase, Subscription, SubscriptionCheckout, type ISubscription, type ISubscriptionCheckout } from "../models/Subscription";
 import { User, type IUser } from "../models/User";
 import { isSiteAdmin } from "../policies/hosting";
-import type { planConfigSchema } from "../validators/schemas";
+import type { adStoreVerifySchema, planConfigSchema } from "../validators/schemas";
 import { sid } from "./helpers";
 import { paystack } from "./promotions.service";
 import { notify } from "./push.service";
+import { appleSale, googleSale, planStoreToken, storeBillingStatus, testSalesAllowed } from "./store-billing.service";
 
 /**
  * Lite and Pro (lib/plans), paid monthly through Paystack subscriptions:
@@ -106,6 +107,7 @@ export async function mySubscription(viewer: IUser): Promise<SubscriptionDTO> {
     renews: paid && row?.source === "paystack" && (row.status === "active" || row.status === "attention"),
     siteAdmin: isSiteAdmin(viewer),
     canBuy: !!paystackConfig(),
+    store: { ...storeBillingStatus(), products: PLAN_STORE_PRODUCTS, accountToken: planStoreToken(sid(viewer._id)) },
     config,
     usage,
   };
@@ -204,6 +206,39 @@ export async function verifyCheckout(viewer: IUser, reference: string): Promise<
   const now = await SubscriptionCheckout.findById(c._id).select("status").lean<Pick<ISubscriptionCheckout, "status">>();
   const me = (await User.findById(viewer._id).lean<IUser>()) ?? viewer;
   return { paid: now?.status === "paid", subscription: await mySubscription(me) };
+}
+
+/* ------------------------------ bought in the phone app ------------------------------ */
+
+/** Give someone what a checked store purchase paid for. Counted once, however many times the phone reports it. */
+export async function applyPlanPurchase(userId: Types.ObjectId, ref: string, bought: PaidPlan, platform: "apple" | "google", now = new Date()): Promise<void> {
+  if (await PlanStorePurchase.exists({ ref })) return;
+  const me = await User.findById(userId).select("plan planUntil").lean<Pick<IUser, "plan" | "planUntil">>();
+  const next = planAfterPurchase({ plan: me?.plan ?? "free", until: me?.planUntil ?? null }, bought, now);
+  try {
+    await PlanStorePurchase.create({ ref, userId, plan: bought, platform, until: next.until });
+  } catch (e) {
+    if ((e as { code?: number })?.code === 11000) return; // the same purchase, reported twice at once
+    throw e;
+  }
+  await User.updateOne({ _id: userId }, { $set: { plan: next.plan, planUntil: next.until } });
+  await Subscription.updateOne({ userId }, { $set: { plan: next.plan, status: "non_renewing", source: "store", currentPeriodEnd: next.until, cancelledAt: null } }, { upsert: true });
+  notify([userId], { title: `You're on ${PLAN_NAMES[next.plan]}`, body: "Thanks! It lasts 30 days and doesn't renew by itself.", data: { href: "/settings?tab=plan" } });
+}
+
+/** A Lite or Pro purchase from the phone: ask the store what it really was, then give it to the person who bought it. */
+export async function verifyPlanStorePurchase(viewer: IUser, input: z.infer<typeof adStoreVerifySchema>): Promise<SubscriptionDTO> {
+  rateLimit(`plan-store:${sid(viewer._id)}`, 30, 60 * 60 * 1000);
+  const sale = input.platform === "apple" ? await appleSale(input.transactionId) : await googleSale(input.productId, input.purchaseToken);
+  if (sale.test && !testSalesAllowed()) throw new ApiError(402, "That was a test purchase, so it can't pay for a plan.", { code: "store_test" });
+  if (sale.refunded) throw new ApiError(402, "That purchase was refunded.", { code: "store_refunded" });
+  if (sale.pending) throw new ApiError(409, "Your payment is still going through. Your plan starts once it's done.", { code: "store_pending" });
+  const bought = planFromStoreProduct(sale.productId);
+  if (!bought) throw new ApiError(402, "That purchase isn't for a plan.", { code: "store_unknown" });
+  if (sale.accountToken !== planStoreToken(sid(viewer._id))) throw new ApiError(409, "That purchase was made on another Klique account. Contact us and we'll sort it out.", { code: "store_other_account" });
+  await applyPlanPurchase(viewer._id, `${input.platform}:${sale.id}`, bought, input.platform);
+  const me = (await User.findById(viewer._id).lean<IUser>()) ?? viewer;
+  return mySubscription(me);
 }
 
 /* ------------------------------ cancelling ------------------------------ */
