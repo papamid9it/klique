@@ -728,6 +728,8 @@ export interface AttendeesDTO {
 /* ---------------------------- discovery ----------------------------- */
 
 export interface DiscoverDTO {
+  /** every event on this page in one mixed order, different per person and over time: Home shows them in this order */
+  eventsForYou: EventDTO[];
   /** the scope that was used, e.g. "city:NG:lagos" */
   where: string;
   featured: EventDTO | null;
@@ -744,6 +746,19 @@ export interface DiscoverDTO {
   fromCommunities: EventDTO[];
   free: EventDTO[];
   online: EventDTO[];
+}
+
+/** What can narrow a search; leave anything out for "any". */
+export interface SearchFilters {
+  where?: string;
+  type?: "all" | "communities" | "events" | "people";
+  interest?: string;
+  when?: string;
+  price?: "any" | "free" | "paid";
+  format?: "any" | "in-person" | "online";
+  past?: boolean;
+  verified?: boolean;
+  sort?: "best" | "new" | "popular";
 }
 
 export interface SearchResultsDTO {
@@ -1746,7 +1761,7 @@ export interface AdCampaignDTO {
   amount: number;
   currency: string;
   reviewNote: string;
-  paymentMethod: "paystack" | "manual" | null;
+  paymentMethod: "paystack" | "manual" | "apple" | "google" | null;
   paidAt: ISODate | null;
   startsAt: ISODate | null;
   endsAt: ISODate | null;
@@ -1758,6 +1773,8 @@ export interface AdCampaignDTO {
   user?: UserBrief;
   /** card payment through Paystack is set up */
   canPayOnline: boolean;
+  /** paying in the phone app: the store product to buy (null when the price is above every tier), what it costs, and what ties the purchase to this ad */
+  store: { productId: string | null; amount: number | null; accountToken: string; apple: boolean; google: boolean };
 }
 
 export interface AdCampaignInput {

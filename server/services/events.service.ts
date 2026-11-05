@@ -1,3 +1,4 @@
+import { searchFilter } from "./search-terms";
 import type { QueryFilter, Types } from "mongoose";
 import { EVENT_FALLBACK_MS, eventEnded } from "@/lib/event-time";
 import { assertCanHostInSpace, assertCanHostPublic, canHostInSpace, isSiteAdmin } from "../policies/hosting";
@@ -77,8 +78,7 @@ export async function listEvents(viewer: IUser | null, q: ListQuery): Promise<Pa
   if (q.price === "free") and.push({ priceNaira: 0 });
   if (q.price === "paid") and.push({ priceNaira: { $gt: 0 } });
   if (q.q) {
-    const rx = new RegExp(escapeRegex(q.q), "i");
-    and.push({ $or: [{ title: rx }, { venue: rx }, { neighborhood: rx }, { description: rx }] });
+    and.push(searchFilter(q.q, ["title", "venue", "neighborhood", "description", "city", "interest"]) as QueryFilter<IEvent>);
   }
 
   // Events inside one community / group: whoever may see that space sees its events. That's how a public
@@ -105,7 +105,7 @@ export async function listEvents(viewer: IUser | null, q: ListQuery): Promise<Pa
   }
 
   const rows = await Event.find({ $and: and })
-    .sort({ startsAt: q.past ? -1 : 1 })
+    .sort(q.sort === "new" ? { createdAt: -1 } : q.sort === "popular" ? { goingCount: -1, startsAt: 1 } : { startsAt: q.past ? -1 : 1 })
     .skip((q.page - 1) * PAGE_SIZE)
     .limit(PAGE_SIZE + 1)
     .lean<IEvent[]>();

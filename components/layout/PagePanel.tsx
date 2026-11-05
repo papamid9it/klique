@@ -26,7 +26,7 @@ export function PanelSlot({ className }: { className?: string }) {
 }
 
 /** Pages that bring their own panel (HomePanel leaves out its main nav, search and place for these). */
-export const hasPagePanel = (p: string) => p === "/kliques" || p === "/communities" || p.startsWith("/saved") || p.startsWith("/notifications") || p === "/events" || /^\/events\/(?!new$)[^/]+$/.test(p);
+export const hasPagePanel = (p: string) => p === "/kliques" || p === "/search" || p === "/communities" || p.startsWith("/saved") || p.startsWith("/notifications") || p === "/events" || /^\/events\/(?!new$)[^/]+$/.test(p);
 
 export function PagePanel({ label, children }: { label: string; children: ReactNode }) {
   const el = useContext(SlotCtx)?.el;

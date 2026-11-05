@@ -1,3 +1,4 @@
+import { searchFilter } from "./search-terms";
 import { parseScope, scopeFilter } from "@/lib/places";
 import { forgetAdultCommunities, isAdult } from "../policies/adult";
 import { deleteUploads } from "./media.service";
@@ -42,12 +43,12 @@ export async function listCommunities(viewer: IUser | null, q: ListQuery): Promi
   if (where) Object.assign(filter, scopeFilter(where));
   if (q.interest) filter.interest = q.interest;
   if (q.q) {
-    const rx = new RegExp(escapeRegex(q.q), "i");
-    filter.$or = [{ name: rx }, { description: rx }, { neighborhood: rx }];
+    Object.assign(filter, searchFilter(q.q, ["name", "description", "neighborhood", "city", "interest"]));
   }
+  if (q.verified) filter.$or = [{ verified: true }, { official: true }];
 
   const rows = await Community.find(filter)
-    .sort({ memberCount: -1, createdAt: -1 })
+    .sort(q.sort === "new" ? { createdAt: -1 } : { memberCount: -1, createdAt: -1 })
     .skip((q.page - 1) * PAGE_SIZE)
     .limit(PAGE_SIZE + 1)
     .lean<ICommunity[]>();

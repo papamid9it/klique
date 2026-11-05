@@ -139,6 +139,9 @@ export const communityListQuery = pageQuery.extend({
   interest: z.preprocess(blankToUndef, interestId.optional()),
   q: z.preprocess(blankToUndef, z.string().trim().max(60).optional()),
   scope: z.enum(["discover", "joined"]).default("discover"),
+  /** only verified (and Klique's own) communities */
+  verified: z.preprocess((v) => v === "1" || v === "true" || v === true, z.boolean()).default(false),
+  sort: z.enum(["popular", "new"]).default("popular"),
 });
 
 export const subCreateSchema = z.object({
@@ -356,6 +359,7 @@ export const eventListQuery = pageQuery.extend({
   sub: z.preprocess(blankToUndef, z.string().trim().max(80).optional()),
   scope: z.enum(["all", "going", "saved", "hosted"]).default("all"),
   past: z.preprocess((v) => v === "true" || v === true, z.boolean()).default(false),
+  sort: z.enum(["soonest", "popular", "new"]).default("soonest"),
 });
 
 /** The events page's side panel: counts per place and per day for whatever is being looked at. */
@@ -369,6 +373,18 @@ export const discoverQuery = z.object({ where: whereParam });
 export const searchQuery = z.object({
   q: z.string().trim().min(1, "Type something to search").max(60),
   where: whereParam,
+  /** one kind of result, and more of it */
+  type: z.enum(["all", "communities", "events", "people"]).default("all"),
+  interest: z.preprocess(blankToUndef, interestId.optional()),
+  /** events only */
+  when: z.enum(DATE_FILTERS.map((d) => d.id) as [string, ...string[]]).default("any"),
+  price: z.enum(["any", "free", "paid"]).default("any"),
+  format: z.enum(["any", "in-person", "online"]).default("any"),
+  past: z.preprocess((v) => v === "1" || v === "true" || v === true, z.boolean()).default(false),
+  /** communities only */
+  verified: z.preprocess((v) => v === "1" || v === "true" || v === true, z.boolean()).default(false),
+  /** best match first, the newest, or the most people */
+  sort: z.enum(["best", "new", "popular"]).default("best"),
 });
 
 /* ------------------------------ messaging --------------------------- */
@@ -794,6 +810,11 @@ export const adPricingSchema = z.object({
 export const adReviewSchema = z.object({ action: z.enum(["approve", "changes", "reject", "mark-paid"]), note: z.string().trim().max(500).default("") });
 export const adCampaignListQuery = z.object({ status: z.enum(["review", "approved", "running", "all"]).default("review") });
 export const adVerifySchema = z.object({ reference: z.string().trim().min(6).max(80) });
+/** a purchase made in the phone app, to check with the store */
+export const adStoreVerifySchema = z.discriminatedUnion("platform", [
+  z.object({ platform: z.literal("apple"), transactionId: z.string().trim().min(1).max(64) }),
+  z.object({ platform: z.literal("google"), productId: z.string().trim().min(1).max(64), purchaseToken: z.string().trim().min(1).max(2000) }),
+]);
 
 /* ------------------------------ Hype (bought) ------------------------------ */
 

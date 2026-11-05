@@ -2,11 +2,11 @@ import "server-only";
 import { randomBytes } from "node:crypto";
 import { Types } from "mongoose";
 import type { z } from "zod";
-import { AD_PLACEMENTS, adPrice, pricingOf, type AdPlacement, type AdPricing } from "@/lib/ads";
+import { AD_PLACEMENTS, adPrice, adStoreProductId, adStoreTier, pricingOf, type AdPlacement, type AdPricing } from "@/lib/ads";
 import { parseScope, scopeLabel } from "@/lib/places";
 import type { AdCampaignDTO, AdCampaignPhase } from "@/lib/types";
 import { adminEmails, appUrl, paystackConfig } from "../env";
-import { badRequest, conflict, forbidden, notFound } from "../http/errors";
+import { ApiError, badRequest, conflict, forbidden, notFound } from "../http/errors";
 import { rateLimit } from "../http/rate-limit";
 import { Ad, type IAd } from "../models/Ad";
 import { AdCampaign, type IAdCampaign } from "../models/AdCampaign";
@@ -16,17 +16,18 @@ import { Event, type IEvent } from "../models/Event";
 import { Membership } from "../models/Membership";
 import { User, type IUser } from "../models/User";
 import { GHOST, loadBriefs } from "../serializers";
-import type { adCampaignSchema, adPricingSchema } from "../validators/schemas";
+import type { adCampaignSchema, adPricingSchema, adStoreVerifySchema } from "../validators/schemas";
 import { assertVerified } from "./account.service";
 import { sid } from "./helpers";
 import { isKlique, kliqueId } from "./klique-id";
 import { paystack } from "./promotions.service";
+import { appleSale, googleSale, storeAccountToken, storeBillingStatus, testSalesAllowed } from "./store-billing.service";
 import { notify, notifyNow } from "./push.service";
 
 /**
  * Ads people ask for. Anyone signed in (with a verified email) can submit one: promote an event they host,
  * a community they run, or their own ad (picture, headline, link). A site admin approves it, asks for changes,
- * or turns it down. Once approved they pay (card through Paystack, or an admin marks it paid for a transfer),
+ * or turns it down. Once approved they pay (card through Paystack, Apple or Google in the phone app, or an admin marks it paid for a transfer),
  * and it runs for the days they bought in the placements they chose, then ends. The price is always worked
  * out here from the admin's price list, never taken from the browser.
  */
@@ -75,7 +76,9 @@ async function toDtos(rows: IAdCampaign[], withUser = false): Promise<AdCampaign
   const co = new Map(communities.map((c) => [sid(c._id), c]));
   const ad = new Map(ads.map((a) => [sid(a._id), a]));
   const online = !!paystackConfig();
+  const billing = storeBillingStatus();
   return rows.map((c) => {
+    const tier = adStoreTier(c.amount);
     const e = c.eventId ? ev.get(sid(c.eventId)) : undefined;
     const k = c.communityId ? co.get(sid(c.communityId)) : undefined;
     const a = c.adId ? ad.get(sid(c.adId)) : undefined;
@@ -111,6 +114,7 @@ async function toDtos(rows: IAdCampaign[], withUser = false): Promise<AdCampaign
       updatedAt: c.updatedAt.toISOString(),
       ...(withUser ? { user: users.get(sid(c.userId)) ?? GHOST } : {}),
       canPayOnline: online,
+      store: { productId: tier ? adStoreProductId(tier) : null, amount: tier, accountToken: storeAccountToken(sid(c._id)), ...billing },
     };
   });
 }
@@ -279,7 +283,7 @@ export async function payCampaign(viewer: IUser, id: string): Promise<{ authoriz
 }
 
 /** Turn a paid ad request into a running ad. Safe to call any number of times. */
-async function startRun(c: IAdCampaign, method: "paystack" | "manual", paidAt = new Date()): Promise<void> {
+async function startRun(c: IAdCampaign, method: "paystack" | "manual" | "apple" | "google", paidAt = new Date()): Promise<void> {
   const claimed = await AdCampaign.findOneAndUpdate({ _id: c._id, status: "approved" }, { $set: { status: "paid", paymentMethod: method, paidAt } }, { returnDocument: "after" }).lean<IAdCampaign>();
   if (!claimed) return; // already started (the webhook and the redirect arriving together)
   const now = Date.now();
@@ -338,6 +342,39 @@ export async function verifyCampaignPayment(viewer: IUser, reference: string): P
     const data = await paystack<{ status: string; amount: number; currency: string; paid_at?: string }>(`/transaction/verify/${encodeURIComponent(reference)}`);
     await fulfilCampaign(reference, data);
   }
+  return getMyCampaign(viewer, sid(c._id));
+}
+
+/**
+ * A purchase made in the phone app: ask the store what it really was, find the ad it was bought for, and start it.
+ * The phone only finishes the purchase once this succeeds, so anything thrown here leaves it to try again; a Google
+ * purchase that's never finished is refunded by Google after 3 days. Safe to call again for the same purchase.
+ */
+export async function verifyStorePurchase(viewer: IUser, input: z.infer<typeof adStoreVerifySchema>): Promise<AdCampaignDTO> {
+  rateLimit(`ad-store:${sid(viewer._id)}`, 30, 60 * 60 * 1000);
+  const sale = input.platform === "apple" ? await appleSale(input.transactionId) : await googleSale(input.productId, input.purchaseToken);
+  if (sale.test && !testSalesAllowed()) throw new ApiError(402, "That was a test purchase, so it can't pay for an ad.", { code: "store_test" });
+  if (sale.refunded) throw new ApiError(402, "That purchase was refunded.", { code: "store_refunded" });
+  if (sale.pending) throw new ApiError(409, "Your payment is still going through. Your ad starts once it's done.", { code: "store_pending" });
+
+  const ref = `${input.platform}:${sale.id}`;
+  const mine = await AdCampaign.find({ userId: viewer._id, status: { $in: ["approved", "paid"] } }).lean<IAdCampaign[]>();
+  const c = mine.find((x) => storeAccountToken(sid(x._id)) === sale.accountToken);
+  if (!c) throw new ApiError(409, "That purchase doesn't match an ad waiting for payment. Contact us and we'll sort it out.", { code: "store_no_ad" });
+  if (c.status === "paid") {
+    if (c.paymentRef === ref) return getMyCampaign(viewer, sid(c._id)); // already counted: the phone can finish it now
+    throw new ApiError(409, "This ad is already paid for. Contact us and we'll sort out the second payment.", { code: "store_no_ad" });
+  }
+  const tier = adStoreTier(c.amount);
+  if (!tier || adStoreProductId(tier) !== sale.productId) throw new ApiError(409, "That purchase doesn't cover this ad's price. Contact us and we'll sort it out.", { code: "store_no_ad" });
+  try {
+    // the unique index on paymentRef stops one purchase paying for two ads
+    await AdCampaign.updateOne({ _id: c._id, status: "approved" }, { $set: { paymentRef: ref, paymentUrl: null } });
+  } catch (e) {
+    if ((e as { code?: number })?.code === 11000) throw new ApiError(409, "That purchase has already paid for an ad.", { code: "store_no_ad" });
+    throw e;
+  }
+  await startRun(c, input.platform);
   return getMyCampaign(viewer, sid(c._id));
 }
 

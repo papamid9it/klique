@@ -41,7 +41,7 @@ export default function HomePage() {
   // an RSVP shows wherever that event appears
   const patchEvent = (e: EventDTO) => {
     const swap = (list: EventDTO[]) => list.map((x) => (x.id === e.id ? e : x));
-    setData((d): DiscoverDTO | null => (d ? { ...d, featured: d.featured?.id === e.id ? e : d.featured, eventsNearYou: swap(d.eventsNearYou), fromCommunities: swap(d.fromCommunities), thisWeekend: swap(d.thisWeekend), free: swap(d.free), online: swap(d.online), yourPlans: swap(d.yourPlans) } : d));
+    setData((d): DiscoverDTO | null => (d ? { ...d, eventsForYou: swap(d.eventsForYou), featured: d.featured?.id === e.id ? e : d.featured, eventsNearYou: swap(d.eventsNearYou), fromCommunities: swap(d.fromCommunities), thisWeekend: swap(d.thisWeekend), free: swap(d.free), online: swap(d.online), yourPlans: swap(d.yourPlans) } : d));
   };
   const events = rankEvents(data, user?.interests ?? []);
   // kliques you could join, best for you first: the first few in their own row, the rest between posts
@@ -103,7 +103,7 @@ export default function HomePage() {
 
 
       <div className="mx-auto max-w-[730px]">
-        <HomeFeed refreshRef={feedRefresh} onNewer={setNewer} moreEvents={events.slice(TOP_EVENTS)} kliques={forYou} onDismissKlique={dismiss} communities={data?.suggestedCommunities ?? []} onEvent={patchEvent} onCommunity={patchCommunity} />
+        <HomeFeed refreshRef={feedRefresh} onNewer={setNewer} moreEvents={events.length > TOP_EVENTS + 2 ? events.slice(TOP_EVENTS) : events} kliques={forYou} onDismissKlique={dismiss} communities={data?.suggestedCommunities ?? []} onEvent={patchEvent} onCommunity={patchCommunity} />
         <BackToTop hidden={newer.length > 0} />
       </div>
     </div>

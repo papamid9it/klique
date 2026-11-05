@@ -17,7 +17,10 @@ import { hiddenUserIds } from "./blocks";
 import { listCommunities } from "./communities.service";
 import { listEvents } from "./events.service";
 import { kliqueId } from "./klique-id";
-import { escapeRegex } from "./helpers";
+import { mixEvents } from "./event-mix";
+import { matchScore, searchFilter } from "./search-terms";
+import type { z } from "zod";
+import type { searchQuery } from "../validators/schemas";
 
 const LINGER_MS = EVENT_FALLBACK_MS;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -56,8 +59,15 @@ export async function discover(viewer: IUser | null, whereParam?: string): Promi
     ]),
   ]);
 
-  // Interest matches first, then soonest.
-  const ranked = [...upcoming].sort((a, b) => Number(mine.has(b.interest)) - Number(mine.has(a.interest)) || +a.startsAt - +b.startsAt);
+  // Mixed, so no one event leads every time: your interests, more people going and sooner only raise the odds.
+  const who = viewer ? String(viewer._id) : scopeToString(scope);
+  const nowMs = +now;
+  const weight = (e: { interest: string; goingCount?: number; startsAt: Date | string }) => {
+    const days = (+new Date(e.startsAt) - nowMs) / DAY_MS;
+    return (mine.has(e.interest) ? 3 : 1) * (1 + Math.log2(1 + (e.goingCount ?? 0)) / 2) * (days <= 7 ? 1.5 : 1);
+  };
+  const withId = (e: IEvent) => ({ ...e, id: String(e._id) });
+  const ranked = mixEvents(upcoming.map(withId), weight, who, nowMs);
   // The big banner is public-facing: only events open to everyone (never a members-only community or group
   // event), the one with the most people going first; your interests, then the sooner one, break ties.
   const candidates = upcoming.filter((e) => e.audience === "public" && !e.subcommunityId);
@@ -65,21 +75,19 @@ export async function discover(viewer: IUser | null, whereParam?: string): Promi
   const privateCommunities = new Set(
     candidateCommunities.length ? (await Community.find({ _id: { $in: candidateCommunities }, privacy: { $ne: "public" } }).select("_id").lean<{ _id: ICommunity["_id"] }[]>()).map((c) => String(c._id)) : [],
   );
-  const featuredRow =
-    candidates
-      .filter((e) => !e.communityId || !privateCommunities.has(String(e.communityId)))
-      .sort((a, b) => (b.goingCount ?? 0) - (a.goingCount ?? 0) || Number(mine.has(b.interest)) - Number(mine.has(a.interest)) || +a.startsAt - +b.startsAt)[0] ?? null;
-  const nearRows = ranked.filter((e) => e !== featuredRow).slice(0, 6);
+  const featuredRow = mixEvents(candidates.filter((e) => !e.communityId || !privateCommunities.has(String(e.communityId))).map(withId), weight, `${who}:featured`, nowMs)[0] ?? null;
+  const nearRows = ranked.filter((e) => String(e._id) !== String(featuredRow?._id)).slice(0, 6);
 
   // The themed rows below never repeat an event already shown above them.
   const shown = new Set([featuredRow, ...nearRows].filter(Boolean).map((e) => String(e!._id)));
+  const soonMixed = ranked.filter((e) => e.startsAt >= now);
   const pick = (rows: IEvent[], keep: (e: IEvent) => boolean, n = 3) => {
     const out = rows.filter((e) => !shown.has(String(e._id)) && keep(e)).slice(0, n);
     for (const e of out) shown.add(String(e._id));
     return out;
   };
   const weekend = dateRangeFor("weekend", now);
-  const soon = upcoming.filter((e) => e.startsAt >= now);
+  const soon = soonMixed;
   const weekendRows = pick(soon, (e) => e.startsAt >= weekend.from && (!weekend.to || e.startsAt < weekend.to));
   const fromCommunityRows = pick(communityRows, () => true);
   const freeRows = pick(soon, (e) => !e.priceNaira);
@@ -114,8 +122,14 @@ export async function discover(viewer: IUser | null, whereParam?: string): Promi
     : visibleCategories().map((c) => c.id).sort((a, b) => (counts.get(b) ?? 0) - (counts.get(a) ?? 0)).slice(0, 4);
   const yourScenes = interests.map((interest) => ({ interest, count: counts.get(interest) ?? 0 }));
 
+  // Home is for finding things: what you host or already said yes to comes after everything new
+  const isMine = (d: EventDTO) => d.viewer.isHost || !!d.viewer.rsvp;
+  const mixedForYou = mixEvents([...dtos.values()].filter((d) => !d.isPast), weight, `${who}:for-you`, nowMs);
+  const eventsForYou = [...mixedForYou.filter((d) => !isMine(d)), ...mixedForYou.filter(isMine)];
+
   return {
     where: scopeToString(scope),
+    eventsForYou,
     featured,
     eventsNearYou,
     newCommunities,
@@ -130,27 +144,50 @@ export async function discover(viewer: IUser | null, whereParam?: string): Promi
   };
 }
 
-export async function search(viewer: IUser | null, q: string, where?: string): Promise<SearchResultsDTO> {
-  const [communities, events, people] = await Promise.all([
-    // Both reuse the list services, so search can never see more than browsing can.
-    listCommunities(viewer, { q, where, page: 1, scope: "discover" }).then((r) => r.items.slice(0, 6) as CommunityCardDTO[]),
-    listEvents(viewer, { q, where, page: 1, price: "any", format: "any", date: "any", scope: "all", past: false }).then((r) => r.items.slice(0, 6)),
-    searchPeople(viewer, q, where),
+const SHOWN_WITH_ALL = 6;
+
+/**
+ * Search everything at once, or one kind of thing. A filter that only makes sense for one kind narrows the results to
+ * that kind: "Free" leaves out people and communities, "Verified" leaves out events and people. @name looks for people.
+ * Both lists reuse the list services, so search can never see more than browsing can.
+ */
+export async function search(viewer: IUser | null, input: z.infer<typeof searchQuery>): Promise<SearchResultsDTO> {
+  const { q, where, type, interest, when, price, format, past, verified, sort } = input;
+  const eventOnly = when !== "any" || price !== "any" || format !== "any" || past;
+  const person = /^@\S+$/.test(q);
+  const wants = (kind: "communities" | "events" | "people") => {
+    if (type !== "all") return type === kind;
+    if (person) return kind === "people";
+    if (kind === "communities") return !eventOnly;
+    if (kind === "events") return !verified;
+    return !eventOnly && !verified && !interest;
+  };
+  const cap = type === "all" ? SHOWN_WITH_ALL : Infinity;
+  const [communityRows, eventRows, people] = await Promise.all([
+    wants("communities") ? listCommunities(viewer, { q, where, interest, page: 1, scope: "discover", verified, sort: sort === "new" ? "new" : "popular" }).then((r) => r.items) : Promise.resolve([] as CommunityCardDTO[]),
+    wants("events") ? listEvents(viewer, { q, where, interest, page: 1, price, format, date: when, scope: "all", past, sort: sort === "new" ? "new" : sort === "popular" ? "popular" : "soonest" }).then((r) => r.items) : Promise.resolve([] as EventDTO[]),
+    wants("people") ? searchPeople(viewer, q, where, type === "people" ? 24 : 8) : Promise.resolve([]),
   ]);
-  return { query: q, communities, events, people };
+  // best match first: a name that is what you typed beats one that only mentions it
+  const rank = <T,>(rows: T[], name: (r: T) => string) => (sort === "best" ? [...rows].sort((a, b) => matchScore(name(b), q) - matchScore(name(a), q)) : rows);
+  return {
+    query: q,
+    communities: rank(communityRows, (c) => c.name).slice(0, cap),
+    events: rank(eventRows, (e) => e.title).slice(0, cap),
+    people: rank(people, (p) => p.displayName),
+  };
 }
 
-async function searchPeople(viewer: IUser | null, q: string, where?: string) {
+async function searchPeople(viewer: IUser | null, q: string, where?: string, limit = 8) {
   const scope = parseScope(where);
   const hidden = await hiddenUserIds(viewer?._id ?? null);
-  const rx = new RegExp(escapeRegex(q), "i");
   const rows = await User.find({
     profileVisibility: viewer ? { $ne: "private" } : "public",
     _id: { $nin: [...hidden, ...(viewer ? [viewer._id] : [])] },
     ...scopeFilter(scope),
-    $or: [{ handle: rx }, { displayName: rx }],
+    ...searchFilter(q, ["handle", "displayName"]),
   })
-    .limit(8)
+    .limit(limit)
     .select("handle displayName avatarUrl avatarFrame nameEffect plan planUntil email country city")
     .lean<IUser[]>();
   return rows.map(toBrief);

@@ -1,5 +1,6 @@
 "use client";
 
+import { COMMUNITIES_AT, mixFeed, newFeedSeed } from "@/lib/feedMix";
 import Link from "next/link";
 import { Fragment, useEffect, useRef, useState, type RefObject } from "react";
 import { useNewerPosts } from "@/components/domain/feed/NewPosts";
@@ -225,6 +226,8 @@ function Carousel({ id, title, item = 208, children }: { id: string; title: stri
  */
 export function rankEvents(data: DiscoverDTO | null, interests: string[]): EventDTO[] {
   if (!data) return [];
+  // the server has already mixed them, so no one event leads every time
+  if (data.eventsForYou?.length) return data.eventsForYou;
   const near = new Set(data.eventsNearYou.map((e) => e.id));
   const all = [data.featured, ...data.eventsNearYou, ...data.fromCommunities, ...data.thisWeekend, ...data.free, ...data.online].filter((e): e is EventDTO => !!e && !e.isPast);
   const unique = all.filter((e, i) => all.findIndex((x) => x.id === e.id) === i);
@@ -265,76 +268,13 @@ export function KliquesRow({ kliques, onDismiss }: { kliques: CrewCardDTO[]; onD
   );
 }
 
-/**
- * Between posts, one card every SLOT_EVERY posts, never two in a row: they take turns as klique, event, klique,
- * ad (skipping a kind there's none left of), each shown once. Trending posts from elsewhere are posts, so they
- * don't count. The "Kliques for you" row comes after KLIQUES_ROW_AT posts and again every KLIQUES_ROW_EVERY,
- * with kliques not shown yet (pushed a few posts down when it would land on a slot). Once: communities to join.
- */
-const SLOT_EVERY = 6;
-const ROTATION = ["klique", "event", "klique", "ad"] as const;
-type Slot = { kind: "klique"; klique: CrewCardDTO } | { kind: "event"; event: EventDTO } | { kind: "ad"; ad: number };
-/** After this many posts, once: communities to join (between two slots). */
-const COMMUNITIES_AT = 9;
-/** The first "Kliques for you" row, how often it comes back, and how many kliques one row shows. */
-const KLIQUES_ROW_AT = 4;
-const KLIQUES_ROW_EVERY = 15;
-const KLIQUES_PER_ROW = 8;
-
-interface FeedPlan {
-  slots: Map<number, Slot>;
-  rows: Map<number, CrewCardDTO[]>;
-}
-
-/** Where every inserted card and row goes, in post order, drawing kliques from one pool so none repeats. */
-function planFeed(posts: number, kliques: CrewCardDTO[], events: EventDTO[], ads: number): FeedPlan {
-  const slots = new Map<number, Slot>();
-  const rows = new Map<number, CrewCardDTO[]>();
-  const taken = new Set<number>([COMMUNITIES_AT]);
-  // rows first in position order, nudged off slot and community positions
-  const rowAt: number[] = [];
-  for (let n = KLIQUES_ROW_AT; n <= Math.max(posts, KLIQUES_ROW_AT); n += KLIQUES_ROW_EVERY) {
-    let at = n;
-    while (at % SLOT_EVERY === 0 || taken.has(at) || taken.has(at - 1) || (at + 1) % SLOT_EVERY === 0 || (at - 1) % SLOT_EVERY === 0) at++;
-    rowAt.push(Math.min(at, Math.max(posts, 1)));
-    taken.add(at);
-  }
-  let k = 0;
-  let e = 0;
-  let a = 0;
-  let turn = 0;
-  // walk the feed in order, so rows and single klique cards share the pool fairly
-  for (let n = 1; n <= Math.max(posts, 1); n++) {
-    if (rowAt.includes(n) && k < kliques.length) {
-      rows.set(n, kliques.slice(k, k + KLIQUES_PER_ROW));
-      k += KLIQUES_PER_ROW;
-    }
-    if (n % SLOT_EVERY !== 0) continue;
-    for (let tries = 0; tries < ROTATION.length; tries++) {
-      const kind = ROTATION[(turn + tries) % ROTATION.length];
-      if (kind === "klique" && k < kliques.length) {
-        slots.set(n, { kind, klique: kliques[k++] });
-        break;
-      }
-      if (kind === "event" && e < events.length) {
-        slots.set(n, { kind, event: events[e++] });
-        break;
-      }
-      // the few ads there are take turns all the way down
-      if (kind === "ad" && ads > 0) {
-        slots.set(n, { kind, ad: a++ % ads });
-        break;
-      }
-    }
-    turn++;
-  }
-  return { slots, rows };
-}
+/** A new mix each visit, the same while scrolling and coming Back. */
+const FEED_SEED = newFeedSeed();
 
 /**
  * Posts from your communities, best first (pictures and videos rank higher), with now and then a trending post
- * from a public community you're not in, a sponsored card every few posts, a row of more events every eight
- * (ones not already at the top of the page) and once a row of communities to join. The next page loads as you
+ * from a public community you're not in, and now and then, at random, an event, a klique or a sponsored card (lib/feedMix), and once a row of
+ * communities to join. The next page loads as you
  * near the bottom, until "You're all caught up". What's loaded is kept, so Back returns to the same spot.
  */
 export function HomeFeed({
@@ -414,7 +354,7 @@ export function HomeFeed({
     );
   }
 
-  const { slots, rows } = planFeed(items.length, kliques, moreEvents, ads.length);
+  const { slots, rows } = mixFeed(items.length, kliques, moreEvents, ads.length, FEED_SEED, [COMMUNITIES_AT]);
   return (
     <section ref={anchor} aria-labelledby="feed-h" className="space-y-5">
       <h2 id="feed-h" className="text-lg font-semibold tracking-tight">

@@ -47,6 +47,14 @@ export function adPrice(p: AdPricing, placements: AdPlacement[], reach: AdReach,
   return Math.round((perDay * (p.reach[reach] ?? 1) * days) / 100) * 100;
 }
 
+/**
+ * Apple and Google only sell fixed prices, set up by hand in each store, so an ad bought in the phone app costs the
+ * nearest of these at or above its price. Each is a consumable product called ads_<naira> in both stores.
+ */
+export const AD_STORE_TIERS = [3000, 5000, 7500, 10000, 15000, 20000, 30000, 40000, 50000, 75000, 100000, 125000, 150000, 200000, 250000, 300000, 400000, 500000, 750000, 1000000, 1250000, 1500000, 2000000, 2500000] as const;
+export const adStoreTier = (amount: number): number | null => AD_STORE_TIERS.find((t) => t >= amount) ?? null;
+export const adStoreProductId = (tier: number) => `ads_${tier}`;
+
 /** Fill in anything missing from saved pricing with the defaults. */
 export function pricingOf(stored: unknown): AdPricing {
   const s = (stored && typeof stored === "object" ? stored : {}) as Partial<AdPricing>;

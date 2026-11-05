@@ -75,6 +75,11 @@ export function CommunityInfo({ community: c, onJoined, onNavigate }: { communit
             <JoinButton size="md" community={c} onChange={(next) => onJoined(next as CommunityDTO)} />
           )}
           <ShareButton path={base} text={`${c.name} on klique`} label="Share" />
+          {c.viewer.role === "owner" && c.privacy === "public" && !c.official && (
+            <Button size="sm" href={`/ads/new?community=${c.slug}`} onClick={onNavigate}>
+              <Icon name="megaphone" size={15} /> Promote
+            </Button>
+          )}
           {v.canManage && c.privacy === "private" && (
             <Button size="sm" href={`${base}?settings=invites`} onClick={onNavigate}>
               <Icon name="link" size={13} /> Invite

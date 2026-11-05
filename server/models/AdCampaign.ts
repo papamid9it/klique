@@ -3,7 +3,7 @@ import { ALL_AD_PLACEMENTS as AD_PLACEMENTS, AD_REACHES, type AdPlacement, type 
 
 /**
  * An ad someone asked to run. The steps: they submit it ("pending") → a site admin approves it, asks for
- * changes, or rejects it → once approved they pay (Paystack, or an admin marks it paid) → it becomes a live
+ * changes, or rejects it → once approved they pay (Paystack, Apple or Google in the phone app, or an admin marks it paid) → it becomes a live
  * Ad for the days they bought, then ends. Every step notifies them.
  */
 export type CampaignStatus = "pending" | "changes" | "rejected" | "approved" | "paid" | "cancelled";
@@ -39,7 +39,7 @@ export interface IAdCampaign {
   paymentRef: string | null;
   /** the Paystack checkout for paymentRef, reused if they press Pay again */
   paymentUrl: string | null;
-  paymentMethod: "paystack" | "manual" | null;
+  paymentMethod: "paystack" | "manual" | "apple" | "google" | null;
   paidAt: Date | null;
   /** the running ad, once paid */
   adId: Types.ObjectId | null;
@@ -76,7 +76,7 @@ const AdCampaignSchema = new Schema<IAdCampaign>(
     reviewedAt: { type: Date, default: null },
     paymentRef: { type: String, default: null },
     paymentUrl: { type: String, default: null },
-    paymentMethod: { type: String, enum: ["paystack", "manual", null], default: null },
+    paymentMethod: { type: String, enum: ["paystack", "manual", "apple", "google", null], default: null },
     paidAt: { type: Date, default: null },
     adId: { type: Schema.Types.ObjectId, ref: "Ad", default: null },
     startsAt: { type: Date, default: null },

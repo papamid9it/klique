@@ -420,7 +420,7 @@ export function AdsBilling({ list }: { list: AdCampaignDTO[] }) {
                 <tr key={c.id}>
                   <td className="px-4 py-3 whitespace-nowrap text-ink-muted">{c.paidAt ? short(c.paidAt) : "–"}</td>
                   <td className="max-w-[20rem] truncate px-3 py-3 font-medium">{c.title}</td>
-                  <td className="px-3 py-3 text-ink-muted">{c.paymentMethod === "manual" ? "Bank transfer" : "Card (Paystack)"}</td>
+                  <td className="px-3 py-3 text-ink-muted">{c.paymentMethod === "apple" ? "Apple" : c.paymentMethod === "google" ? "Google Play" : c.paymentMethod === "manual" ? "Bank transfer" : "Card (Paystack)"}</td>
                   <td className="px-4 py-3 text-right font-mono">{formatPrice(c.amount, c.currency)}</td>
                 </tr>
               ))
