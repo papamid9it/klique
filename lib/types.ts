@@ -302,6 +302,13 @@ export interface SubcommunityDTO {
 
 /* ------------------------- community posts ------------------------- */
 
+/** A community you can post to right now. */
+export interface PostTargetDTO {
+  slug: string;
+  name: string;
+  coverImage: string | null;
+}
+
 /** A post in a community's Posts section (Instagram style). */
 export interface FeedPostDTO {
   id: Id;

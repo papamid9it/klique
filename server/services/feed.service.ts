@@ -1,7 +1,7 @@
 import "server-only";
 import { Types } from "mongoose";
 import type { z } from "zod";
-import type { FeedCommentDTO, FeedPostDTO, FeedSidebarDTO, HomeFeedItem, Paginated, ReactionDTO } from "@/lib/types";
+import type { FeedCommentDTO, FeedPostDTO, FeedSidebarDTO, HomeFeedItem, Paginated, PostTargetDTO, ReactionDTO } from "@/lib/types";
 import type { ReactionKind } from "@/lib/reactions";
 import { badRequest, forbidden, notFound } from "../http/errors";
 import { rateLimit } from "../http/rate-limit";
@@ -9,7 +9,7 @@ import { Community, type ICommunity } from "../models/Community";
 import { FeedComment, FeedPost, FeedVote, type IFeedComment, type IFeedPost } from "../models/FeedPost";
 import { Membership, type IMembership } from "../models/Membership";
 import type { IUser } from "../models/User";
-import { assertCanView, outranks, type Space, type SpaceAccess } from "../policies/access";
+import { assertCanView, outranks, spaceAccess, type Space, type SpaceAccess } from "../policies/access";
 import { loadBriefs } from "../serializers";
 import { standings } from "./roles.service";
 import type { feedCommentSchema, feedPostSchema } from "../validators/schemas";
@@ -159,6 +159,26 @@ export async function listPosts(viewer: IUser | null, space: Space, access: Spac
     .limit(PAGE + 1)
     .lean<IFeedPost[]>();
   return { items: await toPosts(rows.slice(0, PAGE), viewer), page, hasMore: rows.length > PAGE, at: now };
+}
+
+/** The communities you can post to right now, for choosing one: you're in it, it has Posts on, and it lets you post. */
+export async function postTargets(viewer: IUser): Promise<PostTargetDTO[]> {
+  const mine = await Membership.find({ userId: viewer._id, status: "active", subcommunityId: null }).select("communityId").lean<{ communityId: Types.ObjectId }[]>();
+  if (!mine.length) return [];
+  const communities = await Community.find({ _id: { $in: mine.map((m) => m.communityId) }, feedPolicy: { $in: ["admins", "members"] } }).sort({ name: 1 }).lean<ICommunity[]>();
+  const allowed = await Promise.all(
+    communities.map(async (community) => {
+      const access = await spaceAccess({ community, sub: null }, viewer);
+      if (!canPostIn(community, access)) return false;
+      try {
+        assertNotTimedOut(access);
+        return true;
+      } catch {
+        return false;
+      }
+    }),
+  );
+  return communities.filter((_, i) => allowed[i]).map((c) => ({ slug: c.slug, name: c.name, coverImage: c.coverImage ?? null }));
 }
 
 export async function createPost(viewer: IUser, space: Space, access: SpaceAccess, input: z.infer<typeof feedPostSchema>): Promise<FeedPostDTO> {
