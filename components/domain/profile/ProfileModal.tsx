@@ -22,7 +22,7 @@ import { useApi } from "@/lib/hooks/useApi";
 import { VerifiedCheck } from "@/components/ui/VerifiedCheck";
 import type { CommunityCardDTO, EventDTO, UserBrief, UserProfile } from "@/lib/types";
 import { longDate, monthYear, PresenceDot, ProfileActions, ProfileBanner, useMutualCommunities, ZoomAvatar } from "./ProfileParts";
-import { PointsPill } from "./ProfileCard";
+import { MembersPill, PointsPill } from "./ProfileCard";
 import { UserName } from "@/components/ui/UserName";
 import { SocialRow } from "@/components/ui/SocialIcons";
 
@@ -162,6 +162,7 @@ function ProfileBody({ handle, onClose, onOpenPerson, tryOn }: { handle: string;
             <span className="font-mono">@{p.handle}</span>
             {p.pronouns && <span>· {p.pronouns}</span>}
             {view.visible && <PointsPill n={p.points} />}
+            {view.visible && <MembersPill view={view} />}
           </p>
           {view.visible && <SocialRow socials={p.socials} className="mt-3" />}
 
@@ -169,15 +170,6 @@ function ProfileBody({ handle, onClose, onOpenPerson, tryOn }: { handle: string;
             <ProfileActions view={view} layout="stack" onFriendship={(friendship) => setData((d) => (d ? { ...d, friendship } : d))} onReload={() => void reload()} onNavigate={onClose} />
           </div>
 
-          {view.communityReach !== null && (
-            <button type="button" disabled={!created.length} onClick={() => setTab("created")} aria-label={`${view.communityReach} members in communities ${view.isSelf ? "you" : "they"} created`} className="mt-4 flex w-full items-center gap-3 rounded-card border border-line bg-surface p-3 text-left transition enabled:hover:bg-raised">
-              <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-raised text-accent-text"><Icon name="users" size={18} /></span>
-              <span className="flex min-w-0 items-center gap-1.5 text-lg font-bold">
-                <span className="tabular-nums">{compactCount(view.communityReach)}</span> {view.communityReach === 1 ? "member" : "members"}
-                {view.communityReachVerified && <VerifiedCheck on size={16} />}
-              </span>
-            </button>
-          )}
           {view.visible ? (
             <div className="mt-5 space-y-4 rounded-card border border-line bg-surface p-4">
               <ProfileGallery userId={p.id} media={p.media ?? []} isSelf={view.isSelf} onNavigate={onClose} />

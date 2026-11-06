@@ -330,7 +330,14 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
             </div>
             <h1 className="display text-[clamp(1.75rem,4vw,2.5rem)] text-balance">{event.title}</h1>
               {event.viewer.canPin && (
-                <button type="button" onClick={() => void EventService.pin(event.id, !event.pinned).then(() => onChange({ ...event, pinned: !event.pinned }), (e) => toast(errorMessage(e), "error"))} className="mt-2 inline-flex items-center gap-1.5 text-[13px] font-semibold text-accent-text hover:underline">
+                <button type="button" onClick={() => {
+                  // shows at once; put back if the server says no (three pinned already)
+                  onChange({ ...event, pinned: !event.pinned });
+                  void EventService.pin(event.id, !event.pinned).catch((e) => {
+                    onChange(event);
+                    toast(errorMessage(e), "error");
+                  });
+                }} className="mt-2 inline-flex items-center gap-1.5 text-[13px] font-semibold text-accent-text hover:underline">
                   <Icon name="pin" size={13} /> {event.pinned ? "Unpin from community" : "Pin to community"}
                 </button>
               )}

@@ -43,7 +43,7 @@ import { useAuth } from "@/components/providers/AuthProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import { Button } from "@/components/ui/Button";
 import { Icon, type IconName } from "@/components/ui/Icon";
-import { ChannelListSkeleton, ChatSkeleton, Skeleton } from "@/components/ui/Skeleton";
+import { ChannelListSkeleton, ChatSkeleton } from "@/components/ui/Skeleton";
 import { cx } from "@/components/ui/cx";
 import { slowModeLabel, audienceLabel, audienceRefusal } from "@/lib/constants";
 import { SlideOver } from "@/components/ui/SlideOver";
@@ -345,11 +345,8 @@ function CommunityWorkspace({ slug }: { slug: string }) {
         <ErrorState title="Couldn't load channels" message={channels.error} onRetry={channels.reload} />
       </div>
     ) : (
-      <div className="space-y-2 p-4" role="status" aria-label="Loading channels">
-        <Skeleton className="h-10" />
-        <Skeleton className="h-8" />
-        <Skeleton className="h-8" />
-        <Skeleton className="h-8" />
+      <div role="status" aria-label="Loading channels">
+        <ChannelListSkeleton />
       </div>
     );
 
@@ -407,10 +404,7 @@ function CommunityWorkspace({ slug }: { slug: string }) {
     if (!gSlug) return null;
     if (group.loading || (!group.data && !group.error)) {
       return (
-        <div className="space-y-4 p-6" role="status" aria-label="Loading group">
-          <Skeleton className="h-10 w-1/2" />
-          <Skeleton className="h-10 w-2/3" />
-        </div>
+        <ChatSkeleton />
       );
     }
     if (group.error || !g) {
@@ -545,10 +539,7 @@ function CommunityWorkspace({ slug }: { slug: string }) {
             />
           </Scroll>
         ) : channels.loading || (!channels.data && !channels.error) || (gSlug && (groupChannels.loading || (!groupChannels.data && !groupChannels.error))) ? (
-          <div className="space-y-4 p-6" role="status" aria-label="Loading">
-            <Skeleton className="h-10 w-1/2" />
-            <Skeleton className="h-10 w-2/3" />
-          </div>
+          <ChatSkeleton />
         ) : channels.error || (gSlug && groupChannels.error) ? (
           <Scroll inner>
             <ErrorState message={channels.error ?? groupChannels.error ?? ""} onRetry={() => void (channels.error ? channels.reload() : groupChannels.reload())} />

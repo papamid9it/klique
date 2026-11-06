@@ -28,7 +28,30 @@ export function NotificationSettings() {
     }
   }
 
-  if (loading) return <Skeleton className="h-64" />;
+  if (loading) {
+    // the table itself, row for row, so nothing jumps when it arrives
+    return (
+      <div role="status" aria-label="Loading notification settings" className="overflow-hidden rounded-card border border-line">
+        <div className="flex items-center gap-3 border-b border-line bg-raised/50 px-4 py-2 text-[11px] font-bold tracking-[0.08em] text-ink-muted uppercase">
+          <span className="flex-1">Notify me about</span>
+          <span className="w-12 text-center">In app</span>
+          <span className="w-12 text-center">Push</span>
+        </div>
+        <ul className="divide-y divide-line">
+          {NOTIFY_CATEGORIES.map((c, i) => (
+            <li key={c.id} className="flex items-center gap-3 px-4 py-3">
+              <span className="min-w-0 flex-1 space-y-1.5">
+                <Skeleton className={`h-3.5 ${i % 2 ? "w-28" : "w-36"}`} />
+                <Skeleton className={`h-3 ${i % 3 === 0 ? "w-3/4" : i % 3 === 1 ? "w-2/3" : "w-1/2"}`} />
+              </span>
+              <span className="flex w-12 justify-center"><Skeleton className="h-5 w-9 rounded-full" /></span>
+              <span className="flex w-12 justify-center"><Skeleton className="h-5 w-9 rounded-full" /></span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
   if (error || !data) return <ErrorState message={error} onRetry={reload} />;
 
   return (

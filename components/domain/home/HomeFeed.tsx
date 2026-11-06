@@ -347,6 +347,21 @@ export function HomeFeed({
     return <RowSkeleton rows={3} />;
   }
   if (!items.length) {
+    // no posts yet (Klique's early days): what's happening still fills the page
+    if (kliques.length) {
+      return (
+        <section aria-labelledby="feed-h" className="space-y-5">
+          <h2 id="feed-h" className="text-lg font-semibold tracking-tight">Kliques you could join</h2>
+          <ul className="space-y-5">
+            {kliques.slice(0, 10).map((k) => (
+              <li key={k.id}>
+                <KliqueCard crew={k} wide onDismiss={onDismissKlique ? () => onDismissKlique(k.id) : undefined} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      );
+    }
     return (
       <EmptyState icon="image" title="No posts yet" action={<Button href="/communities" variant="primary">Find communities</Button>}>
         Pictures and videos from your communities show up here. Join a few, or turn on Posts in one you run.

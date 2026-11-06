@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/Button";
 import { SelectField, TextArea, TextField } from "@/components/ui/Field";
 import { Icon } from "@/components/ui/Icon";
 import { LIMITS, isInterestId, type InterestId } from "@/lib/constants";
-import { CURRENCIES, formatPrice } from "@/lib/format";
+import { CURRENCIES, formatDateShort, formatPrice } from "@/lib/format";
 import { useApi, useDebounced } from "@/lib/hooks/useApi";
 import { isHttpLink, normalizeLink } from "@/lib/links";
 
@@ -31,6 +31,9 @@ function toIso(date: string, time: string): string | null {
   const d = new Date(`${date}T${time}:00+01:00`);
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
+
+/** What's asked on the first page, so an error about one of these goes back there. */
+const FIRST_PAGE_FIELDS = ["title", "description", "interest", "city", "country", "region", "neighborhood", "venue", "onlineUrl", "date", "startsAt", "endsAt", "coverImage"];
 
 function NewEventForm() {
   const categories = useCategories();
@@ -66,6 +69,8 @@ function NewEventForm() {
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
+  // first the event itself, then a second page to preview it, set the extras and publish
+  const [step, setStep] = useState<1 | 2>(1);
 
   useEffect(() => {
     if (status === "anon") requireAuth({ redirect: true });
@@ -93,30 +98,47 @@ function NewEventForm() {
   const priceNum = Math.max(0, Math.round(Number(price) || 0));
   const cur = currency ?? currencyOf(place.country);
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!requireAuth()) return;
+  /** What the first page needs before moving on. */
+  function firstPageProblems() {
     const next: Record<string, string> = {};
     if (!title.trim()) next.title = "Give your event a title.";
     if (!venue.trim()) next.venue = online ? "Where do people join? A link or a platform name." : "Where is it happening?";
     if (!place.city) next.city = "Which city or town is it in?";
-    const startsAt = toIso(date, start);
     if (!date) next.date = "Pick a date.";
     if (!start) next.startsAt = "Pick a start time.";
-    let endsAt: string | null = null;
-    if (end) {
-      endsAt = toIso(date, end);
-      if (endsAt && startsAt && endsAt <= startsAt) next.endsAt = "End time must be after the start.";
-    }
+    const from = toIso(date, start);
+    const to = end ? toIso(date, end) : null;
+    if (to && from && to <= from) next.endsAt = "End time must be after the start.";
+    const joinLink = online ? normalizeLink(onlineUrl) : "";
+    if (joinLink && !isHttpLink(joinLink)) next.onlineUrl = "Enter a valid link, like https://meet.google.com/abc-defg-hij";
+    return next;
+  }
+
+  function goNext() {
+    const next = firstPageProblems();
+    setErrors(next);
+    setFormError(null);
+    if (Object.keys(next).length) return;
+    setStep(2);
+    window.scrollTo({ top: 0 });
+  }
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (step === 1) return goNext();
+    if (!requireAuth()) return;
+    const next: Record<string, string> = firstPageProblems();
+    const startsAt = toIso(date, start);
+    const endsAt = end ? toIso(date, end) : null;
     const tickets = normalizeLink(ticketUrl);
     const joinLink = online ? normalizeLink(onlineUrl) : "";
     if (tickets && !isHttpLink(tickets)) next.ticketUrl = "Enter a valid link, like https://tix.africa/your-event";
-    if (joinLink && !isHttpLink(joinLink)) next.onlineUrl = "Enter a valid link, like https://meet.google.com/abc-defg-hij";
     const cap = capacity.trim() ? Math.round(Number(capacity)) : null;
     if (cap !== null && (!Number.isFinite(cap) || cap < 1)) next.capacity = "Capacity must be 1 or more.";
     if (Object.keys(next).length || !startsAt) {
       setErrors(next);
       setFormError(null);
+      if (FIRST_PAGE_FIELDS.some((k) => next[k])) setStep(1);
       return;
     }
     const input: EventInput = {
@@ -158,7 +180,11 @@ function NewEventForm() {
       const res = await EventService.create(input);
       router.push(`/events/${res.data.id}`);
     } catch (err) {
-      if (isApiError(err) && err.errors) setErrors(err.errors);
+      if (isApiError(err) && err.errors) {
+        setErrors(err.errors);
+        // something on the first page: take them back to it
+        if (FIRST_PAGE_FIELDS.some((k) => err.errors?.[k])) setStep(1);
+      }
       setFormError(errorMessage(err));
       setBusy(false);
     }
@@ -203,6 +229,10 @@ function NewEventForm() {
 
   return (
     <form onSubmit={submit} className="max-w-2xl space-y-5" noValidate>
+      <p className="eyebrow">Step {step} of 2 · {step === 1 ? "the event" : "preview and publish"}</p>
+      {step === 1 ? (
+      <>
+      <ImageField kind="photo" label="Cover image (optional)" value={cover} onChange={setCover} error={errors.coverImage} hint="A wide picture works best. We'll use artwork if you skip it." />
       <TextField label="Title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={LIMITS.eventTitle} error={errors.title} placeholder="Sunday sunset skate" />
       <TextArea label="Description" value={description} onChange={(e) => setDescription(e.target.value)} maxLength={LIMITS.eventDescription} counter={LIMITS.eventDescription} error={errors.description} hint="What should people expect? What should they bring?" />
       <div className="grid gap-4 sm:grid-cols-2">
@@ -230,6 +260,20 @@ function NewEventForm() {
         <TextField label="Ends (optional)" type="time" value={end} onChange={(e) => setEnd(e.target.value)} error={errors.endsAt} />
       </div>
       <p className="-mt-3 text-xs text-ink-muted">Times are shown in West Africa Time (Lagos) for now.</p>
+      </>
+      ) : (
+      <>
+      <section aria-label="Preview" className="overflow-hidden rounded-card border border-line bg-surface">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        {cover.trim() ? <img src={cover.trim()} alt="" className="aspect-[16/9] w-full object-cover" /> : <div className="flex aspect-[16/9] w-full items-center justify-center bg-raised text-ink-muted"><Icon name="calendar" size={30} /></div>}
+        <div className="space-y-1 p-4">
+          <p className="eyebrow">{online ? "Online" : place.city || "Event"} · {toIso(date, start) ? formatDateShort(toIso(date, start)!) : ""}</p>
+          <h2 className="text-xl font-semibold tracking-[-0.02em]">{title.trim()}</h2>
+          <p className="text-sm text-ink-muted">{venue.trim()}{neighborhood ? ` · ${neighborhood}` : ""}</p>
+          <p className="text-sm font-semibold">{formatPrice(priceNum, cur)}</p>
+          {description.trim() && <p className="line-clamp-3 pt-1 text-sm whitespace-pre-wrap text-ink-muted">{description.trim()}</p>}
+        </div>
+      </section>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="grid grid-cols-[6.5rem_1fr] gap-3">
           <SelectField label="Currency" value={cur} onChange={(e) => setCurrency(e.target.value)}>
@@ -242,7 +286,6 @@ function NewEventForm() {
         <TextField label="Capacity (optional)" type="number" inputMode="numeric" min={1} value={capacity} onChange={(e) => setCapacity(e.target.value)} error={errors.capacity} hint="Leave empty for unlimited spots." />
       </div>
       <TextField label="Ticket link (optional)" type="url" inputMode="url" value={ticketUrl} onChange={(e) => setTicketUrl(e.target.value)} onBlur={() => setTicketUrl((v) => normalizeLink(v))} error={errors.ticketUrl} placeholder="https://tix.africa/…" hint="Shows as a Get tickets button on the event." />
-      <ImageField kind="photo" label="Cover image (optional)" value={cover} onChange={setCover} error={errors.coverImage} hint="A wide picture works best. We'll use artwork if you skip it." />
       {communitySlug && communitySlug !== KLIQUE_SLUG && <ContributionFields value={chipIn} onChange={setChipIn} error={errors.contribution} />}
 
       <fieldset className="space-y-4 rounded-card border border-line bg-surface p-4">
@@ -295,6 +338,8 @@ function NewEventForm() {
           </p>
         )}
       </fieldset>
+      </>
+      )}
 
       {formError && Object.keys(errors).length === 0 && (
         <p role="alert" className="text-sm font-medium text-danger">
@@ -307,12 +352,25 @@ function NewEventForm() {
         </p>
       )}
       <div className="flex gap-2">
-        <Button type="submit" variant="primary" size="lg" loading={busy} disabled={status !== "authed"}>
-          {submitting ? "Send for approval" : "Publish event"}
-        </Button>
-        <Button size="lg" href="/events">
-          Cancel
-        </Button>
+        {step === 1 ? (
+          <>
+            <Button key="next" type="submit" variant="primary" size="lg">
+              Next <Icon name="chevron-right" size={16} />
+            </Button>
+            <Button size="lg" href="/events">
+              Cancel
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button key="publish" type="submit" variant="primary" size="lg" loading={busy} disabled={status !== "authed"}>
+              {submitting ? "Send for approval" : "Publish event"}
+            </Button>
+            <Button size="lg" disabled={busy} onClick={() => setStep(1)}>
+              <Icon name="chevron-left" size={16} /> Back
+            </Button>
+          </>
+        )}
       </div>
     </form>
   );

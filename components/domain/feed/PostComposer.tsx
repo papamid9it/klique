@@ -22,8 +22,9 @@ import type { FeedPostDTO, TopicMediaDTO } from "@/lib/types";
 import { useTagSuggest } from "./TagSuggest";
 
 /**
- * Share a post: pictures (up to ten) or one video with a caption, or (the Text tab) text on its own: short text shows
- * as a coloured card, longer text as a title and body (lib/feedText). The preview shows which it'll be.
+ * Share a post, in two pages: first choose pictures (up to ten) or one video, then see how it looks in reels and on
+ * Home and add the caption. The Text tab is one page: short text shows as a coloured card, longer text as a title and
+ * body (lib/feedText), and its preview shows which it'll be.
  */
 export function PostComposer({ slug, communityName, explicitAllowed, onClose, onPosted }: { slug: string; communityName: string; explicitAllowed?: boolean; onClose: () => void; onPosted: (p: FeedPostDTO) => void }) {
   const toast = useToast();
@@ -37,7 +38,10 @@ export function PostComposer({ slug, communityName, explicitAllowed, onClose, on
   const [textBg, setTextBg] = useState<TextBackgroundId>("sunset");
   const [explicit, setExplicit] = useState(false);
   const [media, setMedia] = useState<TopicMediaDTO[]>([]);
-  const [preview, setPreview] = useState(false);
+  // pictures or a video: first choose them, then a second page to see how it looks and finish it
+  const [step, setStep] = useState<1 | 2>(1);
+  const [previewAt, setPreviewAt] = useState(0);
+  const [previewIn, setPreviewIn] = useState<"reels" | "home">("reels");
   const [plainBackdrop, setPlainBackdrop] = useState(false);
   const [link, setLink] = useState("");
   const [progress, setProgress] = useState<number | null>(null);
@@ -74,6 +78,8 @@ export function PostComposer({ slug, communityName, explicitAllowed, onClose, on
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    // only the second page shares
+    if (mode === "media" && step === 1) return;
     if (sending.current) return;
     sending.current = true;
     setBusy(true);
@@ -90,8 +96,9 @@ export function PostComposer({ slug, communityName, explicitAllowed, onClose, on
   }
 
   return (
-    <Modal open onClose={onClose} size="lg" title="New post" description={`Share pictures, a video or some text with ${communityName}.`}>
-      <form onSubmit={submit} className="space-y-4">
+    <Modal open onClose={onClose} size="lg" title={mode === "media" && step === 2 ? "Preview and finish" : "New post"} description={mode === "media" ? `Step ${step} of 2 · ${step === 1 ? "choose your pictures or video" : `sharing with ${communityName}`}` : `Share some text with ${communityName}.`}>
+      <form onSubmit={submit} onKeyDown={(e) => { if (e.key === "Enter" && mode === "media" && step === 1 && (e.target as HTMLElement).tagName === "INPUT") e.preventDefault(); }} className="space-y-4">
+        {step === 1 && (
         <div role="tablist" aria-label="What to post" className="inline-flex gap-1 rounded-control bg-raised p-1">
           {(
             [
@@ -104,10 +111,10 @@ export function PostComposer({ slug, communityName, explicitAllowed, onClose, on
             </button>
           ))}
         </div>
+        )}
         {mode === "text" ? (
           <TextFields title={title} setTitle={setTitle} caption={caption} setCaption={setCaption} textBg={textBg} setTextBg={setTextBg} captionRef={captionRef} suggest={suggest} />
-        ) : (
-        <>
+        ) : step === 1 ? (
         <fieldset>
           <legend className="mb-1.5 text-sm font-medium">
             Pictures or a video <span className="font-normal text-ink-muted">(up to {LIMITS.feedMedia} pictures, or one video)</span>
@@ -176,19 +183,26 @@ export function PostComposer({ slug, communityName, explicitAllowed, onClose, on
             </Button>
           </div>
         </fieldset>
-        {media.length > 0 && (
-          <Button onClick={() => setPreview(true)}>
-            <Icon name="eye" size={15} /> See in reels
-          </Button>
-        )}
-        {preview && media[0] && <ReelPreview item={media[0]} caption={caption} plain={plainBackdrop} onPlain={setPlainBackdrop} onClose={() => setPreview(false)} />}
-        <FormatButton area={captionRef} value={caption} onChange={setCaption} />
-      <TextArea ref={captionRef} label="Caption (optional)" value={caption} onChange={(e) => setCaption(e.target.value)} onKeyDown={(e) => suggest.onKeyDown(e)} maxLength={LIMITS.feedCaption} counter={LIMITS.feedCaption} placeholder="Say something about it… @someone #tag" />
-        {suggest.panel}
-        </>
+        ) : (
+        <div className="grid gap-5 sm:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]">
+          <PostPreview media={media} at={Math.min(previewAt, media.length - 1)} onAt={setPreviewAt} caption={caption} plain={plainBackdrop} where={previewIn} onWhere={setPreviewIn} />
+          <div className="min-w-0 space-y-4">
+            <FormatButton area={captionRef} value={caption} onChange={setCaption} />
+            <TextArea ref={captionRef} label="Caption (optional)" value={caption} onChange={(e) => setCaption(e.target.value)} onKeyDown={(e) => suggest.onKeyDown(e)} maxLength={LIMITS.feedCaption} counter={LIMITS.feedCaption} placeholder="Say something about it… @someone #tag" />
+            {suggest.panel}
+            <div>
+              <p className="mb-1.5 text-sm font-medium">Background in reels</p>
+              <div role="radiogroup" aria-label="Background in reels" className="grid grid-cols-2 gap-2">
+                <Button size="sm" variant={plainBackdrop ? "secondary" : "primary"} role="radio" aria-checked={!plainBackdrop} onClick={() => setPlainBackdrop(false)}>Blurred</Button>
+                <Button size="sm" variant={plainBackdrop ? "primary" : "secondary"} role="radio" aria-checked={plainBackdrop} onClick={() => setPlainBackdrop(true)}>Plain</Button>
+              </div>
+              <p className="mt-1.5 text-xs text-ink-muted">Tall ones fill the screen. Wider ones show whole, with nothing cut off.</p>
+            </div>
+          </div>
+        </div>
         )}
         {/* a community that allows explicit content: the poster says whether this post is (it's blurred until tapped) */}
-        {explicitAllowed && (
+        {explicitAllowed && (mode === "text" || step === 2) && (
           <label className="flex items-start gap-2.5 rounded-control border border-line bg-raised/40 p-3 text-sm">
             <input type="checkbox" checked={explicit} onChange={(e) => setExplicit(e.target.checked)} className="mt-0.5 size-4 accent-[var(--accent-text)]" />
             <span>
@@ -198,12 +212,25 @@ export function PostComposer({ slug, communityName, explicitAllowed, onClose, on
           </label>
         )}
         <div className="flex justify-end gap-2 pt-1">
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="primary" loading={busy} disabled={mode === "media" ? !media.length || uploading : !caption.trim() || (caption.trim().length > TEXT_CARD_MAX && !title.trim())}>
-            Share
-          </Button>
+          {mode === "media" && step === 2 ? (
+            <Button variant="ghost" onClick={() => setStep(1)}>
+              <Icon name="chevron-left" size={15} /> Back
+            </Button>
+          ) : (
+            <Button variant="ghost" onClick={onClose}>
+              Cancel
+            </Button>
+          )}
+          {mode === "media" && step === 1 ? (
+            // its own key: Share takes its place, and reusing this button would send the post on this same click
+            <Button key="next" variant="primary" disabled={!media.length || uploading} onClick={() => setStep(2)}>
+              Next <Icon name="chevron-right" size={15} />
+            </Button>
+          ) : (
+            <Button key="share" type="submit" variant="primary" loading={busy} disabled={mode === "media" ? !media.length || uploading : !caption.trim() || (caption.trim().length > TEXT_CARD_MAX && !title.trim())}>
+              Share
+            </Button>
+          )}
         </div>
       </form>
     </Modal>
@@ -250,29 +277,52 @@ function TextFields({ title, setTitle, caption, setCaption, textBg, setTextBg, c
 }
 
 
-/** How it will look in reels: a tall one fills the screen, anything else shows whole over a blurred copy of itself. */
-function ReelPreview({ item, caption, plain, onPlain, onClose }: { item: TopicMediaDTO; caption: string; plain: boolean; onPlain: (v: boolean) => void; onClose: () => void }) {
+/** The second page's preview: how it will look in reels and on Home, updating as you type. */
+function PostPreview({ media, at, onAt, caption, plain, where, onWhere }: { media: TopicMediaDTO[]; at: number; onAt: (i: number) => void; caption: string; plain: boolean; where: "reels" | "home"; onWhere: (w: "reels" | "home") => void }) {
+  const item = media[at];
   const still = item.kind === "video" ? (item.poster ?? videoPoster(item.url)) : item.url;
+  const reels = where === "reels";
+  const shown = item.kind === "video" ? (
+    <video key={item.url} src={item.url} poster={still ?? undefined} muted loop autoPlay playsInline className={cx("relative", reels ? "max-h-full max-w-full object-contain" : "size-full object-cover")} />
+  ) : (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={item.url} alt="" className={cx("relative", reels ? "max-h-full max-w-full object-contain" : "size-full object-cover")} />
+  );
   return (
-    <Modal open onClose={onClose} title="In reels" description="Tall pictures and videos fill the screen. Wider ones show whole, with nothing cut off." size="sm">
-      <div className="relative mx-auto flex aspect-[9/16] max-h-[60dvh] items-center justify-center overflow-hidden rounded-card bg-black">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        {still && !plain && <img src={still} alt="" aria-hidden="true" className="absolute inset-0 size-full scale-110 object-cover opacity-30 blur-xl" />}
-        {item.kind === "video" ? (
-          <video src={item.url} poster={still ?? undefined} muted loop autoPlay playsInline className="relative max-h-full max-w-full object-contain" />
-        ) : (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={item.url} alt="" className="relative max-h-full max-w-full object-contain" />
-        )}
-        <div className="absolute right-2 bottom-16 flex flex-col gap-4 text-white">
-          <Icon name="heart" size={22} /><Icon name="message" size={22} /><Icon name="send" size={22} />
+    <div className="space-y-2">
+      <div role="tablist" aria-label="Preview" className="grid grid-cols-2 gap-1 rounded-control bg-raised p-1">
+        {(["reels", "home"] as const).map((w) => (
+          <button key={w} type="button" role="tab" aria-selected={where === w} onClick={() => onWhere(w)} className={cx("h-8 rounded-[9px] text-[13px] font-semibold transition", where === w ? "bg-ink text-canvas" : "text-ink-muted hover:text-ink")}>
+            {w === "reels" ? "Reels" : "Home"}
+          </button>
+        ))}
+      </div>
+      {reels ? (
+        <div className="relative mx-auto flex aspect-[9/16] max-h-[52dvh] items-center justify-center overflow-hidden rounded-card bg-black">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          {still && !plain && <img src={still} alt="" aria-hidden="true" className="absolute inset-0 size-full scale-110 object-cover opacity-30 blur-xl" />}
+          {shown}
+          <div className="absolute right-2 bottom-16 flex flex-col gap-4 text-white drop-shadow">
+            <Icon name="heart" size={21} /><Icon name="message" size={21} /><Icon name="send" size={21} />
+          </div>
+          {caption.trim() && <p className="absolute inset-x-0 bottom-0 line-clamp-2 bg-gradient-to-t from-black/75 to-transparent p-3 pt-8 pr-10 text-[13px] text-white">{caption}</p>}
         </div>
-        {caption.trim() && <p className="absolute inset-x-0 bottom-0 line-clamp-2 bg-gradient-to-t from-black/75 to-transparent p-3 pt-8 pr-10 text-[13px] text-white">{caption}</p>}
-      </div>
-      <div role="radiogroup" aria-label="Background" className="mt-3 grid grid-cols-2 gap-2">
-        <Button variant={plain ? "secondary" : "primary"} onClick={() => onPlain(false)}>Blurred background</Button>
-        <Button variant={plain ? "primary" : "secondary"} onClick={() => onPlain(true)}>Plain background</Button>
-      </div>
-    </Modal>
+      ) : (
+        <div className="overflow-hidden rounded-card border border-line bg-surface">
+          <div className="aspect-[4/5] max-h-[44dvh] w-full overflow-hidden bg-raised">{shown}</div>
+          {caption.trim() && <p className="line-clamp-2 p-2.5 text-[13px]">{caption}</p>}
+        </div>
+      )}
+      {media.length > 1 && (
+        <div className="flex flex-wrap justify-center gap-1.5">
+          {media.map((m, i) => (
+            <button key={`${m.url}${i}`} type="button" aria-label={`See picture ${i + 1}`} aria-current={i === at} onClick={() => onAt(i)} className={cx("size-9 overflow-hidden rounded-control border-2", i === at ? "border-ink" : "border-transparent opacity-70")}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={cdn(m.url, { w: 100 })} alt="" className="size-full object-cover" />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

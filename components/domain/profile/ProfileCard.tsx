@@ -1,5 +1,7 @@
 "use client";
 
+import { compactCount } from "@/lib/format";
+import { VerifiedCheck } from "@/components/ui/VerifiedCheck";
 import { PlanBadge } from "@/components/domain/account/PlanTab";
 import { ProfileEffect } from "@/components/ui/ProfileEffect";
 import { themeStyle } from "@/components/ui/profileTheme";
@@ -23,6 +25,18 @@ import { PresenceDot, ProfileActions, ProfileBanner } from "./ProfileParts";
 import { StatusPicker } from "./StatusPicker";
 
 /** The little points pill next to a handle. */
+/** Everyone across the communities they created (with the gold check if any is verified): Klique's follower count. */
+export function MembersPill({ view }: { view: Pick<ProfileView, "communityReach" | "communityReachVerified"> }) {
+  const n = view.communityReach;
+  if (n === null || n === undefined) return null;
+  return (
+    <span title="Members across the communities they created" className="inline-flex items-center gap-1 rounded-full bg-raised px-2 py-0.5 font-mono text-[11px] font-semibold text-ink">
+      {compactCount(n)} {n === 1 ? "member" : "members"}
+      {view.communityReachVerified && <VerifiedCheck on size={12} />}
+    </span>
+  );
+}
+
 export function PointsPill({ n }: { n: number }) {
   return (
     <span className="inline-flex items-center gap-1 rounded-full bg-raised px-2 py-0.5 font-mono text-[11px] font-semibold text-ink" title="Earned by hosting, showing up and good reactions from others">
@@ -77,6 +91,7 @@ export function ProfileCard({ handle, onClose, onExpand }: { handle: string; onC
           <span className="font-mono text-xs">@{p.handle}</span>
           {p.pronouns && <span>· {p.pronouns}</span>}
           {view.visible && <PointsPill n={p.points} />}
+          {view.visible && <MembersPill view={view} />}
         </p>
         {view.visible && <SocialRow socials={p.socials} className="mt-2.5" />}
         {view.visible && p.bio && <p className="mt-3 line-clamp-3 text-[13px] leading-relaxed whitespace-pre-wrap">{p.bio}</p>}

@@ -23,6 +23,8 @@ export interface AuthPayload {
 }
 
 export const AuthService = {
+  /** where they seem to be, to fill in sign-up (null if it can't tell) */
+  placeGuess: () => api.get<Envelope<{ country: string; region: string; city: string } | null>>("/api/place-guess"),
   signup: (input: SignupInput) => api.post<Envelope<AuthPayload>>("/api/auth/signup", input),
   login: (email: string, password: string) => api.post<Envelope<AuthPayload>>("/api/auth/login", { email, password }),
   logout: () => api.post<Envelope<{ signedOut: boolean }>>("/api/auth/logout"),

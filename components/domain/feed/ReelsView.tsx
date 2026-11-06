@@ -39,7 +39,7 @@ function RailButton({ icon, label, count, on, filled, onClick }: { icon: IconNam
   );
 }
 
-function Reel({ post: p, active, muted, onMuted, onChange, onComments, onReport }: { post: FeedPostDTO; active: boolean; muted: boolean; onMuted: () => void; onChange: (p: FeedPostDTO) => void; onComments: () => void; onReport: () => void }) {
+function Reel({ post: p, active, held, muted, onMuted, onChange, onComments, onReport }: { post: FeedPostDTO; active: boolean; /** comments or a report are open over it: it waits where it is */ held: boolean; muted: boolean; onMuted: () => void; onChange: (p: FeedPostDTO) => void; onComments: () => void; onReport: () => void }) {
   const toast = useToast();
   const vote = useVote(p, onChange);
   const video = useRef<HTMLVideoElement>(null);
@@ -73,14 +73,14 @@ function Reel({ post: p, active, muted, onMuted, onChange, onComments, onReport 
   useEffect(() => {
     const v = video.current;
     if (!v) return;
-    if (active) void v.play().catch(() => setPaused(true));
-    else {
+    if (!active) {
       v.pause();
       v.currentTime = 0;
-    }
+    } else if (held) v.pause();
+    else void v.play().catch(() => setPaused(true));
     // leaving the page mustn't leave it playing out of sight
     return () => v.pause();
-  }, [active, item.url]);
+  }, [active, held, item.url]);
 
   const share = () => {
     const url = absoluteUrl(postHref(p));
@@ -118,7 +118,7 @@ function Reel({ post: p, active, muted, onMuted, onChange, onComments, onReport 
               <Icon name="heart" size={88} className="fill-current" />
             </span>
           )}
-          {item.kind === "video" && paused && active && (
+          {item.kind === "video" && paused && active && !held && (
             <span className="pointer-events-none absolute inset-0 flex items-center justify-center text-white/90">
               <span className="inline-flex size-16 items-center justify-center rounded-full bg-black/50"><Icon name="play" size={28} /></span>
             </span>
@@ -257,7 +257,7 @@ function Reels({ start }: { start?: string }) {
       <div ref={box} onScroll={(e) => setActive(Math.round(e.currentTarget.scrollTop / Math.max(1, e.currentTarget.clientHeight)))} className="no-bar h-full snap-y snap-mandatory overflow-y-auto overscroll-contain">
         {entries.map((e, i) =>
           e.post ? (
-            <Reel key={e.post.id} post={e.post} active={i === active && !commentsOn} muted={muted} onMuted={() => setMuted((m) => !m)} onChange={change} onComments={() => setCommentsOn(e.post)} onReport={() => setReporting(e.post)} />
+            <Reel key={e.post.id} post={e.post} active={i === active} held={!!commentsOn || !!reporting} muted={muted} onMuted={() => setMuted((m) => !m)} onChange={change} onComments={() => setCommentsOn(e.post)} onReport={() => setReporting(e.post)} />
           ) : e.slot?.kind === "ad" ? (
             <Between key={`ad:${e.at}`} label="Sponsored"><SponsoredCard ad={ads[e.slot.ad]} /></Between>
           ) : e.slot?.kind === "event" ? (

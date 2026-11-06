@@ -34,7 +34,7 @@ export default function PrivacyPage() {
         <ul>
           <li><strong>To run klique for you</strong> (performing our contract with you): your account, communities, chats, events and notifications.</li>
           <li><strong>To keep people safe</strong> (legitimate interests and legal obligations): preventing spam and abuse, reviewing reports, and enforcing our rules.</li>
-          <li><strong>To show you what&apos;s near you</strong> (legitimate interests): we use the city you choose. We don&apos;t track your precise location.</li>
+          <li><strong>To show you what&apos;s near you</strong> (legitimate interests): we use the city you choose. When you sign up we suggest a starting city from your IP address, which you can change, and we don&apos;t save that guess. We don&apos;t track your precise location.</li>
           <li><strong>To send emails you need</strong>: verification, password resets and important account notices. We don&apos;t send marketing without your consent.</li>
           <li><strong>To show ads</strong> (legitimate interests): some cards are ads, always labelled &ldquo;Sponsored&rdquo; or &ldquo;Promoted&rdquo;. They&apos;re chosen only by the place and scene you&apos;re looking at, the words you search and the interests on your profile. Advertisers never receive your personal data. We only count how many times an ad was shown and clicked, without recording who.</li>
         </ul>

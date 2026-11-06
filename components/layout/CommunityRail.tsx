@@ -32,7 +32,7 @@ import { prefetchCommunity } from "./prefetchCommunity";
 export function CommunityRail({ activeSlug, horizontal, onNavigate }: { activeSlug: string | null; horizontal?: boolean; onNavigate?: () => void }) {
   const { status, user } = useAuth();
   const authed = status === "authed";
-  const { data, loading, reload } = useApi(authed ? () => CommunityService.mine() : null, [authed, user?.id], { key: "my-communities" });
+  const { data, loading, reload, setData } = useApi(authed ? () => CommunityService.mine() : null, [authed, user?.id], { key: "my-communities" });
 
   const pathname = usePathname();
   // already in a community: switching to another one stays in the browser (everything it needs is preloaded)
@@ -83,7 +83,15 @@ export function CommunityRail({ activeSlug, horizontal, onNavigate }: { activeSl
     return [
       { label: "Mark as read", icon: "check", disabled: !c.unread && !c.unreadCount && !c.mentions, onSelect: () => void CommunityService.markRead(c.slug).then(refresh, failed) },
       { label: "Invite people", icon: "userplus", onSelect: () => (c.privacy === "private" && manages ? softNavigate(`${link}?settings=invites`) : copyLink(link, "Community link copied. Send it to invite them.")) },
-      { label: c.pinned ? "Unpin from top" : "Pin to top", icon: "pin", onSelect: () => void PinService.set("community", c.id, !c.pinned).then(refresh, failed) },
+      { label: c.pinned ? "Unpin from top" : "Pin to top", icon: "pin", onSelect: () => {
+          // shows at once; the server is told behind (put back if that fails)
+          const before = data;
+          setData((now) => [...(now ?? [])].map((x) => (x.id === c.id ? { ...x, pinned: !c.pinned } : x)).sort((x, y) => Number(!!y.pinned) - Number(!!x.pinned)));
+          void PinService.set("community", c.id, !c.pinned).then(refresh, (e) => {
+            setData(before ?? null);
+            failed(e);
+          });
+        } },
       { label: "Copy link", icon: "link", onSelect: () => copyLink(link, "Link copied") },
       { type: "sep" },
       {

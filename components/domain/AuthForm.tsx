@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ApiRequestError, errorMessage } from "@/app/ApiCore";
 import { AuthService } from "@/app/services/AuthService";
 import { AuthField } from "@/components/domain/auth/AuthField";
@@ -155,6 +155,13 @@ function SignupCard({ next, google }: { next: string; google: boolean }) {
   const [handle, setHandle] = useState("");
   const [dob, setDob] = useState("");
   const [place, setPlace] = useState<Place>({ country: "NG", region: "lagos", city: "lagos" });
+  // starts from where they seem to be, until they choose for themselves
+  const placeTouched = useRef(false);
+  useEffect(() => {
+    void AuthService.placeGuess().then((r) => {
+      if (r.data && !placeTouched.current) setPlace(r.data);
+    }, () => {});
+  }, []);
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
@@ -227,7 +234,7 @@ function SignupCard({ next, google }: { next: string; google: boolean }) {
           </>
         ) : (
           <>
-            <PlaceFields value={place} onChange={setPlace} errors={errors} />
+            <PlaceFields value={place} onChange={(p) => { placeTouched.current = true; setPlace(p); }} errors={errors} />
             <AuthField label="Date of birth" type="date" value={dob} onChange={(e) => setDob(e.target.value)} max={new Date().toISOString().slice(0, 10)} autoComplete="bday" hint="Keeps 18+ communities to adults. Never shown on your profile." error={errors.dob} required />
             {formError && !STEP1_FIELDS.some((f) => errors[f]) && <Notice tone="error">{formError}</Notice>}
             <Button type="submit" variant="primary" size="lg" loading={busy} className="h-12 w-full">

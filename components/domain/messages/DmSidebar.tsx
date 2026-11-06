@@ -182,7 +182,15 @@ export function DmSidebar({ onNavigate }: { onNavigate?: () => void }) {
               const preview = c.request?.fromMe ? "Request sent · waiting for them to accept" : c.lastMessage ? `${c.lastMessage.mine ? "You: " : ""}${sticker ? `${sticker.emoji} Sticker` : c.lastMessage.body}` : "No messages yet";
               return (
                 <li key={c.id}>
-                  <ContextMenu label={`${c.other.displayName} options`} items={[{ label: c.pinned ? "Unpin chat" : "Pin chat", icon: "pin", onSelect: () => void PinService.set("chat", c.id, !c.pinned).then(() => inbox.reload(), (e) => toast(errorMessage(e), "error")) }]}>
+                  <ContextMenu label={`${c.other.displayName} options`} items={[{ label: c.pinned ? "Unpin chat" : "Pin chat", icon: "pin", onSelect: () => {
+                    // shows at once; the server is told behind (put back if that fails)
+                    const before = inbox.data;
+                    inbox.setData((now) => [...(now ?? [])].map((x) => (x.id === c.id ? { ...x, pinned: !c.pinned } : x)).sort((x, y) => Number(!!y.pinned) - Number(!!x.pinned)));
+                    void PinService.set("chat", c.id, !c.pinned).then(() => inbox.reload(), (e) => {
+                      inbox.setData(before ?? null);
+                      toast(errorMessage(e), "error");
+                    });
+                  } }]}>
                   <Link href={`/messages/${c.id}`} onClick={onNavigate} aria-current={active ? "page" : undefined} className={cx("flex items-center gap-3 rounded-control px-2.5 py-1.5 transition", active ? "bg-raised" : "hover:bg-raised/60")}>
                     <Avatar name={c.other.displayName} src={c.other.avatarUrl} frame={c.other.avatarFrame} size={36} />
                     <span className="min-w-0 flex-1">

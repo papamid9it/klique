@@ -84,27 +84,34 @@ export function ChatSkeleton({ header = true, rows = 6 }: { header?: boolean; ro
 /** A community's channel list: its name, the sections, then a category or two of channels. */
 export function ChannelListSkeleton() {
   return (
-    <div className="space-y-5 p-3" aria-hidden="true">
-      <Line className="mx-1 mt-2 h-4 w-36" />
-      <div className="space-y-2.5">
-        {[0, 1, 2, 3].map((i) => (
-          <div key={i} className="flex items-center gap-3 px-1.5">
-            <Skeleton className="size-4 shrink-0 rounded-[5px]" />
-            <Line className={widths[i]} />
-          </div>
-        ))}
+    <div aria-hidden="true">
+      {/* the name at the top */}
+      <div className="space-y-2.5 border-b border-line px-5 py-4">
+        <Line className="h-2.5 w-24 opacity-70" />
+        <Line className="h-5 w-40" />
       </div>
-      {[3, 2].map((n, g) => (
-        <div key={g} className="space-y-2.5">
-          <Line className="mx-1.5 h-2.5 w-16 opacity-70" />
-          {Array.from({ length: n }, (_, i) => (
-            <div key={i} className="flex items-center gap-2.5 px-1.5">
-              <span className="font-mono text-sm text-ink-muted/40">#</span>
-              <Line className={widths[(i + g + 1) % widths.length]} />
+      <div className="space-y-5 p-2">
+        {/* Posts, Events, Kliques, Members */}
+        <div className="space-y-0.5">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="flex h-9 items-center gap-2.5 px-2.5">
+              <Skeleton className="size-4 shrink-0 rounded-[5px]" />
+              <Line className={widths[i]} />
             </div>
           ))}
         </div>
-      ))}
+        {[3, 3, 2].map((n, g) => (
+          <div key={g} className="space-y-0.5">
+            <Line className="mx-2 mb-2 h-2.5 w-20 opacity-70" />
+            {Array.from({ length: n }, (_, i) => (
+              <div key={i} className="flex h-9 items-center gap-2.5 px-2.5">
+                <Skeleton className="size-4 shrink-0 rounded-[5px]" />
+                <Line className={widths[(i + g + 1) % widths.length]} />
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

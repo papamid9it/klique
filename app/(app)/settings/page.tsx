@@ -28,6 +28,8 @@ import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { SelectField, Switch, TextArea, TextField } from "@/components/ui/Field";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { PlacePicker } from "@/components/domain/places/PlacePicker";
+import { usePlace } from "@/components/providers/PlaceProvider";
 import { SettingsShellSkeleton } from "@/components/ui/SettingsShell";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { cx } from "@/components/ui/cx";
@@ -392,6 +394,20 @@ function Row({ label, value, action }: { label: string; value: string; action?: 
   );
 }
 
+/** Where Home, Events and Communities look: the same choice as the switcher in the side menu. */
+function LocationBlock() {
+  const { scope, label, setScope, home } = usePlace();
+  const [open, setOpen] = useState(false);
+  return (
+    <Block title="Location" intro="The events, kliques and communities you see first come from here. It's only what you're browsing: your profile's city doesn't change.">
+      <Button onClick={() => setOpen(true)}>
+        <Icon name="globe" size={15} /> {label}
+      </Button>
+      <PlacePicker open={open} onClose={() => setOpen(false)} value={scope} onChange={setScope} home={home} />
+    </Block>
+  );
+}
+
 function AccountTab({ me, go, onSignOut, onEverywhere }: { me: UserMe; go: (t: Tab) => void; onSignOut: () => void; onEverywhere: () => void }) {
   return (
     <div className="space-y-8">
@@ -437,6 +453,8 @@ function AccountTab({ me, go, onSignOut, onEverywhere }: { me: UserMe; go: (t: T
       <Block title="Password" intro={me.hasPassword ? "Changing it signs you out on every other device." : "You signed up with Google. Add a password if you also want to sign in with your email."}>
         <PasswordBlock me={me} />
       </Block>
+
+      <LocationBlock />
 
       <Block title="Sessions" intro="Sign out here, or end every session if you think someone else has access.">
         <div className="flex flex-wrap gap-2">
