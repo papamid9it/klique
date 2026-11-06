@@ -30,6 +30,8 @@ export interface ProfileUpdate {
   mood?: MoodPref;
   profileVisibility?: ProfileVisibility;
   attendancePublic?: boolean;
+  createdCommunitiesPublic?: boolean;
+  communityReachPublic?: boolean;
   dmPolicy?: DmPolicy;
 }
 

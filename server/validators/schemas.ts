@@ -103,6 +103,8 @@ export const profileUpdateSchema = z.object({
   mood: z.enum(MOOD_PREFS as [string, ...string[]]).optional(),
   profileVisibility: z.enum(PROFILE_VISIBILITY.map((p) => p.id) as [string, ...string[]]).optional(),
   attendancePublic: z.boolean().optional(),
+  createdCommunitiesPublic: z.boolean().optional(),
+  communityReachPublic: z.boolean().optional(),
   dmPolicy: z.enum(DM_POLICIES.map((p) => p.id) as [string, ...string[]]).optional(),
 });
 

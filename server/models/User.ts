@@ -48,6 +48,10 @@ export interface IUser {
   mood: MoodPref;
   profileVisibility: ProfileVisibility;
   attendancePublic: boolean;
+  /** others can see the communities they created, on their profile */
+  createdCommunitiesPublic?: boolean;
+  /** others can see how many people are in those communities */
+  communityReachPublic?: boolean;
   dmPolicy: DmPolicy;
   /** bump to invalidate every issued login token */
   tokenVersion: number;
@@ -114,6 +118,8 @@ const UserSchema = new Schema<IUser>(
     mood: { type: String, enum: MOOD_PREFS, default: DEFAULT_PREF },
     profileVisibility: { type: String, enum: ["public", "members", "friends", "private"], default: "public" },
     attendancePublic: { type: Boolean, default: true },
+    createdCommunitiesPublic: { type: Boolean, default: true },
+    communityReachPublic: { type: Boolean, default: true },
     // new accounts: anyone can send a message request (Nov 2026; was "shared")
     dmPolicy: { type: String, enum: ["everyone", "shared", "nobody"], default: "everyone" },
     tokenVersion: { type: Number, default: 0 },

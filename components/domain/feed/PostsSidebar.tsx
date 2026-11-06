@@ -73,7 +73,7 @@ export function PostsSidebar({ c, onCommunity }: { c: CommunityDTO; onCommunity:
                       <UserName name={t.user.displayName} effect={t.user.nameEffect} />
                     </span>
                     <span className="block font-mono text-[11px] text-ink-muted">
-                      {t.posts} {t.posts === 1 ? "post" : "posts"} · {compactCount(t.upvotes)} up
+                      {t.posts} {t.posts === 1 ? "post" : "posts"} · {compactCount(t.upvotes)} love
                     </span>
                   </span>
                 </ProfileTrigger>

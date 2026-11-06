@@ -138,7 +138,7 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
             onSave={() => (document.getElementById("community-form") as HTMLFormElement | null)?.requestSubmit()}
           />
           {!c.official && (
-            <SettingsBlock title="Points to join" intro="Points are earned from other people (upvotes, good reactions, showing up to events) and can't be bought. Ask for a minimum to keep out brand-new or spammy accounts.">
+            <SettingsBlock title="Points to join" intro="Points are earned from other people (love, upvotes, good reactions, showing up to events) and can't be bought. Ask for a minimum to keep out brand-new or spammy accounts.">
               <MinPointField
                 label="Minimum points to join"
                 hint="0 means anyone. Shown on its card and page. People already in stay in, and owners and admins never need any."
@@ -189,7 +189,7 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
           {!c.official && c.feedPolicy !== "off" && (
             <MinPointField
               label="Minimum points to post"
-              hint="Points are earned from other people (upvotes, good reactions, showing up to events) and can't be bought. 0 means any member. Below it, members can still chat, use boards, comment, vote and react. Owners and admins never need any."
+              hint="Points are earned from other people (love, upvotes, good reactions, showing up to events) and can't be bought. 0 means any member. Below it, members can still chat, use boards, comment, vote and react. Owners and admins never need any."
               value={c.minPointsPost}
               onSave={async (minPointsPost) => {
                 await CommunityService.update(c.slug, { minPointsPost });

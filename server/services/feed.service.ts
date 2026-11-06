@@ -314,7 +314,7 @@ export async function vote(viewer: IUser, space: Space, access: SpaceAccess, pos
   if (was !== value) {
     const inc = { upCount: (value === 1 ? 1 : 0) - (was === 1 ? 1 : 0), downCount: (value === -1 ? 1 : 0) - (was === -1 ? 1 : 0) };
     await FeedPost.updateOne({ _id: p._id }, { $inc: inc });
-    // an upvote earns the author points (once per person per post, however often it's taken back and given again)
+    // love earns the author points (older apps can still send a downvote: it's kept, but counts for nothing) (once per person per post, however often it's taken back and given again)
     if (value === 1) awardPointsLater(p.authorId, "postUpvote", `feed:${sid(p._id)}:${sid(viewer._id)}`, viewer._id);
   }
   const fresh = await FeedPost.findById(p._id).select("upCount downCount").lean<Pick<IFeedPost, "upCount" | "downCount">>();
@@ -453,8 +453,15 @@ export async function reactToComment(viewer: IUser, space: Space, access: SpaceA
 
 const HOUR = 3_600_000;
 /** Newer, busier posts first; videos rank above pictures, and pictures above text-only posts (still shown, lower). */
+/** Verified communities' posts (checked by hand by the Klique team) rank this much higher in your feed, and more among suggestions and reels. */
+const VERIFIED_LIFT = 1.5;
+const VERIFIED_SUGGEST_LIFT = 2.5;
+type RankedCommunity = { _id: Types.ObjectId; verified?: boolean; official?: boolean };
+const verifiedSet = (list: RankedCommunity[]) => new Set(list.filter((c) => c.verified || c.official).map((c) => sid(c._id)));
+const liftedRank = (p: IFeedPost, now: number, verified: Set<string>, lift = VERIFIED_LIFT) => rank(p, now) * (verified.has(sid(p.communityId)) ? lift : 1);
+
 function rank(p: IFeedPost, now: number) {
-  const engagement = 1 + Math.max(0, p.upCount - p.downCount) + p.commentCount * 0.5;
+  const engagement = 1 + Math.max(0, p.upCount) + p.commentCount * 0.5;
   const media = p.media.some((m) => m.kind === "video") ? 1.8 : p.media.length ? 1.5 : 0.6;
   return (engagement * media) / Math.pow((now - p.createdAt.getTime()) / HOUR + 2, 1.3);
 }
@@ -502,13 +509,14 @@ export async function reelsFeed(viewer: IUser, page: number, at?: number, start?
   const mine = await Membership.find({ userId: viewer._id, subcommunityId: null, status: "active" }).select("communityId").lean<Pick<IMembership, "communityId">[]>();
   const mineIds = mine.map((m) => m.communityId);
   const [communities, hidden] = await Promise.all([
-    Community.find({ adult: { $ne: true }, explicit: { $ne: true }, feedPolicy: { $in: ["admins", "members"] }, $or: [{ _id: { $in: mineIds } }, { privacy: "public" }] }).select("_id").limit(800).lean<{ _id: Types.ObjectId }[]>(),
+    Community.find({ adult: { $ne: true }, explicit: { $ne: true }, feedPolicy: { $in: ["admins", "members"] }, $or: [{ _id: { $in: mineIds } }, { privacy: "public" }] }).sort({ verified: -1, official: -1 }).select("_id verified official").limit(800).lean<RankedCommunity[]>(),
     hiddenUserIds(viewer._id),
   ]);
   const now = at && at <= Date.now() && at > Date.now() - 24 * HOUR ? at : Date.now();
   const rows = await FeedPost.find({ communityId: { $in: communities.map((c) => c._id) }, "media.0": { $exists: true }, explicit: { $ne: true }, hiddenAt: null, createdAt: { $gte: new Date(now - 90 * 24 * HOUR), $lte: new Date(now) }, ...(hidden.length ? { authorId: { $nin: hidden } } : {}) }).sort({ createdAt: -1 }).limit(500).lean<IFeedPost[]>();
   const yours = new Set(mineIds.map(sid));
-  const score = (p: IFeedPost) => rank(p, now) + (yours.has(sid(p.communityId)) ? 1 : 0);
+  const lifted = verifiedSet(communities);
+  const score = (p: IFeedPost) => liftedRank(p, now, lifted, VERIFIED_SUGGEST_LIFT) + (yours.has(sid(p.communityId)) ? 1 : 0);
   const byScore = (a: IFeedPost, b: IFeedPost) => score(b) - score(a) || (sid(b._id) > sid(a._id) ? 1 : -1);
   const videos = rows.filter((p) => p.media.some((m) => m.kind === "video")).sort(byScore);
   const photos = rows.filter((p) => !p.media.some((m) => m.kind === "video")).sort(byScore);
@@ -529,10 +537,12 @@ export async function homeFeed(viewer: IUser, page: number, at?: number): Promis
   const mineIds = mine.map((m) => m.communityId);
   const [open, hidden, elsewhere] = await Promise.all([
     // 18+ communities' posts stay inside them
-    Community.find({ _id: { $in: mineIds }, feedPolicy: { $in: ["admins", "members"] }, adult: { $ne: true } }).select("_id").lean<{ _id: Types.ObjectId }[]>(),
+    Community.find({ _id: { $in: mineIds }, feedPolicy: { $in: ["admins", "members"] }, adult: { $ne: true } }).select("_id verified official").lean<RankedCommunity[]>(),
     hiddenUserIds(viewer._id),
-    Community.find({ _id: { $nin: mineIds }, privacy: "public", feedPolicy: { $in: ["admins", "members"] }, $or: [{ minPointsJoin: { $exists: false } }, { minPointsJoin: { $lte: viewer.points ?? 0 } }] }).select("_id").limit(500).lean<{ _id: Types.ObjectId }[]>(),
+    // verified ones first, so a long list never leaves them out
+    Community.find({ _id: { $nin: mineIds }, privacy: "public", feedPolicy: { $in: ["admins", "members"] }, $or: [{ minPointsJoin: { $exists: false } }, { minPointsJoin: { $lte: viewer.points ?? 0 } }] }).sort({ verified: -1, official: -1 }).select("_id verified official").limit(500).lean<RankedCommunity[]>(),
   ]);
+  const lifted = verifiedSet([...open, ...elsewhere]);
   // later pages rank as of page 1 and leave out what was posted since, so the pages line up
   const now = at && at <= Date.now() && at > Date.now() - 24 * HOUR ? at : Date.now();
   const notHidden = { hiddenAt: null, ...(hidden.length ? { authorId: { $nin: hidden } } : {}) };
@@ -542,9 +552,9 @@ export async function homeFeed(viewer: IUser, page: number, at?: number): Promis
   ]);
   // ties broken by id, so every page sees the same order and pages never overlap
   const idOrder = (a: IFeedPost, b: IFeedPost) => (sid(b._id) > sid(a._id) ? 1 : sid(b._id) < sid(a._id) ? -1 : 0);
-  pool.sort((a, b) => rank(b, now) - rank(a, now) || idOrder(a, b));
+  pool.sort((a, b) => liftedRank(b, now, lifted) - liftedRank(a, now, lifted) || idOrder(a, b));
   // what's taking off, pictures and video first
-  suggestions.sort((a, b) => Number(b.media.length > 0) - Number(a.media.length > 0) || rank(b, now) - rank(a, now) || idOrder(a, b));
+  suggestions.sort((a, b) => Number(b.media.length > 0) - Number(a.media.length > 0) || liftedRank(b, now, lifted, VERIFIED_SUGGEST_LIFT) - liftedRank(a, now, lifted, VERIFIED_SUGGEST_LIFT) || idOrder(a, b));
 
   // yours with a suggestion after every few, then suggestions only (the same order every time, so pages line up)
   const merged: { post: IFeedPost; trending: boolean }[] = [];

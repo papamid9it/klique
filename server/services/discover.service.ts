@@ -1,3 +1,4 @@
+import { communityRankStage } from "./communities.service";
 import type { InterestId } from "@/lib/constants";
 import { EVENT_FALLBACK_MS } from "@/lib/event-time";
 import { parseScope, scopeFilter, scopeFromPlace, scopeToString } from "@/lib/places";
@@ -109,7 +110,7 @@ export async function discover(viewer: IUser | null, whereParam?: string): Promi
   // Communities
   const [newRows, suggestedPool] = await Promise.all([
     Community.find({ privacy: "public", ...place }).sort({ createdAt: -1 }).limit(4).lean<ICommunity[]>(),
-    Community.find({ privacy: "public", ...place, _id: { $nin: joinedIds } }).sort({ memberCount: -1 }).limit(30).lean<ICommunity[]>(),
+    communityRankStage().then((rank) => Community.aggregate<ICommunity>([{ $match: { privacy: "public", ...place, _id: { $nin: joinedIds } } }, rank, { $sort: { rank: -1, memberCount: -1 } }, { $limit: 30 }])),
   ]);
   const suggestedRows = [...suggestedPool].sort((a, b) => Number(mine.has(b.interest)) - Number(mine.has(a.interest)) || b.memberCount - a.memberCount).slice(0, 4);
   const [newCommunities, suggestedCommunities] = await Promise.all([toCommunityCards(newRows, viewer), toCommunityCards(suggestedRows, viewer)]);

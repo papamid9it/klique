@@ -63,20 +63,12 @@ export function useVote(p: FeedPostDTO, onChange: (p: FeedPostDTO) => void) {
 
 export function VoteControl({ post: p, onChange }: { post: FeedPostDTO; onChange: (p: FeedPostDTO) => void }) {
   const vote = useVote(p, onChange);
-  const score = p.upCount - p.downCount;
-  // your vote shows at a glance, the same in every mood: the whole pill turns green (up) or red (down)
+  const loved = p.myVote === 1;
   return (
-    <div className={cx("inline-flex items-center rounded-full transition-colors", p.myVote === 1 ? "bg-vote-up/15" : p.myVote === -1 ? "bg-vote-down/15" : "bg-raised/70")} role="group" aria-label="Vote" data-vote={p.myVote}>
-      <button type="button" onClick={() => void vote(1)} aria-pressed={p.myVote === 1} aria-label="Upvote" title="Upvote" className={cx("inline-flex size-9 items-center justify-center rounded-full transition", p.myVote === 1 ? "text-vote-up hover:bg-vote-up/15" : "text-ink-muted hover:bg-raised hover:text-vote-up")}>
-        <Icon name="arrowdown" size={18} className="rotate-180" />
-      </button>
-      <span className={cx("min-w-6 text-center font-mono text-[13.5px] font-semibold tabular-nums", p.myVote === 1 ? "text-vote-up" : p.myVote === -1 ? "text-vote-down" : "text-ink")} aria-label={`Score ${score}`}>
-        {compactCount(score)}
-      </span>
-      <button type="button" onClick={() => void vote(-1)} aria-pressed={p.myVote === -1} aria-label="Downvote" title="Downvote" className={cx("inline-flex size-9 items-center justify-center rounded-full transition", p.myVote === -1 ? "text-vote-down hover:bg-vote-down/15" : "text-ink-muted hover:bg-raised hover:text-vote-down")}>
-        <Icon name="arrowdown" size={18} />
-      </button>
-    </div>
+    <button type="button" onClick={() => void vote(1)} aria-pressed={loved} aria-label={loved ? `Take your love back, ${p.upCount} loves` : `Love, ${p.upCount} loves`} title={loved ? "Take your love back" : "Love"} data-vote={p.myVote} className={cx("inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-[13.5px] font-semibold transition-colors", loved ? "bg-[#ff3040]/15 text-[#ff3040]" : "bg-raised/70 text-ink hover:text-[#ff3040]")}>
+      <Icon name="heart" size={18} className={cx(loved && "fill-current")} />
+      <span className="tabular-nums">{compactCount(p.upCount)}</span>
+    </button>
   );
 }
 
@@ -179,7 +171,7 @@ export function PostCard({ post: p, onChange, onRemoved, onOpenComments, showCom
         </>
       )}
 
-      {/* a tap opens the post; a double tap upvotes (a downvote turns up; an upvote is never taken back) */}
+      {/* a tap opens the post; a double tap loves it (love is never taken back by a double tap) */}
       {(p.media.length > 0 || style === "card") && (
         <div className="mt-3">
           <ExplicitCover explicit={p.explicit}>

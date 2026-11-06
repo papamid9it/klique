@@ -265,7 +265,7 @@ function ReelPreview({ item, caption, plain, onPlain, onClose }: { item: TopicMe
           <img src={item.url} alt="" className="relative max-h-full max-w-full object-contain" />
         )}
         <div className="absolute right-2 bottom-16 flex flex-col gap-4 text-white">
-          <Icon name="chevron-up" size={22} /><Icon name="chevron-down" size={22} /><Icon name="message" size={22} /><Icon name="send" size={22} />
+          <Icon name="heart" size={22} /><Icon name="message" size={22} /><Icon name="send" size={22} />
         </div>
         {caption.trim() && <p className="absolute inset-x-0 bottom-0 line-clamp-2 bg-gradient-to-t from-black/75 to-transparent p-3 pt-8 pr-10 text-[13px] text-white">{caption}</p>}
       </div>

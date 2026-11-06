@@ -28,11 +28,11 @@ import { postHref, useVote } from "./PostCard";
 import { PostDialog } from "./PostDialog";
 import { RichText } from "./RichText";
 
-function RailButton({ icon, label, count, on, flip, onClick }: { icon: IconName; label: string; count?: number; /** its colour when it's chosen */ on?: string; flip?: boolean; onClick: () => void }) {
+function RailButton({ icon, label, count, on, filled, onClick }: { icon: IconName; label: string; count?: number; /** its colour when it's chosen */ on?: string; filled?: boolean; onClick: () => void }) {
   return (
     <button type="button" aria-label={label} title={label} aria-pressed={!!on} onClick={onClick} className="flex w-12 flex-col items-center gap-1 text-white">
       <span className={cx("inline-flex size-11 items-center justify-center rounded-full backdrop-blur transition", on ?? "bg-white/15 hover:bg-white/25")}>
-        <Icon name={icon} size={21} className={flip ? "rotate-180" : undefined} />
+        <Icon name={icon} size={21} className={filled ? "fill-current" : undefined} />
       </span>
       {count !== undefined && <span className="text-xs font-semibold drop-shadow">{compactCount(count)}</span>}
     </button>
@@ -123,8 +123,7 @@ function Reel({ post: p, active, muted, onMuted, onChange, onComments, onReport 
           </div>
         </div>
         <div className="absolute right-1.5 bottom-20 flex flex-col items-center gap-2.5 sm:static sm:self-end sm:pb-2">
-          <RailButton icon="arrowdown" flip label="Upvote" count={p.upCount - p.downCount} on={p.myVote === 1 ? "bg-vote-up text-white" : undefined} onClick={() => void vote(1)} />
-          <RailButton icon="arrowdown" label="Downvote" on={p.myVote === -1 ? "bg-vote-down text-white" : undefined} onClick={() => void vote(-1)} />
+          <RailButton icon="heart" filled={p.myVote === 1} label={p.myVote === 1 ? "Take your love back" : "Love"} count={p.upCount} on={p.myVote === 1 ? "bg-[#ff3040] text-white" : undefined} onClick={() => void vote(1)} />
           <RailButton icon="message" label="Comments" count={p.commentCount} onClick={onComments} />
           <RailButton icon="send" label="Share" onClick={share} />
           <RailButton icon="flag" label="Report" onClick={onReport} />

@@ -1,7 +1,7 @@
 /**
  * Points: earned reputation, like Reddit karma. Never bought, never spent, and they never go down because of
  * someone's bad reaction. You earn them from other people only: hosting events people come to, showing up,
- * going with a crew that met, upvotes on your posts and board posts, and good reactions to your messages in
+ * going with a crew that met, love on your posts, upvotes on your board posts, and good reactions to your messages in
  * community, group and crew chats (not DMs). Each kind has its own daily cap so it can't be farmed. A site admin
  * sets what each is worth and the caps. Communities can ask for a minimum to join or to post.
  * (Hype is the currency you buy: see lib/wallet.ts.)
@@ -20,7 +20,7 @@ export const POINT_ACTIONS: { id: PointAction; label: string; hint: string }[] =
   { id: "attend", label: "Came to an event", hint: "The host confirms you were there." },
   { id: "hostAttendee", label: "Someone came to your event", hint: "Per person the host confirms (up to 50 per event)." },
   { id: "crew", label: "Went with a klique", hint: "You were in a klique of 2 or more for an event you were confirmed at." },
-  { id: "postUpvote", label: "Upvote on your post", hint: "Someone else upvoted a post of yours (once per person per post)." },
+  { id: "postUpvote", label: "Love on your post", hint: "Someone else loved a post of yours (once per person per post)." },
   { id: "boardUpvote", label: "Upvote on your board post", hint: "Someone else upvoted a board post of yours (once per person per post)." },
   { id: "reaction", label: "Good reaction to your message", hint: "Someone else reacted 👍 ❤️ 😂 😮 🥳 🔥 to your message in a community, group or klique chat. Not DMs." },
 ];
@@ -52,5 +52,5 @@ export const GOOD_REACTIONS = new Set(["like", "love", "laugh", "wow", "party", 
 /** For a member without the points a space asks for to post in its Posts section (undefined when that's not why). */
 export function pointsNote(need: number | undefined, have: number): string | undefined {
   if (!need) return undefined;
-  return `New posts here need ${need.toLocaleString("en-NG")} points. You have ${have.toLocaleString("en-NG")}: upvotes and good reactions from others earn them. You can still chat, use boards, comment, vote and react.`;
+  return `New posts here need ${need.toLocaleString("en-NG")} points. You have ${have.toLocaleString("en-NG")}: love, upvotes and good reactions from others earn them. You can still chat, use boards, comment, vote and react.`;
 }

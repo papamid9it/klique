@@ -52,6 +52,10 @@ export interface UserBrief {
 export interface UserPrivacy {
   profileVisibility: ProfileVisibility;
   attendancePublic: boolean;
+    /** others can see the communities you created, on your profile */
+    createdCommunitiesPublic: boolean;
+    /** others can see how many people are in the communities you created */
+    communityReachPublic: boolean;
 }
 
 export interface UserProfile extends UserBrief {
@@ -131,6 +135,10 @@ export interface ProfileView {
   visible: boolean;
   hiddenReason?: "private" | "members" | "friends";
   communities: CommunityCardDTO[];
+  /** the ones they started and still own (private ones only for their members, 18+ only for themselves) */
+  createdCommunities: CommunityCardDTO[];
+  /** everyone across the communities they created (null: none, or they hide it). Klique's own follower count */
+  communityReach: number | null;
   hostedEvents: EventDTO[];
   /** upcoming RSVPs — empty unless attendance is public or isSelf */
   upcomingEvents: EventDTO[];

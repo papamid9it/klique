@@ -101,7 +101,7 @@ export const toMe = (u: IUser, unreadMessages = 0, unreadNotifications = 0): Use
   hasPassword: u.hasPassword !== false,
   googleLinked: !!u.googleId,
   mood: u.mood,
-  privacy: { profileVisibility: u.profileVisibility, attendancePublic: u.attendancePublic },
+  privacy: { profileVisibility: u.profileVisibility, attendancePublic: u.attendancePublic, createdCommunitiesPublic: u.createdCommunitiesPublic !== false, communityReachPublic: u.communityReachPublic !== false },
   dmPolicy: u.dmPolicy,
   unreadMessages,
   unreadNotifications,

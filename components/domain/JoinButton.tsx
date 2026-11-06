@@ -211,7 +211,7 @@ export function PointsLocked({ open, onClose, need, have, what }: { open: boolea
         <div>
           <p className="mb-1.5 text-[13px] font-semibold">Points come from other people</p>
           <ul className="space-y-1 text-[13px] text-ink-muted">
-            <li>· Upvotes on your posts and board posts</li>
+            <li>· Love on your posts, and upvotes on your board posts</li>
             <li>· Good reactions to your messages in community and group chats</li>
             <li>· Going to events (the host ticks you off), with a klique for a bit more</li>
             <li>· People coming to events you host</li>

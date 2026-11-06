@@ -33,7 +33,7 @@ export function MinPointsForm({ join, post, what, onSave }: { join: number; post
   }
 
   return (
-    <SettingsBlock title="Points needed" intro={`Points are earned from other people (upvotes, good reactions, showing up to events) and can't be bought. Ask for a minimum to keep out brand-new or spammy accounts. 0 means anyone. Owners and admins never need any.`}>
+    <SettingsBlock title="Points needed" intro={`Points are earned from other people (love, upvotes, good reactions, showing up to events) and can't be bought. Ask for a minimum to keep out brand-new or spammy accounts. 0 means anyone. Owners and admins never need any.`}>
       <div className="grid gap-4 sm:grid-cols-2">
         <TextField label={what === "group" ? "Minimum points to be added" : "Minimum points to join"} type="number" min={0} inputMode="numeric" value={j} onChange={(e) => setJ(e.target.value)} hint={what === "group" ? "People below it can't be added to the group." : "Shown on its card and page. People already in stay in."} />
         <TextField label="Minimum points to post" type="number" min={0} inputMode="numeric" value={p} onChange={(e) => setP(e.target.value)} hint="Posts section only. Below it, members can still chat, use boards, comment, vote and react." />

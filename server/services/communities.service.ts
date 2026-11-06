@@ -27,11 +27,26 @@ import { assertCanCreateCommunity } from "./space-limits";
 
 type ListQuery = z.infer<typeof communityListQuery>;
 
+/** Lite and Pro owners' communities count as this many members ahead, so only a much bigger community stays above. */
 const COMMUNITY_BOOST = 500;
+/** And verified ones (checked by hand by the Klique team) this many: they rank above what's only paid for. */
+const VERIFIED_BOOST = 2000;
 
 /** Everyone on Lite or Pro now (checked at most every 5 minutes). */
 const paidOwnerIds = async () =>
   (await remember("paid-owners", "all", 300, async () => (await User.find({ plan: { $in: ["lite", "pro"] }, planUntil: { $gt: new Date() } }).select("_id").limit(50_000).lean<{ _id: Types.ObjectId }[]>()).map((u) => String(u._id)))).map((id: string) => new Types.ObjectId(id));
+
+/** Adds `rank`, for browsing and search: members, plus a lift for verified communities and for Lite and Pro owners'. */
+export async function communityRankStage() {
+  const paid = await paidOwnerIds();
+  return {
+    $addFields: {
+      rank: {
+        $add: ["$memberCount", { $cond: [{ $in: ["$ownerId", paid] }, COMMUNITY_BOOST, 0] }, { $cond: [{ $or: [{ $eq: ["$verified", true] }, { $eq: ["$official", true] }] }, VERIFIED_BOOST, 0] }],
+      },
+    },
+  };
+}
 
 export async function listCommunities(viewer: IUser | null, q: ListQuery): Promise<Paginated<CommunityCardDTO>> {
   let filter: QueryFilter<ICommunity>;
@@ -67,11 +82,9 @@ export async function listCommunities(viewer: IUser | null, q: ListQuery): Promi
         .skip((q.page - 1) * PAGE_SIZE)
         .limit(PAGE_SIZE + 1)
         .lean<ICommunity[]>()
-    : // Lite and Pro owners' communities usually come first: they count as this many members ahead, so only a much
-      // bigger community stays above them
-      await Community.aggregate<ICommunity>([
+    : await Community.aggregate<ICommunity>([
         { $match: { $and: [allowed, filter] } },
-        { $addFields: { rank: { $add: ["$memberCount", { $cond: [{ $in: ["$ownerId", await paidOwnerIds()] }, COMMUNITY_BOOST, 0] }] } } },
+        await communityRankStage(),
         { $sort: { rank: -1, createdAt: -1 } },
         { $skip: (q.page - 1) * PAGE_SIZE },
         { $limit: PAGE_SIZE + 1 },

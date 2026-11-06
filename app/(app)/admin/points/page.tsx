@@ -9,7 +9,7 @@ import { EarningSettings, PointsPeople } from "@/components/domain/admin/PointsA
 type View = "earning" | "people";
 
 const INTRO: Record<View, string> = {
-  earning: "Points are earned reputation, never bought. People earn them when others come to their events, upvote their posts and board posts, and react well to their messages in community and group chats. Each action has its own daily cap.",
+  earning: "Points are earned reputation, never bought. People earn them when others come to their events, love their posts, upvote their board posts, and react well to their messages in community and group chats. Each action has its own daily cap.",
   people: "Look someone up to see their points, or give and take some (prizes, mistakes). Every change is in the audit log. (Hype, the old bought currency, is gone: leftover Hype became Lite days. Plans are under Admin → Plans.)",
 };
 

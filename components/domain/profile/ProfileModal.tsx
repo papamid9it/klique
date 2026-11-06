@@ -19,13 +19,14 @@ import { ProfileSkeleton } from "@/components/ui/Skeleton";
 import { getInterest, hiddenProfileText } from "@/lib/constants";
 import { compactCount, dateChip } from "@/lib/format";
 import { useApi } from "@/lib/hooks/useApi";
+import { VerifiedCheck } from "@/components/ui/VerifiedCheck";
 import type { CommunityCardDTO, EventDTO, UserBrief, UserProfile } from "@/lib/types";
 import { longDate, monthYear, PresenceDot, ProfileActions, ProfileBanner, useMutualCommunities, ZoomAvatar } from "./ProfileParts";
 import { PointsPill } from "./ProfileCard";
 import { UserName } from "@/components/ui/UserName";
 import { SocialRow } from "@/components/ui/SocialIcons";
 
-type Tab = "activity" | "friends" | "communities";
+type Tab = "activity" | "friends" | "communities" | "created";
 /** the most a list shows on a profile; the rest are behind See all */
 const SHOWN = 5;
 
@@ -53,6 +54,7 @@ function CommunityListRow({ c, onNavigate }: { c: CommunityCardDTO; onNavigate: 
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-1.5 text-sm font-semibold">
           <span className="truncate">{c.name}</span>
+          <VerifiedCheck on={c.verified} size={14} />
           {c.privacy === "private" && <Icon name="lock" size={12} className="shrink-0 text-ink-muted" />}
         </span>
         <span className="eyebrow mt-0.5 block truncate">
@@ -108,7 +110,7 @@ function ProfileBody({ handle, onClose, onOpenPerson, tryOn }: { handle: string;
   const { data: view, loading, status, setData, reload } = useApi(() => ProfileService.get(handle), [handle], { key: `profile:${handle}` });
   const mutual = useMutualCommunities(view);
   const [tab, setTab] = useState<Tab>("activity");
-  const [all, setAll] = useState<"going" | "hosting" | "friends" | "communities" | null>(null);
+  const [all, setAll] = useState<"going" | "hosting" | "friends" | "communities" | "created" | null>(null);
   // your own friends (for others, the mutual ones come with the profile)
   const myFriends = useApi(view?.isSelf ? () => FriendService.list() : null, [view?.isSelf]);
 
@@ -126,14 +128,17 @@ function ProfileBody({ handle, onClose, onOpenPerson, tryOn }: { handle: string;
   const place = [p.neighborhood, placeLabel(p)].filter(Boolean).join(", ");
   const friends = view.isSelf ? (myFriends.data ?? []).map((f) => f.user) : view.mutualFriends;
   const sharedCommunities = view.isSelf ? view.communities : mutual;
+  const created = view.createdCommunities ?? [];
   const tabs: { id: Tab; label: string }[] = view.isSelf
     ? [
         { id: "activity", label: "About" },
         { id: "communities", label: `Your communities · ${view.communities.length}` },
+        ...(created.length ? [{ id: "created" as const, label: `Created · ${created.length}` }] : []),
         { id: "friends", label: friends.length ? `Friends · ${friends.length}` : "Friends" },
       ]
     : [
         { id: "activity", label: "Activity" },
+        ...(created.length ? [{ id: "created" as const, label: `Created · ${created.length}` }] : []),
         { id: "communities", label: mutual.length ? `Mutual communities · ${mutual.length}` : "Mutual communities" },
         { id: "friends", label: friends.length ? `Mutual friends · ${friends.length}` : "Mutual friends" },
       ];
@@ -164,6 +169,15 @@ function ProfileBody({ handle, onClose, onOpenPerson, tryOn }: { handle: string;
             <ProfileActions view={view} layout="stack" onFriendship={(friendship) => setData((d) => (d ? { ...d, friendship } : d))} onReload={() => void reload()} onNavigate={onClose} />
           </div>
 
+          {view.communityReach !== null && view.createdCommunities.length > 0 && (
+            <button type="button" onClick={() => setTab("created")} aria-label={`${view.communityReach} people in communities ${view.isSelf ? "you" : "they"} created`} className="mt-4 flex w-full items-center gap-3 rounded-card border border-line bg-surface p-3 text-left transition hover:bg-raised">
+              <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-raised text-accent-text"><Icon name="users" size={18} /></span>
+              <span className="min-w-0">
+                <span className="flex items-center gap-1.5 text-lg font-bold tabular-nums">{compactCount(view.communityReach)}{view.createdCommunities.some((c) => c.verified) && <VerifiedCheck on size={15} />}</span>
+                <span className="block text-xs text-ink-muted">in {view.createdCommunities.length === 1 ? "the community" : `${view.createdCommunities.length} communities`} {view.isSelf ? "you" : "they"} created</span>
+              </span>
+            </button>
+          )}
           {view.visible ? (
             <div className="mt-5 space-y-4 rounded-card border border-line bg-surface p-4">
               <ProfileGallery userId={p.id} media={p.media ?? []} isSelf={view.isSelf} onNavigate={onClose} />
@@ -258,6 +272,11 @@ function ProfileBody({ handle, onClose, onOpenPerson, tryOn }: { handle: string;
             ) : (
               <Empty>{view.isSelf ? "No friends yet. Add people from their profile." : "No mutual friends yet."}</Empty>
             )
+          ) : tab === "created" ? (
+            <>
+              {created.slice(0, SHOWN).map((c) => <CommunityListRow key={c.id} c={c} onNavigate={onClose} />)}
+              {created.length > SHOWN && <SeeAll label={`See all · ${created.length}`} onClick={() => setAll("created")} />}
+            </>
           ) : sharedCommunities.length ? (
             <>
               {sharedCommunities.slice(0, SHOWN).map((c) => <CommunityListRow key={c.id} c={c} onNavigate={onClose} />)}
@@ -268,11 +287,12 @@ function ProfileBody({ handle, onClose, onOpenPerson, tryOn }: { handle: string;
           )}
         </div>
       </div>
-      <Modal open={!!all} onClose={() => setAll(null)} title={all === "going" ? "Going to" : all === "hosting" ? "Hosting" : all === "friends" ? (view.isSelf ? "Friends" : "Mutual friends") : view.isSelf ? "Communities" : "Mutual communities"}>
+      <Modal open={!!all} onClose={() => setAll(null)} title={all === "created" ? "Communities created" : all === "going" ? "Going to" : all === "hosting" ? "Hosting" : all === "friends" ? (view.isSelf ? "Friends" : "Mutual friends") : view.isSelf ? "Communities" : "Mutual communities"}>
         <div className="space-y-2.5">
           {all === "going" || all === "hosting" ? <AllEvents handle={p.handle} kind={all} onNavigate={onClose} /> : null}
           {all === "friends" ? friends.map((u) => <PersonListRow key={u.id} u={u} onOpen={(h) => { setAll(null); onOpenPerson(h); }} />) : null}
           {all === "communities" ? sharedCommunities.map((c) => <CommunityListRow key={c.id} c={c} onNavigate={onClose} />) : null}
+          {all === "created" ? created.map((c) => <CommunityListRow key={c.id} c={c} onNavigate={onClose} />) : null}
         </div>
       </Modal>
     </div>
