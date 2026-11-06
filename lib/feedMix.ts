@@ -83,3 +83,26 @@ export function mixFeed(posts: number, kliques: CrewCardDTO[], events: EventDTO[
   }
   return { slots, rows };
 }
+
+/** Reels between two cards: at least, and at most. Fewer than on Home: reels are for watching. */
+const REEL_GAP_MIN = 8;
+const REEL_GAP_MAX = 12;
+
+/** What goes between reels now and then: an event, a klique or an ad. It stays put for one `seed`, like Home's. */
+export function mixReels(reels: number, kliques: CrewCardDTO[], events: EventDTO[], ads: number, seed: number) {
+  const slots = new Map<number, FeedSlot>();
+  const random = randomFrom(seed);
+  const left = { klique: shuffled(kliques, seed), event: shuffled(events, seed), ad: Array.from({ length: ads }, (_, i) => i) };
+  let at = REEL_GAP_MIN + Math.floor(random() * (REEL_GAP_MAX - REEL_GAP_MIN + 1));
+  while (at <= PLANNED_POSTS && at < reels) {
+    const roll = random();
+    const wanted = roll < CHANCE.event ? "event" : roll < CHANCE.event + CHANCE.klique ? "klique" : "ad";
+    const kind = ([wanted, "event", "klique", "ad"] as const).find((k) => left[k].length);
+    if (!kind) break;
+    if (kind === "event") slots.set(at, { kind, event: left.event.shift()! });
+    else if (kind === "klique") slots.set(at, { kind, klique: left.klique.shift()! });
+    else slots.set(at, { kind, ad: left.ad.shift()! });
+    at += REEL_GAP_MIN + Math.floor(random() * (REEL_GAP_MAX - REEL_GAP_MIN + 1));
+  }
+  return slots;
+}

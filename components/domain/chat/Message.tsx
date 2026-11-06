@@ -22,11 +22,16 @@ import { MASS_WORDS } from "@/lib/mentions";
 import { BotTag } from "@/components/domain/space/WebhooksPanel";
 import { PlanBadge } from "@/components/domain/account/PlanTab";
 import { EmojiText } from "@/components/ui/CustomEmoji";
+import { Formatted } from "@/components/ui/Formatted";
 
 const TOKEN_RX = /(https?:\/\/[^\s<]+)|(?<![\w@])@([a-zA-Z0-9_]{3,20})(?![\w])/g;
 
 /** Plain text with clickable links and @mention chips. Never injects HTML. */
 function Body({ text, mentions, meId, mass }: { text: string; mentions: MentionDTO[]; meId: string | null; mass?: "everyone" | "here" | null }) {
+  return <Formatted text={text} plain={(t) => <PlainBody text={t} mentions={mentions} meId={meId} mass={mass} />} />;
+}
+
+function PlainBody({ text, mentions, meId, mass }: { text: string; mentions: MentionDTO[]; meId: string | null; mass?: "everyone" | "here" | null }) {
   const byHandle = new Map(mentions.map((m) => [m.handle.toLowerCase(), m]));
   const out: ReactNode[] = [];
   let last = 0;

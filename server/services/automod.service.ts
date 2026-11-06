@@ -1,3 +1,4 @@
+import { stripFormat } from "@/lib/textFormat";
 import "server-only";
 import { Types } from "mongoose";
 import { z } from "zod";
@@ -70,7 +71,8 @@ export async function checkAutoMod(space: Space, viewer: IUser, access: SpaceAcc
   if (access.canManage || isSiteAdmin(viewer)) return;
   if (access.roleIds?.some((id) => cfg.exemptRoleIds.includes(id))) return;
   if (input.channelId && cfg.exemptChannelIds.includes(sid(input.channelId))) return;
-  const hit = await firstHit(cfg, community._id, viewer, input.text, input.channelId ?? null);
+  // the words without their marks: b**a**d is still bad
+  const hit = await firstHit(cfg, community._id, viewer, stripFormat(input.text), input.channelId ?? null);
   if (!hit) return;
   await act(community, cfg, viewer, hit.rule, hit.action, input.text, input.where);
   if (hit.action.block) throw new ApiError(422, BLOCK_MESSAGE[hit.rule], { code: "automod" });

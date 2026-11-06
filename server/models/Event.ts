@@ -48,6 +48,8 @@ export interface IEvent {
    * A member's event waiting for the community's owner or an admin ("pending"), or turned down ("rejected", with
    * `reviewReason`). Until approved only its host and the space's owners and admins see it. null: published.
    */
+  /** its community's owner pinned it: first on the community's events */
+  pinnedAt?: Date | null;
   review?: "pending" | "rejected" | null;
   /** people can chip in toward it through Paystack: so much a unit, up to `maxQuantity` units at a time (lib/money) */
   contribution?: { label: string; unitPrice: number; maxQuantity: number } | null;
@@ -87,6 +89,7 @@ const EventSchema = new Schema<IEvent>(
     reminderSentAt: { type: Date, default: null },
     organizerName: { type: String, default: null, maxlength: 120 },
     sourceUrl: { type: String, default: null, maxlength: 1000 },
+    pinnedAt: { type: Date, default: null },
     review: { type: String, enum: ["pending", "rejected", null], default: null },
     contribution: { type: new Schema({ label: { type: String, default: "", maxlength: 60 }, unitPrice: { type: Number, required: true, min: 100 }, maxQuantity: { type: Number, default: 1, min: 1, max: 100 } }, { _id: false }), default: null },
     reviewReason: { type: String, default: "", maxlength: 500 },

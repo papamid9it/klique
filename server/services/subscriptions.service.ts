@@ -85,10 +85,10 @@ export async function noteKliqueStart(userId: Types.ObjectId) {
   await KliqueStart.create({ userId });
 }
 
-/** Pro hosts among these, for the small boost in "Kliques for you". */
+/** Lite and Pro hosts among these: their kliques come first in "Kliques for you". */
 export async function proHosts(hostIds: Types.ObjectId[]): Promise<Set<string>> {
   if (!hostIds.length) return new Set();
-  const rows = await User.find({ _id: { $in: hostIds }, plan: "pro", planUntil: { $gt: new Date() } }).select("_id").lean<{ _id: Types.ObjectId }[]>();
+  const rows = await User.find({ _id: { $in: hostIds }, plan: { $in: ["lite", "pro"] }, planUntil: { $gt: new Date() } }).select("_id").lean<{ _id: Types.ObjectId }[]>();
   return new Set(rows.map((r) => sid(r._id)));
 }
 

@@ -76,6 +76,8 @@ export const EventService = {
   cancelRsvp: (id: string) => api.delete<Envelope<EventDTO>>(`/api/events/${id}/rsvp`),
   save: (id: string) => api.post<Envelope<EventDTO>>(`/api/events/${id}/save`),
   unsave: (id: string) => api.delete<Envelope<EventDTO>>(`/api/events/${id}/save`),
+  /** its community's owner pins it, so it comes first on the community's events */
+  pin: (id: string, on: boolean) => api.post<Envelope<{ id: string; pinned: boolean }>>(`/api/events/${id}/pin`, { on }),
   attendees: (id: string) => api.get<Envelope<AttendeesDTO>>(`/api/events/${id}/attendees`),
 };
 

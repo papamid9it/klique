@@ -285,8 +285,8 @@ export async function toEvents(events: IEvent[], viewer: IUser | null): Promise<
     loadBriefs(hostIds),
     communityIds.length
       ? Community.find({ _id: { $in: communityIds } })
-          .select("slug name privacy official adult verified")
-          .lean<Pick<ICommunity, "_id" | "slug" | "name" | "privacy" | "official" | "adult" | "verified">[]>()
+          .select("slug name privacy official adult verified ownerId")
+          .lean<Pick<ICommunity, "_id" | "slug" | "name" | "privacy" | "official" | "adult" | "verified" | "ownerId">[]>()
       : [],
     subIds.length
       ? Subcommunity.find({ _id: { $in: subIds } })
@@ -333,6 +333,7 @@ export async function toEvents(events: IEvent[], viewer: IUser | null): Promise<
     const end = eventEndMs(e);
     return {
       id: sid(e._id),
+      ...(e.pinnedAt ? { pinned: true } : {}),
       title: e.title,
       description: e.description,
       interest: e.interest,
@@ -373,6 +374,7 @@ export async function toEvents(events: IEvent[], viewer: IUser | null): Promise<
         saved: savedSet.has(sid(e._id)),
         isHost,
         canEdit: isHost,
+        ...(c && viewer && (String(c.ownerId) === sid(viewer._id) || isSiteAdmin(viewer)) ? { canPin: true } : {}),
         // a community's event (not Klique's): going or saving it means joining the community first
         mustJoin: !isHost && !!c && !isKlique(c) && !memberSet.has(sid(c._id)),
       },

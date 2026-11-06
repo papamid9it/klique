@@ -118,7 +118,8 @@ export function JoinButton({
     );
   }
 
-  const need = community.minPointsJoin;
+  // Lite and Pro members don't need points to join
+  const need = user?.badge ? 0 : community.minPointsJoin;
   const have = user?.points ?? 0;
   if (need > 0 && user && !user.isAdmin && have < need) {
     return (

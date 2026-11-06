@@ -47,7 +47,7 @@ export function TextCard({ post, onOpen, onDoubleTap, className }: { post: Pick<
   return (
     <div ref={box} onClick={tap} role={onOpen ? "button" : undefined} tabIndex={onOpen ? 0 : undefined} onKeyDown={(e) => onOpen && (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onOpen())} aria-label={onOpen ? "Open the post" : undefined} className={cx("relative flex aspect-[4/3] max-h-[440px] w-full max-w-full items-center justify-center overflow-hidden rounded-control px-7 text-center select-none", onOpen && "cursor-pointer", className)} style={{ background: bg.css, color: bg.ink }}>
       <p className={cx("max-w-full leading-[1.18] font-bold tracking-[-0.02em] [overflow-wrap:anywhere] whitespace-pre-wrap", sizeFor(post.caption.length))}>
-        <RichText text={post.caption} refs={post.refs} />
+        <RichText text={post.caption} refs={post.refs} formatted />
       </p>
       {bursts.map((b) => (
         // Instagram's heart (it counts as an upvote)
@@ -65,7 +65,7 @@ export function LongPost({ post, clamp, onOpen }: { post: Pick<FeedPostDTO, "tit
     <div className="space-y-1.5">
       {post.title && <h3 className={cx("text-[18px] leading-snug font-semibold tracking-[-0.01em] [overflow-wrap:anywhere] text-ink", clamp && onOpen && "cursor-pointer hover:underline")} onClick={clamp ? onOpen : undefined}>{post.title}</h3>}
       <p className={cx("text-[14.5px] leading-relaxed [overflow-wrap:anywhere] whitespace-pre-wrap text-ink/85", clamp && "line-clamp-4")}>
-        <RichText text={post.caption} refs={post.refs} />
+        <RichText text={post.caption} refs={post.refs} formatted />
       </p>
       {clamp && onOpen && post.caption.length > 180 && (
         <button type="button" onClick={onOpen} className="text-[13px] font-semibold text-ink-muted hover:text-ink">

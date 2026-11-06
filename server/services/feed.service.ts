@@ -88,6 +88,7 @@ async function toPosts(rows: IFeedPost[], viewer: IUser | null): Promise<FeedPos
         refs: refOf(p),
         title: p.title ?? "",
         explicit: !!p.explicit,
+        ...(p.plainBackdrop ? { plainBackdrop: true } : {}),
         textBg: p.media.length ? null : (p.textBg ?? null),
         media: p.media.map((m) => ({ kind: m.kind, url: m.url, poster: m.poster ?? null })),
         upCount: p.upCount,
@@ -205,6 +206,7 @@ export async function createPost(viewer: IUser, space: Space, access: SpaceAcces
     mentionIds: refs.userIds,
     communityRefIds: refs.communityIds,
     title: input.media.length ? "" : input.title,
+    plainBackdrop: input.plainBackdrop,
     textBg: style === "card" ? (input.textBg ?? "sunset") : null,
     // only a community that allows explicit content takes explicit posts
     explicit: !!space.community.explicit && input.explicit,
@@ -344,7 +346,10 @@ export async function listComments(viewer: IUser | null, space: Space, access: S
   const p = await loadPost(space, postId);
   const hidden = await hiddenUserIds(viewer?._id ?? null);
   const rows = await FeedComment.find({ postId: p._id, ...(hidden.length ? { authorId: { $nin: hidden } } : {}) }).sort({ _id: 1 }).limit(COMMENT_CAP).lean<IFeedComment[]>();
-  return toComments(rows, viewer, access.role);
+  const list = await toComments(rows, viewer, access.role);
+  // Lite and Pro members' comments come first; replies stay with what they answer
+  const paid = (c: FeedCommentDTO) => (!c.parentId && c.author.badge ? 1 : 0);
+  return list.map((c, at) => ({ c, at })).sort((a, b) => paid(b.c) - paid(a.c) || a.at - b.at).map((x) => x.c);
 }
 
 export async function addComment(viewer: IUser, space: Space, access: SpaceAccess, postId: string, input: z.infer<typeof feedCommentSchema>): Promise<FeedCommentDTO> {
@@ -488,6 +493,37 @@ const SUGGEST_EVERY = 5;
  * pictures and video first; never from private communities, people you've hidden, or a community whose points
  * minimum you can't meet yet. Each appears once (marked `trending`, shown with Join).
  */
+/**
+ * Reels: pictures and videos only, one after another, full screen. Mostly videos, with a photo in every few; text posts
+ * never, and nothing explicit or 18+. From your communities, then what's taking off elsewhere. `start`: the post they
+ * tapped comes first.
+ */
+export async function reelsFeed(viewer: IUser, page: number, at?: number, start?: string): Promise<{ items: FeedPostDTO[]; page: number; hasMore: boolean; at: number }> {
+  const mine = await Membership.find({ userId: viewer._id, subcommunityId: null, status: "active" }).select("communityId").lean<Pick<IMembership, "communityId">[]>();
+  const mineIds = mine.map((m) => m.communityId);
+  const [communities, hidden] = await Promise.all([
+    Community.find({ adult: { $ne: true }, explicit: { $ne: true }, feedPolicy: { $in: ["admins", "members"] }, $or: [{ _id: { $in: mineIds } }, { privacy: "public" }] }).select("_id").limit(800).lean<{ _id: Types.ObjectId }[]>(),
+    hiddenUserIds(viewer._id),
+  ]);
+  const now = at && at <= Date.now() && at > Date.now() - 24 * HOUR ? at : Date.now();
+  const rows = await FeedPost.find({ communityId: { $in: communities.map((c) => c._id) }, "media.0": { $exists: true }, explicit: { $ne: true }, hiddenAt: null, createdAt: { $gte: new Date(now - 90 * 24 * HOUR), $lte: new Date(now) }, ...(hidden.length ? { authorId: { $nin: hidden } } : {}) }).sort({ createdAt: -1 }).limit(500).lean<IFeedPost[]>();
+  const yours = new Set(mineIds.map(sid));
+  const score = (p: IFeedPost) => rank(p, now) + (yours.has(sid(p.communityId)) ? 1 : 0);
+  const byScore = (a: IFeedPost, b: IFeedPost) => score(b) - score(a) || (sid(b._id) > sid(a._id) ? 1 : -1);
+  const videos = rows.filter((p) => p.media.some((m) => m.kind === "video")).sort(byScore);
+  const photos = rows.filter((p) => !p.media.some((m) => m.kind === "video")).sort(byScore);
+  // three videos, then a photo; whichever runs out, the other carries on
+  const mixed: IFeedPost[] = [];
+  for (let v = 0, ph = 0; v < videos.length || ph < photos.length; ) {
+    for (let n = 0; n < 3 && v < videos.length; n++) mixed.push(videos[v++]);
+    if (ph < photos.length) mixed.push(photos[ph++]);
+  }
+  const tapped = start && Types.ObjectId.isValid(start) ? (rows.find((p) => sid(p._id) === start) ?? (await FeedPost.findOne({ _id: start, "media.0": { $exists: true }, hiddenAt: null, explicit: { $ne: true }, communityId: { $in: communities.map((c) => c._id) } }).lean<IFeedPost>())) : null;
+  const ordered = tapped ? [tapped, ...mixed.filter((p) => sid(p._id) !== sid(tapped._id))] : mixed;
+  const slice = ordered.slice((page - 1) * PAGE, page * PAGE);
+  return { items: await toPosts(slice, viewer), page, hasMore: ordered.length > page * PAGE, at: now };
+}
+
 export async function homeFeed(viewer: IUser, page: number, at?: number): Promise<{ items: HomeFeedItem[]; page: number; hasMore: boolean; at: number }> {
   const mine = await Membership.find({ userId: viewer._id, subcommunityId: null, status: "active" }).select("communityId").lean<Pick<IMembership, "communityId">[]>();
   const mineIds = mine.map((m) => m.communityId);

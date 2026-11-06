@@ -329,6 +329,8 @@ export interface FeedPostDTO {
   textBg: string | null;
   /** marked explicit (in a community that allows it): blurred until tapped */
   explicit: boolean;
+  /** in reels: plain black behind a wider picture or video, not a blurred copy of it */
+  plainBackdrop?: boolean;
   /** pictures, or one video; empty for a text post */
   media: TopicMediaDTO[];
   upCount: number;
@@ -498,6 +500,8 @@ export type RsvpStatus = "going" | "interested";
 export type EventAudience = "public" | "community" | "subcommunity";
 
 export interface EventDTO {
+  /** its community's owner pinned it: first on the community's events */
+  pinned?: boolean;
   id: Id;
   title: string;
   description: string;
@@ -534,7 +538,9 @@ export interface EventDTO {
   isPast: boolean;
   isFull: boolean;
   /** `mustJoin`: a community's event the viewer isn't a member of: going or saving it means joining first */
-  viewer: { rsvp: RsvpStatus | null; saved: boolean; isHost: boolean; canEdit: boolean; mustJoin?: boolean; canReview?: boolean; canManageMoney?: boolean };
+  viewer: { rsvp: RsvpStatus | null; saved: boolean; isHost: boolean; /** the community's owner (or a site admin): may pin it */
+    canPin?: boolean;
+    canEdit: boolean; mustJoin?: boolean; canReview?: boolean; canManageMoney?: boolean };
   /** a member's event not approved yet: waiting for the space's owner or an admin, or turned down (with why) */
   review: { status: "pending" | "rejected"; reason: string } | null;
   /** chipping in toward it (lib/money): so much a unit; what's been raised; the viewer's units; paid out yet */
@@ -816,6 +822,8 @@ export interface MessageDTO {
   id: Id;
   conversationId: Id;
   senderId: Id;
+  /** in a group: who sent it */
+  sender?: UserBrief;
   body: string;
   sticker: string | null;
   /** a picture sticker (see SavedStickerDTO); the message has no text then */
@@ -844,8 +852,13 @@ export interface SavedStickerDTO {
 }
 
 export interface ConversationDTO {
+  /** you pinned it to the top */
+  pinned?: boolean;
   id: Id;
+  /** who it's with. In a group, `other` stands for the group: its name, with no profile behind it */
   other: UserBrief;
+  /** a group of friends */
+  group?: { memberCount: number; mine: boolean } | null;
   lastMessage: { body: string; sticker?: string | null; senderId: Id; createdAt: ISODate; mine: boolean } | null;
   unreadCount: number;
   updatedAt: ISODate;
@@ -853,6 +866,15 @@ export interface ConversationDTO {
   blockedByMe: boolean;
   /** a message request waiting to be accepted: sent by you (`fromMe`) or to you */
   request?: { fromMe: boolean } | null;
+}
+
+/** Who's in a group of friends. */
+export interface ChatGroupDTO {
+  id: Id;
+  name: string;
+  /** you started it: you add and remove people */
+  mine: boolean;
+  members: { user: UserBrief; owner: boolean; me: boolean }[];
 }
 
 export interface ConversationDetailDTO {
@@ -987,6 +1009,8 @@ export interface SidebarDTO {
 }
 
 export interface MyCommunityDTO {
+  /** you pinned it to the top */
+  pinned?: boolean;
   id: Id;
   slug: string;
   name: string;
@@ -1216,6 +1240,29 @@ export interface CommunityDashboardDTO {
   /** people asking to join (private communities) */
   pendingRequests: number;
   activity: { posts7: number; upcomingEvents: number };
+}
+
+/**
+ * How a community is doing, by its owner's plan: Lite sees who's active and how the week went; Pro also sees the best
+ * times to post, the last 30 days of chat and its most active members. `tier: "none"`: the owner is on Free.
+ */
+export interface GrowthStatsDTO {
+  tier: "none" | "lite" | "pro";
+  /** people who wrote in chat in the last 30 days */
+  activeMembers: number;
+  /** of everyone in it, in percent */
+  activeShare: number;
+  messages7: number;
+  messagesLast7: number;
+  /** most messages in the last 30 days */
+  topChannels: { name: string; messages: number }[];
+  /** Pro */
+  messagesPerDay?: { day: string; count: number }[];
+  /** the busiest hours of the day, Lagos time (0-23), busiest first */
+  bestHours?: { hour: number; messages: number }[];
+  /** the busiest days of the week (0 = Sunday), busiest first */
+  bestDays?: { day: number; messages: number }[];
+  topMembers?: { user: UserBrief; messages: number }[];
 }
 
 /** Beside a community's Posts: who posted the most in the last 7 days (and the upvotes they got). */

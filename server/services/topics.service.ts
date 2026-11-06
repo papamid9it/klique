@@ -9,6 +9,7 @@ import { Community, type ICommunity } from "../models/Community";
 import { Membership, type IMembership } from "../models/Membership";
 import { Board, Topic, TopicComment, TopicFollow, TopicLike, type ITopic, type ITopicComment } from "../models/Topic";
 import { deleteTopicThread, ensureTopicThread, listMessages, syncTopicThread } from "./channels.service";
+import { stripFormat } from "@/lib/textFormat";
 import { assertCanPost, assertCanView, assertNotPostBanned, outranks, postBanOf, type Space, type SpaceAccess } from "../policies/access";
 import { loadBriefs } from "../serializers";
 import type { commentCreateSchema, commentUpdateSchema, topicCreateSchema, topicListQuery, topicUpdateSchema } from "../validators/schemas";
@@ -374,10 +375,10 @@ export async function createComment(viewer: IUser, space: Space, access: SpaceAc
   const href = `/communities/${space.community.slug}?view=topics${board ? `&b=${board.slug}` : ""}&t=${sid(t._id)}`;
   const me = sid(viewer._id);
   if (parentAuthor && sid(parentAuthor) !== me) {
-    notify([parentAuthor], { title: `${viewer.displayName} replied to your comment`, body: input.body.slice(0, 140), data: { href } }, { actorId: viewer._id, category: "replies", groupKey: `topic:${sid(t._id)}`, many: (n) => `${n} new replies and comments on "${t.title}"`, ref: `topic:${sid(t._id)}` });
+    notify([parentAuthor], { title: `${viewer.displayName} replied to your comment`, body: stripFormat(input.body).slice(0, 140), data: { href } }, { actorId: viewer._id, category: "replies", groupKey: `topic:${sid(t._id)}`, many: (n) => `${n} new replies and comments on "${t.title}"`, ref: `topic:${sid(t._id)}` });
   }
   if (sid(t.authorId) !== me && (!parentAuthor || sid(parentAuthor) !== sid(t.authorId))) {
-    notify([t.authorId], { title: `${viewer.displayName} commented on "${t.title}"`, body: input.body.slice(0, 140), data: { href } }, { actorId: viewer._id, category: "replies", groupKey: `topic:${sid(t._id)}`, many: (n) => `${n} new comments on "${t.title}"`, ref: `topic:${sid(t._id)}` });
+    notify([t.authorId], { title: `${viewer.displayName} commented on "${t.title}"`, body: stripFormat(input.body).slice(0, 140), data: { href } }, { actorId: viewer._id, category: "replies", groupKey: `topic:${sid(t._id)}`, many: (n) => `${n} new comments on "${t.title}"`, ref: `topic:${sid(t._id)}` });
   }
   const [topic] = await toTopics([{ ...t, commentCount: t.commentCount + 1 }], viewer);
   return (await toComments([doc.toObject() as ITopicComment], viewer, topic))[0];

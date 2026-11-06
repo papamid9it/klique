@@ -1,5 +1,6 @@
 import { isKlique } from "./klique-id";
 import { audienceRefusal, LIMITS } from "@/lib/constants";
+import { planOf } from "./subscriptions.service";
 import type { GroupPower } from "@/lib/roles";
 import type { Types } from "mongoose";
 import { deleteUploads } from "./media.service";
@@ -157,7 +158,8 @@ export async function joinSpace(
   }
 
   // the points this community asks for, to join or to ask to (site admins never need any; Klique never asks)
-  const short = pointsShort(space.community.minPointsJoin, null, gateOf(viewer), !!space.community.official);
+  // Lite and Pro members don't need points to join a community (a group's points still count, for everyone)
+  const short = planOf(viewer) === "free" ? pointsShort(space.community.minPointsJoin, null, gateOf(viewer), !!space.community.official) : 0;
   if (short) throw forbidden(`${space.community.name} needs ${short.toLocaleString("en-NG")} points to join. You have ${(viewer.points ?? 0).toLocaleString("en-NG")}.`);
 
   // raid protection (AutoMod) may have locked joining for a while: paused, or through approval

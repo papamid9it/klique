@@ -30,6 +30,9 @@ import { ReplyingTo, ReplyQuote } from "@/components/domain/chat/ReplyQuote";
 import { useAttachments } from "@/lib/hooks/useAttachments";
 import { recallApi, rememberApi } from "@/lib/hooks/useApi";
 import { EditedTag, MessageEditor } from "@/components/domain/chat/MessageEditor";
+import { ChatGroupInfo } from "@/components/domain/messages/ChatGroup";
+import { FormatButton } from "@/components/ui/FormatButton";
+import { Formatted } from "@/components/ui/Formatted";
 import { ConfirmModal } from "@/components/domain/space/parts";
 import { AttachedSticker, StickerPicker, StickerView, ReactButton, ReactionBar, type StickerChoice } from "@/components/domain/chat/Reactions";
 import { MessageSheet, PressRow } from "@/components/domain/chat/MessageSheet";
@@ -71,6 +74,7 @@ export default function ConversationPage() {
   const [notFound, setNotFound] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [draft, setDraft] = useState("");
+  const draftArea = useRef<HTMLTextAreaElement>(null);
   const [sendError, setSendError] = useState<string | null>(null);
   const [reportMsg, setReportMsg] = useState<string | null>(null);
   const [reportUser, setReportUser] = useState(false);
@@ -328,7 +332,7 @@ export default function ConversationPage() {
   if (loadError && !detail) return <div className="p-6"><ErrorState message={loadError} onRetry={() => void load()} /></div>;
   if (!detail) return null;
 
-  const { other, blockedByMe } = detail.conversation;
+  const { other, blockedByMe, group: chatGroup } = detail.conversation;
   let lastDay = "";
 
   return (
@@ -338,6 +342,15 @@ export default function ConversationPage() {
         <Link href="/messages" aria-label="Back to messages" className="inline-flex size-9 items-center justify-center rounded-full text-ink-muted hover:bg-raised hover:text-ink lg:hidden">
           <Icon name="arrow-left" size={18} />
         </Link>
+        {chatGroup ? (
+          <button type="button" onClick={() => setInfoOpen(true)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+            <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-raised text-ink-muted"><Icon name="users" size={18} /></span>
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-semibold">{other.displayName}</span>
+              <span className="block truncate text-[11px] text-ink-muted">{chatGroup.memberCount} people</span>
+            </span>
+          </button>
+        ) : (
         <ProfileTrigger handle={other.handle} className="flex min-w-0 flex-1 items-center gap-3 text-left">
           <Avatar name={other.displayName} src={other.avatarUrl} frame={other.avatarFrame} size={40} />
           <span className="min-w-0">
@@ -345,6 +358,8 @@ export default function ConversationPage() {
             <span className="block truncate font-mono text-[11px] text-ink-muted">@{other.handle}</span>
           </span>
         </ProfileTrigger>
+        )}
+        {!chatGroup && (
         <OverflowMenu
           label="Conversation options"
           items={[
@@ -352,7 +367,8 @@ export default function ConversationPage() {
             { label: "Report user", icon: "flag", danger: true, onSelect: () => setReportUser(true) },
           ]}
         />
-        <button type="button" onClick={() => setInfoOpen(true)} aria-label="About this person" className="inline-flex size-9 items-center justify-center rounded-full text-ink hover:bg-raised xl:hidden">
+        )}
+        <button type="button" onClick={() => setInfoOpen(true)} aria-label={chatGroup ? "About this group" : "About this person"} className="inline-flex size-9 items-center justify-center rounded-full text-ink hover:bg-raised xl:hidden">
           <Icon name="info" size={19} />
         </button>
       </header>
@@ -375,6 +391,7 @@ export default function ConversationPage() {
               {showDay && <p className="eyebrow my-4 text-center">{day}</p>}
               <PressRow onLong={() => !m.pending && !m.failed && !m.deleted && editingId !== m.id && setSheetFor(m)} className={cx("group flex items-end gap-1.5", m.mine ? "flex-row-reverse" : "flex-row")}>
                 <div className={cx("flex max-w-[80%] flex-col", m.mine ? "items-end" : "items-start")}>
+                  {chatGroup && !m.mine && m.sender && <ProfileTrigger handle={m.sender.handle} className="mb-0.5 px-1 text-left text-xs font-semibold text-accent-text hover:underline">{m.sender.displayName}</ProfileTrigger>}
                   {m.deleted ? (
                     <div className="rounded-2xl border border-dashed border-line px-3.5 py-2 text-sm text-ink-muted italic">Message deleted</div>
                   ) : editingId === m.id ? (
@@ -393,7 +410,7 @@ export default function ConversationPage() {
                     )}
                     <div id={`msg-${m.id}`} className={cx("rounded-2xl px-3.5 py-2 text-[15px] break-words whitespace-pre-wrap transition-colors", m.mine ? "rounded-br-md bg-accent text-accent-ink" : "rounded-bl-md border border-line bg-surface text-ink", m.pending && "opacity-60")}>
                       {m.replyTo && <ReplyQuote reply={m.replyTo} onJump={jump} className={cx("whitespace-normal", m.mine ? "!text-accent-ink/80 [&_span]:!text-accent-ink/80" : "")} />}
-                      <EmojiText text={m.body} />
+                      <Formatted text={m.body} plain={(words) => <EmojiText text={words} />} />
                       {!m.body && !m.images?.length && <span className="italic opacity-70">Sticker unavailable</span>}
                       <ChatImages images={m.images ?? []} mine={m.mine} className={m.body ? "mt-1.5" : ""} />
                       <span className={cx("mt-0.5 flex items-baseline justify-end gap-1.5 font-mono text-[10px]", m.mine ? "text-accent-ink/70" : "text-ink-muted")}>
@@ -454,7 +471,9 @@ export default function ConversationPage() {
                 </button>
               </>
             )}
+            <FormatButton area={draftArea} value={draft} onChange={setDraft} />
             <textarea
+              ref={draftArea}
               value={draft}
               onChange={(e) => {
                 setDraft(e.target.value);
@@ -508,10 +527,10 @@ export default function ConversationPage() {
       </section>
 
       <aside className="hidden w-80 shrink-0 overflow-y-auto border-l border-line xl:block" aria-label="About this person">
-        <ConversationInfo handle={other.handle} blockedByMe={blockedByMe} onBlock={() => setBlockOpen(true)} onReport={() => setReportUser(true)} />
+        {chatGroup ? <ChatGroupInfo id={id} onChanged={() => void load()} /> : <ConversationInfo handle={other.handle} blockedByMe={blockedByMe} onBlock={() => setBlockOpen(true)} onReport={() => setReportUser(true)} />}
       </aside>
-      <SlideOver open={infoOpen} onClose={() => setInfoOpen(false)} side="right" title="About this person">
-        <ConversationInfo handle={other.handle} blockedByMe={blockedByMe} onBlock={() => { setInfoOpen(false); setBlockOpen(true); }} onReport={() => { setInfoOpen(false); setReportUser(true); }} onNavigate={() => setInfoOpen(false)} />
+      <SlideOver open={infoOpen} onClose={() => setInfoOpen(false)} side="right" title={chatGroup ? "About this group" : "About this person"}>
+        {chatGroup ? <ChatGroupInfo id={id} onChanged={() => void load()} /> : <ConversationInfo handle={other.handle} blockedByMe={blockedByMe} onBlock={() => { setInfoOpen(false); setBlockOpen(true); }} onReport={() => { setInfoOpen(false); setReportUser(true); }} onNavigate={() => setInfoOpen(false)} />}
       </SlideOver>
 
       <Modal open={blockOpen} onClose={() => setBlockOpen(false)} size="sm" title={blockedByMe ? `Unblock @${other.handle}?` : `Block @${other.handle}?`} description={blockedByMe ? "You'll be able to message each other again." : "You won't be able to message each other. You can unblock them any time."}>

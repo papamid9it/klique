@@ -18,6 +18,8 @@ export interface IConversation {
    * the other person's Requests until they accept (or reply), delete it (silently) or block. null: a normal chat.
    */
   request?: { fromId: Types.ObjectId; at: Date } | null;
+  /** a group of friends (up to LIMITS.chatGroupMembers), not a chat between two people */
+  group?: { name: string; ownerId: Types.ObjectId } | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -26,7 +28,12 @@ const ConversationSchema = new Schema<IConversation>(
   {
     participants: {
       type: [{ type: Schema.Types.ObjectId, ref: "User" }],
-      validate: [(v: unknown[]) => v.length === 2, "A conversation has exactly two participants."],
+      validate: [
+        function (this: IConversation, v: unknown[]) {
+          return this.group ? v.length >= 1 : v.length === 2;
+        },
+        "A conversation has exactly two participants.",
+      ],
       required: true,
     },
     participantKey: { type: String, required: true, unique: true },
@@ -43,6 +50,7 @@ const ConversationSchema = new Schema<IConversation>(
     },
     lastMessageAt: { type: Date, default: () => new Date() },
     unread: { type: Schema.Types.Mixed, default: {} },
+    group: { type: new Schema({ name: { type: String, maxlength: 60 }, ownerId: { type: Schema.Types.ObjectId, ref: "User" } }, { _id: false }), default: null },
     request: { type: new Schema({ fromId: { type: Schema.Types.ObjectId, ref: "User" }, at: Date }, { _id: false }), default: null },
   },
   { timestamps: true, minimize: false },

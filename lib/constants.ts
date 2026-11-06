@@ -116,6 +116,13 @@ export const LIMITS = {
   groupMembers: 1000,
   /** a community's owner can start this many groups in it */
   groupsPerCommunity: 3,
+  /** a group chat of friends, its creator included */
+  chatGroupMembers: 100,
+  chatGroupName: 60,
+  pinnedChats: 10,
+  pinnedCommunities: 10,
+  /** events a community's owner can pin at once */
+  pinnedEvents: 3,
   /** a community needs this many members before its owner can apply to be verified */
   verifyMembers: 1000,
   handleMin: 3,

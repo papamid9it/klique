@@ -5,6 +5,11 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { FriendService } from "@/app/services/FriendService";
 import { MessageService } from "@/app/services/MessageService";
+import { PinService } from "@/app/services/PinService";
+import { NewChatGroupModal } from "./ChatGroup";
+import { ContextMenu } from "@/components/ui/Dropdown";
+import { errorMessage } from "@/app/ApiCore";
+import { useToast } from "@/components/providers/ToastProvider";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
@@ -23,6 +28,8 @@ import { UserName } from "@/components/ui/UserName";
 
 /** Left pane of Messages: Friends, Friend requests, then everyone you're chatting with. */
 export function DmSidebar({ onNavigate }: { onNavigate?: () => void }) {
+  const [makingGroup, setMakingGroup] = useState(false);
+  const toast = useToast();
   const { status, requireAuth } = useAuth();
   const authed = status === "authed";
   const pathname = usePathname();
@@ -137,7 +144,13 @@ export function DmSidebar({ onNavigate }: { onNavigate?: () => void }) {
               </Link>
             </li>
           ))}
+          <li>
+            <button type="button" onClick={() => setMakingGroup(true)} className="flex h-10 w-full items-center gap-3 rounded-control px-2.5 text-[14px] font-medium text-ink-muted transition hover:bg-raised/60 hover:text-ink">
+              <Icon name="users" size={18} /> New group
+            </button>
+          </li>
         </ul>
+        {makingGroup && <NewChatGroupModal onClose={() => setMakingGroup(false)} />}
 
         <div className="mt-4 mb-1 flex items-center justify-between px-2.5">
           <h2 className="text-[11px] font-bold tracking-[0.08em] text-ink-muted uppercase">Direct messages</h2>
@@ -169,11 +182,13 @@ export function DmSidebar({ onNavigate }: { onNavigate?: () => void }) {
               const preview = c.request?.fromMe ? "Request sent · waiting for them to accept" : c.lastMessage ? `${c.lastMessage.mine ? "You: " : ""}${sticker ? `${sticker.emoji} Sticker` : c.lastMessage.body}` : "No messages yet";
               return (
                 <li key={c.id}>
+                  <ContextMenu label={`${c.other.displayName} options`} items={[{ label: c.pinned ? "Unpin chat" : "Pin chat", icon: "pin", onSelect: () => void PinService.set("chat", c.id, !c.pinned).then(() => inbox.reload(), (e) => toast(errorMessage(e), "error")) }]}>
                   <Link href={`/messages/${c.id}`} onClick={onNavigate} aria-current={active ? "page" : undefined} className={cx("flex items-center gap-3 rounded-control px-2.5 py-1.5 transition", active ? "bg-raised" : "hover:bg-raised/60")}>
                     <Avatar name={c.other.displayName} src={c.other.avatarUrl} frame={c.other.avatarFrame} size={36} />
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-2">
                         <span className={cx("truncate text-[14px]", unread || active ? "font-semibold text-ink" : "font-medium text-ink-muted")}><UserName name={c.other.displayName} effect={c.other.nameEffect} /></span>
+                        {c.pinned && <Icon name="pin" size={12} className="shrink-0 text-accent-text" />}
                         <span className="ml-auto shrink-0 font-mono text-[10px] text-ink-muted">{c.lastMessage && now ? relativeStamp(c.lastMessage.createdAt, now) : ""}</span>
                       </span>
                       <span className="flex items-center gap-2">
@@ -186,6 +201,7 @@ export function DmSidebar({ onNavigate }: { onNavigate?: () => void }) {
                       </span>
                     </span>
                   </Link>
+                  </ContextMenu>
                 </li>
               );
             })}

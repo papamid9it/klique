@@ -12,7 +12,7 @@ import { absoluteUrl } from "@/components/domain/ShareButton";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import { ContextMenu, type MenuEntry } from "@/components/ui/Dropdown";
-import { usePins } from "@/lib/hooks/usePins";
+import { PinService } from "@/app/services/PinService";
 import { KLIQUE_SLUG } from "@/lib/constants";
 import { CountBadge } from "@/components/ui/CountBadge";
 import { useAppEvent } from "@/lib/appEvents";
@@ -38,7 +38,6 @@ export function CommunityRail({ activeSlug, horizontal, onNavigate }: { activeSl
   // already in a community: switching to another one stays in the browser (everything it needs is preloaded)
   const inWorkspace = /^\/communities\/(?!new$)[^/]+$/.test(pathname);
 
-  const pins = usePins("communities");
   const toast = useToast();
   const confirm = useConfirm();
   const { connected } = useRealtime();
@@ -74,7 +73,7 @@ export function CommunityRail({ activeSlug, horizontal, onNavigate }: { activeSl
     );
   }
   if (!authed) return null;
-  const items: MyCommunityDTO[] = pins.first(data ?? []);
+  const items: MyCommunityDTO[] = data ?? [];
   const refresh = () => void reload();
   const failed = (e: unknown) => toast(errorMessage(e), "error");
   const copyLink = (link: string, done: string) => void navigator.clipboard.writeText(absoluteUrl(link)).then(() => toast(done, "success"), failed);
@@ -84,7 +83,7 @@ export function CommunityRail({ activeSlug, horizontal, onNavigate }: { activeSl
     return [
       { label: "Mark as read", icon: "check", disabled: !c.unread && !c.unreadCount && !c.mentions, onSelect: () => void CommunityService.markRead(c.slug).then(refresh, failed) },
       { label: "Invite people", icon: "userplus", onSelect: () => (c.privacy === "private" && manages ? softNavigate(`${link}?settings=invites`) : copyLink(link, "Community link copied. Send it to invite them.")) },
-      { label: pins.has(c.id) ? "Unpin from top" : "Pin to top", icon: "pin", onSelect: () => pins.toggle(c.id) },
+      { label: c.pinned ? "Unpin from top" : "Pin to top", icon: "pin", onSelect: () => void PinService.set("community", c.id, !c.pinned).then(refresh, failed) },
       { label: "Copy link", icon: "link", onSelect: () => copyLink(link, "Link copied") },
       { type: "sep" },
       {

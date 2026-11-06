@@ -1,6 +1,6 @@
 import ApiClient from "@/app/ApiCore";
 import type { CityId, InterestId } from "@/lib/constants";
-import type { CommunityCardDTO, CommunityDTO, CommunityPrivacy, Envelope, GroupPolicy, MyCommunityDTO, Paginated, SidebarDTO, CommunityDashboardDTO, VerificationDTO } from "@/lib/types";
+import type { CommunityCardDTO, CommunityDTO, CommunityPrivacy, Envelope, GroupPolicy, MyCommunityDTO, Paginated, SidebarDTO, CommunityDashboardDTO, GrowthStatsDTO, VerificationDTO } from "@/lib/types";
 
 const api = new ApiClient();
 
@@ -54,6 +54,7 @@ export const CommunityService = {
   update: (slug: string, patch: Partial<CommunityInput>) => api.patch<Envelope<CommunityDTO>>(`/api/communities/${slug}`, patch),
   /** the owner's dashboard: members and growth, what's waiting for approval, this week (owners and admins) */
   dashboard: (slug: string) => api.get<Envelope<CommunityDashboardDTO>>(`/api/communities/${slug}/dashboard`),
+  growth: (slug: string) => api.get<Envelope<GrowthStatsDTO>>(`/api/communities/${slug}/growth`),
   remove: (slug: string) => api.delete<Envelope<{ deleted: boolean }>>(`/api/communities/${slug}`),
   /** the Verified check: where it stands, and applying for it (the owner) */
   verification: (slug: string) => api.get<Envelope<VerificationDTO>>(`/api/communities/${slug}/verification`),

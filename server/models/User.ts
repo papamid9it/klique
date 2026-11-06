@@ -59,6 +59,8 @@ export interface IUser {
   /** points earned from other people (lib/points); never bought, never spent, never go down by themselves */
   points?: number;
   /** set by a site admin: the account can't sign in or use the API */
+  /** chats and communities they pinned to the top of their lists */
+  pins?: { chats?: Types.ObjectId[]; communities?: Types.ObjectId[] };
   suspendedAt?: Date | null;
   /** finished joining: picked 3+ categories and joined 2+ communities (null: they're sent to /welcome) */
   onboardedAt?: Date | null;
@@ -119,6 +121,7 @@ const UserSchema = new Schema<IUser>(
     notifyPrefs: { type: Schema.Types.Mixed, default: {} },
     hype: { type: Number, default: 0, min: 0 },
     points: { type: Number, default: 0, min: 0 },
+    pins: { type: { chats: [Schema.Types.ObjectId], communities: [Schema.Types.ObjectId], _id: false }, default: undefined },
     suspendedAt: { type: Date, default: null },
     onboardedAt: { type: Date, default: null },
     bot: { type: new Schema({ appId: { type: Schema.Types.ObjectId, required: true } }, { _id: false }), default: null },

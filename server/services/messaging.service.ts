@@ -1,3 +1,4 @@
+import { stripFormat } from "@/lib/textFormat";
 import type { Types } from "mongoose";
 import { deleteUploads } from "./media.service";
 import { assertStickerUrl, noteStickerUse } from "./stickers.service";
@@ -11,7 +12,7 @@ import { Conversation, participantKey, type IConversation } from "../models/Conv
 import { Message, type IMessage } from "../models/Message";
 import { Block } from "../models/Safety";
 import { User, type IUser } from "../models/User";
-import { loadBriefs, toBrief } from "../serializers";
+import { GHOST, loadBriefs, toBrief } from "../serializers";
 import { blockedByMe, blockedEitherWay, hiddenUserIds } from "./blocks";
 import { CrewMember } from "../models/Crew";
 import { Membership } from "../models/Membership";
@@ -113,30 +114,33 @@ const otherParticipant = (c: IConversation, viewerId: Types.ObjectId) =>
 
 async function toConversations(rows: IConversation[], viewer: IUser): Promise<ConversationDTO[]> {
   if (!rows.length) return [];
-  const others = rows.map((c) => otherParticipant(c, viewer._id));
+  const others = rows.filter((c) => !c.group).map((c) => otherParticipant(c, viewer._id));
   const [briefs, myBlocks] = await Promise.all([
     loadBriefs(others),
     Block.find({ blockerId: viewer._id, blockedId: { $in: others } }).select("blockedId").lean<{ blockedId: Types.ObjectId }[]>(),
   ]);
   const blocked = new Set(myBlocks.map((b) => sid(b.blockedId)));
+  const pinnedChats = new Set((viewer.pins?.chats ?? []).map(sid));
 
   return rows.map((c) => {
     const otherId = sid(otherParticipant(c, viewer._id));
-    const other = briefs.get(otherId) ?? { id: otherId, handle: "deleted", displayName: "Deleted user", avatarUrl: null, country: "NG", city: "lagos" as const };
+    const other = c.group ? { id: sid(c._id), handle: "", displayName: c.group.name, avatarUrl: null, country: "NG", city: "lagos" as const } : briefs.get(otherId) ?? { id: otherId, handle: "deleted", displayName: "Deleted user", avatarUrl: null, country: "NG", city: "lagos" as const };
     return {
       id: sid(c._id),
       other,
       lastMessage: c.lastMessage
         ? {
-            body: c.lastMessage.body,
+            body: stripFormat(c.lastMessage.body),
             senderId: sid(c.lastMessage.senderId),
             createdAt: c.lastMessage.createdAt.toISOString(),
             mine: sid(c.lastMessage.senderId) === sid(viewer._id),
           }
         : null,
       unreadCount: Number(c.unread?.[sid(viewer._id)] ?? 0),
+      pinned: pinnedChats.has(sid(c._id)),
+      ...(c.group ? { group: { memberCount: c.participants.length, mine: sid(c.group.ownerId) === sid(viewer._id) } } : {}),
       updatedAt: c.lastMessageAt.toISOString(),
-      blockedByMe: blocked.has(otherId),
+      blockedByMe: !c.group && blocked.has(otherId),
       request: c.request ? { fromMe: sid(c.request.fromId) === sid(viewer._id) } : null,
     };
   });
@@ -159,7 +163,12 @@ export async function listConversations(viewer: IUser): Promise<ConversationDTO[
     .sort({ lastMessageAt: -1 })
     .limit(60)
     .lean<IConversation[]>();
-  return toConversations(rows, viewer);
+  const list = await toConversations(rows, viewer);
+  // the ones you pinned come first (a pinned chat older than the 60 newest too)
+  const pinned = viewer.pins?.chats ?? [];
+  const missing = pinned.filter((id) => !rows.some((r) => sid(r._id) === sid(id)));
+  const older = missing.length ? await toConversations(await Conversation.find({ _id: { $in: missing }, participants: viewer._id, lastMessage: { $ne: null } }).lean<IConversation[]>(), viewer) : [];
+  return [...older, ...list].sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned));
 }
 
 export async function unreadTotal(userId: Types.ObjectId | string): Promise<number> {
@@ -187,7 +196,8 @@ async function replyRefs(rows: IMessage[]): Promise<Map<string, ReplyRefDTO>> {
 async function detail(viewer: IUser, convo: IConversation, messages: IMessage[], hasMore: boolean): Promise<ConversationDetailDTO> {
   const [dto] = await toConversations([convo], viewer);
   const otherId = otherParticipant(convo, viewer._id);
-  const blocked = await blockedEitherWay(viewer._id, otherId);
+  const blocked = convo.group ? false : await blockedEitherWay(viewer._id, otherId);
+  const senders = convo.group ? await loadBriefs(messages.map((m) => m.senderId)) : null;
 
   let cannotSendReason: string | undefined;
   if (blocked) cannotSendReason = dto.blockedByMe ? `You blocked @${dto.other.handle}. Unblock them to send a message.` : "You can't message this person.";
@@ -202,7 +212,7 @@ async function detail(viewer: IUser, convo: IConversation, messages: IMessage[],
   const replies = await replyRefs(messages);
   return {
     conversation: dto,
-    messages: messages.map((m) => toMessage(m, viewer._id, reactionMap.get(sid(m._id)) ?? [], m.replyToId ? (replies.get(sid(m.replyToId)) ?? null) : null)),
+    messages: messages.map((m) => ({ ...toMessage(m, viewer._id, reactionMap.get(sid(m._id)) ?? [], m.replyToId ? (replies.get(sid(m.replyToId)) ?? null) : null), ...(senders ? { sender: senders.get(sid(m.senderId)) ?? GHOST } : {}) })),
     hasMore,
     canSend: !blocked && !requestWait,
     ...(cannotSendReason ? { cannotSendReason } : {}),
@@ -276,8 +286,10 @@ export async function sendMessage(viewer: IUser, id: string, input: string | { b
   rateLimit(`dm:${sid(viewer._id)}`, 40, 60_000);
   const convo = await loadMyConversation(viewer, id);
   const otherId = otherParticipant(convo, viewer._id);
+  // everyone else who gets it
+  const others = convo.group ? convo.participants.filter((p) => sid(p) !== sid(viewer._id)) : [otherId];
 
-  if (await blockedEitherWay(viewer._id, otherId)) {
+  if (!convo.group && (await blockedEitherWay(viewer._id, otherId))) {
     throw forbidden((await blockedByMe(viewer._id, otherId)) ? "You blocked this person. Unblock them to send a message." : "You can't message this person.");
   }
 
@@ -315,12 +327,16 @@ export async function sendMessage(viewer: IUser, id: string, input: string | { b
         [`unread.${sid(viewer._id)}`]: 0,
       },
       // a request isn't counted as unread (it shows as a small count on Requests instead)
-      ...(pendingRequest ? {} : { $inc: { [`unread.${sid(otherId)}`]: 1 } }),
+      ...(pendingRequest ? {} : { $inc: Object.fromEntries(others.map((p) => [`unread.${sid(p)}`, 1])) }),
     },
   );
-  emitDm([viewer._id, otherId], convo._id);
+  emitDm([viewer._id, ...others], convo._id);
   // no buzz for a request: it waits quietly in their Requests
-  if (!pendingRequest) notify([otherId], { title: viewer.displayName, body: preview, data: { type: "dm", conversationId: sid(convo._id) } }, { actorId: viewer._id, category: "messages", ref: `dm:${sid(convo._id)}` });
+  if (convo.group) {
+    // someone who blocked the sender stays in the group, but isn't buzzed for them
+    const blockers = new Set((await Block.find({ blockerId: { $in: others }, blockedId: viewer._id }).select("blockerId").lean<{ blockerId: Types.ObjectId }[]>()).map((b) => sid(b.blockerId)));
+    notify(others.filter((p) => !blockers.has(sid(p))), { title: convo.group.name, body: `${viewer.displayName}: ${preview}`, data: { type: "dm", conversationId: sid(convo._id) } }, { actorId: viewer._id, category: "messages", ref: `dm:${sid(convo._id)}` });
+  } else if (!pendingRequest) notify([otherId], { title: viewer.displayName, body: preview, data: { type: "dm", conversationId: sid(convo._id) } }, { actorId: viewer._id, category: "messages", ref: `dm:${sid(convo._id)}` });
   const row = msg.toObject() as IMessage;
   const replies = await replyRefs([row]);
   return toMessage(row, viewer._id, [], row.replyToId ? (replies.get(sid(row.replyToId)) ?? null) : null);
@@ -335,7 +351,7 @@ export { toBrief };
 export async function reactToMessage(viewer: IUser, id: string, messageId: string, kind: ReactionKind): Promise<ReactionDTO[]> {
   rateLimit(`react:${sid(viewer._id)}`, 60, 30_000);
   const convo = await loadMyConversation(viewer, id);
-  if (await blockedEitherWay(viewer._id, otherParticipant(convo, viewer._id))) throw forbidden("You can't react in this conversation.");
+  if (!convo.group && (await blockedEitherWay(viewer._id, otherParticipant(convo, viewer._id)))) throw forbidden("You can't react in this conversation.");
   const msg = await Message.findOne({ _id: messageId, conversationId: convo._id }).select("_id").lean();
   if (!msg) throw notFound("We couldn't find that message.");
   const reactions = await toggleReaction("dm", msg._id, viewer._id, kind);
@@ -374,7 +390,7 @@ export async function editMessage(viewer: IUser, id: string, messageId: string, 
   const { convo, msg } = await loadOwnMessage(viewer, id, messageId);
   if (msg.sticker || msg.stickerUrl) throw forbidden("Stickers can't be edited. Delete it and send another.");
   if (msg.pollId) throw forbidden("Polls can't be edited. Delete it and start another.");
-  if (await blockedEitherWay(viewer._id, otherParticipant(convo, viewer._id))) throw forbidden("You can't change messages in this conversation.");
+  if (!convo.group && (await blockedEitherWay(viewer._id, otherParticipant(convo, viewer._id)))) throw forbidden("You can't change messages in this conversation.");
   const next = (await normalizeEmoji(viewer, null, body)).trim();
   const replies = await replyRefs([msg]);
   const reply = msg.replyToId ? (replies.get(sid(msg.replyToId)) ?? null) : null;

@@ -8,6 +8,7 @@ import { checkFile } from "@/lib/uploads";
 import { TopicService } from "@/app/services/TopicService";
 import { useToast } from "@/components/providers/ToastProvider";
 import { Button } from "@/components/ui/Button";
+import { FormatButton } from "@/components/ui/FormatButton";
 import { TextArea, TextField } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
 import { MOCK_IMAGES, looksLikeVideo } from "./TopicMedia";
@@ -21,6 +22,7 @@ export function TopicFormModal({ slug, communityName, board, topic, onClose, onS
   const toast = useToast();
   const [title, setTitle] = useState(topic?.title ?? "");
   const [body, setBody] = useState(topic?.body ?? "");
+  const bodyArea = useRef<HTMLTextAreaElement>(null);
   // one picture: an older post with a video or several pictures keeps its first picture
   const [image, setImage] = useState<TopicMediaDTO | null>(() => topic?.media.find((m) => m.kind === "image") ?? null);
   const [tags, setTags] = useState<string[]>(topic?.tags ?? []);
@@ -78,7 +80,8 @@ export function TopicFormModal({ slug, communityName, board, topic, onClose, onS
     <Modal open onClose={onClose} size="lg" title={topic ? "Edit post" : "New post"} description={topic ? undefined : `Start a conversation in ${communityName}. It gets its own chat for replies.`}>
       <form onSubmit={submit} className="space-y-4">
         <TextField label="Title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={LIMITS.topicTitle} required autoFocus placeholder="What's it about?" error={errs.title} />
-        <TextArea label={image ? "Text (optional)" : "Text"} required={!image} value={body} onChange={(e) => setBody(e.target.value)} maxLength={LIMITS.topicBody} counter={LIMITS.topicBody} placeholder="Add the details, a question, a plan…" error={errs.body} />
+        <FormatButton area={bodyArea} value={body} onChange={setBody} />
+        <TextArea ref={bodyArea} label={image ? "Text (optional)" : "Text"} required={!image} value={body} onChange={(e) => setBody(e.target.value)} maxLength={LIMITS.topicBody} counter={LIMITS.topicBody} placeholder="Add the details, a question, a plan…" error={errs.body} />
 
         <fieldset>
           <legend className="mb-1.5 text-sm font-medium">

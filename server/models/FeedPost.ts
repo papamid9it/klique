@@ -22,6 +22,8 @@ export interface IFeedPost {
   /** a short text post's card background (lib/feedText TEXT_BACKGROUNDS) */
   textBg: string | null;
   /** marked explicit (only in explicit communities): its pictures and video stay blurred until tapped */
+  /** in reels, a wider picture or video sits on plain black, not a blurred copy of itself */
+  plainBackdrop?: boolean;
   explicit?: boolean;
   /** hidden pending review (a "minor or non-consensual" report): nobody but site admins sees it */
   hiddenAt?: Date | null;
@@ -47,6 +49,7 @@ const FeedPostSchema = new Schema<IFeedPost>(
     title: { type: String, default: "", trim: true, maxlength: 120 },
     textBg: { type: String, default: null },
     explicit: { type: Boolean, default: false },
+    plainBackdrop: { type: Boolean, default: false },
     hiddenAt: { type: Date, default: null },
     clientKey: { type: String, default: undefined },
     media: { type: [new Schema({ kind: { type: String, enum: ["image", "video"], required: true }, url: { type: String, required: true }, poster: { type: String, default: null } }, { _id: false })], default: [] },

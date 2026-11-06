@@ -60,6 +60,7 @@ export function EventCard({ event, onChange }: { event: EventDTO; onChange: (e: 
 
       <div className="flex flex-1 flex-col p-4">
         <p className="eyebrow truncate">
+          {event.pinned && <Icon name="pin" size={12} className="mr-1 inline text-accent-text" />}
           {getInterest(event.interest).short} · {label}
         </p>
         <h3 className="mt-1.5 text-[17px] leading-snug font-semibold tracking-[-0.02em]">

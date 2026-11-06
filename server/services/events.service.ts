@@ -9,6 +9,7 @@ import type { z } from "zod";
 import { dateRangeFor, startOfLagosDay, type DateFilter } from "@/lib/dates";
 import { currencyOf, getCountry, getRegion, parseScope, regionsOf, scopeFilter, scopeToString, type Scope } from "@/lib/places";
 import type { AttendeesDTO, EventDTO, Paginated, UserBrief } from "@/lib/types";
+import { LIMITS } from "@/lib/constants";
 import { ApiError, badRequest, conflict, forbidden, notFound, unauthorized } from "../http/errors";
 import { kliqueId } from "./klique-id";
 import { rateLimit } from "../http/rate-limit";
@@ -49,6 +50,20 @@ type ListQuery = z.infer<typeof eventListQuery>;
 /* ------------------------------------------------------------------ */
 /* Listing & search                                                    */
 /* ------------------------------------------------------------------ */
+
+/** A community's owner (or a site admin) pins one of its events, so it comes first on the community's events. */
+export async function setEventPin(viewer: IUser, id: string, on: boolean) {
+  const e = await Event.findById(id).lean<IEvent>();
+  if (!e || !e.communityId) throw notFound("We couldn't find that event.");
+  const c = await Community.findById(e.communityId).select("ownerId").lean<{ ownerId: Types.ObjectId }>();
+  if (!isSiteAdmin(viewer) && String(c?.ownerId) !== String(viewer._id)) throw forbidden("Only the owner of this community can pin its events.");
+  if (on) {
+    const now = await Event.countDocuments({ communityId: e.communityId, subcommunityId: e.subcommunityId ?? null, pinnedAt: { $ne: null }, _id: { $ne: e._id }, startsAt: { $gte: new Date() }, cancelled: false });
+    if (now >= LIMITS.pinnedEvents) throw conflict(`You can pin ${LIMITS.pinnedEvents} events. Unpin one first.`);
+  }
+  await Event.updateOne({ _id: e._id }, { $set: { pinnedAt: on ? new Date() : null } });
+  return { id, pinned: on };
+}
 
 export async function listEvents(viewer: IUser | null, q: ListQuery): Promise<Paginated<EventDTO>> {
   const now = new Date();
@@ -105,7 +120,8 @@ export async function listEvents(viewer: IUser | null, q: ListQuery): Promise<Pa
   }
 
   const rows = await Event.find({ $and: and })
-    .sort(q.sort === "new" ? { createdAt: -1 } : q.sort === "popular" ? { goingCount: -1, startsAt: 1 } : { startsAt: q.past ? -1 : 1 })
+    // a community's own list: what its owner pinned comes first
+    .sort(q.sort === "new" ? { createdAt: -1 } : q.sort === "popular" ? { goingCount: -1, startsAt: 1 } : q.community && !q.past ? { pinnedAt: -1, startsAt: 1 } : { startsAt: q.past ? -1 : 1 })
     .skip((q.page - 1) * PAGE_SIZE)
     .limit(PAGE_SIZE + 1)
     .lean<IEvent[]>();

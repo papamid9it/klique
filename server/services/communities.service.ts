@@ -5,7 +5,8 @@ import { forgetAdultCommunities, isAdult } from "../policies/adult";
 import { deleteUploads } from "./media.service";
 import { sameFile } from "@/lib/focal";
 import { assertVerified } from "./account.service";
-import type { QueryFilter, Types } from "mongoose";
+import { Types, type QueryFilter } from "mongoose";
+import { remember } from "../cache";
 import type { z } from "zod";
 import type { CommunityCardDTO, CommunityDTO, Paginated } from "@/lib/types";
 import { ApiError, forbidden, notFound, unauthorized } from "../http/errors";
@@ -25,6 +26,12 @@ import { countVisibleSubs } from "./subcommunities.service";
 import { assertCanCreateCommunity } from "./space-limits";
 
 type ListQuery = z.infer<typeof communityListQuery>;
+
+const COMMUNITY_BOOST = 500;
+
+/** Everyone on Lite or Pro now (checked at most every 5 minutes). */
+const paidOwnerIds = async () =>
+  (await remember("paid-owners", "all", 300, async () => (await User.find({ plan: { $in: ["lite", "pro"] }, planUntil: { $gt: new Date() } }).select("_id").limit(50_000).lean<{ _id: Types.ObjectId }[]>()).map((u) => String(u._id)))).map((id: string) => new Types.ObjectId(id));
 
 export async function listCommunities(viewer: IUser | null, q: ListQuery): Promise<Paginated<CommunityCardDTO>> {
   let filter: QueryFilter<ICommunity>;
@@ -54,11 +61,21 @@ export async function listCommunities(viewer: IUser | null, q: ListQuery): Promi
   }
   if (q.verified) filter.$or = [{ verified: true }, { official: true }];
 
-  const rows = await Community.find({ $and: [allowed, filter] })
-    .sort(q.sort === "new" ? { createdAt: -1 } : { memberCount: -1, createdAt: -1 })
-    .skip((q.page - 1) * PAGE_SIZE)
-    .limit(PAGE_SIZE + 1)
-    .lean<ICommunity[]>();
+  const rows = q.sort === "new" || q.scope === "joined"
+    ? await Community.find({ $and: [allowed, filter] })
+        .sort(q.sort === "new" ? { createdAt: -1 } : { memberCount: -1, createdAt: -1 })
+        .skip((q.page - 1) * PAGE_SIZE)
+        .limit(PAGE_SIZE + 1)
+        .lean<ICommunity[]>()
+    : // Lite and Pro owners' communities usually come first: they count as this many members ahead, so only a much
+      // bigger community stays above them
+      await Community.aggregate<ICommunity>([
+        { $match: { $and: [allowed, filter] } },
+        { $addFields: { rank: { $add: ["$memberCount", { $cond: [{ $in: ["$ownerId", await paidOwnerIds()] }, COMMUNITY_BOOST, 0] }] } } },
+        { $sort: { rank: -1, createdAt: -1 } },
+        { $skip: (q.page - 1) * PAGE_SIZE },
+        { $limit: PAGE_SIZE + 1 },
+      ]);
 
   return {
     items: await toCommunityCards(rows.slice(0, PAGE_SIZE), viewer),

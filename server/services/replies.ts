@@ -1,6 +1,7 @@
 import type { Types } from "mongoose";
 import { cardPreview, type MessageCard } from "@/lib/cards";
 import { stickerOf } from "@/lib/reactions";
+import { stripFormat } from "@/lib/textFormat";
 import type { ReplyRefDTO } from "@/lib/types";
 
 type Row = { _id: Types.ObjectId; body: string; sticker?: string | null; stickerUrl?: string | null; images?: string[]; pollId?: Types.ObjectId | null; deletedAt?: Date | null; cards?: MessageCard[] | null };
@@ -8,7 +9,7 @@ type Row = { _id: Types.ObjectId; body: string; sticker?: string | null; sticker
 /** The one-line preview shown above a reply. */
 function snippetOf(r: Row): string {
   if (r.deletedAt) return "Message deleted";
-  const text = r.body.replace(/\s+/g, " ").trim();
+  const text = stripFormat(r.body).replace(/\s+/g, " ").trim();
   if (text) return text.length > 120 ? `${text.slice(0, 120).trimEnd()}…` : text;
   if (r.cards?.length) return cardPreview(r.cards).slice(0, 120);
   if (r.sticker) return `${stickerOf(r.sticker)?.emoji ?? ""} Sticker`.trim();
@@ -24,7 +25,7 @@ export function toReplyRef(r: Row, authorName: string): ReplyRefDTO {
 
 /** What a chat list shows for a message that has no text (inbox preview). */
 export function previewOf(r: { body: string; sticker?: string | null; stickerUrl?: string | null; images?: string[]; cards?: MessageCard[] | null }): string {
-  if (r.body.trim()) return r.body.slice(0, 140);
+  if (r.body.trim()) return stripFormat(r.body).slice(0, 140);
   if (r.cards?.length) return cardPreview(r.cards).slice(0, 140);
   if (r.sticker) return `${stickerOf(r.sticker)?.emoji ?? ""} Sticker`.trim();
   if (r.stickerUrl) return "🖼️ Sticker";

@@ -580,7 +580,8 @@ export async function listKliques(viewer: IUser | null, q: z.infer<typeof klique
     // sooner is better: a full point today, fading over two weeks
     Math.max(0, 1 - (+c.meetupAt - now) / (14 * DAY_MS)) +
     Math.log2(1 + c.memberCount) * 0.5 +
-    (boosted.has(sid(c.hostId)) ? 0.75 : 0);
+    // Lite and Pro hosts come first, ahead of a match on interests
+    (boosted.has(sid(c.hostId)) ? 5 : 0);
   // full ones still show, after every klique with a spot left (leaving reopens one: memberCount drops)
   const full = (c: ICrew) => (c.memberCount >= c.maxMembers ? 1 : 0);
   visible.sort((a, b) => full(a) - full(b) || score(b) - score(a) || +a.meetupAt - +b.meetupAt);

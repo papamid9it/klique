@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState, type R
 import { errorMessage } from "@/app/ApiCore";
 import { TopicService } from "@/app/services/TopicService";
 import { ChatPane } from "@/components/domain/chat/ChatPane";
+import { Formatted } from "@/components/ui/Formatted";
 import { SpaceError } from "@/components/domain/space/parts";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useRealtimeEvent } from "@/components/providers/RealtimeProvider";
@@ -265,7 +266,7 @@ function PostIntro({ t, empty }: { t: TopicDTO; empty: boolean }) {
       <TopicMedia media={t.media.slice(0, 1)} tall className="mt-3" mine={!!user && t.author.handle === user.handle} />
       {t.body && (
         <p className="mt-3 text-[15px] leading-relaxed break-words whitespace-pre-wrap">
-          <Linkified text={t.body} />
+          <Formatted text={t.body} plain={(words) => <Linkified text={words} />} />
         </p>
       )}
       <div className="mt-5 flex items-center gap-3 text-[11px] font-semibold tracking-wide text-ink-muted uppercase">

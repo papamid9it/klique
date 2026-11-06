@@ -1,6 +1,7 @@
 "use client";
 
 import ApiClient, { errorMessage } from "@/app/ApiCore";
+import { FormatButton } from "@/components/ui/FormatButton";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { SpaceRef } from "@/app/services/ChannelService";
 import { channelSource, type ChatSource } from "@/app/services/ChatSource";
@@ -756,6 +757,7 @@ function Composer({
             </button>
           )}
         />
+        <FormatButton area={area} value={text} onChange={(v) => { setText(v); requestAnimationFrame(resize); }} />
         <label htmlFor="chat-composer" className="sr-only">
           Message #{channel.name}. Type @ to tag someone.
         </label>

@@ -1,12 +1,18 @@
 import ApiClient from "@/app/ApiCore";
 import type { PollInput } from "./PollService";
 import type { ReactionKind } from "@/lib/reactions";
-import type { ConversationDetailDTO, ConversationDTO, Envelope, MessageDTO, ReactionDTO } from "@/lib/types";
+import type { ChatGroupDTO, ConversationDetailDTO, ConversationDTO, Envelope, MessageDTO, ReactionDTO } from "@/lib/types";
 
 const api = new ApiClient();
 
 export const MessageService = {
   inbox: () => api.get<Envelope<ConversationDTO[]>>("/api/conversations"),
+  /** group chats between friends */
+  createGroup: (name: string, memberIds: string[]) => api.post<Envelope<ConversationDetailDTO>>("/api/conversations/groups", { name, memberIds }),
+  group: (id: string) => api.get<Envelope<ChatGroupDTO>>(`/api/conversations/${id}/group`),
+  renameGroup: (id: string, name: string) => api.patch<Envelope<ChatGroupDTO>>(`/api/conversations/${id}/group`, { name }),
+  addToGroup: (id: string, memberIds: string[]) => api.post<Envelope<ChatGroupDTO>>(`/api/conversations/${id}/group/members`, { memberIds }),
+  removeFromGroup: (id: string, userId: string) => api.delete<Envelope<{ left: boolean }>>(`/api/conversations/${id}/group/members/${userId}`),
   /** Opens (or creates) the one-to-one conversation with `handle`. Fails clearly if they can't be messaged. */
   start: (handle: string, message?: string) => api.post<Envelope<ConversationDetailDTO>>("/api/conversations", { handle, message }),
   open: (id: string, before?: string) => api.get<Envelope<ConversationDetailDTO>>(`/api/conversations/${id}`, { before }),

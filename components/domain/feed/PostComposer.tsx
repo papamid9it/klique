@@ -1,5 +1,6 @@
 "use client";
 
+import { FormatButton } from "@/components/ui/FormatButton";
 import { useRef, useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
 import { FeedService, newClientKey } from "@/app/services/FeedService";
@@ -13,7 +14,7 @@ import { Modal } from "@/components/ui/Modal";
 import { cx } from "@/components/ui/cx";
 import { FEED_TITLE_MAX, TEXT_BACKGROUNDS, TEXT_CARD_MAX, textStyleOf, type TextBackgroundId } from "@/lib/feedText";
 import { LongPost, TextCard } from "./TextPost";
-import { cdn } from "@/lib/cdn";
+import { cdn, videoPoster } from "@/lib/cdn";
 import { LIMITS } from "@/lib/constants";
 import { useUploadStatus } from "@/lib/hooks/useUploads";
 import { checkFile } from "@/lib/uploads";
@@ -36,6 +37,8 @@ export function PostComposer({ slug, communityName, explicitAllowed, onClose, on
   const [textBg, setTextBg] = useState<TextBackgroundId>("sunset");
   const [explicit, setExplicit] = useState(false);
   const [media, setMedia] = useState<TopicMediaDTO[]>([]);
+  const [preview, setPreview] = useState(false);
+  const [plainBackdrop, setPlainBackdrop] = useState(false);
   const [link, setLink] = useState("");
   const [progress, setProgress] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
@@ -75,7 +78,7 @@ export function PostComposer({ slug, communityName, explicitAllowed, onClose, on
     sending.current = true;
     setBusy(true);
     try {
-      const res = await FeedService.create(slug, { ...(mode === "media" ? { caption: caption.trim(), media } : { caption: caption.trim(), title: title.trim(), textBg, media: [] }), ...(explicitAllowed ? { explicit } : {}), clientKey });
+      const res = await FeedService.create(slug, { ...(mode === "media" ? { caption: caption.trim(), media, plainBackdrop } : { caption: caption.trim(), title: title.trim(), textBg, media: [] }), ...(explicitAllowed ? { explicit } : {}), clientKey });
       toast("Posted", "success");
       onPosted(res.data);
     } catch (err) {
@@ -173,7 +176,14 @@ export function PostComposer({ slug, communityName, explicitAllowed, onClose, on
             </Button>
           </div>
         </fieldset>
-        <TextArea ref={captionRef} label="Caption (optional)" value={caption} onChange={(e) => setCaption(e.target.value)} onKeyDown={(e) => suggest.onKeyDown(e)} maxLength={LIMITS.feedCaption} counter={LIMITS.feedCaption} placeholder="Say something about it… @someone #tag" />
+        {media.length > 0 && (
+          <Button onClick={() => setPreview(true)}>
+            <Icon name="eye" size={15} /> See in reels
+          </Button>
+        )}
+        {preview && media[0] && <ReelPreview item={media[0]} caption={caption} plain={plainBackdrop} onPlain={setPlainBackdrop} onClose={() => setPreview(false)} />}
+        <FormatButton area={captionRef} value={caption} onChange={setCaption} />
+      <TextArea ref={captionRef} label="Caption (optional)" value={caption} onChange={(e) => setCaption(e.target.value)} onKeyDown={(e) => suggest.onKeyDown(e)} maxLength={LIMITS.feedCaption} counter={LIMITS.feedCaption} placeholder="Say something about it… @someone #tag" />
         {suggest.panel}
         </>
         )}
@@ -208,6 +218,7 @@ function TextFields({ title, setTitle, caption, setCaption, textBg, setTextBg, c
   return (
     <div className="space-y-4">
       <TextField label={text.length > TEXT_CARD_MAX ? "Title" : "Title (optional)"} value={title} onChange={(e) => setTitle(e.target.value)} maxLength={FEED_TITLE_MAX} placeholder="What's it about?" error={needsTitle ? "Longer posts need a title." : undefined} hint={text.length > TEXT_CARD_MAX ? undefined : `Short text with no title shows as a colour card. Add a title, or go past ${TEXT_CARD_MAX} characters, for a text post.`} />
+      <FormatButton area={captionRef} value={caption} onChange={setCaption} />
       <TextArea ref={captionRef} label="Text" value={caption} onChange={(e) => setCaption(e.target.value)} onKeyDown={(e) => suggest.onKeyDown(e)} maxLength={LIMITS.feedCaption} counter={LIMITS.feedCaption} placeholder="Ask something, share a tip, start a conversation… @someone #tag" />
       {suggest.panel}
       <div className="flex flex-wrap items-start gap-4 rounded-card border border-line bg-raised/40 p-3">
@@ -238,3 +249,30 @@ function TextFields({ title, setTitle, caption, setCaption, textBg, setTextBg, c
   );
 }
 
+
+/** How it will look in reels: a tall one fills the screen, anything else shows whole over a blurred copy of itself. */
+function ReelPreview({ item, caption, plain, onPlain, onClose }: { item: TopicMediaDTO; caption: string; plain: boolean; onPlain: (v: boolean) => void; onClose: () => void }) {
+  const still = item.kind === "video" ? (item.poster ?? videoPoster(item.url)) : item.url;
+  return (
+    <Modal open onClose={onClose} title="In reels" description="Tall pictures and videos fill the screen. Wider ones show whole, with nothing cut off." size="sm">
+      <div className="relative mx-auto flex aspect-[9/16] max-h-[60dvh] items-center justify-center overflow-hidden rounded-card bg-black">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        {still && !plain && <img src={still} alt="" aria-hidden="true" className="absolute inset-0 size-full scale-110 object-cover opacity-30 blur-xl" />}
+        {item.kind === "video" ? (
+          <video src={item.url} poster={still ?? undefined} muted loop autoPlay playsInline className="relative max-h-full max-w-full object-contain" />
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={item.url} alt="" className="relative max-h-full max-w-full object-contain" />
+        )}
+        <div className="absolute right-2 bottom-16 flex flex-col gap-4 text-white">
+          <Icon name="chevron-up" size={22} /><Icon name="chevron-down" size={22} /><Icon name="message" size={22} /><Icon name="send" size={22} />
+        </div>
+        {caption.trim() && <p className="absolute inset-x-0 bottom-0 line-clamp-2 bg-gradient-to-t from-black/75 to-transparent p-3 pt-8 pr-10 text-[13px] text-white">{caption}</p>}
+      </div>
+      <div role="radiogroup" aria-label="Background" className="mt-3 grid grid-cols-2 gap-2">
+        <Button variant={plain ? "secondary" : "primary"} onClick={() => onPlain(false)}>Blurred background</Button>
+        <Button variant={plain ? "primary" : "secondary"} onClick={() => onPlain(true)}>Plain background</Button>
+      </div>
+    </Modal>
+  );
+}

@@ -1,5 +1,6 @@
 "use client";
 
+import { useAuth } from "@/components/providers/AuthProvider";
 import { placeShort } from "@/lib/places";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -14,6 +15,7 @@ import { VerifiedCheck } from "@/components/ui/VerifiedCheck";
 
 /** Grid card for browsing communities. Private communities you're not in show a lock and nothing else. */
 export function CommunityCard({ community, onChange, tag }: { community: CommunityCardDTO; onChange?: (c: CommunityCardDTO) => void; tag?: string }) {
+  const { user } = useAuth();
   const [c, setC] = useState(community);
   useEffect(() => setC(community), [community]);
   const update = (next: CommunityCardDTO) => {
@@ -62,7 +64,7 @@ export function CommunityCard({ community, onChange, tag }: { community: Communi
         <p className="mt-1 line-clamp-2 min-h-10 text-[13px] text-ink-muted">
           {c.locked ? (audienceLabel(c.audience) ? `${audienceLabel(c.audience)}. Request to join and an admin will take a look.` : "A private community. Request to join and an admin will take a look.") : c.description || `${getInterest(c.interest).name} in ${c.neighborhood || placeShort(c)}.`}
         </p>
-        {!c.viewer.isMember && <PointsNeededChip need={c.minPointsJoin} className="mt-2" />}
+        {!c.viewer.isMember && !user?.badge && <PointsNeededChip need={c.minPointsJoin} className="mt-2" />}
         <div className="mt-4 flex items-center justify-between gap-3 border-t border-line pt-3.5">
           <span className="font-mono text-[11px] text-ink-muted">
             {getInterest(c.interest).short} · <MemberCount community={c} />

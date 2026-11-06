@@ -202,6 +202,11 @@ export const screeningSchema = z.object({
     .max(5, "Up to 5 questions"),
 });
 
+export const chatGroupCreateSchema = z.object({ name: z.string().trim().min(1).max(LIMITS.chatGroupName), memberIds: z.array(z.string().regex(/^[a-f0-9]{24}$/)).min(2).max(LIMITS.chatGroupMembers) });
+export const chatGroupRenameSchema = z.object({ name: z.string().trim().min(1).max(LIMITS.chatGroupName) });
+export const chatGroupMembersSchema = z.object({ memberIds: z.array(z.string().regex(/^[a-f0-9]{24}$/)).min(1).max(LIMITS.chatGroupMembers) });
+export const listPinSchema = z.object({ kind: z.enum(["chat", "community"]), id: z.string().max(40), on: z.boolean() });
+export const eventPinSchema = z.object({ on: z.boolean() });
 export const postBanSchema = z.object({ seconds: z.number().int().min(0).nullable(), reason: z.string().trim().max(300).default("") });
 export const roleSchema = z.object({ role: z.enum(["admin", "member"]) });
 export const groupModSchema = z.object({ title: z.string().trim().max(GROUP_TITLE_MAX), powers: z.array(z.enum(GROUP_POWERS)).max(GROUP_POWERS.length) });
@@ -250,6 +255,8 @@ export const feedPostSchema = z
     textBg: z.enum(TEXT_BACKGROUND_IDS, { error: "Pick one of the card colours." }).optional(),
     /** explicit (only in a community that allows explicit content): blurred until tapped */
     explicit: z.boolean().default(false),
+    /** in reels: plain black behind a wider picture or video, not a blurred copy of it */
+    plainBackdrop: z.boolean().default(false),
     media: mediaList.default([]),
     /** a random id per "New post" box: the same send twice makes one post */
     clientKey: clientKey.optional(),
@@ -276,6 +283,8 @@ export const feedReactSchema = z.object({ kind: z.enum(REACTION_IDS) });
 /** a page of the home feed, or of a community's posts */
 /** `at`: when page 1 was made, so later pages rank the same posts the same way (no repeats, no gaps). */
 export const homeFeedQuery = pageQuery.extend({ at: z.coerce.number().int().positive().optional() });
+
+export const reelsQuery = homeFeedQuery.extend({ start: z.string().max(40).optional() });
 
 export const boardCreateSchema = z.object({
   name: text(LIMITS.boardName, 1).pipe(z.string().min(1, "Give the board a name")),

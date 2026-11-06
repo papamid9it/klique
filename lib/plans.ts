@@ -70,8 +70,8 @@ export function planPerks(plan: PlanId, c: PlanConfig): string[] {
   const em = c.emojiSlots[plan];
   const spaces = [`Create ${c.communitiesCreate[plan]} communities, join up to ${c.communitiesJoin[plan]}`, ...(w ? [`${w} ${w === 1 ? "bot" : "bots"} (webhooks) in each community you own`] : []), `${em} custom emoji in each community you own`, ...(plan === "pro" ? ["Use your communities' emoji anywhere"] : [])];
   if (plan === "free") return [...kliques, media, ...spaces];
-  if (plan === "lite") return [...kliques, media, ...spaces, "Lite badge by your name"];
-  return [...kliques, media, ...spaces, "Pro badge by your name", "Your kliques shown a little higher"];
+  if (plan === "lite") return [...kliques, media, ...spaces, "Community growth stats: who's active, your busiest channels", "Lite badge by your name", "Your comments, kliques and communities shown higher", "No points needed to join communities"];
+  return [...kliques, media, ...spaces, "Full growth stats: best times to post, most active members", "Pro badge by your name", "Your comments, kliques and communities shown higher", "No points needed to join communities"];
 }
 
 const int = (v: unknown, min: number, max: number, fallback: number) => (typeof v === "number" && Number.isFinite(v) ? Math.min(max, Math.max(min, Math.round(v))) : fallback);

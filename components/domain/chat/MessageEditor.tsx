@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { FormatButton } from "@/components/ui/FormatButton";
 import { LIMITS } from "@/lib/constants";
 
 /**
@@ -44,6 +45,7 @@ export function MessageEditor({ initial, onSave, onCancel, className, max = LIMI
       <label htmlFor="edit-message" className="sr-only">
         Edit message
       </label>
+      <div className="mb-1"><FormatButton area={ref} value={text} onChange={setText} /></div>
       <textarea
         id="edit-message"
         ref={ref}

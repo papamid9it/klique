@@ -6,6 +6,7 @@ import { Panel, StatCard } from "@/components/domain/admin/AdminParts";
 import { SignupChart } from "@/components/domain/admin/SignupChart";
 import { ReviewButtons } from "@/components/domain/events/ReviewBar";
 import { MoneySummary } from "@/components/domain/money/CommunityMoney";
+import { GrowthStats } from "./GrowthStats";
 import { useRealtimeEvent } from "@/components/providers/RealtimeProvider";
 import { Avatar } from "@/components/ui/Avatar";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -35,6 +36,8 @@ export function DashboardView({ c }: { c: CommunityDTO }) {
         <StatCard label="Waiting on you" value={d.pendingEvents.length + d.pendingRequests} hint={`${d.pendingEvents.length} ${d.pendingEvents.length === 1 ? "event" : "events"} · ${d.pendingRequests} join ${d.pendingRequests === 1 ? "request" : "requests"}`} icon="clock" tone={d.pendingEvents.length + d.pendingRequests ? "attention" : undefined} />
         <StatCard label="Posts this week" value={d.activity.posts7} hint={`${d.activity.upcomingEvents} upcoming events`} icon="image" />
       </div>
+
+      <GrowthStats slug={c.slug} />
 
       <Panel title="New members, last 30 days">
         <div className="p-4">

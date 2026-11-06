@@ -329,6 +329,11 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
               {event.isPast && <span className="chip chip-ink">Past event</span>}
             </div>
             <h1 className="display text-[clamp(1.75rem,4vw,2.5rem)] text-balance">{event.title}</h1>
+              {event.viewer.canPin && (
+                <button type="button" onClick={() => void EventService.pin(event.id, !event.pinned).then(() => onChange({ ...event, pinned: !event.pinned }), (e) => toast(errorMessage(e), "error"))} className="mt-2 inline-flex items-center gap-1.5 text-[13px] font-semibold text-accent-text hover:underline">
+                  <Icon name="pin" size={13} /> {event.pinned ? "Unpin from community" : "Pin to community"}
+                </button>
+              )}
           </header>
 
           <dl className="space-y-3 text-[15px]">

@@ -81,6 +81,7 @@ export async function myCommunities(viewer: IUser): Promise<MyCommunityDTO[]> {
     }
   }
 
+  const pinned = new Set((viewer.pins?.communities ?? []).map(sid));
   return communities
     .map((c): MyCommunityDTO => {
       const slot = byCommunity.get(sid(c._id))!;
@@ -96,9 +97,10 @@ export async function myCommunities(viewer: IUser): Promise<MyCommunityDTO[]> {
         unread: !mutedCommunities.has(sid(c._id)) && (slot.unread.some((ch) => !mutedChannels.has(sid(ch._id))) || !!slot.crewUnread),
         unreadCount: mutedCommunities.has(sid(c._id)) ? 0 : Math.min(99, unreadTotals.get(sid(c._id)) ?? 0),
         ...(mutedCommunities.has(sid(c._id)) ? { muted: true } : {}),
+        ...(pinned.has(sid(c._id)) ? { pinned: true } : {}),
         mentions: Math.min(99, mentionTotals.get(sid(c._id)) ?? 0),
         lastActivityAt: (slot.last ?? null)?.toISOString() ?? null,
       };
     })
-    .sort((a, b) => Number(b.mentions > 0) - Number(a.mentions > 0) || Number(b.unread) - Number(a.unread) || (b.lastActivityAt ?? "").localeCompare(a.lastActivityAt ?? "") || a.name.localeCompare(b.name));
+    .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || Number(b.mentions > 0) - Number(a.mentions > 0) || Number(b.unread) - Number(a.unread) || (b.lastActivityAt ?? "").localeCompare(a.lastActivityAt ?? "") || a.name.localeCompare(b.name));
 }

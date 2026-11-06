@@ -1,5 +1,6 @@
 "use client";
 
+import { useAuth } from "@/components/providers/AuthProvider";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { cx } from "@/components/ui/cx";
@@ -31,6 +32,7 @@ export function MemberCount({ community }: { community: Pick<CommunityCardDTO, "
 
 /** Compact list row: tile · name · "SKATE · 342 MEMBERS" · join. Owns its join state. */
 export function CommunityRow({ community, compact, onChange }: { community: CommunityCardDTO; compact?: boolean; onChange?: (c: CommunityCardDTO) => void }) {
+  const { user } = useAuth();
   const [c, setC] = useState(community);
   useEffect(() => setC(community), [community]);
   const update = (next: CommunityCardDTO) => {
@@ -50,7 +52,7 @@ export function CommunityRow({ community, compact, onChange }: { community: Comm
           </span>
           <span className="eyebrow mt-0.5 block truncate">
             {getInterest(c.interest).short} · <MemberCount community={c} />
-            {!c.viewer.isMember && c.minPointsJoin > 0 && <> · Needs {c.minPointsJoin.toLocaleString("en-NG")} points</>}
+            {!c.viewer.isMember && !user?.badge && c.minPointsJoin > 0 && <> · Needs {c.minPointsJoin.toLocaleString("en-NG")} points</>}
           </span>
         </span>
       </Link>

@@ -1,5 +1,6 @@
 "use client";
 
+import { Formatted } from "@/components/ui/Formatted";
 import Link from "next/link";
 import { Fragment, type ReactNode } from "react";
 import { ProfileTrigger } from "@/components/providers/ProfileCardProvider";
@@ -14,7 +15,12 @@ const TOKEN_RX = /(https?:\/\/[^\s<]+)|(?<![\w@])@([a-zA-Z0-9][a-zA-Z0-9_-]{1,39
  * verified badge) to the community, #tags go to /tags/<tag>. Only names the server resolved (`refs`) become links:
  * anything else stays plain text. Never injects HTML.
  */
-export function RichText({ text, refs }: { text: string; refs?: TextRefsDTO | null }) {
+export function RichText({ text, refs, formatted }: { text: string; refs?: TextRefsDTO | null; /** bold, italic and so on: posts, not their comments */ formatted?: boolean }) {
+  if (formatted) return <Formatted text={text} plain={(t) => <PlainRichText text={t} refs={refs} />} />;
+  return <PlainRichText text={text} refs={refs} />;
+}
+
+function PlainRichText({ text, refs }: { text: string; refs?: TextRefsDTO | null }) {
   const people = new Map((refs?.users ?? []).map((u) => [u.handle.toLowerCase(), u]));
   const communities = new Map((refs?.communities ?? []).map((c) => [c.slug.toLowerCase(), c]));
   const out: ReactNode[] = [];

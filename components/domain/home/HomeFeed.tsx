@@ -93,7 +93,7 @@ function EventTile({ e, onChange }: { e: EventDTO; onChange: (e: EventDTO) => vo
 }
 
 /** One event, full width, between posts in the feed: picture, date, title, where, how many are going, Going. */
-function EventFeedCard({ e, onChange }: { e: EventDTO; onChange: (e: EventDTO) => void }) {
+export function EventFeedCard({ e, onChange }: { e: EventDTO; onChange: (e: EventDTO) => void }) {
   const d = dateChip(e.startsAt);
   const { busy, rsvp } = useEventActions(e, onChange);
   const going = e.viewer.rsvp === "going";

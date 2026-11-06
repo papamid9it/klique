@@ -1,7 +1,5 @@
 import "server-only";
 import { notify } from "./push.service";
-import { accountRestoredMail, accountSuspendedMail } from "../emails";
-import { queueMail } from "../mailer";
 import { cardWords } from "@/lib/cards";
 import { forgetAdultCommunities } from "../policies/adult";
 import { unhideAfterReview } from "./safety.service";
@@ -396,8 +394,8 @@ export async function setSuspended(admin: IUser, userId: string, on: boolean, re
     on ? { suspendedAt: new Date(), suspendedReason: reason.slice(0, 300), $inc: { tokenVersion: 1 } } : { suspendedAt: null, suspendedReason: "" },
     { returnDocument: "after" },
   ).lean<IUser>();
-  // a suspended person can't open the app, so they hear by email
-  if (on !== !!target.suspendedAt) queueMail((on ? accountSuspendedMail : accountRestoredMail)(u!.email, u!.displayName));
+  // suspended: the sign-in screen tells them. Back again: they'll see this when they next open Klique.
+  if (!on && target.suspendedAt) notify([u!._id], { title: "Your account is back", body: "Your suspension was lifted. Welcome back.", data: { href: "/" } }, { category: "admin", ref: `restored:${sid(u!._id)}` });
   await logAction(admin, on ? "user.suspend" : "user.restore", "user", u!._id, `@${u!.handle}`, on ? reason : "", `/?profile=${u!.handle}`);
   return toAdminUser(u!);
 }

@@ -7,7 +7,7 @@ import { getPlanConfig, kliqueUsage, planOf, proHosts } from "./subscriptions.se
 
 /**
  * How many kliques someone may start a month and be in at once (their plan's limits, lib/plans), and whose kliques
- * get a small boost in "Kliques for you" (Pro hosts). Site admins have no limits.
+ * come first in "Kliques for you" (Lite and Pro hosts). Site admins have no limits.
  */
 
 const upgrade = (plan: string) => (plan === "pro" ? "" : ` Upgrade to ${plan === "free" ? "Lite or Pro" : "Pro"} for more.`);
@@ -32,7 +32,7 @@ export async function kliqueJoinBlock(viewer: IUser): Promise<string | null> {
   return `You're in ${max} ${max === 1 ? "klique" : "kliques"} already, the ${PLAN_NAMES[plan]} plan's limit. Leave one, or upgrade${plan === "free" ? " to Lite or Pro" : " to Pro"} to join more.`;
 }
 
-/** Hosts whose kliques are nudged up in "Kliques for you" (Pro). */
+/** Hosts whose kliques are first in "Kliques for you" (Lite and Pro). */
 export async function kliqueBoost(hostIds: Types.ObjectId[]): Promise<Set<string>> {
   return proHosts(hostIds);
 }

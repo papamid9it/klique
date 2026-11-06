@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
@@ -86,7 +87,8 @@ export function VoteControl({ post: p, onChange }: { post: FeedPostDTO; onChange
 export function PostCard({ post: p, onChange, onRemoved, onOpenComments, showCommunity, trending }: { post: FeedPostDTO; onChange: (p: FeedPostDTO) => void; onRemoved: () => void; onOpenComments: () => void; showCommunity?: boolean; trending?: boolean }) {
   const now = useNow();
   const toast = useToast();
-  const { requireAuth } = useAuth();
+  const { requireAuth, user } = useAuth();
+  const router = useRouter();
   const [deleting, setDeleting] = useState(false);
   const [reporting, setReporting] = useState(false);
   const [more, setMore] = useState(false);
@@ -167,7 +169,7 @@ export function PostCard({ post: p, onChange, onRemoved, onOpenComments, showCom
       {!style && p.caption && (
         <>
           <p className={cx("mt-2.5 text-[16px] leading-snug font-semibold break-words whitespace-pre-wrap text-ink", !more && long && "line-clamp-3")}>
-            <RichText text={p.caption} refs={p.refs} />
+            <RichText text={p.caption} refs={p.refs} formatted />
           </p>
           {long && !more && (
             <button type="button" onClick={() => setMore(true)} className="mt-0.5 text-[13px] font-medium text-ink-muted hover:text-ink">
@@ -181,7 +183,7 @@ export function PostCard({ post: p, onChange, onRemoved, onOpenComments, showCom
       {(p.media.length > 0 || style === "card") && (
         <div className="mt-3">
           <ExplicitCover explicit={p.explicit}>
-            {p.media.length > 0 ? <FeedMedia media={p.media} onOpen={onOpenComments} onDoubleTap={() => p.myVote !== 1 && void vote(1)} /> : <TextCard post={p} onOpen={onOpenComments} onDoubleTap={() => p.myVote !== 1 && void vote(1)} />}
+            {p.media.length > 0 ? <FeedMedia media={p.media} onOpen={p.explicit || !user ? onOpenComments : () => router.push(`/reels?start=${p.id}`)} onDoubleTap={() => p.myVote !== 1 && void vote(1)} /> : <TextCard post={p} onOpen={onOpenComments} onDoubleTap={() => p.myVote !== 1 && void vote(1)} />}
           </ExplicitCover>
         </div>
       )}
