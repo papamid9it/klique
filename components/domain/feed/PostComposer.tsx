@@ -4,6 +4,7 @@ import { FormatButton } from "@/components/ui/FormatButton";
 import { useRef, useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
 import { FeedService, newClientKey } from "@/app/services/FeedService";
+import { useApi } from "@/lib/hooks/useApi";
 import { UploadService } from "@/app/services/UploadService";
 import { MOCK_IMAGES, MOCK_VIDEOS, looksLikeVideo } from "@/components/domain/topics/TopicMedia";
 import { useToast } from "@/components/providers/ToastProvider";
@@ -42,6 +43,8 @@ export function PostComposer({ slug, communityName, explicitAllowed, onClose, on
   const [step, setStep] = useState<1 | 2>(1);
   const [previewAt, setPreviewAt] = useState(0);
   const [previewIn, setPreviewIn] = useState<"reels" | "home">("reels");
+  // reels switched off (or not known yet): nothing here mentions them
+  const reelsOn = useApi(() => FeedService.reelsReady(), []).data?.on === true;
   const [plainBackdrop, setPlainBackdrop] = useState(false);
   const [link, setLink] = useState("");
   const [progress, setProgress] = useState<number | null>(null);
@@ -185,19 +188,19 @@ export function PostComposer({ slug, communityName, explicitAllowed, onClose, on
         </fieldset>
         ) : (
         <div className="grid gap-5 sm:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]">
-          <PostPreview media={media} at={Math.min(previewAt, media.length - 1)} onAt={setPreviewAt} caption={caption} plain={plainBackdrop} where={previewIn} onWhere={setPreviewIn} />
+          <PostPreview media={media} at={Math.min(previewAt, media.length - 1)} onAt={setPreviewAt} caption={caption} plain={plainBackdrop} where={reelsOn ? previewIn : "home"} onWhere={setPreviewIn} reelsOn={reelsOn} />
           <div className="min-w-0 space-y-4">
             <FormatButton area={captionRef} value={caption} onChange={setCaption} />
             <TextArea ref={captionRef} label="Caption (optional)" value={caption} onChange={(e) => setCaption(e.target.value)} onKeyDown={(e) => suggest.onKeyDown(e)} maxLength={LIMITS.feedCaption} counter={LIMITS.feedCaption} placeholder="Say something about it… @someone #tag" />
             {suggest.panel}
-            <div>
+            {reelsOn && <div>
               <p className="mb-1.5 text-sm font-medium">Background in reels</p>
               <div role="radiogroup" aria-label="Background in reels" className="grid grid-cols-2 gap-2">
                 <Button size="sm" variant={plainBackdrop ? "secondary" : "primary"} role="radio" aria-checked={!plainBackdrop} onClick={() => setPlainBackdrop(false)}>Blurred</Button>
                 <Button size="sm" variant={plainBackdrop ? "primary" : "secondary"} role="radio" aria-checked={plainBackdrop} onClick={() => setPlainBackdrop(true)}>Plain</Button>
               </div>
               <p className="mt-1.5 text-xs text-ink-muted">Tall ones fill the screen. Wider ones show whole, with nothing cut off.</p>
-            </div>
+            </div>}
           </div>
         </div>
         )}
@@ -278,7 +281,7 @@ function TextFields({ title, setTitle, caption, setCaption, textBg, setTextBg, c
 
 
 /** The second page's preview: how it will look in reels and on Home, updating as you type. */
-function PostPreview({ media, at, onAt, caption, plain, where, onWhere }: { media: TopicMediaDTO[]; at: number; onAt: (i: number) => void; caption: string; plain: boolean; where: "reels" | "home"; onWhere: (w: "reels" | "home") => void }) {
+function PostPreview({ media, at, onAt, caption, plain, where, onWhere, reelsOn }: { reelsOn: boolean; media: TopicMediaDTO[]; at: number; onAt: (i: number) => void; caption: string; plain: boolean; where: "reels" | "home"; onWhere: (w: "reels" | "home") => void }) {
   const item = media[at];
   const still = item.kind === "video" ? (item.poster ?? videoPoster(item.url)) : item.url;
   const reels = where === "reels";
@@ -290,13 +293,13 @@ function PostPreview({ media, at, onAt, caption, plain, where, onWhere }: { medi
   );
   return (
     <div className="space-y-2">
-      <div role="tablist" aria-label="Preview" className="grid grid-cols-2 gap-1 rounded-control bg-raised p-1">
+      {reelsOn && <div role="tablist" aria-label="Preview" className="grid grid-cols-2 gap-1 rounded-control bg-raised p-1">
         {(["reels", "home"] as const).map((w) => (
           <button key={w} type="button" role="tab" aria-selected={where === w} onClick={() => onWhere(w)} className={cx("h-8 rounded-[9px] text-[13px] font-semibold transition", where === w ? "bg-ink text-canvas" : "text-ink-muted hover:text-ink")}>
             {w === "reels" ? "Reels" : "Home"}
           </button>
         ))}
-      </div>
+      </div>}
       {reels ? (
         <div className="relative mx-auto flex aspect-[9/16] max-h-[52dvh] items-center justify-center overflow-hidden rounded-card bg-black">
           {/* eslint-disable-next-line @next/next/no-img-element */}

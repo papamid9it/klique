@@ -539,13 +539,13 @@ export async function assertReelsOn() {
 }
 
 /** Do posts open in reels for this person? The team has turned them on, and there's enough to swipe through. */
-export async function reelsReady(viewer: IUser): Promise<{ ready: boolean }> {
+export async function reelsReady(viewer: IUser): Promise<{ ready: boolean; on: boolean }> {
   const setting = await AppSetting.findById(REELS_SETTING).lean<{ value?: unknown }>();
-  if (setting?.value !== true) return { ready: false };
+  if (setting?.value !== true) return { ready: false, on: false };
   const mine = await Membership.find({ userId: viewer._id, subcommunityId: null, status: "active" }).select("communityId").lean<Pick<IMembership, "communityId">[]>();
   const open = await Community.find(reelCommunities(mine.map((m) => m.communityId))).select("_id").limit(800).lean<{ _id: Types.ObjectId }[]>();
   const videos = await FeedPost.countDocuments({ communityId: { $in: open.map((c) => c._id) }, ...recentVideos() }).limit(REELS_MIN_VIDEOS);
-  return { ready: videos >= REELS_MIN_VIDEOS };
+  return { ready: videos >= REELS_MIN_VIDEOS, on: true };
 }
 
 export async function reelsFeed(viewer: IUser, page: number, at?: number, start?: string): Promise<{ items: FeedPostDTO[]; page: number; hasMore: boolean; at: number }> {

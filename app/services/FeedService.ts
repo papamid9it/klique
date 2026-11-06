@@ -30,7 +30,7 @@ export const FeedService = {
   /** posts from your communities, best first, with a trending one from elsewhere now and then */
   /** full-screen pictures and videos (`start`: the post tapped comes first) */
   reels: (page = 1, at?: number, start?: string) => api.get<Envelope<{ items: FeedPostDTO[]; page: number; hasMore: boolean; at: number }>>("/api/reels", { page, ...(at ? { at } : {}), ...(start ? { start } : {}) }),
-  reelsReady: () => api.get<Envelope<{ ready: boolean }>>("/api/reels/ready"),
+  reelsReady: () => api.get<Envelope<{ ready: boolean; on: boolean }>>("/api/reels/ready"),
   home: (page = 1, at?: number) => api.get<Envelope<{ items: HomeFeedItem[]; page: number; hasMore: boolean; at: number }>>("/api/me/feed", at ? { page, at } : { page }),
 };
 
