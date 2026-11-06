@@ -1,8 +1,9 @@
 "use client";
 
+import { checkReels, reelsReady } from "@/lib/reels-ready";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { errorMessage } from "@/app/ApiCore";
 import { FeedService } from "@/app/services/FeedService";
 import { SpaceService } from "@/app/services/SpaceService";
@@ -80,6 +81,9 @@ export function PostCard({ post: p, onChange, onRemoved, onOpenComments, showCom
   const now = useNow();
   const toast = useToast();
   const { requireAuth, user } = useAuth();
+  useEffect(() => {
+    if (user) checkReels();
+  }, [user]);
   const router = useRouter();
   const [deleting, setDeleting] = useState(false);
   const [reporting, setReporting] = useState(false);
@@ -175,7 +179,7 @@ export function PostCard({ post: p, onChange, onRemoved, onOpenComments, showCom
       {(p.media.length > 0 || style === "card") && (
         <div className="mt-3">
           <ExplicitCover explicit={p.explicit}>
-            {p.media.length > 0 ? <FeedMedia media={p.media} onOpen={p.explicit || !user ? onOpenComments : () => router.push(`/reels?start=${p.id}&from=${Date.now()}`)} onDoubleTap={() => p.myVote !== 1 && void vote(1)} /> : <TextCard post={p} onOpen={onOpenComments} onDoubleTap={() => p.myVote !== 1 && void vote(1)} />}
+            {p.media.length > 0 ? <FeedMedia media={p.media} onOpen={p.explicit || !user || !reelsReady() ? onOpenComments : () => router.push(`/reels?start=${p.id}&from=${Date.now()}`)} onDoubleTap={() => p.myVote !== 1 && void vote(1)} /> : <TextCard post={p} onOpen={onOpenComments} onDoubleTap={() => p.myVote !== 1 && void vote(1)} />}
           </ExplicitCover>
         </div>
       )}

@@ -103,7 +103,7 @@ export default function HomePage() {
 
 
       <div className="mx-auto max-w-[730px]">
-        <HomeFeed refreshRef={feedRefresh} onNewer={setNewer} moreEvents={events.length > TOP_EVENTS + 2 ? events.slice(TOP_EVENTS) : events} kliques={forYou} onDismissKlique={dismiss} communities={data?.suggestedCommunities ?? []} onEvent={patchEvent} onCommunity={patchCommunity} />
+        <HomeFeed refreshRef={feedRefresh} onNewer={setNewer} moreEvents={events.length > TOP_EVENTS + 2 ? events.slice(TOP_EVENTS) : events} fillersLoading={loading || kliques.loading} kliques={forYou} onDismissKlique={dismiss} communities={data?.suggestedCommunities ?? []} onEvent={patchEvent} onCommunity={patchCommunity} />
         <BackToTop hidden={newer.length > 0} />
       </div>
     </div>

@@ -19,3 +19,5 @@ export const crewMetadata = (id: string, s: Share) => withImage(s, `/og/klique/$
 export const topicMetadata = (slug: string, id: string, s: Share) => withImage(s, `/og/topic/${slug}/${id}`, "A topic on klique.");
 export const communityMetadata = (slug: string, s: Share) => withImage(s, `/og/community/${slug}`, "A community on klique.");
 export const postMetadata = (id: string, s: Share) => withImage(s, `/og/post/${id}`, "A post on klique.");
+// a working link, but not one for search engines
+export const inviteMetadata = (code: string, s: Share): Metadata => ({ ...withImage(s, `/og/invite/${code}`, "An invite on klique."), robots: { index: false } });

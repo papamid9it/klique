@@ -154,9 +154,9 @@ function LeaveBody({ pending, always, onAlways, onCancel, onContinue }: { pendin
         <input type="checkbox" checked={always} onChange={(e) => onAlways(e.target.checked)} className="size-4 shrink-0 accent-[var(--accent-text)]" />
         <span>Don&apos;t ask again for this site on this device</span>
       </label>
-      <div className="grid grid-cols-2 gap-2">
-        <Button onClick={onCancel}>Stay here</Button>
-        <Button variant="primary" onClick={onContinue} autoFocus>
+      <div className="grid grid-cols-2 gap-3 pt-1">
+        <Button size="lg" onClick={onCancel}>Stay here</Button>
+        <Button size="lg" variant="primary" onClick={onContinue} autoFocus>
           Open site <Icon name="arrow-up-right" size={15} />
         </Button>
       </div>

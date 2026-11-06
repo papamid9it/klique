@@ -47,11 +47,11 @@ export function SignOutHost() {
       title={ask?.everywhere ? "Sign out everywhere?" : "Sign out of Klique?"}
       description={ask?.everywhere ? "This ends every session, on all your phones and computers. You'll need to sign in again on each." : "You can sign back in any time."}
     >
-      <div className="grid grid-cols-2 gap-2">
-        <Button onClick={() => setAsk(null)} disabled={busy}>
+      <div className="grid grid-cols-2 gap-3 pt-1">
+        <Button size="lg" onClick={() => setAsk(null)} disabled={busy}>
           Cancel
         </Button>
-        <Button variant="danger" onClick={() => void go()} loading={busy}>
+        <Button size="lg" variant="danger" onClick={() => void go()} loading={busy}>
           Sign out
         </Button>
       </div>

@@ -111,6 +111,9 @@ export function isInterestId(id: unknown): id is InterestId {
 /* Limits shared by validators and UI                                  */
 /* ------------------------------------------------------------------ */
 
+/** Recent videos someone must be able to see before tapping a post opens reels (otherwise it opens the post). */
+export const REELS_MIN_VIDEOS = 10;
+
 export const LIMITS = {
   /** groups are private: at most this many people, owner included */
   groupMembers: 1000,

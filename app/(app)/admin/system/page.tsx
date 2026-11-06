@@ -1,6 +1,11 @@
 "use client";
 
+import { useState } from "react";
+import { errorMessage } from "@/app/ApiCore";
 import { AdminService } from "@/app/services/AdminService";
+import { useToast } from "@/components/providers/ToastProvider";
+import { Button } from "@/components/ui/Button";
+import { REELS_MIN_VIDEOS } from "@/lib/constants";
 import { AdminHeader, Badge, Panel } from "@/components/domain/admin/AdminParts";
 import { AdminGate } from "@/components/domain/admin/AdminShell";
 import { Icon } from "@/components/ui/Icon";
@@ -9,6 +14,42 @@ import { ErrorState } from "@/components/ui/States";
 import { cx } from "@/components/ui/cx";
 import { useApi } from "@/lib/hooks/useApi";
 
+/** Reels stay off until you turn them on: tapping a post just opens it. */
+function ReelsSwitch() {
+  const toast = useToast();
+  const { data, setData } = useApi(() => AdminService.reels(), []);
+  const [busy, setBusy] = useState(false);
+  async function flip() {
+    if (!data) return;
+    setBusy(true);
+    try {
+      setData((await AdminService.setReels(!data.on)).data);
+      toast(data.on ? "Reels are off" : "Reels are on", "success");
+    } catch (e) {
+      toast(errorMessage(e), "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="mb-6">
+      <Panel title="Reels" action={data ? <Badge tone={data.on ? "good" : "bad"}>{data.on ? "On" : "Off"}</Badge> : undefined}>
+        <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-3.5">
+          <p className="min-w-0 flex-1 text-sm text-ink-muted">
+            {data?.on
+              ? `Tapping a picture or video opens reels for anyone who can see at least ${REELS_MIN_VIDEOS} recent videos. Everyone else just gets the post.`
+              : "Tapping a picture or video just opens the post. Turn this on when there's enough to swipe through."}
+            {data ? ` ${data.recentVideos.toLocaleString("en-US")} ${data.recentVideos === 1 ? "video" : "videos"} posted in the last 30 days. After turning them on, it can take about 10 minutes to reach everyone, or as soon as the app is reopened.` : ""}
+          </p>
+          <Button variant={data?.on ? "secondary" : "primary"} onClick={() => void flip()} disabled={!data} loading={busy}>
+            {data?.on ? "Turn reels off" : "Turn reels on"}
+          </Button>
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
 function AdminSystemPageContent() {
   const { data: s, loading, error, reload } = useApi(() => AdminService.system(), []);
   const needed = s ? s.checks.filter((c) => !c.ok && !c.optional).length : 0;
@@ -16,6 +57,7 @@ function AdminSystemPageContent() {
   return (
     <>
       <AdminHeader title="System">What&apos;s switched on for this deployment. Settings live in your environment variables (Vercel → Settings → Environment Variables); change them there and redeploy.</AdminHeader>
+      <ReelsSwitch />
       {loading ? (
         <Skeleton className="h-80 w-full rounded-card" />
       ) : error || !s ? (

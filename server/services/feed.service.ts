@@ -1,10 +1,12 @@
+import { REELS_MIN_VIDEOS } from "@/lib/constants";
 import "server-only";
-import { Types } from "mongoose";
+import { Types, type QueryFilter } from "mongoose";
 import type { z } from "zod";
 import type { FeedCommentDTO, FeedPostDTO, FeedSidebarDTO, HomeFeedItem, Paginated, PostTargetDTO, ReactionDTO } from "@/lib/types";
 import type { ReactionKind } from "@/lib/reactions";
-import { badRequest, forbidden, notFound } from "../http/errors";
+import { ApiError, badRequest, forbidden, notFound } from "../http/errors";
 import { rateLimit } from "../http/rate-limit";
+import { AppSetting } from "../models/AppSetting";
 import { Community, type ICommunity } from "../models/Community";
 import { FeedComment, FeedPost, FeedVote, type IFeedComment, type IFeedPost } from "../models/FeedPost";
 import { Membership, type IMembership } from "../models/Membership";
@@ -513,11 +515,44 @@ const SUGGEST_EVERY = 5;
  * never, and nothing explicit or 18+. From your communities, then what's taking off elsewhere. `start`: the post they
  * tapped comes first.
  */
+/** What reels may show: not 18+ or explicit, with Posts on, public or your own. */
+const reelCommunities = (mineIds: Types.ObjectId[]): QueryFilter<ICommunity> => ({ adult: { $ne: true }, explicit: { $ne: true }, feedPolicy: { $in: ["admins", "members"] }, $or: [{ _id: { $in: mineIds } }, { privacy: "public" }] });
+
+const REELS_SETTING = "reelsEnabled";
+const recentVideos = () => ({ "media.kind": "video" as const, explicit: { $ne: true }, hiddenAt: null, createdAt: { $gte: new Date(Date.now() - 30 * 24 * HOUR) } });
+
+/** Klique's own switch for reels: off until the team decides there's enough on the app. Tapping a post then just opens it. */
+export async function reelsSetting(): Promise<{ on: boolean; recentVideos: number }> {
+  const [row, videos] = await Promise.all([AppSetting.findById(REELS_SETTING).lean<{ value?: unknown }>(), FeedPost.countDocuments(recentVideos())]);
+  return { on: row?.value === true, recentVideos: videos };
+}
+
+export async function setReelsSetting(on: boolean) {
+  await AppSetting.updateOne({ _id: REELS_SETTING }, { $set: { value: on } }, { upsert: true });
+  return reelsSetting();
+}
+
+/** The team's switch, for reels themselves: off means off, a saved or shared link included. */
+export async function assertReelsOn() {
+  const setting = await AppSetting.findById(REELS_SETTING).lean<{ value?: unknown }>();
+  if (setting?.value !== true) throw new ApiError(403, "Reels aren't on right now.", { code: "reels_off" });
+}
+
+/** Do posts open in reels for this person? The team has turned them on, and there's enough to swipe through. */
+export async function reelsReady(viewer: IUser): Promise<{ ready: boolean }> {
+  const setting = await AppSetting.findById(REELS_SETTING).lean<{ value?: unknown }>();
+  if (setting?.value !== true) return { ready: false };
+  const mine = await Membership.find({ userId: viewer._id, subcommunityId: null, status: "active" }).select("communityId").lean<Pick<IMembership, "communityId">[]>();
+  const open = await Community.find(reelCommunities(mine.map((m) => m.communityId))).select("_id").limit(800).lean<{ _id: Types.ObjectId }[]>();
+  const videos = await FeedPost.countDocuments({ communityId: { $in: open.map((c) => c._id) }, ...recentVideos() }).limit(REELS_MIN_VIDEOS);
+  return { ready: videos >= REELS_MIN_VIDEOS };
+}
+
 export async function reelsFeed(viewer: IUser, page: number, at?: number, start?: string): Promise<{ items: FeedPostDTO[]; page: number; hasMore: boolean; at: number }> {
   const mine = await Membership.find({ userId: viewer._id, subcommunityId: null, status: "active" }).select("communityId").lean<Pick<IMembership, "communityId">[]>();
   const mineIds = mine.map((m) => m.communityId);
   const [communities, hidden] = await Promise.all([
-    Community.find({ adult: { $ne: true }, explicit: { $ne: true }, feedPolicy: { $in: ["admins", "members"] }, $or: [{ _id: { $in: mineIds } }, { privacy: "public" }] }).sort({ verified: -1, official: -1 }).select("_id verified official").limit(800).lean<RankedCommunity[]>(),
+    Community.find(reelCommunities(mineIds)).sort({ verified: -1, official: -1 }).select("_id verified official").limit(800).lean<RankedCommunity[]>(),
     hiddenUserIds(viewer._id),
   ]);
   const now = at && at <= Date.now() && at > Date.now() - 24 * HOUR ? at : Date.now();

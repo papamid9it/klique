@@ -3,10 +3,11 @@ import { formatDateShort, isFree } from "@/lib/format";
 import { getInterest } from "@/lib/constants";
 import { placeLabel } from "@/lib/places";
 import { connectDb } from "../db";
+import { Community, type ICommunity } from "../models/Community";
 import { getCommunity } from "./communities.service";
 import { getCrew } from "./crews.service";
 import { getEvent } from "./events.service";
-import { resolveSpaceFor } from "./spaces.service";
+import { inviteActive, loadInvite, resolveSpaceFor } from "./spaces.service";
 import { getTopic } from "./topics.service";
 import { getPost, postCommunitySlug } from "./feed.service";
 import { getProfile } from "./users.service";
@@ -44,19 +45,48 @@ export async function eventShare(id: string): Promise<ShareInfo | null> {
   }
 }
 
+/** A link preview can land in any chat, in front of anyone: an explicit community's picture never goes on one. */
+const shareableCover = (c: Pick<ICommunity, "coverImage" | "explicit"> | null) => (c && !c.explicit ? (c.coverImage ?? null) : null);
+
 export async function communityShare(slug: string): Promise<ShareInfo | null> {
   await connectDb();
   try {
     const c = await getCommunity(null, slug);
-    // an 18+ community: a plain card, not even its name
-    if (c.adult) return { title: "Klique", description: "A community on Klique.", eyebrow: "Community", lines: [], image: null };
-    if (c.privacy !== "public") return { title: c.name, description: "A private community on klique.", eyebrow: "Private community", lines: [], image: null };
+    // private and 18+ communities hide their cover from visitors, but it's on their card; only an explicit one's never is
+    const hidden = c.adult || c.privacy !== "public";
+    const raw = hidden ? await Community.findOne({ slug }).select("coverImage explicit").lean<Pick<ICommunity, "coverImage" | "explicit">>() : null;
+    const cover = shareableCover(raw);
+    // an 18+ community: its picture, not even its name
+    if (c.adult) return { title: "Klique", description: "A community on Klique.", eyebrow: "Community", lines: [], image: cover };
+    if (c.privacy !== "public") return { title: c.name, description: "A private community on klique.", eyebrow: "Private community", lines: [], image: cover };
     return {
       title: c.name,
       description: c.description.slice(0, 200) || `A ${getInterest(c.interest)?.name ?? ""} community in ${placeLabel(c)}.`,
       eyebrow: getInterest(c.interest)?.name ?? "Community",
       lines: [placeLabel(c), c.memberCount === null ? "" : `${c.memberCount.toLocaleString("en-US")} ${c.memberCount === 1 ? "member" : "members"}`],
       image: c.coverImage,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** An invite link that still works: where it leads and its picture. 18+: the picture only, not the name. */
+export async function inviteShare(code: string): Promise<ShareInfo | null> {
+  await connectDb();
+  try {
+    const loaded = await loadInvite(code);
+    if (!loaded || !inviteActive(loaded.invite).active) return null;
+    const { community: c, sub } = loaded.space;
+    const image = shareableCover(c);
+    if (c.adult) return { title: "You're invited", description: "An invite to a community on Klique.", eyebrow: "Invite", lines: [], image };
+    const name = sub?.name ?? c.name;
+    return {
+      title: `Join ${name}`,
+      description: c.privacy === "public" && !sub && c.description ? c.description.slice(0, 200) : `You've been invited to ${sub ? `a private group in ${c.name}` : c.privacy === "public" ? "a community" : "a private community"} on klique.`,
+      eyebrow: "You're invited",
+      lines: [sub ? `In ${c.name}` : "", placeLabel(c)],
+      image,
     };
   } catch {
     return null;

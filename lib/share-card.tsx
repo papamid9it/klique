@@ -13,7 +13,7 @@ export function ShareCard({ eyebrow, title, lines = [], image }: { eyebrow: stri
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
           <span style={{ fontSize: 24, letterSpacing: 3, textTransform: "uppercase", color: "#a3a3a3" }}>{eyebrow}</span>
-          <span style={{ fontSize: title.length > 40 ? 58 : 72, fontWeight: 700, lineHeight: 1.05, letterSpacing: -2 }}>{title.length > 90 ? `${title.slice(0, 89)}…` : title}</span>
+          <span style={{ fontSize: image ? (title.length > 70 ? 42 : title.length > 24 ? 46 : 58) : title.length > 70 ? 42 : title.length > 40 ? 58 : 72, fontWeight: 700, lineHeight: 1.05, letterSpacing: -2 }}>{title.length > 90 ? `${title.slice(0, 89)}…` : title}</span>
           {lines.filter(Boolean).map((l) => (
             <span key={l} style={{ fontSize: 30, color: "#d4d4d4" }}>
               {l.length > 60 ? `${l.slice(0, 59)}…` : l}

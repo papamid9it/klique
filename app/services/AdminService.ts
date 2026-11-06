@@ -36,6 +36,8 @@ export const AdminService = {
 
   overview: (days = 30) => api.get<Envelope<AdminOverviewDTO>>("/api/admin/overview", { days }),
   system: () => api.get<Envelope<SystemStatusDTO>>("/api/admin/system"),
+  reels: () => api.get<Envelope<{ on: boolean; recentVideos: number }>>("/api/admin/reels"),
+  setReels: (on: boolean) => api.put<Envelope<{ on: boolean; recentVideos: number }>>("/api/admin/reels", { on }),
   audit: (params: { page?: number; q?: string; action?: string }) => api.get<Envelope<Paginated<AuditEntryDTO>>>("/api/admin/audit", params),
 
   users: (params: { filter?: AdminUserFilter; q?: string; page?: number }) => api.get<Envelope<Paginated<AdminUserDTO>>>("/api/admin/users", params),

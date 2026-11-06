@@ -26,6 +26,9 @@ import type { searchQuery } from "../validators/schemas";
 const LINGER_MS = EVENT_FALLBACK_MS;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/** How many upcoming events Home can draw on, besides the rows it always has. */
+const HOME_EVENTS = 40;
+
 export async function discover(viewer: IUser | null, whereParam?: string): Promise<DiscoverDTO> {
   // No place chosen: look in the viewer's own city (everywhere when signed out).
   const scope = parseScope(whereParam) ?? (viewer ? scopeFromPlace(viewer, "city") : parseScope("world")!);
@@ -95,7 +98,9 @@ export async function discover(viewer: IUser | null, whereParam?: string): Promi
   const onlineRows = pick(soon, (e) => e.online);
 
   // One serializer pass for everything on the page.
-  const all = [...new Map([featuredRow, ...nearRows, ...planRows, ...weekendRows, ...fromCommunityRows, ...freeRows, ...onlineRows].filter(Boolean).map((e) => [String(e!._id), e!])).values()];
+  // plenty for Home to scroll through, however many are on, not only the ones in the rows above
+  const forYouRows = soonMixed.slice(0, HOME_EVENTS);
+  const all = [...new Map([featuredRow, ...nearRows, ...planRows, ...weekendRows, ...fromCommunityRows, ...freeRows, ...onlineRows, ...forYouRows].filter(Boolean).map((e) => [String(e!._id), e!])).values()];
   const dtos = new Map((await toEvents(all, viewer)).map((d) => [d.id, d]));
   const dto = (rows: IEvent[]) => rows.map((e) => dtos.get(String(e._id))).filter((d): d is EventDTO => !!d);
   const featured = featuredRow ? (dtos.get(String(featuredRow._id)) ?? null) : null;

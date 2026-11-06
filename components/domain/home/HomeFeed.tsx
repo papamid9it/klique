@@ -279,6 +279,7 @@ const FEED_SEED = newFeedSeed();
  */
 export function HomeFeed({
   moreEvents,
+  fillersLoading,
   kliques = [],
   communities,
   onEvent,
@@ -288,6 +289,8 @@ export function HomeFeed({
   onNewer,
 }: {
   moreEvents: EventDTO[];
+  /** the events and kliques are still loading */
+  fillersLoading: boolean;
   kliques?: CrewCardDTO[];
   communities: CommunityCardDTO[];
   onEvent: (e: EventDTO) => void;
@@ -348,20 +351,33 @@ export function HomeFeed({
   }
   if (!items.length) {
     // no posts yet (Klique's early days): what's happening still fills the page
-    if (kliques.length) {
+    // the same kliques and events that sit between posts, taking turns
+    const between = Math.max(kliques.length, moreEvents.length);
+    if (between) {
       return (
-        <section aria-labelledby="feed-h" className="space-y-5">
-          <h2 id="feed-h" className="text-lg font-semibold tracking-tight">Kliques you could join</h2>
+        <section aria-label="What's happening">
           <ul className="space-y-5">
-            {kliques.slice(0, 10).map((k) => (
-              <li key={k.id}>
-                <KliqueCard crew={k} wide onDismiss={onDismissKlique ? () => onDismissKlique(k.id) : undefined} />
-              </li>
+            {Array.from({ length: between }, (_, n) => (
+              <Fragment key={n}>
+                {moreEvents[n] && (
+                  <li>
+                    <EventFeedCard e={moreEvents[n]} onChange={onEvent} />
+                  </li>
+                )}
+                {kliques[n] && (
+                  <li>
+                    <p className="eyebrow mb-2">Klique for you</p>
+                    <KliqueCard crew={kliques[n]} wide onDismiss={onDismissKlique ? () => onDismissKlique(kliques[n].id) : undefined} />
+                  </li>
+                )}
+              </Fragment>
             ))}
           </ul>
         </section>
       );
     }
+    // what fills the page may still be on its way: not "nothing" yet
+    if (fillersLoading) return <RowSkeleton rows={3} />;
     return (
       <EmptyState icon="image" title="No posts yet" action={<Button href="/communities" variant="primary">Find communities</Button>}>
         Pictures and videos from your communities show up here. Join a few, or turn on Posts in one you run.

@@ -1,6 +1,6 @@
 import { feedCaptionSchema, feedCommentEditSchema, feedCommentSchema, feedPostSchema, feedReactSchema, feedVoteSchema, homeFeedQuery, reelsQuery } from "../validators/schemas";
 import { resolveSpaceFor } from "../services/spaces.service";
-import { addComment, createPost, deleteComment, deletePost, editCaption, editComment, feedSidebar, getPost, homeFeed, reelsFeed, postCommunitySlug, listComments, listPosts, reactToComment, setPostExplicit, vote } from "../services/feed.service";
+import { assertReelsOn, addComment, createPost, deleteComment, deletePost, editCaption, editComment, feedSidebar, getPost, homeFeed, reelsFeed, reelsReady, postCommunitySlug, listComments, listPosts, reactToComment, setPostExplicit, vote } from "../services/feed.service";
 import { created, readJson, readQuery, withApi } from "./api";
 
 /** Handlers for a community's Posts section (`/api/communities/[slug]/feed/…`) and the home feed. Authorization lives in the service. */
@@ -88,9 +88,12 @@ export const feedCommentReact = withApi<Comment, "required">({ auth: "required" 
 
 /** GET /api/me/feed?page=&at= — posts from your communities, best first, with a trending one from elsewhere now and then. */
 export const reelsGet = withApi<Record<string, never>, "required">({ auth: "required" }, async ({ req, viewer }) => {
+  await assertReelsOn();
   const { page, at, start } = readQuery(req, reelsQuery);
   return reelsFeed(viewer, page, at, start);
 });
+
+export const reelsReadyGet = withApi<Record<string, never>, "required">({ auth: "required" }, async ({ viewer }) => reelsReady(viewer));
 
 export const homeFeedGet = withApi<Record<string, never>, "required">({ auth: "required" }, async ({ req, viewer }) => {
   const { page, at } = readQuery(req, homeFeedQuery);

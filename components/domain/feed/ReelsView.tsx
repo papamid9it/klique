@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { errorMessage } from "@/app/ApiCore";
+import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent } from "react";
+import { errorMessage, isApiError } from "@/app/ApiCore";
 import { FeedService } from "@/app/services/FeedService";
 import { ReportDialog } from "@/components/domain/ReportDialog";
 import { absoluteUrl } from "@/components/domain/ShareButton";
@@ -23,6 +23,7 @@ import { useApi } from "@/lib/hooks/useApi";
 import { Spinner } from "@/components/ui/Button";
 import { UserName } from "@/components/ui/UserName";
 import { cdn, videoPoster, videoSrc } from "@/lib/cdn";
+import { isDataSaver } from "@/lib/data-saver";
 import { compactCount } from "@/lib/format";
 import type { EventDTO, FeedPostDTO } from "@/lib/types";
 import { postHref, useVote } from "./PostCard";
@@ -40,7 +41,7 @@ function RailButton({ icon, label, count, on, filled, onClick }: { icon: IconNam
   );
 }
 
-function Reel({ post: p, active, held, muted, onMuted, onChange, onComments, onReport }: { post: FeedPostDTO; active: boolean; /** comments or a report are open over it: it waits where it is */ held: boolean; muted: boolean; onMuted: () => void; onChange: (p: FeedPostDTO) => void; onComments: () => void; onReport: () => void }) {
+function Reel({ post: p, active, next, held, muted, onMuted, onChange, onComments, onReport }: { post: FeedPostDTO; active: boolean; /** one of the next two: its video gets ready */ next: boolean; /** comments or a report are open over it: it waits where it is */ held: boolean; muted: boolean; onMuted: () => void; onChange: (p: FeedPostDTO) => void; onComments: () => void; onReport: () => void }) {
   const toast = useToast();
   const vote = useVote(p, onChange);
   const video = useRef<HTMLVideoElement>(null);
@@ -49,6 +50,19 @@ function Reel({ post: p, active, held, muted, onMuted, onChange, onComments, onR
   const [paused, setPaused] = useState(false);
   const [hearts, setHearts] = useState(0);
   const item = p.media[Math.min(at, p.media.length - 1)];
+  // an album moves with a finger, left or right; up and down is the next reel
+  const touch = useRef<{ x: number; y: number } | null>(null);
+  const swipeStart = (e: TouchEvent) => {
+    touch.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  };
+  const swipeEnd = (e: TouchEvent) => {
+    const from = touch.current;
+    touch.current = null;
+    if (!from || p.media.length < 2) return;
+    const dx = e.changedTouches[0].clientX - from.x;
+    if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(e.changedTouches[0].clientY - from.y)) return;
+    setAt((i) => Math.max(0, Math.min(p.media.length - 1, i + (dx < 0 ? 1 : -1))));
+  };
   // two taps: love, with a heart every time (it never takes love back)
   const oneTap = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => {
@@ -90,7 +104,7 @@ function Reel({ post: p, active, held, muted, onMuted, onChange, onComments, onR
   };
 
   return (
-    <section aria-label={`Post by ${p.author.displayName}`} className="relative flex h-dvh w-full shrink-0 snap-start snap-always items-center justify-center overflow-hidden bg-black">
+    <section aria-label={`Post by ${p.author.displayName}`} onTouchStart={swipeStart} onTouchEnd={swipeEnd} className="relative flex h-dvh w-full shrink-0 snap-start snap-always items-center justify-center overflow-hidden bg-black">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       {backdrop && !p.plainBackdrop && <img src={cdn(backdrop, { w: 200 })} alt="" aria-hidden="true" className="absolute inset-0 size-full scale-110 object-cover opacity-30 blur-2xl" />}
       <div className="relative flex h-full max-w-full items-center justify-center gap-3 sm:max-w-[calc(100%-11rem)] sm:py-4">
@@ -103,7 +117,7 @@ function Reel({ post: p, active, held, muted, onMuted, onChange, onComments, onR
               muted={muted}
               loop
               playsInline
-              preload={active ? "auto" : "none"}
+              preload={active || (next && !isDataSaver()) ? "auto" : "none"}
               onPlay={() => setPaused(false)}
               onPause={() => setPaused(true)}
               className="max-h-full max-w-full object-contain sm:max-h-[86dvh]"
@@ -128,6 +142,9 @@ function Reel({ post: p, active, held, muted, onMuted, onChange, onComments, onR
             <>
               {at > 0 && <button type="button" aria-label="Previous picture" onClick={() => setAt(at - 1)} className="absolute top-1/2 left-2 inline-flex size-9 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-white"><Icon name="chevron-left" size={18} /></button>}
               {at < p.media.length - 1 && <button type="button" aria-label="Next picture" onClick={() => setAt(at + 1)} className="absolute top-1/2 right-2 inline-flex size-9 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-white"><Icon name="chevron-right" size={18} /></button>}
+              <span aria-label={`Picture ${at + 1} of ${p.media.length}`} className="pointer-events-none absolute inset-x-0 bottom-2 z-10 flex justify-center gap-1.5">
+                {p.media.map((_, i) => <span key={i} className={`size-[7px] rounded-full ${i === at ? "bg-white" : "bg-white/40"}`} />)}
+              </span>
             </>
           )}
           {item.kind === "video" && (
@@ -225,19 +242,27 @@ function Reels({ start }: { start?: string }) {
       s.hasMore = res.hasMore;
       setItems((now) => [...now, ...res.items.filter((x) => !now.some((y) => y.id === x.id))]);
     } catch (e) {
-      toast(errorMessage(e), "error");
+      // reels are switched off: a saved link just goes to the post, or home
+      if (isApiError(e) && e.code === "reels_off") return router.replace(start ? `/p/${start}` : "/");
+      // no connection: the list carries on by itself once it's back
+      if (navigator.onLine) toast(errorMessage(e), "error");
     } finally {
       s.busy = false;
       setLoading(false);
     }
-  }, [start, toast]);
+  }, [start, toast, router]);
 
   useEffect(() => {
     if (status === "authed") void loadMore();
   }, [loadMore, status]);
+  useEffect(() => {
+    const again = () => void loadMore();
+    window.addEventListener("online", again);
+    return () => window.removeEventListener("online", again);
+  }, [loadMore]);
 
   useEffect(() => {
-    if (items.length && active >= items.length - 3) void loadMore();
+    if (items.length && active >= items.length - 6) void loadMore();
   }, [active, items.length, loadMore]);
 
   const go = useCallback((to: number) => {
@@ -276,7 +301,7 @@ function Reels({ start }: { start?: string }) {
       <div ref={box} onScroll={(e) => setActive(Math.round(e.currentTarget.scrollTop / Math.max(1, e.currentTarget.clientHeight)))} className="no-bar h-full snap-y snap-mandatory overflow-y-auto overscroll-contain">
         {entries.map((e, i) =>
           e.post ? (
-            <Reel key={e.post.id} post={e.post} active={i === active} held={!!commentsOn || !!reporting} muted={muted} onMuted={() => setMuted((m) => !m)} onChange={change} onComments={() => setCommentsOn(e.post)} onReport={() => setReporting(e.post)} />
+            <Reel key={e.post.id} post={e.post} active={i === active} next={i > active && i <= active + 2} held={!!commentsOn || !!reporting} muted={muted} onMuted={() => setMuted((m) => !m)} onChange={change} onComments={() => setCommentsOn(e.post)} onReport={() => setReporting(e.post)} />
           ) : e.slot?.kind === "ad" ? (
             <Between key={`ad:${e.at}`} label="Sponsored"><SponsoredCard ad={ads[e.slot.ad]} /></Between>
           ) : e.slot?.kind === "event" ? (

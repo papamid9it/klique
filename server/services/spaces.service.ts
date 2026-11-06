@@ -546,7 +546,7 @@ export async function decideRequest(
 
 const isInviteOnly = (space: Space) => !!space.sub || space.community.privacy === "private";
 
-function inviteActive(i: IInvitation, now = new Date()): { active: boolean; reason?: "expired" | "revoked" | "used_up" } {
+export function inviteActive(i: IInvitation, now = new Date()): { active: boolean; reason?: "expired" | "revoked" | "used_up" } {
   if (i.revokedAt) return { active: false, reason: "revoked" };
   if (i.expiresAt && i.expiresAt <= now) return { active: false, reason: "expired" };
   if (i.maxUses !== null && i.uses >= i.maxUses) return { active: false, reason: "used_up" };
@@ -615,7 +615,7 @@ async function consumeInvite(code: string, space: Space) {
   if (!updated) throw forbidden("That invite link isn't valid any more.");
 }
 
-async function loadInvite(code: string) {
+export async function loadInvite(code: string) {
   const invite = await Invitation.findOne({ code }).lean<IInvitation>();
   if (!invite) return null;
   const community = await Community.findById(invite.communityId).lean<ICommunity>();
