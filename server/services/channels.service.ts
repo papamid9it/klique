@@ -698,7 +698,7 @@ export async function postMessage(viewer: IUser, space: Space, access: SpaceAcce
   ]);
   emitChannel(channel.communityId, channel._id);
   const post = channel.topicId ? await Topic.findById(channel.topicId).select("_id title boardId communityId").lean<Pick<ITopic, "_id" | "title" | "boardId" | "communityId">>() : null;
-  const href = post ? await postHref(space, post) : null;
+  const href = post ? `${await postHref(space, post)}&m=${sid(doc._id)}` : null;
   // a reply in a thread: the message it hangs off counts it, and its channel's chat updates
   if (channel.parentChannelId && channel.threadOf) {
     await ChannelMessage.updateOne({ _id: channel.threadOf }, { $inc: { "thread.count": 1 }, $set: { "thread.lastAt": doc.createdAt, "thread.lastBy": viewer.displayName } });
@@ -711,7 +711,8 @@ export async function postMessage(viewer: IUser, space: Space, access: SpaceAcce
   notify(targets, {
     title: `${viewer.displayName} in ${where}`,
     body: said,
-    data: href ? { href } : { type: "channel", communitySlug: space.community.slug, channelSlug: channel.slug, ...(space.sub ? { subSlug: space.sub.slug } : {}) },
+    // tapping it opens this very message
+    data: href ? { href } : channel.parentChannelId ? { href: `/communities/${space.community.slug}?th=${channel.slug}&m=${sid(doc._id)}` } : { type: "channel", communitySlug: space.community.slug, channelSlug: channel.slug, messageId: sid(doc._id), ...(space.sub ? { subSlug: space.sub.slug } : {}) },
   }, { actorId: viewer._id, category: "mentions", groupKey: `chat:${sid(channel._id)}`, many: (n) => `${n} mentions and replies in ${where}`, ref: `channel:${sid(channel._id)}` });
   if (post && href) await onPostReply(viewer, post, href, said, targets);
   const out = (await toMessages([doc.toObject()], viewer, access, space))[0];

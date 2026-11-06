@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { errorMessage } from "@/app/ApiCore";
 import { TopicService } from "@/app/services/TopicService";
@@ -132,6 +133,8 @@ export function TopicDetailProvider({ slug, topicId, children }: { slug: string;
  * `onClose` puts the board's sidebar back; `bare` leaves the close button to the drawer it sits in.
  */
 export function TopicSide({ onClose, bare }: { onClose: () => void; bare?: boolean }) {
+  // from a notification: ?m=<message id> opens on that message
+  const focus = useSearchParams().get("m");
   const { preview: t, data: loaded, error, status, reload, slug, setTopic, topicId } = useDetail();
   // the post and its replies appear together: until both are in, one placeholder (no half-drawn post first).
   // A post loaded ahead (hovered in the list) is in the cache: use it straight away rather than a frame later.
@@ -185,7 +188,7 @@ export function TopicSide({ onClose, bare }: { onClose: () => void; bare?: boole
           <PostSkeleton />
         </div>
       ) : (
-        <ChatPane
+        <ChatPane focus={focus}
           key={data.thread.id}
           space={{ slug }}
           channel={data.thread}

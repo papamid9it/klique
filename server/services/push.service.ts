@@ -54,7 +54,7 @@ export function urlFor(data: Record<string, string>): string {
     case "group":
       return `/communities/${data.communitySlug}?g=${data.subSlug}`;
     case "channel":
-      return `/communities/${data.communitySlug}?${new URLSearchParams({ ...(data.subSlug ? { g: data.subSlug } : {}), c: data.channelSlug })}`;
+      return `/communities/${data.communitySlug}?${new URLSearchParams({ ...(data.subSlug ? { g: data.subSlug } : {}), c: data.channelSlug, ...(data.messageId ? { m: data.messageId } : {}) })}`;
     default:
       return "/";
   }

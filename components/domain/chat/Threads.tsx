@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 
 import ApiClient, { errorMessage } from "@/app/ApiCore";
 import { useToast } from "@/components/providers/ToastProvider";
@@ -26,6 +27,8 @@ const api = new ApiClient();
  * (7 quiet days) open again with a reply.
  */
 export function ThreadSide({ slug, threadSlug, isMember, gate, onClose }: { slug: string; threadSlug: string; isMember: boolean; gate: React.ReactNode; onClose: () => void }) {
+  // from a notification: ?m=<message id> opens on that message
+  const focus = useSearchParams().get("m");
   const draft = threadDraft(threadSlug);
   const [made, setMade] = useState<ChannelDTO | null>(null);
   // a thread that already exists: the last copy shows straight away (useApi's cache), then it refreshes
@@ -56,7 +59,7 @@ export function ThreadSide({ slug, threadSlug, isMember, gate, onClose }: { slug
       </header>
       <div className="flex min-h-0 flex-1 flex-col">
         {thread ? (
-          <ChatPane key={thread.slug} space={{ slug }} channel={thread} isMember={isMember} gate={gate} onRead={() => undefined} placeholder="Reply in the thread" />
+          <ChatPane focus={focus} key={thread.slug} space={{ slug }} channel={thread} isMember={isMember} gate={gate} onRead={() => undefined} placeholder="Reply in the thread" />
         ) : draft ? (
           <DraftThread
             draft={draft}

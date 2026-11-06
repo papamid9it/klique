@@ -10,14 +10,14 @@ import { toCommunityCards } from "../serializers";
 import { kliqueId } from "./klique-id";
 
 /**
- * Joining Klique, step by step (/welcome): pick at least 3 categories, then join at least 2 communities from
- * suggestions in those categories (your city first, then your country, then anywhere). Klique itself is
- * automatic and doesn't count. If there aren't 2 public communities left to join, they can finish anyway.
- * Until it's done the app sends them back here, existing accounts included (once).
+ * Joining Klique, step by step (/welcome): pick at least 3 categories, then see communities suggested from them (your
+ * city first, then your country, then anywhere). Joining any is up to them: Klique itself is automatic, and early on
+ * they may not find one they like. Until it's done the app sends them back here, existing accounts included (once).
  */
 
 export const MIN_INTERESTS = LIMITS.minInterests;
-export const MIN_COMMUNITIES = 2;
+/** Fewer than this in their categories: show other public communities too. */
+const WIDEN_BELOW = 4;
 const SUGGEST = 12;
 
 /** Top-level communities they're in, Klique aside. */
@@ -48,23 +48,21 @@ export async function onboardingState(viewer: IUser): Promise<OnboardingDTO> {
   let picks = matching.sort(byPlace(viewer)).slice(0, SUGGEST);
   let widened = false;
   // too few in their categories: widen to any public community
-  if (picks.length < MIN_COMMUNITIES + 2) {
+  if (picks.length < WIDEN_BELOW) {
     const more = await Community.find({ ...open, _id: { $nin: [...joined, ...(k ? [k] : []), ...banned, ...picks.map((c) => c._id)] } }).limit(200).lean<ICommunity[]>();
-    if (more.length) widened = picks.length < MIN_COMMUNITIES;
+    if (more.length) widened = picks.length < 2;
     picks = [...picks, ...more.sort(byPlace(viewer))].slice(0, SUGGEST);
   }
   // also show the ones they've already joined (so the count makes sense), first
   const already = joined.length ? await Community.find({ _id: { $in: joined } }).lean<ICommunity[]>() : [];
   const cards: CommunityCardDTO[] = await toCommunityCards([...already, ...picks], viewer);
 
-  // can they finish? enough joined, or nothing (enough) left to join
-  const joinable = await Community.countDocuments(open);
-  const needed = Math.min(MIN_COMMUNITIES, joined.length + joinable);
   return {
     interests,
     minInterests: MIN_INTERESTS,
     joined: joined.length,
-    needed,
+    // joining is optional (kept for apps that still read it)
+    needed: 0,
     widened,
     suggestions: cards,
     done: !!viewer.onboardedAt,
@@ -81,7 +79,6 @@ export async function setOnboardingInterests(viewer: IUser, interests: string[])
 export async function completeOnboarding(viewer: IUser): Promise<OnboardingDTO> {
   if ((viewer.interests ?? []).length < MIN_INTERESTS) throw badRequest(`Pick at least ${MIN_INTERESTS} categories first.`);
   const state = await onboardingState(viewer);
-  if (state.joined < state.needed) throw badRequest(`Join at least ${state.needed} ${state.needed === 1 ? "community" : "communities"} to continue.`);
   const now = new Date();
   await User.updateOne({ _id: viewer._id, onboardedAt: null }, { $set: { onboardedAt: now } });
   return { ...state, done: true };

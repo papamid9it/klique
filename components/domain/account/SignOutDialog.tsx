@@ -48,10 +48,10 @@ export function SignOutHost() {
       description={ask?.everywhere ? "This ends every session, on all your phones and computers. You'll need to sign in again on each." : "You can sign back in any time."}
     >
       <div className="grid grid-cols-2 gap-3 pt-1">
-        <Button size="lg" onClick={() => setAsk(null)} disabled={busy}>
+        <Button size="lg" onClick={() => setAsk(null)} disabled={busy} className="h-14 border-2 border-ink text-[16px]">
           Cancel
         </Button>
-        <Button size="lg" variant="danger" onClick={() => void go()} loading={busy}>
+        <Button size="lg" variant="danger" onClick={() => void go()} loading={busy} className="h-14 border-2 border-[#8a1f16] !bg-[#a3261b] text-[16px] !text-white hover:!bg-[#8a1f16]">
           Sign out
         </Button>
       </div>

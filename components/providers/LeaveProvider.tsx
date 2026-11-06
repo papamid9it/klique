@@ -155,8 +155,8 @@ function LeaveBody({ pending, always, onAlways, onCancel, onContinue }: { pendin
         <span>Don&apos;t ask again for this site on this device</span>
       </label>
       <div className="grid grid-cols-2 gap-3 pt-1">
-        <Button size="lg" onClick={onCancel}>Stay here</Button>
-        <Button size="lg" variant="primary" onClick={onContinue} autoFocus>
+        <Button size="lg" onClick={onCancel} className="h-14 border-2 border-ink text-[16px]">Stay here</Button>
+        <Button size="lg" variant="primary" onClick={onContinue} autoFocus className="h-14 border-2 border-ink text-[16px]">
           Open site <Icon name="arrow-up-right" size={15} />
         </Button>
       </div>
