@@ -45,7 +45,6 @@ export function useAccountMenu(): MenuEntry[] | null {
     { type: "sep" },
     { label: "Your profile", icon: "user", onSelect: () => card.openFull(user.handle) },
     { label: "My events", icon: "calendar", onSelect: () => router.push("/saved") },
-    { label: "My kliques", icon: "users", onSelect: () => router.push("/kliques?tab=joined") },
     { label: "Advertise", icon: "megaphone", onSelect: () => router.push("/ads") },
     { label: "Plan & points", icon: "coin", onSelect: () => router.push("/settings?tab=plan") },
     { label: "Settings", icon: "sliders", onSelect: () => router.push("/settings") },
