@@ -139,6 +139,8 @@ export interface ProfileView {
   createdCommunities: CommunityCardDTO[];
   /** everyone across the communities they created (null: none, or they hide it). Klique's own follower count */
   communityReach: number | null;
+  /** at least one of those communities is verified (shown with the total, even when the list is hidden) */
+  communityReachVerified: boolean;
   hostedEvents: EventDTO[];
   /** upcoming RSVPs — empty unless attendance is public or isSelf */
   upcomingEvents: EventDTO[];

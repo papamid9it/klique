@@ -175,7 +175,7 @@ export function PostCard({ post: p, onChange, onRemoved, onOpenComments, showCom
       {(p.media.length > 0 || style === "card") && (
         <div className="mt-3">
           <ExplicitCover explicit={p.explicit}>
-            {p.media.length > 0 ? <FeedMedia media={p.media} onOpen={p.explicit || !user ? onOpenComments : () => router.push(`/reels?start=${p.id}`)} onDoubleTap={() => p.myVote !== 1 && void vote(1)} /> : <TextCard post={p} onOpen={onOpenComments} onDoubleTap={() => p.myVote !== 1 && void vote(1)} />}
+            {p.media.length > 0 ? <FeedMedia media={p.media} onOpen={p.explicit || !user ? onOpenComments : () => router.push(`/reels?start=${p.id}&from=${Date.now()}`)} onDoubleTap={() => p.myVote !== 1 && void vote(1)} /> : <TextCard post={p} onOpen={onOpenComments} onDoubleTap={() => p.myVote !== 1 && void vote(1)} />}
           </ExplicitCover>
         </div>
       )}

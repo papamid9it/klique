@@ -27,6 +27,13 @@ function useLoadCategories() {
 
 const scrollsAlong = (value: string) => value === "auto" || value === "scroll";
 
+
+
+/** The Animations setting, marked on <html data-motion> from the first load (the CSS motion rules read it). */
+function useMotionMarker() {
+  useEffect(() => void isReducedMotion(), []);
+}
+
 /** The innermost thing under this element that can really scroll; the page itself when nothing closer can. */
 function scrollerOf(start: Element | null): Element | null {
   const root = document.documentElement;
@@ -83,11 +90,6 @@ function useScrollbarMarker() {
       show(null);
     };
   }, []);
-}
-
-/** The Animations setting, marked on <html data-motion> from the first load (the CSS motion rules read it). */
-function useMotionMarker() {
-  useEffect(() => void isReducedMotion(), []);
 }
 
 /** Data saver on: say so on <html> (data-saver="on"). */

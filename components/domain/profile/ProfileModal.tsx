@@ -169,12 +169,12 @@ function ProfileBody({ handle, onClose, onOpenPerson, tryOn }: { handle: string;
             <ProfileActions view={view} layout="stack" onFriendship={(friendship) => setData((d) => (d ? { ...d, friendship } : d))} onReload={() => void reload()} onNavigate={onClose} />
           </div>
 
-          {view.communityReach !== null && view.createdCommunities.length > 0 && (
-            <button type="button" onClick={() => setTab("created")} aria-label={`${view.communityReach} people in communities ${view.isSelf ? "you" : "they"} created`} className="mt-4 flex w-full items-center gap-3 rounded-card border border-line bg-surface p-3 text-left transition hover:bg-raised">
+          {view.communityReach !== null && (
+            <button type="button" disabled={!created.length} onClick={() => setTab("created")} aria-label={`${view.communityReach} members in communities ${view.isSelf ? "you" : "they"} created`} className="mt-4 flex w-full items-center gap-3 rounded-card border border-line bg-surface p-3 text-left transition enabled:hover:bg-raised">
               <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-raised text-accent-text"><Icon name="users" size={18} /></span>
-              <span className="min-w-0">
-                <span className="flex items-center gap-1.5 text-lg font-bold tabular-nums">{compactCount(view.communityReach)}{view.createdCommunities.some((c) => c.verified) && <VerifiedCheck on size={15} />}</span>
-                <span className="block text-xs text-ink-muted">in {view.createdCommunities.length === 1 ? "the community" : `${view.createdCommunities.length} communities`} {view.isSelf ? "you" : "they"} created</span>
+              <span className="flex min-w-0 items-center gap-1.5 text-lg font-bold">
+                <span className="tabular-nums">{compactCount(view.communityReach)}</span> {view.communityReach === 1 ? "member" : "members"}
+                {view.communityReachVerified && <VerifiedCheck on size={16} />}
               </span>
             </button>
           )}

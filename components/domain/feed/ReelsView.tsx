@@ -46,7 +46,28 @@ function Reel({ post: p, active, muted, onMuted, onChange, onComments, onReport 
   const [at, setAt] = useState(0);
   const [more, setMore] = useState(false);
   const [paused, setPaused] = useState(false);
+  const [hearts, setHearts] = useState(0);
   const item = p.media[Math.min(at, p.media.length - 1)];
+  // two taps: love, with a heart every time (it never takes love back)
+  const oneTap = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (oneTap.current) clearTimeout(oneTap.current);
+  }, []);
+  const tapped = () => {
+    if (oneTap.current) {
+      clearTimeout(oneTap.current);
+      oneTap.current = null;
+      setHearts((n) => n + 1);
+      if (p.myVote !== 1) void vote(1);
+      return;
+    }
+    // one tap: play or pause, once it's clear a second isn't coming
+    oneTap.current = setTimeout(() => {
+      oneTap.current = null;
+      const v = video.current;
+      if (v) void (v.paused ? v.play() : v.pause());
+    }, 280);
+  };
   const backdrop = item.kind === "video" ? (item.poster ?? videoPoster(item.url)) : item.url;
 
   useEffect(() => {
@@ -57,6 +78,8 @@ function Reel({ post: p, active, muted, onMuted, onChange, onComments, onReport 
       v.pause();
       v.currentTime = 0;
     }
+    // leaving the page mustn't leave it playing out of sight
+    return () => v.pause();
   }, [active, item.url]);
 
   const share = () => {
@@ -82,13 +105,18 @@ function Reel({ post: p, active, muted, onMuted, onChange, onComments, onReport 
               preload={active ? "auto" : "none"}
               onPlay={() => setPaused(false)}
               onPause={() => setPaused(true)}
-              onClick={(e) => (e.currentTarget.paused ? void e.currentTarget.play() : e.currentTarget.pause())}
-              onDoubleClick={() => p.myVote !== 1 && void vote(1)}
-              className="max-h-full max-w-full cursor-pointer object-contain sm:max-h-[86dvh]"
+              className="max-h-full max-w-full object-contain sm:max-h-[86dvh]"
             />
           ) : (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={cdn(item.url, { w: 1200 })} alt="" loading={active ? "eager" : "lazy"} onDoubleClick={() => p.myVote !== 1 && void vote(1)} className="max-h-full max-w-full object-contain sm:max-h-[86dvh]" />
+            <img src={cdn(item.url, { w: 1200 })} alt="" loading={active ? "eager" : "lazy"} className="max-h-full max-w-full object-contain sm:max-h-[86dvh]" />
+          )}
+          {/* every tap on the picture lands here, the caption's strip included */}
+          <button type="button" aria-label={item.kind === "video" ? "Play or pause. Two taps to love" : "Two taps to love"} onClick={tapped} className="absolute inset-0 cursor-pointer touch-manipulation" />
+          {hearts > 0 && (
+            <span key={hearts} className="vote-burst pointer-events-none absolute inset-0 m-auto inline-flex size-24 items-center justify-center text-[#ff3040] drop-shadow-[0_4px_18px_rgba(0,0,0,.45)]" aria-hidden="true">
+              <Icon name="heart" size={88} className="fill-current" />
+            </span>
           )}
           {item.kind === "video" && paused && active && (
             <span className="pointer-events-none absolute inset-0 flex items-center justify-center text-white/90">
@@ -106,8 +134,8 @@ function Reel({ post: p, active, muted, onMuted, onChange, onComments, onReport 
               <Icon name={muted ? "volumeoff" : "volume"} size={17} />
             </button>
           )}
-          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 to-transparent px-4 pt-14 pr-16 pb-4 text-white sm:pr-4">
-            <div className="flex items-center gap-2">
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 to-transparent px-4 pt-14 pr-16 pb-4 text-white sm:pr-4">
+            <div className="pointer-events-auto flex w-fit max-w-full items-center gap-2">
               <ProfileTrigger handle={p.author.handle} className="flex min-w-0 items-center gap-2 text-left">
                 <Avatar name={p.author.displayName} src={p.author.avatarUrl} size={34} />
                 <span className="truncate text-sm font-semibold"><UserName name={p.author.displayName} effect={p.author.nameEffect} /></span>
@@ -116,7 +144,7 @@ function Reel({ post: p, active, muted, onMuted, onChange, onComments, onReport 
               <Link href={`/communities/${p.community.slug}?view=posts`} className="truncate text-[13px] font-medium text-white/85 hover:underline">{p.community.name}</Link>
             </div>
             {p.caption && (
-              <button type="button" onClick={() => setMore((m) => !m)} className={`mt-1.5 block w-full text-left text-sm leading-snug [&_a]:text-white [&_a]:underline ${more ? "max-h-40 overflow-y-auto" : "line-clamp-2"}`}>
+              <button type="button" onClick={() => setMore((m) => !m)} className={`pointer-events-auto mt-1.5 block w-fit max-w-full text-left text-sm leading-snug [&_a]:text-white [&_a]:underline ${more ? "max-h-40 overflow-y-auto" : "line-clamp-2"}`}>
                 <RichText text={p.caption} refs={p.refs} formatted />
               </button>
             )}
@@ -147,9 +175,14 @@ function Between({ label, children }: { label: string; children: React.ReactNode
 
 /** Pictures and videos, full screen, one after another (mostly videos), with an event, a klique or an ad now and then. Scroll, the arrows or the arrow keys move on. */
 export function ReelsView() {
+  const sp = useSearchParams();
+  // the app keeps pages it has shown: each tap on a post starts again, from that post
+  return <Reels key={`${sp.get("start")}:${sp.get("from")}`} start={sp.get("start") ?? undefined} />;
+}
+
+function Reels({ start }: { start?: string }) {
   const router = useRouter();
   const toast = useToast();
-  const start = useSearchParams().get("start") ?? undefined;
   const [items, setItems] = useState<FeedPostDTO[]>([]);
   const [loading, setLoading] = useState(true);
   const [active, setActive] = useState(0);

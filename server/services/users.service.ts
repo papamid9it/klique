@@ -135,6 +135,7 @@ export async function getProfile(viewer: IUser | null, handle: string): Promise<
       communities: [],
       createdCommunities: [],
       communityReach: null,
+      communityReachVerified: false,
       hostedEvents: [],
       upcomingEvents: [],
       attendanceHidden: false,
@@ -158,7 +159,10 @@ export async function getProfile(viewer: IUser | null, handle: string): Promise<
   const communities = cards.filter((c) => (c.privacy === "public" || c.viewer.isMember) && (!c.adult || self));
   const ownedIds = new Set(communityRows.filter((c) => sid(c.ownerId) === sid(user._id)).map((c) => sid(c._id)));
   // theirs to show or hide; they always see their own
-  const createdCommunities = isSelf || user.createdCommunitiesPublic !== false ? communities.filter((c) => ownedIds.has(c.id)) : [];
+  const owned = communities.filter((c) => ownedIds.has(c.id));
+  const createdCommunities = isSelf || user.createdCommunitiesPublic !== false ? owned : [];
+  // the total has its own switch, so someone can show "31 members" without listing the communities
+  const reachShown = owned.length > 0 && (isSelf || user.communityReachPublic !== false);
 
   const attendanceShown = isSelf || user.attendancePublic;
   const [hostedEvents, upcomingEvents, goingCount] = await Promise.all([
@@ -174,7 +178,8 @@ export async function getProfile(viewer: IUser | null, handle: string): Promise<
     communities,
     createdCommunities,
     // only what this viewer may see counts, so a hidden private community's size never shows through
-    communityReach: createdCommunities.length && (isSelf || user.communityReachPublic !== false) ? createdCommunities.reduce((sum, c) => sum + (c.memberCount ?? 0), 0) : null,
+    communityReach: reachShown ? owned.reduce((sum, c) => sum + (c.memberCount ?? 0), 0) : null,
+    communityReachVerified: reachShown && owned.some((c) => c.verified),
     hostedEvents,
     upcomingEvents,
     attendanceHidden: !attendanceShown,
