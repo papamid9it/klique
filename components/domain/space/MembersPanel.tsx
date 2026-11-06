@@ -4,12 +4,13 @@ import { useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
 import { SpaceService } from "@/app/services/SpaceService";
 import { PersonRow } from "@/components/domain/PersonRow";
-import { OverflowMenu } from "@/components/domain/OverflowMenu";
 import { ReportDialog } from "@/components/domain/ReportDialog";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import { Button, Spinner } from "@/components/ui/Button";
-import { Icon } from "@/components/ui/Icon";
+import { Avatar } from "@/components/ui/Avatar";
+import { Icon, type IconName } from "@/components/ui/Icon";
+import { ProfileTrigger } from "@/components/providers/ProfileCardProvider";
 import { RowSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { useDebounced, useNow, usePaged } from "@/lib/hooks/useApi";
@@ -19,6 +20,8 @@ import { AddMembersModal } from "./AddMembersModal";
 import { LIMITS } from "@/lib/constants";
 import { EntryAnswers } from "./EntryQuestions";
 import { Modal } from "@/components/ui/Modal";
+import { GroupModModal } from "./GroupModModal";
+import { PostBanModal } from "./PostBanModal";
 import { TimeoutModal, timeLeft } from "./TimeoutModal";
 import { MemberRolesModal, RoleChip } from "./RolesPanel";
 
@@ -41,13 +44,40 @@ export function MembersPanel({ slug, subSlug, group }: { slug: string; subSlug?:
   const { items, loading, loadingMore, error, hasMore, loadMore, reload, setItems } = usePaged<MemberDTO>((p) => SpaceService.members(slug, subSlug, p, dq || undefined), [slug, subSlug, dq], { keepPrevious: true, key: `members:${slug}:${subSlug ?? ""}:${dq}` });
   const [removing, setRemoving] = useState<{ m: MemberDTO; ban: boolean } | null>(null);
   const [reporting, setReporting] = useState<MemberDTO | null>(null);
-  const [answersOf, setAnswersOf] = useState<MemberDTO | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [handingOver, setHandingOver] = useState<MemberDTO | null>(null);
   const [adding, setAdding] = useState(false);
   const now = useNow(30_000);
   const [editingRoles, setEditingRoles] = useState<MemberDTO | null>(null);
+  const [namingMod, setNamingMod] = useState<MemberDTO | null>(null);
   const [timingOut, setTimingOut] = useState<{ m: MemberDTO; lifting: boolean } | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
+  // "are you sure?" for what changes someone's standing with one click
+  const [asking, setAsking] = useState<{ title: string; description: string; label: string; danger?: boolean; run: () => Promise<void> } | null>(null);
+  const [postBanning, setPostBanning] = useState<MemberDTO | null>(null);
+  const opened = openId ? (items.find((x) => x.user.id === openId) ?? null) : null;
+  // an option that opens its own window: this one closes first
+  const swap = (next: () => void) => {
+    setOpenId(null);
+    next();
+  };
+  const option = (label: string, icon: IconName, onClick: () => void, busy = false, danger = false) => (
+    <button type="button" key={label} disabled={busy} onClick={onClick} className={`flex h-10 w-full items-center gap-2.5 rounded-control px-3 text-left text-sm font-medium hover:bg-raised disabled:opacity-60 ${danger ? "text-danger" : ""}`}>
+      {busy ? <Spinner size={15} /> : <Icon name={icon} size={15} />} {label}
+    </button>
+  );
+  async function liftPostBan(m: MemberDTO) {
+    setBusyId(m.user.id);
+    try {
+      await SpaceService.setPostBan(slug, m.user.id, 0);
+      setItems((prev) => prev.map((x) => (x.user.id === m.user.id ? { ...x, postBan: null } : x)));
+      toast(`${m.user.displayName} can write in Posts and Boards again`, "success");
+    } catch (e) {
+      toast(errorMessage(e), "error");
+    } finally {
+      setBusyId(null);
+    }
+  }
   const iOwn = !!user && items.some((x) => x.user.id === user.id && x.role === "owner");
 
   async function changeRole(m: MemberDTO, role: Exclude<Role, "owner">) {
@@ -108,92 +138,77 @@ export function MembersPanel({ slug, subSlug, group }: { slug: string; subSlug?:
     <div className="space-y-2">
       {addBar}
       {search}
-      {answersOf && (
-        <Modal open onClose={() => setAnswersOf(null)} title={`${answersOf.user.displayName}'s answers`} description="What they answered to the entry questions when they joined." size="sm">
-          <EntryAnswers answers={answersOf.answers} />
-        </Modal>
-      )}
       {items.map((m) => (
         <PersonRow
           key={m.user.id}
           user={m.user}
           badge={m.roleBadge ? { icon: m.roleBadge.icon, label: m.roleBadge.name } : null}
+          onOpen={() => setOpenId(m.user.id)}
           action={
             <div className="flex flex-wrap items-center justify-end gap-1.5">
-              {/* what they answered to the entry questions (owners and admins see this) */}
-              {m.answers?.length ? (
-                <Button size="sm" variant="ghost" onClick={() => setAnswersOf(m)}>
-                  Answers
-                </Button>
-              ) : null}
               <RoleBadge role={m.role} />
+              {m.title ? <span className="inline-flex items-center rounded-full border border-line px-2 py-0.5 text-[11px] font-semibold text-ink">{m.title}</span> : null}
               {m.roles?.filter((r) => r.name !== "Admin").slice(0, 3).map((r) => <RoleChip key={r.id} role={r} className="hidden sm:inline-flex" />)}
               {isTimedOut(m, now) && (
                 <span className="inline-flex items-center gap-1 rounded-full border border-danger/40 px-2 py-0.5 text-[11px] font-semibold text-danger" title={m.timeoutReason ?? undefined}>
                   <Icon name="clock" size={11} /> Timed out · {timeLeft(m.timedOutUntil!, now!)}
                 </span>
               )}
-              {m.canChangeRole && m.role !== "owner" && (
-                <select
-                  aria-label={`Role for ${m.user.displayName}`}
-                  value={m.role}
-                  disabled={busyId === m.user.id}
-                  onChange={(e) => void changeRole(m, e.target.value as "admin" | "member")}
-                  className="h-8 rounded-control border border-line bg-raised px-2 text-[13px] text-ink"
-                >
-                  <option value="member">Member</option>
-                  <option value="admin">Admin</option>
-                </select>
+              {m.postBan && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-danger/40 px-2 py-0.5 text-[11px] font-semibold text-danger" title={m.postBan.reason ?? undefined}>
+                  <Icon name="ban" size={11} /> No Posts or Boards
+                </span>
               )}
-              {busyId === m.user.id && <Spinner size={14} />}
-              {/* phones: these fold into ⋯ so each person stays one row */}
-              <span className="hidden sm:contents">
-                {iOwn && m.user.id !== user?.id && (
-                  <Button size="sm" variant="ghost" onClick={() => setHandingOver(m)}>
-                    Make owner
-                  </Button>
-                )}
-                {m.canEditRoles && (
-                  <Button size="sm" variant="ghost" onClick={() => setEditingRoles(m)}>
-                    Roles
-                  </Button>
-                )}
-                {m.canTimeout && (
-                  <Button size="sm" variant="ghost" onClick={() => setTimingOut({ m, lifting: isTimedOut(m, now) })}>
-                    {isTimedOut(m, now) ? "Lift timeout" : "Time out"}
-                  </Button>
-                )}
-                {m.canRemove && (
-                  <>
-                    <Button size="sm" variant="ghost" onClick={() => setRemoving({ m, ban: false })}>
-                      Remove
-                    </Button>
-                    <Button size="sm" variant="danger" onClick={() => setRemoving({ m, ban: true })}>
-                      Ban
-                    </Button>
-                  </>
-                )}
-                {user && m.user.id !== user.id && (
-                  <Button size="sm" variant="ghost" onClick={() => setReporting(m)} aria-label={`Report ${m.user.displayName}`}>
-                    Report
-                  </Button>
-                )}
-              </span>
-              <OverflowMenu
-                className="sm:hidden"
-                label={`Options for ${m.user.displayName}`}
-                items={[
-                  ...(iOwn && m.user.id !== user?.id ? [{ label: "Make owner", icon: "shield" as const, onSelect: () => setHandingOver(m) }] : []),
-                  ...(m.canEditRoles ? [{ label: "Roles", icon: "shield" as const, onSelect: () => setEditingRoles(m) }] : []),
-                  ...(m.canTimeout ? [{ label: isTimedOut(m, now) ? "Lift timeout" : "Time out", icon: "clock" as const, onSelect: () => setTimingOut({ m, lifting: isTimedOut(m, now) }) }] : []),
-                  ...(m.canRemove ? [{ label: "Remove", icon: "logout" as const, onSelect: () => setRemoving({ m, ban: false }) }, { label: "Ban", icon: "ban" as const, danger: true, onSelect: () => setRemoving({ m, ban: true }) }] : []),
-                  ...(user && m.user.id !== user.id ? [{ label: "Report", icon: "flag" as const, onSelect: () => setReporting(m) }] : []),
-                ]}
-              />
+              <button type="button" onClick={() => setOpenId(m.user.id)} aria-label={`Open ${m.user.displayName}`} className="inline-flex size-8 items-center justify-center rounded-full text-ink-muted hover:bg-raised hover:text-ink">
+                <Icon name="chevron-right" size={15} />
+              </button>
             </div>
           }
         />
       ))}
+      {opened && (
+        <Modal open onClose={() => setOpenId(null)} title={opened.user.displayName} description={`@${opened.user.handle} · Joined ${new Date(opened.joinedAt).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}`} size="sm">
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <Avatar name={opened.user.displayName} src={opened.user.avatarUrl} frame={opened.user.avatarFrame} size={56} />
+              <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                <RoleBadge role={opened.role} />
+                {opened.title ? <span className="rounded-full border border-line px-2 py-0.5 text-[11px] font-semibold text-ink">{opened.title}</span> : null}
+                {opened.roles?.filter((r) => r.name !== "Admin").map((r) => <RoleChip key={r.id} role={r} />)}
+              </div>
+            </div>
+            {isTimedOut(opened, now) && <p className="rounded-control border border-danger/40 px-3 py-2 text-sm text-ink">Timed out · {timeLeft(opened.timedOutUntil!, now!)}{opened.timeoutReason ? `. ${opened.timeoutReason}` : ""}</p>}
+            {opened.postBan && <p className="rounded-control border border-danger/40 px-3 py-2 text-sm text-ink">Can&apos;t write in Posts or on Boards{opened.postBan.until && now ? ` · ${timeLeft(opened.postBan.until, now)}` : " until it's lifted"}{opened.postBan.reason ? `. ${opened.postBan.reason}` : ""}. They can still chat.</p>}
+            {opened.answers?.length ? <EntryAnswers answers={opened.answers} /> : null}
+            <div className="space-y-1.5">
+              <ProfileTrigger handle={opened.user.handle} className="flex h-10 w-full items-center gap-2.5 rounded-control px-3 text-left text-sm font-medium hover:bg-raised">
+                <Icon name="user" size={15} /> View profile
+              </ProfileTrigger>
+              {opened.canChangeRole && opened.role !== "owner" && option(opened.role === "admin" ? "Make member" : "Make admin", "shield", () => swap(() => setAsking(opened.role === "admin" ? { title: `Make ${opened.user.displayName} a member?`, description: "They'll stop being an admin here.", label: "Make member", run: () => changeRole(opened, "member") } : { title: `Make ${opened.user.displayName} an admin?`, description: "They'll be able to manage members, channels and events here.", label: "Make admin", danger: false, run: () => changeRole(opened, "admin") })), busyId === opened.user.id)}
+              {iOwn && opened.user.id !== user?.id && option("Make owner", "shield", () => swap(() => setHandingOver(opened)))}
+              {opened.canEditRoles && option("Roles", "shield", () => swap(() => setEditingRoles(opened)))}
+              {opened.canEditMod && option("Title and powers", "shield", () => swap(() => setNamingMod(opened)))}
+              {opened.canTimeout && option(isTimedOut(opened, now) ? "Lift timeout" : "Time out", "clock", () => swap(() => setTimingOut({ m: opened, lifting: isTimedOut(opened, now) })))}
+              {opened.canPostBan && (opened.postBan ? option("Let them write in Posts and Boards", "check", () => swap(() => setAsking({ title: `Let ${opened.user.displayName} write again?`, description: "They'll be able to post and comment in Posts and on Boards.", label: "Let them write", danger: false, run: () => liftPostBan(opened) })), busyId === opened.user.id) : option("Stop from Posts and Boards", "ban", () => swap(() => setPostBanning(opened))))}
+              {opened.canRemove && option("Remove", "logout", () => swap(() => setRemoving({ m: opened, ban: false })))}
+              {opened.canRemove && option("Ban", "ban", () => swap(() => setRemoving({ m: opened, ban: true })), false, true)}
+              {user && opened.user.id !== user.id && option("Report", "flag", () => swap(() => setReporting(opened)))}
+            </div>
+          </div>
+        </Modal>
+      )}
+      {postBanning && (
+        <PostBanModal
+          slug={slug}
+          user={postBanning.user}
+          onClose={() => setPostBanning(null)}
+          onDone={(postBan) => {
+            const id = postBanning.user.id;
+            setItems((prev) => prev.map((x) => (x.user.id === id ? { ...x, postBan } : x)));
+            setPostBanning(null);
+          }}
+        />
+      )}
       {hasMore && (
         <div className="flex justify-center pt-2">
           <Button onClick={loadMore} loading={loadingMore}>
@@ -202,6 +217,19 @@ export function MembersPanel({ slug, subSlug, group }: { slug: string; subSlug?:
         </div>
       )}
 
+      {namingMod && subSlug && (
+        <GroupModModal
+          slug={slug}
+          subSlug={subSlug}
+          member={namingMod}
+          onClose={() => setNamingMod(null)}
+          onSaved={(title, powers) => {
+            const id = namingMod.user.id;
+            setItems((prev) => prev.map((x) => (x.user.id === id ? { ...x, title, powers } : x)));
+            setNamingMod(null);
+          }}
+        />
+      )}
       {editingRoles && (
         <MemberRolesModal
           slug={slug}
@@ -230,6 +258,10 @@ export function MembersPanel({ slug, subSlug, group }: { slug: string; subSlug?:
         />
       )}
 
+      <ConfirmModal open={!!asking} onClose={() => setAsking(null)} title={asking?.title ?? ""} description={asking?.description} confirmLabel={asking?.label ?? ""} danger={asking?.danger ?? true} onConfirm={async () => {
+        await asking?.run();
+        setAsking(null);
+      }} />
       <ConfirmModal
         open={!!handingOver}
         onClose={() => setHandingOver(null)}

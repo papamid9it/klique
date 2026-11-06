@@ -5,6 +5,7 @@ import { useAuth } from "@/components/providers/AuthProvider";
 import { useProfileCard } from "@/components/providers/ProfileCardProvider";
 import { Dropdown, type MenuEntry } from "@/components/ui/Dropdown";
 import { useSetStatus } from "@/components/domain/profile/StatusPicker";
+import { askSignOut } from "@/components/domain/account/SignOutDialog";
 import { StatusIcon } from "@/components/domain/profile/ProfileParts";
 import { PRESENCES } from "@/lib/constants";
 import { useInDesktopApp } from "@/lib/hooks/useInDesktopApp";
@@ -24,7 +25,7 @@ export function UserMenu({ trigger, align = "left" }: { trigger: Parameters<type
 /** The account menu's items, shared by the dropdown (desktop) and the "Me" sheet (phones). Null when signed out. */
 export function useAccountMenu(): MenuEntry[] | null {
   const router = useRouter();
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
   const card = useProfileCard();
   const setStatus = useSetStatus();
   // big screens have Saved in the Communities panel already; phones reach it from here (the Me tab)
@@ -50,7 +51,7 @@ export function useAccountMenu(): MenuEntry[] | null {
     ...(inApp ? [] : ([{ label: "Desktop app", icon: "download", onSelect: () => router.push("/download") }] as MenuEntry[])),
     ...(user.isAdmin ? ([{ label: "Admin console", icon: "shield", onSelect: () => router.push("/admin") }] as MenuEntry[]) : []),
     { type: "sep" },
-    { label: "Sign out", icon: "logout", danger: true, onSelect: () => void signOut() },
+    { label: "Sign out", icon: "logout", danger: true, onSelect: () => askSignOut() },
   ];
 }
 

@@ -25,8 +25,16 @@ export interface IMembership {
   timeoutUntil?: Date | null;
   timeoutReason?: string | null;
   timeoutById?: Types.ObjectId | null;
+  /**
+   * Stopped from writing in the Posts section and on Boards (community rows only), by an owner or admin above them.
+   * They stay in the community and can still chat, react and go to events. until: null = until it's lifted.
+   */
+  postBan?: { until: Date | null; reason?: string; byId?: Types.ObjectId } | null;
   /** custom roles they hold (community rows; models/CommunityRole) */
   roleIds?: Types.ObjectId[];
+  /** a group row: the title its owner gave them ("Moderator", "Treasurer"…), and what it lets them do (lib/roles GROUP_POWERS) */
+  title?: string | null;
+  powers?: string[];
   /** they accepted the community's rules (welcome screen) */
   rulesAcceptedAt?: Date | null;
   /** they've seen the welcome screen */
@@ -49,6 +57,9 @@ const MembershipSchema = new Schema<IMembership>(
     timeoutReason: { type: String, default: null, maxlength: 300 },
     timeoutById: { type: Schema.Types.ObjectId, default: null },
     roleIds: { type: [Schema.Types.ObjectId], default: [] },
+    postBan: { type: { until: Date, reason: String, byId: Schema.Types.ObjectId, _id: false }, default: null },
+    title: { type: String, default: null },
+    powers: { type: [String], default: undefined },
     rulesAcceptedAt: { type: Date, default: null },
     welcomedAt: { type: Date, default: null },
   },

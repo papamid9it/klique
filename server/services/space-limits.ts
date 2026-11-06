@@ -1,5 +1,6 @@
 import "server-only";
 import type { Types } from "mongoose";
+import { LIMITS } from "@/lib/constants";
 import { PLAN_NAMES, type PlanId } from "@/lib/plans";
 import { ApiError } from "../http/errors";
 import { Community } from "../models/Community";
@@ -12,7 +13,7 @@ import { getPlanConfig, planOf } from "./subscriptions.service";
 
 /**
  * Plan limits on communities (lib/plans, Admin → Plans): how many you may own, how many you may be in (Klique HQ
- * doesn't count) and how many groups you may start in one community. Site admins have none.
+ * doesn't count). Site admins have none.
  * Going down a plan never takes anything away: communities, memberships and groups you already have keep working
  * for everyone in them; you just can't create or join more until you're back under your plan's limit.
  */
@@ -45,11 +46,9 @@ export async function assertCanJoinCommunity(viewer: IUser, communityId: Types.O
   if (inNow >= max) throw limit(`You're in ${inNow} communities; ${PLAN_NAMES[plan]} allows ${max}. Leave one to join another.${more(plan)}`);
 }
 
-/** Throws when they've already started as many groups in this community as their plan allows. */
-export async function assertCanCreateGroup(viewer: IUser, communityId: Types.ObjectId) {
-  if (isSiteAdmin(viewer)) return;
-  const { plan, c } = await planAndConfig(viewer);
-  const max = c.groupsCreate[plan];
-  const started = await Subcommunity.countDocuments({ communityId, ownerId: viewer._id });
-  if (started >= max) throw limit(`You've started ${started} ${started === 1 ? "group" : "groups"} here; ${PLAN_NAMES[plan]} allows ${max} per community.${keep}${more(plan)}`);
+/** Throws when the community already has all the groups it can have. */
+export async function assertCanCreateGroup(communityId: Types.ObjectId) {
+  const max = LIMITS.groupsPerCommunity;
+  const have = await Subcommunity.countDocuments({ communityId });
+  if (have >= max) throw new ApiError(409, `A community can have ${max} groups, and this one has ${have}. Delete one to start another.`, { code: "group_limit" });
 }

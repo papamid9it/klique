@@ -1,4 +1,7 @@
 import "server-only";
+import { notify } from "./push.service";
+import { accountRestoredMail, accountSuspendedMail } from "../emails";
+import { queueMail } from "../mailer";
 import { cardWords } from "@/lib/cards";
 import { forgetAdultCommunities } from "../policies/adult";
 import { unhideAfterReview } from "./safety.service";
@@ -393,6 +396,8 @@ export async function setSuspended(admin: IUser, userId: string, on: boolean, re
     on ? { suspendedAt: new Date(), suspendedReason: reason.slice(0, 300), $inc: { tokenVersion: 1 } } : { suspendedAt: null, suspendedReason: "" },
     { returnDocument: "after" },
   ).lean<IUser>();
+  // a suspended person can't open the app, so they hear by email
+  if (on !== !!target.suspendedAt) queueMail((on ? accountSuspendedMail : accountRestoredMail)(u!.email, u!.displayName));
   await logAction(admin, on ? "user.suspend" : "user.restore", "user", u!._id, `@${u!.handle}`, on ? reason : "", `/?profile=${u!.handle}`);
   return toAdminUser(u!);
 }
@@ -474,14 +479,16 @@ export async function adminDeleteEvent(admin: IUser, id: string, note = "") {
 
 /* ---------------------------- communities --------------------------- */
 
-export async function listAdminCommunities(q: { q: string; sort: "members" | "new"; page: number; adult?: "1" | "0" }): Promise<Paginated<AdminCommunityRow>> {
+export async function listAdminCommunities(q: { q: string; sort: "members" | "new"; page: number; adult?: "1" | "0"; verification?: "1" }): Promise<Paginated<AdminCommunityRow>> {
   const size = 25;
   const filter = {
     ...(q.q.trim() ? { $or: [{ name: new RegExp(escapeRegex(q.q.trim()), "i") }, { slug: new RegExp(escapeRegex(q.q.trim()), "i") }] } : {}),
     ...(q.adult === "1" ? { adult: true } : {}),
+    ...(q.verification === "1" ? { "verificationRequest.status": "pending" as const } : {}),
   };
   const rows = await Community.find(filter)
-    .sort(q.sort === "new" ? { createdAt: -1 } : { memberCount: -1, createdAt: -1 })
+    // who's been waiting longest comes first
+    .sort(q.verification === "1" ? { "verificationRequest.requestedAt": 1 } : q.sort === "new" ? { createdAt: -1 } : { memberCount: -1, createdAt: -1 })
     .skip((q.page - 1) * size)
     .limit(size + 1)
     .lean<ICommunity[]>();
@@ -504,6 +511,7 @@ export async function listAdminCommunities(q: { q: string; sort: "members" | "ne
       explicit: !!c.explicit,
       verified: !!c.verified || !!c.official,
       official: !!c.official,
+      verificationPending: c.verificationRequest?.status === "pending",
     })),
     page: q.page,
     hasMore: rows.length > size,
@@ -511,15 +519,24 @@ export async function listAdminCommunities(q: { q: string; sort: "members" | "ne
 }
 
 /** Take a community's 18+ flag off (which also ends explicit content), or just its explicit flag. */
-export async function adminCommunityFlags(admin: IUser, id: string, input: { adult?: false; explicit?: false; verified?: boolean; note?: string }) {
+export async function adminCommunityFlags(admin: IUser, id: string, input: { adult?: false; explicit?: false; verified?: boolean; rejectVerification?: true; note?: string }) {
   const c = await (Types.ObjectId.isValid(id) ? Community.findById(id) : Community.findOne({ slug: id.toLowerCase() })).lean<ICommunity>();
   if (!c) throw notFound("That community is gone.");
   // the "Verified" check: only site admins give or take it (Klique HQ always keeps it)
   if (input.verified !== undefined) {
     if (c.official && !input.verified) throw badRequest("Klique HQ is always verified.");
-    await Community.updateOne({ _id: c._id }, { $set: { verified: input.verified } });
+    await Community.updateOne({ _id: c._id }, { $set: { verified: input.verified, verificationRequest: null } });
     await logAction(admin, input.verified ? "community.verify" : "community.unverify", "community", c._id, c.name, input.note || "", `/communities/${c.slug}`);
+    if (input.verified && !c.verified) notify([c.ownerId], { title: `Congratulations! ${c.name} is verified`, body: "Your community now has the Verified check by its name.", data: { href: `/communities/${c.slug}` } }, { category: "community", ref: `community:${sid(c._id)}` });
     return { verified: input.verified };
+  }
+  // turning an application down: they can fix what's wrong and apply again
+  if (input.rejectVerification) {
+    if (c.verificationRequest?.status !== "pending") throw badRequest("This community isn't waiting to be verified.");
+    await Community.updateOne({ _id: c._id }, { $set: { verificationRequest: { status: "rejected", requestedAt: c.verificationRequest.requestedAt, note: input.note || "" } } });
+    await logAction(admin, "community.verify_reject", "community", c._id, c.name, input.note || "", `/communities/${c.slug}`);
+    notify([c.ownerId], { title: `${c.name} wasn't verified this time`, body: input.note || "You can apply again from your community's settings.", data: { href: `/communities/${c.slug}?settings=overview` } }, { category: "community", ref: `community:${sid(c._id)}` });
+    return { verified: false };
   }
   const set = input.adult === false ? { adult: false, explicit: false } : input.explicit === false ? { explicit: false } : null;
   if (!set) throw badRequest("Nothing to change.");
@@ -542,8 +559,8 @@ export async function adminDeleteCommunity(admin: IUser, id: string, note = "") 
 
 /** The tab counts in the admin menu. */
 export async function adminSummary(): Promise<AdminSummaryDTO> {
-  const [reports, pendingDrafts, pendingAds, pendingPayouts] = await Promise.all([reportCounts(), EventDraft.countDocuments({ status: "pending" }), AdCampaign.countDocuments({ status: "pending" }), Payout.countDocuments({ status: "requested" })]);
-  return { reports, pendingDrafts, pendingAds, pendingPayouts };
+  const [reports, pendingDrafts, pendingAds, pendingPayouts, pendingVerification] = await Promise.all([reportCounts(), EventDraft.countDocuments({ status: "pending" }), AdCampaign.countDocuments({ status: "pending" }), Payout.countDocuments({ status: "requested" }), Community.countDocuments({ "verificationRequest.status": "pending" })]);
+  return { reports, pendingDrafts, pendingAds, pendingPayouts, pendingVerification };
 }
 
 /** an ObjectId for a moment: windows a collection by its _id index (an _id starts with its creation time) */

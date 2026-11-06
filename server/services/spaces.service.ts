@@ -1,5 +1,6 @@
 import { isKlique } from "./klique-id";
-import { audienceRefusal } from "@/lib/constants";
+import { audienceRefusal, LIMITS } from "@/lib/constants";
+import type { GroupPower } from "@/lib/roles";
 import type { Types } from "mongoose";
 import { deleteUploads } from "./media.service";
 import type {
@@ -27,8 +28,11 @@ import {
   assertCanView,
   assertSubVisibleOrHidden,
   canSetRole,
+  GROUP_MOD_RANK,
   gateOf,
+  groupPowersOf,
   pointsShort,
+  postBanOf,
   spaceAccess,
   type Space,
   type SpaceAccess,
@@ -120,24 +124,33 @@ export async function joinSpace(
   access: SpaceAccess,
 ): Promise<JoinResult> {
   if (access.isMember) return { status: "already_member", message: `You're already in ${spaceLabel(space)}.` };
-  // groups are private and nobody joins them: a group's owner or admins add people from the community
-  if (space.sub) throw forbidden("Groups are private. Ask one of the group's admins to add you.");
+  // groups are private: its owner or admins add people from the community, or send them its invite link
+  if (space.sub && !input.inviteCode) throw forbidden("Groups are private. Ask one of the group's admins to add you or send you a link.");
   if (access.banned) throw forbidden("You can't join this one.");
   // before anything else, so an invite link is no way round it either
   const refusal = audienceRefusal(space.community.audience, viewer.gender);
   if (refusal) throw forbidden(refusal);
   // how many communities their plan lets them be in (asking to join counts too)
-  if (!space.community.official) await assertCanJoinCommunity(viewer, space.community._id);
+  const inCommunity = !!space.sub && access.parentRole !== null;
+  if (!space.community.official && !inCommunity) await assertCanJoinCommunity(viewer, space.community._id);
   // the community's entry questions, when it has them on: answered before anything else (invite links too)
-  const answers = checkAnswers(space.community, input.answers);
+  const answers = inCommunity ? [] : checkAnswers(space.community, input.answers);
   const keepAnswers = async () => {
     if (answers.length) await Membership.updateOne({ userId: viewer._id, communityId: space.community._id, subcommunityId: null }, { $set: { answers } });
   };
 
   // 1) Invite link — the one way into a private space without approval.
   if (input.inviteCode) {
-    await requireParentSeat(viewer, space);
+    if (space.sub) {
+      // a link gets you past asking, not past what the group asks of everyone (site admins never need points)
+      const short = pointsShort(space.sub.minPointsJoin, null, gateOf(viewer));
+      if (short) throw forbidden(`${space.sub.name} needs ${short.toLocaleString("en-NG")} points to join. You have ${(viewer.points ?? 0).toLocaleString("en-NG")}.`);
+      const inGroup = await Membership.countDocuments({ ...spaceFilter(space), status: "active" });
+      if (inGroup >= LIMITS.groupMembers) throw conflict(`This group is full (${LIMITS.groupMembers} people).`);
+      await requireParentSeat(viewer, space, true);
+    }
     await consumeInvite(input.inviteCode, space);
+    await requireParentSeat(viewer, space);
     await addMember(space, viewer._id);
     await keepAnswers();
     return { status: "joined", message: `Welcome to ${spaceLabel(space)}.` };
@@ -191,12 +204,13 @@ export async function joinSpace(
  * community therefore also seats you in the community; for a private community you must already
  * be a member (or have been approved), so a group invite can never be a back door into it.
  */
-async function requireParentSeat(viewer: IUser, space: Space) {
+async function requireParentSeat(viewer: IUser, space: Space, checkOnly = false) {
   if (!space.sub) return;
   const parent = await Membership.findOne({ userId: viewer._id, communityId: space.community._id, subcommunityId: null }).lean<IMembership>();
   if (parent?.status === "active") return;
   if (parent?.status === "banned") throw forbidden("You can't join this one.");
   if (space.community.privacy === "private") throw forbidden(`Join ${space.community.name} first, then use this invite.`);
+  if (checkOnly) return;
   await Membership.updateOne({ userId: viewer._id, communityId: space.community._id, subcommunityId: null }, { $setOnInsert: { role: "member" }, $set: { status: "active" } }, { upsert: true });
   await recountMembers(space.community._id, null);
 }
@@ -283,7 +297,7 @@ export async function listMembers(
     if (!user) return [];
     const isSelf = sid(m.userId) === sid(viewer._id);
     const st = standing.get(sid(m.userId));
-    const theirRank = space.sub ? Math.max(st?.rank ?? 0, m.role === "owner" ? 1e9 : m.role === "admin" ? ADMIN_RANK : 0) : (st?.rank ?? 0);
+    const theirRank = space.sub ? Math.max(st?.rank ?? 0, m.role === "owner" ? 1e9 : m.role === "admin" ? ADMIN_RANK : groupPowersOf(m).length ? GROUP_MOD_RANK : 0) : (st?.rank ?? 0);
     const below = !isSelf && m.role !== "owner" && theirRank < myRank;
     return [
       {
@@ -292,6 +306,8 @@ export async function listMembers(
         joinedAt: m.createdAt.toISOString(),
         canChangeRole: !isSelf && canSetRole(access.role, m.role, m.role === "admin" ? "member" : "admin"),
         canRemove: below && (can(access, "kick") || can(access, "ban")),
+        ...(!space.sub && (access.canManage || isSiteAdmin(viewer)) ? { postBan: postBanOf(m), canPostBan: !isSelf && m.role !== "owner" && (isSiteAdmin(viewer) || theirRank < myRank) } : {}),
+        ...(space.sub ? { title: m.title ?? null, powers: groupPowersOf(m) as GroupPower[], canEditMod: access.role === "owner" || access.canModerate } : {}),
         ...(!space.sub ? { roles: st?.roles ?? [], roleBadge: st?.badge ?? null, canEditRoles: can(access, "manageRoles") && (below || (isSelf && m.role !== "owner")) } : {}),
         // timeouts are community-wide (set from the community, not a group)
         ...(!space.sub && (can(access, "timeout") || access.canManage) ? { canTimeout: below && can(access, "timeout"), timedOutUntil: timeoutOf(m), timeoutReason: timeoutOf(m) ? (m.timeoutReason ?? null) : null } : {}),
@@ -328,6 +344,21 @@ export async function changeRole(viewer: IUser, space: Space, access: SpaceAcces
     );
   }
   return { userId, role };
+}
+
+/** A group's owner names someone (a moderator, or whatever title they like) and picks what they can do in the group. */
+export async function setGroupMod(viewer: IUser, space: Space, access: SpaceAccess, userId: string, input: { title: string; powers: GroupPower[] }) {
+  if (!space.sub) throw badRequest("Titles are for groups. Communities have roles.");
+  if (access.role !== "owner" && !access.canModerate) throw forbidden("Only the group's owner can do that.");
+  const target = await targetMembership(space, userId);
+  const title = input.title.trim() || null;
+  const powers = [...new Set(input.powers)];
+  await Membership.updateOne({ _id: target._id }, { title, powers });
+  const before = groupPowersOf(target);
+  if (powers.length && !before.length && sid(target.userId) !== sid(viewer._id)) {
+    notify([target.userId], { title: `You're ${title ?? "a moderator"} in ${space.sub.name}`, body: `${viewer.displayName} gave you new powers in this group.`, data: { href: `/communities/${space.community.slug}?g=${space.sub.slug}` } }, { category: "community", ref: `community:${sid(space.community._id)}` });
+  }
+  return { userId, title, powers };
 }
 
 /** The owner hands the space to another member; they stay on as an admin. */
@@ -378,6 +409,38 @@ export async function setTimeout_(viewer: IUser, space: Space, access: SpaceAcce
   return { userId, timedOutUntil: until?.toISOString() ?? null };
 }
 
+/**
+ * An owner or admin stops someone writing in the Posts section and on Boards: for a while (seconds), until it's lifted
+ * (null), or lifts it (0). They stay in the community and can still chat, react and go to events.
+ */
+export async function setPostBan(viewer: IUser, space: Space, access: SpaceAccess, userId: string, seconds: number | null, reason: string) {
+  if (space.sub) throw badRequest("Posts and Boards belong to the community, so do this from the community.");
+  const siteAdmin = isSiteAdmin(viewer);
+  if (!access.canManage && !siteAdmin) throw forbidden("Only the community's owner and admins can do that.");
+  const target = await targetMembership(space, userId);
+  if (sid(target.userId) === sid(viewer._id)) throw forbidden("You can't do that to yourself.");
+  if (target.role === "owner") throw forbidden("The owner can't be stopped from posting.");
+  if (!siteAdmin && (await rankOf(space, target.userId)) >= (access.rank ?? 0)) throw forbidden("You can't do that to someone at or above your own rank.");
+  const lifting = seconds === 0;
+  if (seconds !== null && !lifting && !(TIMEOUT_SECONDS as readonly number[]).includes(seconds)) throw badRequest("Pick how long.");
+  const why = reason.trim().slice(0, 300);
+  const until = seconds ? new Date(Date.now() + seconds * 1000) : null;
+  const postBan = lifting ? null : { until, reason: why, byId: viewer._id };
+  await Membership.updateOne({ _id: target._id }, { $set: { postBan } });
+  const who = await User.findById(target.userId).select("displayName").lean<{ displayName: string }>();
+  await ModAction.create({ communityId: space.community._id, actorId: viewer._id, action: lifting ? "postban.remove" : "postban", targetType: "member", targetId: target.userId, label: `${who?.displayName ?? "someone"}${!lifting && why ? `: ${why}` : ""}`, authorId: target.userId });
+  const href = `/communities/${space.community.slug}`;
+  const forHow = seconds ? ` for ${durationLabel(seconds)}` : "";
+  notify(
+    [target.userId],
+    lifting
+      ? { title: `You can write in ${space.community.name}'s Posts and Boards again`, body: "An admin lifted the limit.", data: { href } }
+      : { title: `You can't write in ${space.community.name}'s Posts or Boards${forHow}`, body: `${why ? `Reason: ${why.slice(0, 150)}. ` : ""}You're still in the community and can still chat.`, data: { href } },
+    { category: "community", ref: `postban:${sid(space.community._id)}` },
+  );
+  return { userId, postBan: lifting ? null : { until: until?.toISOString() ?? null, reason: why || null } };
+}
+
 /** "60 seconds", "5 minutes", "1 hour", "1 day", "1 week" */
 export function durationLabel(seconds: number): string {
   if (seconds < 120) return `${seconds} seconds`;
@@ -392,8 +455,8 @@ async function rankOf(space: Space, userId: Types.ObjectId): Promise<number> {
   const { standings } = await import("./roles.service");
   const inCommunity = (await standings(space.community._id, [userId])).get(sid(userId))?.rank ?? 0;
   if (!space.sub) return inCommunity;
-  const m = await Membership.findOne({ ...spaceFilter(space), userId, status: "active" }).select("role").lean<Pick<IMembership, "role">>();
-  return Math.max(inCommunity, m?.role === "owner" ? 1e9 : m?.role === "admin" ? ADMIN_RANK : 0);
+  const m = await Membership.findOne({ ...spaceFilter(space), userId, status: "active" }).select("role powers").lean<Pick<IMembership, "role" | "powers">>();
+  return Math.max(inCommunity, m?.role === "owner" ? 1e9 : m?.role === "admin" ? ADMIN_RANK : groupPowersOf(m).length ? GROUP_MOD_RANK : 0);
 }
 
 export async function removeMember(viewer: IUser, space: Space, access: SpaceAccess, userId: string, ban: boolean) {
@@ -403,9 +466,16 @@ export async function removeMember(viewer: IUser, space: Space, access: SpaceAcc
   if (target.role === "owner" || (await rankOf(space, target.userId)) >= (access.rank ?? 0)) throw forbidden("You can't remove someone at or above your own rank.");
 
   void ModAction.create({ communityId: space.community._id, actorId: viewer._id, action: ban ? "ban" : "kick", targetType: "member", targetId: target.userId, label: (await User.findById(target.userId).select("displayName").lean<{ displayName: string }>())?.displayName ?? "Someone", authorId: target.userId }).catch(() => {});
-  if (ban) await Membership.updateOne({ _id: target._id }, { status: "banned", role: "member", roleIds: [] });
+  if (ban) await Membership.updateOne({ _id: target._id }, { status: "banned", role: "member", roleIds: [], title: null, powers: [], postBan: null });
   else await Membership.deleteOne({ _id: target._id });
   await ChannelMember.deleteMany({ userId: target.userId, ...spaceFilter(space) });
+  notify(
+    [target.userId],
+    ban
+      ? { title: `You were banned from ${spaceLabel(space)}`, body: `${space.sub ? "You can't come back to this group." : "You can't join this community again."} If you think that's a mistake, contact its owner.`, data: { href: "/communities" } }
+      : { title: `You were removed from ${spaceLabel(space)}`, body: space.sub ? "An admin of this group removed you." : "You can join again.", data: { href: space.sub ? `/communities/${space.community.slug}` : `/communities/${space.community.slug}` } },
+    { category: "community", ref: `removed:${sid(space.sub?._id ?? space.community._id)}` },
+  );
 
   await recountMembers(space.community._id, space.sub?._id ?? null);
   if (!space.sub) await dropParentOnlyGroups(space.community._id, [target.userId]);
@@ -466,7 +536,7 @@ export async function decideRequest(
 /* Invite links                                                        */
 /* ------------------------------------------------------------------ */
 
-const isInviteOnly = (space: Space) => !space.sub && space.community.privacy === "private";
+const isInviteOnly = (space: Space) => !!space.sub || space.community.privacy === "private";
 
 function inviteActive(i: IInvitation, now = new Date()): { active: boolean; reason?: "expired" | "revoked" | "used_up" } {
   if (i.revokedAt) return { active: false, reason: "revoked" };
@@ -498,7 +568,6 @@ export async function createInvite(
   access: SpaceAccess,
   input: { expiresInDays?: number; maxUses?: number },
 ): Promise<InviteDTO> {
-  if (space.sub) throw badRequest("Groups don't use invite links. Add people from the group's Members page.");
   assertCanManage(access);
   if (!isInviteOnly(space)) {
     throw badRequest("Invite links are for private spaces. Open ones can just share their normal link.");
@@ -543,9 +612,8 @@ async function loadInvite(code: string) {
   if (!invite) return null;
   const community = await Community.findById(invite.communityId).lean<ICommunity>();
   if (!community) return null;
-  // group invite links stopped working when groups became add-only
-  if (invite.subcommunityId) return null;
-  const sub: ISubcommunity | null = null;
+  const sub = invite.subcommunityId ? await Subcommunity.findById(invite.subcommunityId).lean<ISubcommunity>() : null;
+  if (invite.subcommunityId && !sub) return null;
   return { invite, space: { community, sub } as Space };
 }
 

@@ -62,6 +62,8 @@ export interface ICommunity {
   } | null;
   /** a "Verified" check by its name: given (and taken away) only by site admins; Klique HQ always has it */
   verified?: boolean;
+  /** its owner asked to be verified (server/services/verification.service): a site admin checks it by hand */
+  verificationRequest?: { status: "pending" | "rejected"; requestedAt: Date; note?: string } | null;
   /** the emoji on the owner's picture inside this community; the owner chooses it, and it stays if ownership moves */
   ownerIcon?: string | null;
   /**
@@ -99,6 +101,7 @@ const CommunitySchema = new Schema<ICommunity>(
     adult: { type: Boolean, default: false },
     audience: { type: String, enum: ["everyone", "women", "men"], default: "everyone" },
     verified: { type: Boolean, default: false },
+    verificationRequest: { type: { status: String, requestedAt: Date, note: String, _id: false }, default: null },
     ownerIcon: { type: String, default: null, maxlength: 16 },
     membersMassMention: { type: Boolean, default: false },
     automod: { type: Schema.Types.Mixed, default: null },

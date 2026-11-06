@@ -5,6 +5,8 @@ import {
   memberListQuery,
   postCreateSchema,
   requestDecisionSchema,
+  groupModSchema,
+  postBanSchema,
   roleSchema,
 } from "../validators/schemas";
 import {
@@ -20,6 +22,8 @@ import {
   listPosts,
   listRequests,
   removeMember,
+  setGroupMod,
+  setPostBan,
   resolveSpaceFor,
   revokeInvite,
   transferOwnership,
@@ -63,6 +67,12 @@ export const memberRole = withApi<WithUser, "required">({ auth: "required" }, as
   return changeRole(viewer, space, access, params.userId, role);
 });
 
+export const memberMod = withApi<WithUser, "required">({ auth: "required" }, async ({ req, params, viewer }) => {
+  const input = await readJson(req, groupModSchema);
+  const { space, access } = await resolveSpaceFor(viewer, params.slug, params.subSlug);
+  return setGroupMod(viewer, space, access, params.userId, input);
+});
+
 export const memberRemove = withApi<WithUser, "required">({ auth: "required" }, async ({ req, params, viewer }) => {
   const { ban } = readQuery(req, banQuery);
   const { space, access } = await resolveSpaceFor(viewer, params.slug, params.subSlug);
@@ -76,6 +86,12 @@ export const memberTimeout = withApi<WithUser, "required">({ auth: "required" },
   const { seconds, reason } = await readJson(req, timeoutSchema);
   const { space, access } = await resolveSpaceFor(viewer, params.slug, params.subSlug);
   return setTimeout_(viewer, space, access, params.userId, seconds, reason);
+});
+
+export const memberPostBan = withApi<WithUser, "required">({ auth: "required" }, async ({ req, params, viewer }) => {
+  const { seconds, reason } = await readJson(req, postBanSchema);
+  const { space, access } = await resolveSpaceFor(viewer, params.slug, params.subSlug);
+  return setPostBan(viewer, space, access, params.userId, seconds, reason);
 });
 
 export const memberTransfer = withApi<WithUser, "required">({ auth: "required" }, async ({ params, viewer }) => {

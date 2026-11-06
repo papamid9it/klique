@@ -199,7 +199,7 @@ async function cleanInput(viewer: IUser, input: z.infer<typeof adCampaignSchema>
   return { ...base, advertiser, title, body: (input.body ?? "").trim(), imageUrl: input.imageUrl ? httpUrl(input.imageUrl) : null, ctaLabel: (input.ctaLabel ?? "").trim() || "Learn more", url };
 }
 
-async function siteAdminIds(): Promise<Types.ObjectId[]> {
+export async function siteAdminIds(): Promise<Types.ObjectId[]> {
   const emails = [...adminEmails()];
   if (!emails.length) return [];
   return (await User.find({ email: { $in: emails } }).select("_id").lean<{ _id: Types.ObjectId }[]>()).map((u) => u._id);

@@ -47,6 +47,24 @@ export const resetPasswordMail = (to: string, name: string, url: string) =>
     footnote: "If this wasn't you, ignore this message. Your password stays as it is.",
   });
 
+export const accountSuspendedMail = (to: string, name: string) =>
+  build({
+    to,
+    subject: "Your klique. account was suspended",
+    heading: "Account suspended",
+    paragraphs: [`Hi ${name}, your klique. account has been suspended, so you can't sign in for now.`],
+    footnote: "If you think this is a mistake, reply to this email or contact support.",
+  });
+
+export const accountRestoredMail = (to: string, name: string) =>
+  build({
+    to,
+    subject: "Your klique. account is back",
+    heading: "Account restored",
+    paragraphs: [`Hi ${name}, your klique. account is no longer suspended. You can sign in again.`],
+    footnote: "Welcome back.",
+  });
+
 export const passwordChangedMail = (to: string, name: string) =>
   build({
     to,

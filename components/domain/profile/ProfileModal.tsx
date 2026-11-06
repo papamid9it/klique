@@ -144,7 +144,7 @@ function ProfileBody({ handle, onClose, onOpenPerson, tryOn }: { handle: string;
       {/* ------------------------------ identity (tinted by their theme, with their effect over it) ------------------------------ */}
       <aside className={cx("kq-live relative shrink-0 border-b border-line md:w-[22rem] md:overflow-y-auto md:border-r md:border-b-0", !p.profileTheme && "bg-raised/40")} style={themeStyle(p.profileTheme)}>
         <ProfileEffect id={p.profileEffect} />
-        <ProfileBanner handle={p.handle} bannerUrl={p.bannerUrl} bannerColor={p.bannerColor} className="h-32" zoomable />
+        <ProfileBanner handle={p.handle} bannerUrl={p.bannerUrl} bannerColor={p.bannerColor} className="h-32" />
         <div className="relative px-5 pb-5">
           <span className="relative -mt-14 inline-block rounded-full bg-surface p-1.5">
             <ZoomAvatar url={p.avatarUrl} name={p.displayName}>

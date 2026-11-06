@@ -209,6 +209,8 @@ export interface ViewerAccess {
   pointsToPost?: number;
   /** timed out in this community until then (they can read, not post or react) */
   timedOutUntil?: ISODate | null;
+  /** stopped from writing in Posts and on Boards (until: null = until it's lifted); they can still chat */
+  postBan?: { until: ISODate | null; reason: string | null } | null;
   /** they must accept the community's rules before posting (welcome screen) */
   needsRules?: boolean;
   /** show them the welcome screen */
@@ -260,7 +262,7 @@ export interface CommunityDTO extends CommunityCardDTO {
   /** an 18+ community the viewer may not enter yet, and why (the page asks for it instead of showing anything) */
   ageGate: AdultGate | null;
   groupPolicy: GroupPolicy;
-  /** the viewer may start a group here (server-computed from the policy and their role) */
+  /** the viewer may start a group here: they own the community */
   canCreateGroup: boolean;
   /** the viewer may post events in this community (its owner and admins) */
   canHostEvents: boolean;
@@ -409,6 +411,13 @@ export interface MemberDTO {
   roleBadge?: RoleBadge | null;
   /** you can change their roles */
   canEditRoles?: boolean;
+  /** stopped from writing in Posts and on Boards, and whether you can change that */
+  postBan?: { until: ISODate | null; reason: string | null } | null;
+  canPostBan?: boolean;
+  /** in a group: the title its owner gave them, what it lets them do, and whether you can change those */
+  title?: string | null;
+  powers?: import("./roles").GroupPower[];
+  canEditMod?: boolean;
   /** owners and admins above them may time them out (or lift it) */
   canTimeout?: boolean;
   /** timed out until then (owners and admins see it) */
@@ -1536,6 +1545,8 @@ export interface AdminSummaryDTO {
   pendingDrafts: number;
   /** ad requests waiting for review */
   pendingAds: number;
+  /** communities waiting to be checked for the Verified badge */
+  pendingVerification: number;
   /** community payouts waiting to be sent */
   pendingPayouts: number;
 }
@@ -1604,6 +1615,17 @@ export interface AdminEventRow {
   createdAt: ISODate;
 }
 
+/** Where a community stands on the Verified check (its owner sees this). */
+export interface VerificationDTO {
+  state: "none" | "pending" | "rejected" | "verified";
+  requestedAt: ISODate | null;
+  /** why it was turned down, when a site admin said */
+  note: string | null;
+  /** what it asks for, and whether each is met */
+  checks: { id: "plan" | "members" | "content"; label: string; met: boolean }[];
+  canApply: boolean;
+}
+
 export interface AdminCommunityRow {
   id: Id;
   slug: string;
@@ -1622,6 +1644,8 @@ export interface AdminCommunityRow {
   /** has the "Verified" check (Klique HQ always) */
   verified: boolean;
   official: boolean;
+  /** its owner applied to be verified, and is waiting */
+  verificationPending: boolean;
 }
 
 export interface SystemStatusDTO {

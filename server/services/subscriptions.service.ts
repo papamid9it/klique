@@ -53,7 +53,6 @@ export async function setPlanConfig(input: z.infer<typeof planConfigSchema>): Pr
     mediaSlots: { ...now.mediaSlots, ...(input.mediaSlots ?? {}) },
     communitiesCreate: { ...now.communitiesCreate, ...(input.communitiesCreate ?? {}) },
     communitiesJoin: { ...now.communitiesJoin, ...(input.communitiesJoin ?? {}) },
-    groupsCreate: { ...now.groupsCreate, ...(input.groupsCreate ?? {}) },
     webhooks: { ...now.webhooks, ...(input.webhooks ?? {}) },
     emojiSlots: { ...now.emojiSlots, ...(input.emojiSlots ?? {}) },
   });

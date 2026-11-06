@@ -45,6 +45,10 @@ export function ModLogPanel({ slug }: { slug: string }) {
                 <>
                   {ACTION[r.action]} <span className="font-medium">{r.label}</span>
                 </>
+              ) : r.action === "postban" || r.action === "postban.remove" ? (
+                <>
+                  {r.action === "postban" ? "stopped from writing in Posts and Boards:" : "let write in Posts and Boards again:"} <span className="font-medium">{r.label}</span>
+                </>
               ) : r.action === "timeout" || r.action === "timeout.remove" ? (
                 <>
                   {r.action === "timeout" ? "timed out" : "lifted the timeout on"} <span className="font-medium">{r.label}</span>

@@ -9,7 +9,7 @@ import { Community, type ICommunity } from "../models/Community";
 import { FeedComment, FeedPost, FeedVote, type IFeedComment, type IFeedPost } from "../models/FeedPost";
 import { Membership, type IMembership } from "../models/Membership";
 import type { IUser } from "../models/User";
-import { assertCanView, outranks, spaceAccess, type Space, type SpaceAccess } from "../policies/access";
+import { assertNotPostBanned, assertCanView, outranks, spaceAccess, type Space, type SpaceAccess } from "../policies/access";
 import { loadBriefs } from "../serializers";
 import { standings } from "./roles.service";
 import type { feedCommentSchema, feedPostSchema } from "../validators/schemas";
@@ -43,7 +43,7 @@ function assertFeed(space: Space) {
 /** Owners and admins always; members too when the community lets them (and they have the points it asks for). */
 function canPostIn(c: Pick<ICommunity, "feedPolicy">, access: SpaceAccess) {
   const policy = c.feedPolicy ?? "off";
-  return policy !== "off" && !access.banned && (access.canManage || (policy === "members" && access.canPost && !access.pointsToPost));
+  return policy !== "off" && !access.banned && !access.postBan && (access.canManage || (policy === "members" && access.canPost && !access.pointsToPost));
 }
 
 /* ------------------------------------------------------------------ */
@@ -183,6 +183,7 @@ export async function postTargets(viewer: IUser): Promise<PostTargetDTO[]> {
 
 export async function createPost(viewer: IUser, space: Space, access: SpaceAccess, input: z.infer<typeof feedPostSchema>): Promise<FeedPostDTO> {
   assertNotTimedOut(access);
+  assertNotPostBanned(access);
   assertFeed(space);
   if (!canPostIn(space.community, access)) throw forbidden(space.community.feedPolicy === "admins" ? "Only owners and admins post here." : access.pointsToPost ? `You need ${access.pointsToPost.toLocaleString("en-NG")} points to post here.` : "Join this community to post.");
   // the same send again (a double click, a retry): the post it already made, not a second one
@@ -252,6 +253,7 @@ export async function getPost(viewer: IUser | null, space: Space, access: SpaceA
 }
 
 export async function editCaption(viewer: IUser, space: Space, access: SpaceAccess, postId: string, caption: string): Promise<FeedPostDTO> {
+  assertNotPostBanned(access);
   assertFeed(space);
   const p = await loadPost(space, postId);
   if (sid(p.authorId) !== sid(viewer._id) || !access.isMember) throw forbidden("You can only edit your own posts.");
@@ -347,6 +349,7 @@ export async function listComments(viewer: IUser | null, space: Space, access: S
 
 export async function addComment(viewer: IUser, space: Space, access: SpaceAccess, postId: string, input: z.infer<typeof feedCommentSchema>): Promise<FeedCommentDTO> {
   assertNotTimedOut(access);
+  assertNotPostBanned(access);
   assertFeed(space);
   if (!access.isMember || access.banned) throw forbidden("Join this community to comment.");
   const again = input.clientKey ? await FeedComment.findOne({ authorId: viewer._id, clientKey: input.clientKey }).lean<IFeedComment>() : null;
@@ -399,6 +402,7 @@ async function loadComment(postId: string, commentId: string) {
 
 /** Change your own comment's text (a sticker stays; with no sticker, some text has to stay too). */
 export async function editComment(viewer: IUser, space: Space, access: SpaceAccess, postId: string, commentId: string, body: string): Promise<FeedCommentDTO> {
+  assertNotPostBanned(access);
   assertFeed(space);
   const p = await loadPost(space, postId);
   const c = await loadComment(sid(p._id), commentId);

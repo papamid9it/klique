@@ -4,6 +4,7 @@ import { DATE_FILTERS } from "@/lib/dates";
 import { DM_POLICIES, LIMITS, PRESENCES, PROFILE_VISIBILITY, REPORT_REASONS, SLOW_MODE_STEPS } from "@/lib/constants";
 import { FRAME_IDS, NAME_EFFECT_IDS } from "@/lib/cosmetics";
 import { MOOD_PREFS } from "@/lib/moods";
+import { GROUP_POWERS, GROUP_TITLE_MAX } from "@/lib/roles";
 import { REACTION_IDS, STICKER_IDS } from "@/lib/reactions";
 import { SOCIAL_IDS, socialHandle, socialOf, type SocialId } from "@/lib/socials";
 import { FEED_TITLE_MAX, TEXT_BACKGROUND_IDS, TEXT_CARD_MAX } from "@/lib/feedText";
@@ -201,7 +202,9 @@ export const screeningSchema = z.object({
     .max(5, "Up to 5 questions"),
 });
 
+export const postBanSchema = z.object({ seconds: z.number().int().min(0).nullable(), reason: z.string().trim().max(300).default("") });
 export const roleSchema = z.object({ role: z.enum(["admin", "member"]) });
+export const groupModSchema = z.object({ title: z.string().trim().max(GROUP_TITLE_MAX), powers: z.array(z.enum(GROUP_POWERS)).max(GROUP_POWERS.length) });
 export const removeMemberSchema = z.object({ ban: z.boolean().optional() });
 export const requestDecisionSchema = z.object({ action: z.enum(["approve", "reject"]) });
 
@@ -544,9 +547,11 @@ export const adminCommunitiesQuery = pageQuery.extend({
   sort: z.enum(["members", "new"]).default("members"),
   /** only the 18+ ones */
   adult: z.enum(["1", "0"]).optional(),
+  /** only those waiting to be verified */
+  verification: z.literal("1").optional(),
 });
 /** Admin: take a community's 18+ or explicit flag off */
-export const adminCommunityFlagsSchema = z.object({ adult: z.literal(false).optional(), explicit: z.literal(false).optional(), verified: z.boolean().optional(), note: z.string().trim().max(300).optional() });
+export const adminCommunityFlagsSchema = z.object({ adult: z.literal(false).optional(), explicit: z.literal(false).optional(), verified: z.boolean().optional(), rejectVerification: z.literal(true).optional(), note: z.string().trim().max(300).optional() });
 
 export const adminAuditQuery = pageQuery.extend({
   q: z.string().trim().max(100).default(""),
@@ -716,7 +721,6 @@ export const planConfigSchema = z.object({
   mediaSlots: perPlan(0, 24).optional(),
   communitiesCreate: perPlan(0, 10_000).optional(),
   communitiesJoin: perPlan(0, 10_000).optional(),
-  groupsCreate: perPlan(0, 1000).optional(),
   webhooks: perPlan(0, 50).optional(),
   emojiSlots: perPlan(0, 500).optional(),
 });

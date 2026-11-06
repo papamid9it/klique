@@ -112,8 +112,12 @@ export function isInterestId(id: unknown): id is InterestId {
 /* ------------------------------------------------------------------ */
 
 export const LIMITS = {
-  /** groups are small and private: at most this many people, owner included */
-  groupMembers: 50,
+  /** groups are private: at most this many people, owner included */
+  groupMembers: 1000,
+  /** a community's owner can start this many groups in it */
+  groupsPerCommunity: 3,
+  /** a community needs this many members before its owner can apply to be verified */
+  verifyMembers: 1000,
   handleMin: 3,
   handleMax: 20,
   displayName: 50,

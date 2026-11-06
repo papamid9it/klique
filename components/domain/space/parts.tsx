@@ -1,5 +1,6 @@
 "use client";
 
+import type { IconName } from "@/components/ui/Icon";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { errorMessage } from "@/app/ApiCore";
 import { useToast } from "@/components/providers/ToastProvider";
@@ -96,6 +97,7 @@ export function ConfirmModal({
   requireText,
   children,
   onConfirm,
+  icon,
 }: {
   open: boolean;
   onClose: () => void;
@@ -106,6 +108,8 @@ export function ConfirmModal({
   requireText?: string;
   children?: ReactNode;
   onConfirm: () => Promise<void>;
+  /** the picture on top; by default, one that fits the button's word */
+  icon?: IconName;
 }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
@@ -128,7 +132,7 @@ export function ConfirmModal({
   }
 
   return (
-    <Modal open={open} onClose={onClose} title={title} description={description} size="sm">
+    <Modal open={open} onClose={onClose} title={title} description={description} size="sm" icon={{ name: icon ?? (/delete|cancel|call off/i.test(confirmLabel) ? "trash" : /ban/i.test(confirmLabel) ? "ban" : /remove|leave/i.test(confirmLabel) ? "logout" : danger ? "info" : "shield"), danger }}>
       <form
         onSubmit={go}
         className="space-y-4"
@@ -142,7 +146,7 @@ export function ConfirmModal({
       >
         {children}
         {requireText && <TextField label={`Type "${requireText}" to confirm`} value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" />}
-        <div className="flex justify-end gap-2">
+        <div className="grid grid-cols-2 gap-2">
           <Button onClick={onClose} autoFocus={!requireText}>
             Cancel
           </Button>

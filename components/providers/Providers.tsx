@@ -7,6 +7,7 @@ import { setCategories } from "@/lib/constants";
 import { isReducedMotion } from "@/lib/motion";
 import { AuthProvider } from "./AuthProvider";
 import { DesktopAlerts } from "@/components/domain/DesktopAlerts";
+import { SignOutHost } from "@/components/domain/account/SignOutDialog";
 import { LeaveProvider } from "./LeaveProvider";
 import { PanelSlotProvider } from "@/components/layout/PagePanel";
 import { MediaViewerProvider } from "./MediaViewerProvider";
@@ -115,6 +116,7 @@ export function Providers({ children }: { children: ReactNode }) {
                 <ProfileCardProvider>
                   <LeaveProvider>
                     <DesktopAlerts />
+                    <SignOutHost />
                     <PanelSlotProvider>{children}</PanelSlotProvider>
                   </LeaveProvider>
                 </ProfileCardProvider>

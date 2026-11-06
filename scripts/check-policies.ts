@@ -76,10 +76,8 @@ assert.equal(canSeeChannel(open, inPrivateGroup), true); assert.equal(canPostInC
 assert.equal(canSeeChannel(open, outsideGroup), false); assert.equal(canSeeChannel(room, outsideGroup, true), false);
 assert.equal(canSeeChannel(staff, inPrivateGroup), false); // a plain group member can't see the group's staff room
 
-// Who may start a group.
-const memberAcc = { isMember: true, canManage: false }, adminAcc = { isMember: true, canManage: true }, outsider = { isMember: false, canManage: false };
-assert.equal(canCreateGroup({ groupPolicy: "admins" }, adminAcc), true); assert.equal(canCreateGroup({ groupPolicy: "admins" }, memberAcc), false);
-assert.equal(canCreateGroup({ groupPolicy: "members" }, memberAcc), true); assert.equal(canCreateGroup({ groupPolicy: "members" }, outsider), false);
-assert.equal(canCreateGroup({ groupPolicy: "off" }, adminAcc), false);
+// Who may start a group: a community's owner, nobody else.
+assert.equal(canCreateGroup({ role: "owner" }), true); assert.equal(canCreateGroup({ role: "admin" }), false);
+assert.equal(canCreateGroup({ role: "member" }), false); assert.equal(canCreateGroup({ role: null }), false);
 
 console.log("All policy checks passed.");

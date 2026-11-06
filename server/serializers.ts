@@ -43,6 +43,7 @@ export function viewerAccess(a: SpaceAccess): ViewerAccess {
     ...(a.canModerate ? { canModerate: true } : {}),
     ...(a.pointsToPost ? { pointsToPost: a.pointsToPost } : {}),
     ...(a.timedOutUntil ? { timedOutUntil: a.timedOutUntil } : {}),
+    ...(a.postBan ? { postBan: a.postBan } : {}),
     ...(a.perms?.length ? { perms: a.perms } : {}),
     ...(a.needsRules ? { needsRules: true } : {}),
     ...(a.welcomePending ? { welcomePending: true } : {}),
@@ -165,7 +166,8 @@ export async function toCommunityCards(
 }
 
 export function communityCard(c: ICommunity, access: SpaceAccess): CommunityCardDTO {
-  const locked = c.privacy === "private" && !access.isMember;
+  // site admins see every community without joining it
+  const locked = c.privacy === "private" && !access.canView;
   return {
     id: sid(c._id),
     slug: c.slug,
@@ -205,7 +207,7 @@ export async function toCommunityDetail(
     createdAt: c.createdAt.toISOString(),
     ageGate: access.adultGate ?? null,
     groupPolicy: c.groupPolicy ?? "admins",
-    canCreateGroup: canCreateGroup(c, access),
+    canCreateGroup: canCreateGroup(access),
     feedPolicy: c.feedPolicy ?? "off",
     // the Posts section: owners/admins when it's on, everyone who's a member when members may post
     canPostToFeed: (c.feedPolicy ?? "off") !== "off" && !access.banned && (access.canManage || (c.feedPolicy === "members" && access.canPost && !access.pointsToPost)),

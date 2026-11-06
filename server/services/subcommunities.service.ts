@@ -63,11 +63,8 @@ export async function createSubcommunity(
   const space = await resolveSpace(slug);
   const access = await spaceAccess(space, viewer);
 
-  if (!access.isMember) throw forbidden("Join this community to start a group inside it.");
-  if (!canCreateGroup(space.community, access)) {
-    throw forbidden(space.community.groupPolicy === "off" ? "This community doesn't use groups." : "Only the owners and admins of this community can start groups.");
-  }
-  await assertCanCreateGroup(viewer, space.community._id);
+  if (!canCreateGroup(access)) throw forbidden("Only the owner of this community can start groups.");
+  await assertCanCreateGroup(space.community._id);
   rateLimit(`sub-create:${sid(viewer._id)}`, 8, 24 * 60 * 60 * 1000);
 
   const subSlug = await uniqueSubSlug(space.community._id, input.name);

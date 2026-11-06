@@ -136,7 +136,7 @@ export function LeaveProvider({ children }: { children: ReactNode }) {
   return (
     <LeaveCtx.Provider value={{ leave }}>
       {children}
-      <Modal open={!!pending} onClose={() => setPending(null)} title="You're leaving Klique" description="This link goes to another website. Check it's where you expect before you continue." size="sm">
+      <Modal open={!!pending} onClose={() => setPending(null)} icon={{ name: "globe" }} title="You're leaving Klique" description={pending ? `This link goes to ${pending.domain}. Klique doesn't run that site.` : undefined} size="sm">
         {pending && <LeaveBody pending={pending} always={always} onAlways={setAlways} onCancel={() => setPending(null)} onContinue={proceed} />}
       </Modal>
     </LeaveCtx.Provider>
@@ -146,28 +146,18 @@ export function LeaveProvider({ children }: { children: ReactNode }) {
 function LeaveBody({ pending, always, onAlways, onCancel, onContinue }: { pending: Pending; always: boolean; onAlways: (v: boolean) => void; onCancel: () => void; onContinue: () => void }) {
   return (
     <div className="space-y-4">
-      <div className="overflow-hidden rounded-card border border-line bg-raised">
-        <div className="flex items-center gap-3 border-b border-line px-3.5 py-3">
-          <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-accent text-accent-ink">
-            <Icon name="globe" size={20} />
-          </span>
-          <span className="min-w-0">
-            <span className="eyebrow block">Going to</span>
-            <span className="block truncate text-base font-semibold tracking-tight">{pending.domain}</span>
-          </span>
-        </div>
-        <p className="max-h-28 overflow-y-auto px-3.5 py-2.5 font-mono text-[12px] leading-relaxed break-all text-ink-muted">{pending.href}</p>
+      <div className="rounded-control border border-line bg-raised px-3.5 py-3">
+        <p className="truncate text-[15px] font-semibold tracking-tight">{pending.domain}</p>
+        <p className="mt-1 max-h-24 overflow-y-auto text-[13px] leading-relaxed break-all text-ink-muted">{pending.href}</p>
       </div>
-      <label className="flex cursor-pointer items-center gap-2.5 text-sm">
-        <input type="checkbox" checked={always} onChange={(e) => onAlways(e.target.checked)} className="size-4 accent-[var(--accent-text)]" />
-        <span>
-          Always trust <span className="font-semibold">{pending.domain}</span> on this device
-        </span>
+      <label className="flex cursor-pointer items-center gap-2.5 px-0.5 text-sm text-ink-muted">
+        <input type="checkbox" checked={always} onChange={(e) => onAlways(e.target.checked)} className="size-4 shrink-0 accent-[var(--accent-text)]" />
+        <span>Don&apos;t ask again for this site on this device</span>
       </label>
-      <div className="flex justify-end gap-2">
-        <Button onClick={onCancel}>Cancel</Button>
+      <div className="grid grid-cols-2 gap-2">
+        <Button onClick={onCancel}>Stay here</Button>
         <Button variant="primary" onClick={onContinue} autoFocus>
-          Continue <Icon name="arrow-up-right" size={15} />
+          Open site <Icon name="arrow-up-right" size={15} />
         </Button>
       </div>
     </div>

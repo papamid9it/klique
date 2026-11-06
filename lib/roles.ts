@@ -22,6 +22,10 @@ export type Permission = (typeof PERMISSIONS)[number]["id"];
 export const ALL_PERMISSIONS: Permission[] = PERMISSIONS.map((p) => p.id);
 /** what the built-in Admin role (and "admin") can do: everything except webhooks, which stay the owner's */
 export const ADMIN_PERMISSIONS: Permission[] = ALL_PERMISSIONS.filter((p) => p !== "manageWebhooks");
+/** what a group's owner can let someone do in the group (a moderator, under whatever title they choose) */
+export const GROUP_POWERS = ["deleteMessages", "kick", "ban", "manageEvents"] as const satisfies readonly Permission[];
+export type GroupPower = (typeof GROUP_POWERS)[number];
+export const GROUP_TITLE_MAX = 24;
 export const ROLE_CAP = 50;
 /** a palette to pick from (any #rrggbb works) */
 export const ROLE_COLORS = ["#e74c3c", "#e67e22", "#f1c40f", "#2ecc71", "#1abc9c", "#3498db", "#9b59b6", "#e91e63", "#95a5a6", "#607d8b"];

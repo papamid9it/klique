@@ -1,11 +1,11 @@
 "use client";
 
 import { SupportButtons } from "@/components/domain/money/Donate";
-import { KLIQUE_SLUG } from "@/lib/constants";
+import { KLIQUE_SLUG, LIMITS } from "@/lib/constants";
 import { SoftLink } from "@/components/ui/SoftLink";
 import { isSamePage, softNavigate } from "@/lib/nav";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useEffect } from "react";
+import { Fragment, useMemo, useState, useEffect } from "react";
 import { ChannelService } from "@/app/services/ChannelService";
 import { SpaceService } from "@/app/services/SpaceService";
 import { TopicService } from "@/app/services/TopicService";
@@ -25,7 +25,7 @@ import { compactCount } from "@/lib/format";
 import type { BoardDTO, ChannelCategoryDTO, ChannelDTO, ChannelGroupDTO, ChannelsDTO, CommunityDTO, MyCrewDTO } from "@/lib/types";
 import { CategoryModal, ChannelSettings, CreateChannelModal } from "./ChannelFormModal";
 
-export type WorkspaceView = "dashboard" | "topics" | "posts" | "events" | "kliques" | "search" | "groups" | "members";
+export type WorkspaceView = "dashboard" | "topics" | "posts" | "events" | "kliques" | "search" | "members";
 export type GroupView = "updates" | "events" | "kliques" | "members";
 
 import { orderChannels } from "./order";
@@ -168,15 +168,11 @@ export function ChannelList({
     ...(siteAdmin && !c.official ? ([{ type: "sep" }, { label: c.verified ? "Remove Verified (admin)" : "Give Verified badge (admin)", icon: "check", onSelect: () => void setVerified(!c.verified) }] as MenuEntry[]) : []),
   ];
 
-  // new messages in the groups you're in, for the Groups item
-  const groupsUnread = data.groups.reduce((t, g) => ({ n: t.n + g.channels.reduce((a, ch) => a + (ch.unreadCount ?? 0), 0), mentions: t.mentions + g.channels.reduce((a, ch) => a + ch.mentions, 0) }), { n: 0, mentions: 0 });
   const nav: { id: WorkspaceView; label: string; icon: IconName; count?: number | null; show: boolean }[] = [
     // the Posts section (pictures and videos), when the community has it turned on
     { id: "posts", label: "Posts", icon: "image", show: c.feedPolicy !== "off" },
     { id: "events", label: "Events", icon: "calendar", count: c.upcomingEventCount, show: true },
     { id: "kliques", label: "Kliques", icon: "pin", show: true },
-    // groups are private: the folder only appears once you're in one (the owner and site admins see them all)
-    { id: "groups", label: "Groups", icon: "folder", count: c.subcommunityCount, show: (c.subcommunityCount ?? 0) > 0 },
     // the member list is for owners, admins and moderators
     { id: "members", label: "Members", icon: "users", count: c.memberCount, show: !!c.viewer.canSeeMembers },
   ];
@@ -364,7 +360,7 @@ export function ChannelList({
     ...(sub ? [] : ([{ label: "Create category", icon: "folder", onSelect: () => setCategoryModal({}) }] as MenuEntry[])),
   ];
 
-  /** `unread`: new messages behind it (Groups), shown like a channel's: bold, with a badge instead of the count */
+  /** `unread`: new messages behind it (a group), shown like a channel's: bold, with a badge instead of the count */
   const navLink = (href: string, on: boolean, label: string, icon: IconName, count?: number | null, unread?: { n: number; mentions: number }) => {
     const fresh = !on && !!unread && (unread.n > 0 || unread.mentions > 0);
     return (
@@ -379,7 +375,7 @@ export function ChannelList({
           <Icon name={icon} size={16} />
           {label}
           {fresh ? (
-            <CountBadge n={Math.max(unread.n, unread.mentions)} mention={unread.mentions > 0} className="ml-auto" label={`${unread.n} unread in your groups`} />
+            <CountBadge n={Math.max(unread.n, unread.mentions)} mention={unread.mentions > 0} className="ml-auto" label={`${unread.n} unread`} />
           ) : (
             typeof count === "number" && count > 0 && <span className="ml-auto font-mono text-[11px] text-ink-muted">{compactCount(count)}</span>
           )}
@@ -387,6 +383,34 @@ export function ChannelList({
       </li>
     );
   };
+
+  // "Your groups": the ones you're in (a community's owner and site admins see them all); only its owner gets the +
+  const canAddGroup = c.canCreateGroup && data.groups.length < LIMITS.groupsPerCommunity;
+  const groupsFolded = collapsed.has("your-groups");
+  const groupSection = (data.groups.length > 0 || canAddGroup) && (
+    <section className="mt-3" aria-label="Your groups">
+      <div className="flex items-center pr-1">
+        <button type="button" onClick={() => toggle("your-groups")} aria-expanded={!groupsFolded} className="flex min-w-0 flex-1 items-center gap-1 rounded-control px-2 py-1 text-left text-[11px] font-bold tracking-[0.08em] text-ink-muted uppercase hover:text-ink">
+          <Icon name="chevron-down" size={12} className={cx("shrink-0 transition-transform", groupsFolded && "-rotate-90")} />
+          <span className="truncate">Your groups</span>
+        </button>
+        {canAddGroup && (
+          <button type="button" onClick={() => setNewGroup(true)} aria-label="New group" title="New group" className="inline-flex size-6 items-center justify-center rounded-full text-ink-muted hover:bg-raised hover:text-ink">
+            <Icon name="plus" size={13} />
+          </button>
+        )}
+      </div>
+      {!groupsFolded && (
+        <ul className="space-y-0.5">
+          {data.groups.map((g) => (
+            <Fragment key={g.id}>
+              {navLink(`${base}?g=${g.slug}`, false, g.name, "folder", null, g.role ? { n: g.channels.reduce((a, ch) => a + (ch.muted ? 0 : (ch.unreadCount ?? 0)), 0), mentions: g.channels.reduce((a, ch) => a + ch.mentions, 0) } : undefined)}
+            </Fragment>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
 
   /** "Your kliques": the ones you're in, one tap from their chat. */
   const crewSection = (list: MyCrewDTO[]) =>
@@ -521,8 +545,9 @@ export function ChannelList({
         <ul className="space-y-0.5">
           {nav
             .filter((n) => n.show)
-            .map((n) => navLink(`${base}?view=${n.id}`, view === n.id, n.label, n.icon, n.count, n.id === "groups" ? groupsUnread : undefined))}
+            .map((n) => navLink(`${base}?view=${n.id}`, view === n.id, n.label, n.icon, n.count))}
         </ul>
+        {groupSection}
         {crewSection(crews)}
 
         {(boards.length > 0 || manage) && (

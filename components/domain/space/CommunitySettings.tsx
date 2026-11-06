@@ -26,11 +26,12 @@ import { WebhooksPanel } from "./WebhooksPanel";
 import { CommunityNotifySettings } from "./CommunityNotifySettings";
 import { RolesPanel } from "./RolesPanel";
 import { AutoModPanel } from "./AutoModPanel";
+import { VerificationBlock } from "./VerificationBlock";
 import { WelcomePanel } from "./Welcome";
 import { EmojiPanel } from "./EmojiPanel";
 
 export type CommunityTab = "overview" | "groups" | "posts" | "donations" | "payouts" | "members" | "requests" | "invites" | "screening" | "roles" | "automod" | "welcome" | "emoji" | "modlog" | "webhooks" | "notifications" | "privacy" | "delete";
-const TITLES: Record<CommunityTab, string> = { overview: "Overview", groups: "Groups & events", posts: "Posts", donations: "Donations", payouts: "Payouts", members: "Members", requests: "Join requests", invites: "Invite links", screening: "Entry questions", roles: "Roles", automod: "AutoMod", welcome: "Welcome screen", emoji: "Emoji", modlog: "Moderation log", webhooks: "Webhooks & bots", notifications: "Your notifications", privacy: "Privacy", delete: "Delete community" };
+const TITLES: Record<CommunityTab, string> = { overview: "Overview", groups: "Events and mentions", posts: "Posts", donations: "Donations", payouts: "Payouts", members: "Members", requests: "Join requests", invites: "Invite links", screening: "Entry questions", roles: "Roles", automod: "AutoMod", welcome: "Welcome screen", emoji: "Emoji", modlog: "Moderation log", webhooks: "Webhooks & bots", notifications: "Your notifications", privacy: "Privacy", delete: "Delete community" };
 
 /** Discord-style full-screen community settings. Owners and admins only; the server re-checks every change. */
 export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: CommunityDTO; tab: string; onTab: (t: CommunityTab) => void; onClose: () => void; onChanged: () => Promise<void> | void }) {
@@ -58,7 +59,6 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
 
   // settings that save the moment they change: a spinner in the field while saving, then "Saved" (useAutoSave)
   const feedSave = useAutoSave<GroupPolicy>();
-  const groupSave = useAutoSave<GroupPolicy>();
   const eventsSave = useAutoSave<boolean>();
   const massSave = useAutoSave<boolean>();
   const privacySave = useAutoSave<boolean>();
@@ -74,7 +74,6 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
   };
   const setFeed = (next: GroupPolicy) => feedSave.run(() => saveTo({ feedPolicy: next }, next === "off" ? "Posts turned off" : "Posts settings saved"), next);
   const setMemberEvents = (next: boolean) => eventsSave.run(() => saveTo({ memberEvents: next }, next ? "Members can suggest events" : "Only owners and admins post events now"), next);
-  const setPolicy = (next: GroupPolicy) => groupSave.run(() => saveTo({ groupPolicy: next }, "Group settings saved"), next);
   const setMass = (next: boolean) => massSave.run(() => saveTo({ membersMassMention: next }, next ? "Members can mention everyone" : "Only owners and admins can mention everyone"), next);
   const setPrivacy = (next: boolean) => privacySave.run(() => saveTo({ privacy: next ? "private" : "public" }, next ? "Community is now private" : "Community is now public"), next);
 
@@ -83,7 +82,7 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
       title: "Community",
       items: [
         { id: "overview", label: "Overview", icon: "sliders", hidden: !admin },
-        { id: "groups", label: "Groups", icon: "folder", hidden: !admin },
+        { id: "groups", label: "Events and mentions", icon: "calendar", hidden: !admin },
         { id: "posts", label: "Posts", icon: "image", hidden: !admin },
         { id: "privacy", label: "Privacy", icon: "lock", hidden: !isOwner },
         // your own (every member has one; members reach it from the community's menu)
@@ -151,17 +150,8 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
               />
             </SettingsBlock>
           )}
+          {!c.official && c.viewer.role === "owner" && <VerificationBlock slug={c.slug} />}
         </>
-      )}
-
-      {active === "groups" && (
-        <SettingsBlock title="Who can create groups" intro="Groups are smaller spaces with their own chat channels. Admins can always manage them.">
-          <SelectField label="Group creation" value={groupSave.pending ?? c.groupPolicy} status={groupSave.status} onChange={(e) => void setPolicy(e.target.value as GroupPolicy)}>
-            <option value="admins">Only admins</option>
-            <option value="members">Any member</option>
-            <option value="off">Nobody (groups off)</option>
-          </SelectField>
-        </SettingsBlock>
       )}
 
       {active === "groups" && (

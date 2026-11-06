@@ -23,7 +23,6 @@ const toDraft = (c: PlanConfig): Draft => ({
     [`mediaSlots.${p}`, String(c.mediaSlots[p])],
     [`communitiesCreate.${p}`, String(c.communitiesCreate[p])],
     [`communitiesJoin.${p}`, String(c.communitiesJoin[p])],
-    [`groupsCreate.${p}`, String(c.groupsCreate[p])],
     [`webhooks.${p}`, String(c.webhooks[p])],
     [`emojiSlots.${p}`, String(c.emojiSlots[p])],
   ])),
@@ -61,7 +60,6 @@ export function PlansAdmin() {
           mediaSlots: { free: num("mediaSlots.free"), lite: num("mediaSlots.lite"), pro: num("mediaSlots.pro") },
           communitiesCreate: { free: num("communitiesCreate.free"), lite: num("communitiesCreate.lite"), pro: num("communitiesCreate.pro") },
           communitiesJoin: { free: num("communitiesJoin.free"), lite: num("communitiesJoin.lite"), pro: num("communitiesJoin.pro") },
-          groupsCreate: { free: num("groupsCreate.free"), lite: num("groupsCreate.lite"), pro: num("groupsCreate.pro") },
           webhooks: { free: num("webhooks.free"), lite: num("webhooks.lite"), pro: num("webhooks.pro") },
           emojiSlots: { free: num("emojiSlots.free"), lite: num("emojiSlots.lite"), pro: num("emojiSlots.pro") },
         })
@@ -90,7 +88,6 @@ export function PlansAdmin() {
             {field(`mediaSlots.${p}`, "Gallery slots, photos or videos (0–24)")}
             {field(`communitiesCreate.${p}`, "Communities they can own")}
             {field(`communitiesJoin.${p}`, "Communities they can be in", "Klique HQ doesn't count.")}
-            {field(`groupsCreate.${p}`, "Groups they can start per community")}
             {field(`webhooks.${p}`, "Webhooks / bots per community they own")}
             {field(`emojiSlots.${p}`, "Custom emoji per community they own")}
             <ul className="space-y-1 border-t border-line pt-3 text-xs text-ink-muted">

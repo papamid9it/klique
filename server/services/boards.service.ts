@@ -39,7 +39,7 @@ export async function ensureBoards(space: Space, ownerId: Types.ObjectId): Promi
   return rows;
 }
 
-const canPostIn = (b: Pick<IBoard, "postPolicy">, access: SpaceAccess) => (b.postPolicy === "admins" ? access.canManage : access.canPost);
+const canPostIn = (b: Pick<IBoard, "postPolicy">, access: SpaceAccess) => !access.postBan && (b.postPolicy === "admins" ? access.canManage : access.canPost);
 
 export async function listBoards(viewer: IUser | null, space: Space, access: SpaceAccess): Promise<BoardDTO[]> {
   assertCommunity(space);

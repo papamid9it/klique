@@ -145,15 +145,6 @@ export function CommunityInfo({ community: c, onJoined, onNavigate }: { communit
           <p className="text-sm text-ink-muted">No events planned yet.</p>
         )}
       </section>
-
-      {(c.subcommunityCount ?? 0) > 0 && (
-        <Link href={`${base}?view=groups`} onClick={onNavigate} className="flex items-center justify-between rounded-card border border-line bg-surface p-3.5 text-sm font-semibold hover:bg-raised">
-          <span className="inline-flex items-center gap-2">
-            <Icon name="folder" size={16} className="text-accent-text" /> {c.subcommunityCount} {c.subcommunityCount === 1 ? "group" : "groups"}
-          </span>
-          <Icon name="chevron-right" size={15} className="text-ink-muted" />
-        </Link>
-      )}
     </div>
   );
 }

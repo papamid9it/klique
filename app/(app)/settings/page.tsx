@@ -15,7 +15,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
-import { AuthService } from "@/app/services/AuthService";
+import { askSignOut } from "@/components/domain/account/SignOutDialog";
 import { ProfileService, type ProfileUpdate } from "@/app/services/ProfileService";
 import { SafetyService } from "@/app/services/SafetyService";
 import { PersonRow } from "@/components/domain/PersonRow";
@@ -390,7 +390,7 @@ function Row({ label, value, action }: { label: string; value: string; action?: 
   );
 }
 
-function AccountTab({ me, go, onSignOut, onEverywhere, busy }: { me: UserMe; go: (t: Tab) => void; onSignOut: () => void; onEverywhere: () => void; busy: "out" | "all" | null }) {
+function AccountTab({ me, go, onSignOut, onEverywhere }: { me: UserMe; go: (t: Tab) => void; onSignOut: () => void; onEverywhere: () => void }) {
   return (
     <div className="space-y-8">
       {/* your card: your name style, frame and moving pictures keep playing here (globals.css kq-live) */}
@@ -438,10 +438,10 @@ function AccountTab({ me, go, onSignOut, onEverywhere, busy }: { me: UserMe; go:
 
       <Block title="Sessions" intro="Sign out here, or end every session if you think someone else has access.">
         <div className="flex flex-wrap gap-2">
-          <Button onClick={onSignOut} loading={busy === "out"}>
+          <Button onClick={onSignOut}>
             <Icon name="logout" size={15} /> Sign out
           </Button>
-          <Button variant="danger" onClick={onEverywhere} loading={busy === "all"}>
+          <Button variant="danger" onClick={onEverywhere}>
             Sign out everywhere
           </Button>
         </div>
@@ -617,12 +617,10 @@ function StyleTab({ me, go }: { me: UserMe; go: (t: Tab) => void }) {
 export default function SettingsPage() {
   const inDesktop = useInDesktopApp();
   const router = useRouter();
-  const { user, status, signOut, requireAuth } = useAuth();
-  const toast = useToast();
+  const { user, status, requireAuth } = useAuth();
   const [tab, setTab] = useState<Tab>("account");
   // phones show the list of categories first, then one category at a time
   const [menu, setMenu] = useState(true);
-  const [busy, setBusy] = useState<"out" | "all" | null>(null);
 
   const select = useCallback((t: Tab) => {
     setTab(t);
@@ -679,21 +677,8 @@ export default function SettingsPage() {
     );
   }
 
-  async function everywhere() {
-    if (!window.confirm("Sign out on every device? You'll need to sign in again everywhere.")) return;
-    setBusy("all");
-    try {
-      await AuthService.logoutEverywhere();
-      await signOut().catch(() => {});
-    } catch (e) {
-      toast(errorMessage(e), "error");
-      setBusy(null);
-    }
-  }
-  const out = () => {
-    setBusy("out");
-    void signOut().finally(() => setBusy(null));
-  };
+  const everywhere = () => askSignOut(true);
+  const out = () => askSignOut();
 
   const list = (
     <nav aria-label="Settings" className="space-y-5">
@@ -717,7 +702,7 @@ export default function SettingsPage() {
         </div>
       ))}
       <div className="border-t border-line pt-3">
-        <button type="button" onClick={out} disabled={busy === "out"} className="flex h-10 w-full items-center gap-3 rounded-control px-2.5 text-left text-[15px] font-medium text-danger transition hover:bg-danger/10 md:h-9">
+        <button type="button" onClick={out} className="flex h-10 w-full items-center gap-3 rounded-control px-2.5 text-left text-[15px] font-medium text-danger transition hover:bg-danger/10 md:h-9">
           <Icon name="logout" size={17} /> Log out
         </button>
       </div>
@@ -750,7 +735,7 @@ export default function SettingsPage() {
               </button>
               <h1 className="text-xl font-semibold tracking-[-0.02em]">{TITLES[tab]}</h1>
             </div>
-            {tab === "account" && <AccountTab me={user} go={select} onSignOut={out} onEverywhere={everywhere} busy={busy} />}
+            {tab === "account" && <AccountTab me={user} go={select} onSignOut={out} onEverywhere={everywhere} />}
             {tab === "profile" && <ProfileTab me={user} />}
             {tab === "gallery" && <ProfileMediaEditor me={user} />}
             {tab === "socials" && <SocialsEditor me={user} />}

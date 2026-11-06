@@ -9,7 +9,7 @@ import { Community, type ICommunity } from "../models/Community";
 import { Membership, type IMembership } from "../models/Membership";
 import { Board, Topic, TopicComment, TopicFollow, TopicLike, type ITopic, type ITopicComment } from "../models/Topic";
 import { deleteTopicThread, ensureTopicThread, listMessages, syncTopicThread } from "./channels.service";
-import { assertCanPost, assertCanView, outranks, type Space, type SpaceAccess } from "../policies/access";
+import { assertCanPost, assertCanView, assertNotPostBanned, outranks, postBanOf, type Space, type SpaceAccess } from "../policies/access";
 import { loadBriefs } from "../serializers";
 import type { commentCreateSchema, commentUpdateSchema, topicCreateSchema, topicListQuery, topicUpdateSchema } from "../validators/schemas";
 import { ensureBoards, resolveBoard, canPostIn } from "./boards.service";
@@ -52,7 +52,7 @@ async function toTopics(rows: ITopic[], viewer: IUser | null): Promise<TopicDTO[
     loadBriefs(rows.map((r) => r.authorId)),
     Community.find({ _id: { $in: communityIds } }).select("slug name interest coverImage").lean<Pick<ICommunity, "_id" | "slug" | "name" | "interest" | "coverImage">[]>(),
     viewer ? TopicLike.find({ userId: viewer._id, targetType: "topic", targetId: { $in: rows.map((r) => r._id) } }).select("targetId").lean<{ targetId: Types.ObjectId }[]>() : [],
-    viewer ? Membership.find({ userId: viewer._id, communityId: { $in: communityIds }, subcommunityId: null, status: "active" }).select("communityId role").lean<Pick<IMembership, "communityId" | "role">[]>() : [],
+    viewer ? Membership.find({ userId: viewer._id, communityId: { $in: communityIds }, subcommunityId: null, status: "active" }).select("communityId role status postBan").lean<Pick<IMembership, "communityId" | "role" | "status" | "postBan">[]>() : [],
     Membership.find({ communityId: { $in: communityIds }, subcommunityId: null, status: "active", userId: { $in: rows.map((r) => r.authorId) } }).select("communityId userId role").lean<Pick<IMembership, "communityId" | "userId" | "role">[]>(),
     boardIds.length ? Board.find({ _id: { $in: boardIds } }).select("slug name").lean<{ _id: Types.ObjectId; slug: string; name: string }[]>() : [],
     viewer ? TopicFollow.find({ userId: viewer._id, topicId: { $in: rows.map((r) => r._id) } }).select("topicId").lean<{ topicId: Types.ObjectId }[]>() : [],
@@ -61,6 +61,7 @@ async function toTopics(rows: ITopic[], viewer: IUser | null): Promise<TopicDTO[
   const boardById = new Map(boards.map((b) => [sid(b._id), b]));
   const likedSet = new Set(liked.map((l) => sid(l.targetId)));
   const roleIn = new Map(roles.map((m) => [sid(m.communityId), m.role]));
+  const stoppedIn = new Set(roles.filter((m) => postBanOf(m)).map((m) => sid(m.communityId)));
   const authorRole = new Map(authorRoles.map((m) => [`${sid(m.communityId)}:${sid(m.userId)}`, m.role]));
   const byCommunity = new Map(communities.map((c) => [sid(c._id), c]));
   const me = viewer ? sid(viewer._id) : "";
@@ -101,7 +102,7 @@ async function toTopics(rows: ITopic[], viewer: IUser | null): Promise<TopicDTO[
         canDelete: mine || siteAdmin || (moderator && (target === undefined || outranks(role ?? null, target))),
         canModerate: moderator,
         canLike: member,
-        canComment: member && (!t.locked || moderator),
+        canComment: member && !stoppedIn.has(sid(t.communityId)) && (!t.locked || moderator),
       },
     ];
   });
@@ -266,6 +267,7 @@ export async function setFollow(viewer: IUser, space: Space, access: SpaceAccess
 export async function createTopic(viewer: IUser, space: Space, access: SpaceAccess, input: z.infer<typeof topicCreateSchema>): Promise<TopicDTO> {
   assertCommunity(space);
   assertCanPost(access);
+  assertNotPostBanned(access);
   const board = await resolveBoard(space, input.board);
   await checkAutoMod(space, viewer, access, { text: `${input.title} ${input.body ?? ""}`.trim(), where: `the ${board.name} board` });
   if (!canPostIn(board, access)) throw forbidden(`Only owners and admins can post in ${board.name}.`);
@@ -280,6 +282,7 @@ export async function updateTopic(viewer: IUser, space: Space, access: SpaceAcce
   assertCanView(access, "this topic");
   const t = await loadTopic(space, topicId);
   const mine = sid(t.authorId) === sid(viewer._id);
+  if (mine) assertNotPostBanned(access);
   const set: Record<string, unknown> = {};
 
   const touchesContent = patch.title !== undefined || patch.body !== undefined || patch.media !== undefined || patch.tags !== undefined;
@@ -351,6 +354,7 @@ async function topicForComment(space: Space, access: SpaceAccess, topicId: strin
 export async function createComment(viewer: IUser, space: Space, access: SpaceAccess, topicId: string, input: z.infer<typeof commentCreateSchema>): Promise<TopicCommentDTO> {
   const t = await topicForComment(space, access, topicId);
   assertCanPost(access);
+  assertNotPostBanned(access);
   if (t.locked && !access.canManage) throw forbidden("This topic is locked.");
   rateLimit(`comment:${sid(viewer._id)}`, 30, 5 * 60_000);
   await checkAutoMod(space, viewer, access, { text: input.body ?? "", where: `"${t.title}"` });
@@ -389,6 +393,7 @@ async function ownComment(viewer: IUser, topic: ITopic, commentId: string) {
 export async function updateComment(viewer: IUser, space: Space, access: SpaceAccess, topicId: string, commentId: string, input: z.infer<typeof commentUpdateSchema>): Promise<TopicCommentDTO> {
   const t = await topicForComment(space, access, topicId);
   const { c, mine } = await ownComment(viewer, t, commentId);
+  if (mine) assertNotPostBanned(access);
   if (!(mine && access.isMember)) {
     const authorM = mine ? null : await Membership.findOne({ communityId: t.communityId, subcommunityId: null, userId: c.authorId, status: "active" }).select("role").lean<Pick<IMembership, "role">>();
     if (!access.canManage || !(authorM === null || outranks(access.role, authorM.role))) throw forbidden("You can only edit your own comments.");

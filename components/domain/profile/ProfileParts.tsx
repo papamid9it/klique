@@ -48,13 +48,11 @@ export function ZoomAvatar({ url, name, children }: { url?: string | null; name:
 }
 
 /** Banner strip: a gradient from the accent tokens, rotated per person so everyone isn't identical. */
-export function ProfileBanner({ handle, className, bannerUrl, bannerColor, zoomable }: { handle: string; className?: string; bannerUrl?: string | null; bannerColor?: string | null; zoomable?: boolean }) {
+export function ProfileBanner({ handle, className, bannerUrl, bannerColor }: { handle: string; className?: string; bannerUrl?: string | null; bannerColor?: string | null }) {
   const angle = 100 + (hash(handle) % 160);
-  const view = useMediaViewer();
-  const { user } = useAuth();
   const calm = useCalm();
   if (bannerUrl) {
-    // shown as the person positioned it (lib/focal); tapping opens the whole picture when `zoomable`. An animated
+    // shown as the person positioned it (lib/focal). An animated
     // (GIF) banner holds still for people who turn motion down or use data saver.
     const pic =
       (calm || !PROFILE_DESIGNS_ENABLED) && isAnimatedPicture(bannerUrl) ? (
@@ -63,13 +61,7 @@ export function ProfileBanner({ handle, className, bannerUrl, bannerColor, zooma
         // eslint-disable-next-line @next/next/no-img-element
         <img src={cdn(bannerUrl, { w: 1200 })} alt="" aria-hidden="true" loading="lazy" style={focalStyle(splitFocal(bannerUrl).focal)} className="size-full object-cover" />
       );
-    return zoomable ? (
-      <button type="button" onClick={() => view([bannerUrl], 0, { mine: bannerUrl === user?.bannerUrl })} aria-label="View banner full screen" className={cx("block w-full cursor-zoom-in overflow-hidden", className)}>
-        {pic}
-      </button>
-    ) : (
-      <div className={cx("w-full overflow-hidden", className)}>{pic}</div>
-    );
+    return <div className={cx("w-full overflow-hidden", className)}>{pic}</div>;
   }
   if (bannerColor) {
     return <div aria-hidden="true" className={className} style={{ background: `linear-gradient(135deg, ${bannerColor}, color-mix(in oklab, ${bannerColor} 55%, var(--surface)))` }} />;

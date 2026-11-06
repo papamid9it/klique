@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, type ReactNode } from "react";
-import { Icon } from "./Icon";
+import { Icon, type IconName } from "./Icon";
 import { cx } from "./cx";
 
 /**
@@ -15,6 +15,7 @@ export function Modal({
   description,
   children,
   size = "md",
+  icon,
 }: {
   open: boolean;
   onClose: () => void;
@@ -22,6 +23,8 @@ export function Modal({
   description?: string;
   children: ReactNode;
   size?: "sm" | "md" | "lg" | "xl";
+  /** a short question or warning: a round picture on top, everything centred */
+  icon?: { name: IconName; danger?: boolean };
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -49,15 +52,20 @@ export function Modal({
       )}
     >
       {open && (
-        <div className="max-h-[90dvh] overflow-y-auto overscroll-contain p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:max-h-[85dvh] sm:p-6">
-          <div className="mb-4 flex items-start justify-between gap-4">
+        <div className="relative max-h-[90dvh] overflow-y-auto overscroll-contain p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:max-h-[85dvh] sm:p-6">
+          <div className={icon ? "mb-5 text-center" : "mb-4 flex items-start justify-between gap-4"}>
             <div>
-              <h2 id={titleId} className="text-lg font-semibold tracking-tight">
+              {icon && (
+                <span className={cx("mx-auto mb-3 inline-flex size-14 items-center justify-center rounded-full", icon.danger ? "bg-danger/12 text-danger" : "bg-raised text-accent-text")}>
+                  <Icon name={icon.name} size={25} />
+                </span>
+              )}
+              <h2 id={titleId} className={cx("font-semibold tracking-tight", icon ? "text-xl" : "text-lg")}>
                 {title}
               </h2>
-              {description && <p className="mt-1 text-sm text-ink-muted">{description}</p>}
+              {description && <p className={cx("mt-1 text-ink-muted", icon ? "text-[15px] leading-relaxed" : "text-sm")}>{description}</p>}
             </div>
-            <button type="button" onClick={onClose} aria-label="Close" className="-mt-1 -mr-1 inline-flex size-11 shrink-0 items-center justify-center rounded-full text-ink-muted hover:bg-raised hover:text-ink sm:size-9">
+            <button type="button" onClick={onClose} aria-label="Close" className={cx("inline-flex size-11 shrink-0 items-center justify-center rounded-full text-ink-muted hover:bg-raised hover:text-ink sm:size-9", icon ? "absolute top-2.5 right-2.5" : "-mt-1 -mr-1")}>
               <Icon name="x" />
             </button>
           </div>

@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { RowSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/States";
-import { cx } from "@/components/ui/cx";
 import { formatDateShort } from "@/lib/format";
 import { useApi } from "@/lib/hooks/useApi";
 import { softNavigate } from "@/lib/nav";
@@ -18,13 +17,9 @@ import { CrewResults, useEventCrews } from "./CrewSearch";
 import { KliqueCard, crewHref } from "./parts";
 import { StartCrewModal } from "./StartCrewModal";
 
-/** past this many upcoming events, the picker is a dropdown instead of a row of chips */
-const CHIP_LIMIT = 6;
-const crewsLabel = (n: number) => (n ? `${n} ${n === 1 ? "klique" : "kliques"}` : "no kliques yet");
-
 /**
- * A community's (or group's) "Kliques" view: the community's own kliques ("who wants to…"), with Start a klique,
- * and its upcoming in-person events to go to together. `eventId` (?e=…) opens one event's kliques.
+ * A community's (or group's) "Kliques" view: the community's own kliques ("who wants to…"), with Start a klique.
+ * `eventId` (?e=…), from an event's page, opens that event's kliques.
  */
 export function CrewsBoard({ slug, sub, eventId, community, onChanged }: { slug: string; sub: string | null; eventId: string | null; community: { slug: string; name: string; interest: string }; onChanged: () => void }) {
   const { requireAuth } = useAuth();
@@ -53,7 +48,7 @@ export function CrewsBoard({ slug, sub, eventId, community, onChanged }: { slug:
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-lg font-bold text-ink">Kliques</h2>
-          <p className="text-sm text-ink-muted">Get people together: a movie, a match, a run, a night out. Or go to an event together.</p>
+          <p className="text-sm text-ink-muted">Get people together: a movie, a match, a run, a night out.</p>
         </div>
         {!sub && (
           <Button size="sm" variant="primary" onClick={() => requireAuth() && setStarting(true)}>
@@ -78,48 +73,6 @@ export function CrewsBoard({ slug, sub, eventId, community, onChanged }: { slug:
         <EmptyState icon="users" title="No kliques yet">
           Start the first one. Pick a plan, add a picture, and people here can join you.
         </EmptyState>
-      )}
-
-      {upcoming.length > 0 && (
-        <section aria-label="Go to an event together" className="space-y-2">
-          <h3 className="text-sm font-semibold">Go to an event together</h3>
-          {upcoming.length > CHIP_LIMIT ? (
-            <label className="block">
-              <span className="sr-only">Event</span>
-              <span className="relative block">
-                <select
-                  value=""
-                  onChange={(e) => e.target.value && softNavigate(`${base}&e=${e.target.value}`, { replace: true })}
-                  className="h-11 w-full appearance-none truncate rounded-control border border-line bg-raised pr-9 pl-3.5 text-sm text-ink focus:border-accent-text focus:outline-none"
-                >
-                  <option value="">Pick an event · {upcoming.length} coming up</option>
-                  {upcoming.map((e) => (
-                    <option key={e.id} value={e.id}>
-                      {e.title} · {formatDateShort(e.startsAt)} · {crewsLabel(e.crewCount ?? 0)}
-                    </option>
-                  ))}
-                </select>
-                <Icon name="chevron-down" size={16} className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-ink-muted" />
-              </span>
-            </label>
-          ) : (
-            <div className="no-bar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
-              {upcoming.map((e) => (
-                <button
-                  key={e.id}
-                  type="button"
-                  onClick={() => softNavigate(`${base}&e=${e.id}`, { replace: true })}
-                  className={cx("shrink-0 rounded-card border border-line bg-surface/50 px-3.5 py-2 text-left transition hover:border-ink-muted/50")}
-                >
-                  <span className="block max-w-56 truncate text-sm font-semibold">{e.title}</span>
-                  <span className="block text-xs text-ink-muted">
-                    {formatDateShort(e.startsAt)} · {crewsLabel(e.crewCount ?? 0)}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-        </section>
       )}
 
       {starting && (

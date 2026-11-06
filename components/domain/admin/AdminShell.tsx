@@ -33,7 +33,7 @@ const MENU: { title: string | null; items: Item[] }[] = [
     items: [
       { href: "/admin/people", label: "People", icon: "users" },
       { href: "/admin/events", label: "Events", icon: "calendar" },
-      { href: "/admin/communities", label: "Communities", icon: "hash" },
+      { href: "/admin/communities", label: "Communities", icon: "hash", count: (s) => s.pendingVerification },
       { href: "/admin/categories", label: "Categories", icon: "folder" },
     ],
   },

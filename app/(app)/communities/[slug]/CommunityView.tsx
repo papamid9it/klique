@@ -33,7 +33,6 @@ import { noteCommunityOpened } from "@/components/layout/prefetchCommunity";
 import { JoinButton } from "@/components/domain/JoinButton";
 import { ReportDialog } from "@/components/domain/ReportDialog";
 import { SectionHeader } from "@/components/domain/SectionHeader";
-import { GroupsView } from "@/components/domain/space/GroupsView";
 import { DashboardView } from "@/components/domain/space/DashboardView";
 import { CommunitySettings } from "@/components/domain/space/CommunitySettings";
 import { MembersPanel } from "@/components/domain/space/MembersPanel";
@@ -66,7 +65,6 @@ const VIEWS: Record<WorkspaceView, { label: string; icon: IconName }> = {
   events: { label: "Events", icon: "calendar" },
   kliques: { label: "Kliques", icon: "pin" },
   search: { label: "Search", icon: "search" },
-  groups: { label: "Groups", icon: "folder" },
   members: { label: "Members", icon: "users" },
 };
 
@@ -79,8 +77,8 @@ const GROUP_VIEWS: Record<Exclude<GroupView, "updates">, { label: string; icon: 
 /**
  * A community is a chat space: channels on the left (grouped in categories), the conversation in the
  * middle. The right side only opens for a topic's comments or a call; the community's (or group's) about,
- * admins and what's coming up open from its name menu instead ("About"). Events, groups, members and settings are views in the
- * middle pane. URL: /communities/<slug>?c=<channel>  or  ?view=events|groups|members|manage
+ * admins and what's coming up open from its name menu instead ("About"). Events, members and settings are views in the
+ * middle pane. URL: /communities/<slug>?c=<channel>  or  ?view=events|members|manage
  * A group is a section of the same workspace: ?g=<group>&c=<channel>  or  ?g=<group>&view=updates|events|members|manage
  */
 export function CommunityView() {
@@ -181,7 +179,7 @@ function CommunityWorkspace({ slug }: { slug: string }) {
     requestedView && requestedView in viewTable &&
     (requestedView !== "members" || (gSlug ? !!g?.viewer.isMember : !!c?.viewer.canSeeMembers)) &&
     (requestedView !== "dashboard" || (!gSlug && !!c?.viewer.canManage)) &&
-    (gSlug ? requestedView !== "groups" : requestedView !== "updates")
+    (!!gSlug || requestedView !== "updates")
       ? requestedView
       : null
   ) as (WorkspaceView | GroupView) | null;
@@ -536,10 +534,6 @@ function CommunityWorkspace({ slug }: { slug: string }) {
           <Scroll inner wide>
             <SectionHeader title="Dashboard" />
             <DashboardView c={c} />
-          </Scroll>
-        ) : view === "groups" && !g ? (
-          <Scroll inner full>
-            <GroupsView c={c} />
           </Scroll>
         ) : view === "members" ? (
           <Scroll inner full>

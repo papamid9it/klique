@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
 import { AdminService } from "@/app/services/AdminService";
 import { AdminHeader, Badge, ConfirmDialog, LoadMore, Panel, SearchBox, Segmented, TableHead, Toolbar } from "@/components/domain/admin/AdminParts";
@@ -24,10 +25,13 @@ function AdminCommunitiesPageContent() {
   const toast = useToast();
   const [sort, setSort] = useState<"members" | "new">("members");
   const [q, setQ] = useState("");
-  const [adultOnly, setAdultOnly] = useState(false);
+  const router = useRouter();
+  const shown = useSearchParams().get("view");
+  const which = shown === "adult" || shown === "verification" ? shown : "all";
+  const [rejecting, setRejecting] = useState<AdminCommunityRow | null>(null);
   const query = useDebounced(q.trim(), 300);
   const [pending, setPending] = useState<AdminCommunityRow | null>(null);
-  const { items, loading, loadingMore, error, hasMore, loadMore, reload, setItems } = usePaged<AdminCommunityRow>((page) => AdminService.communities({ sort, q: query, page, ...(adultOnly ? { adult: "1" as const } : {}) }), [sort, query, adultOnly], { keepPrevious: true });
+  const { items, loading, loadingMore, error, hasMore, loadMore, reload, setItems } = usePaged<AdminCommunityRow>((page) => AdminService.communities({ sort, q: query, page, ...(which === "adult" ? { adult: "1" as const } : which === "verification" ? { verification: "1" as const } : {}) }), [sort, query, which], { keepPrevious: true });
 
   return (
     <>
@@ -45,10 +49,11 @@ function AdminCommunitiesPageContent() {
         />
         <Segmented
           label="Which communities"
-          value={adultOnly ? "adult" : "all"}
-          onChange={(v) => setAdultOnly(v === "adult")}
+          value={which}
+          onChange={(v) => router.replace(v === "all" ? "/admin/communities" : `/admin/communities?view=${v}`, { scroll: false })}
           options={[
             { id: "all", label: "All" },
+            { id: "verification", label: "Waiting to be verified" },
             { id: "adult", label: "18+ only" },
           ]}
         />
@@ -66,7 +71,7 @@ function AdminCommunitiesPageContent() {
             <ErrorState message={error} onRetry={reload} />
           </div>
         ) : !items.length ? (
-          <p className="px-4 py-12 text-center text-sm text-ink-muted">{query ? "No communities match that search." : "No communities yet."}</p>
+          <p className="px-4 py-12 text-center text-sm text-ink-muted">{query ? "No communities match that search." : which === "verification" ? "Nobody is waiting to be verified." : "No communities yet."}</p>
         ) : (
           <ul className="divide-y divide-line">
             {items.map((c) => (
@@ -89,6 +94,7 @@ function AdminCommunitiesPageContent() {
                     <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
                       <InterestChip id={c.interest} short />
                       {c.verified && <Badge>Verified</Badge>}
+                      {c.verificationPending && <Badge tone="bad">Waiting to be verified</Badge>}
                       {c.privacy === "private" && <Badge>Private</Badge>}
                       {c.adult && <Badge tone="bad">18+</Badge>}
                       {c.explicit && <Badge tone="bad">Explicit</Badge>}
@@ -120,12 +126,17 @@ function AdminCommunitiesPageContent() {
                       size="sm"
                       onClick={() =>
                         void AdminService.communityFlags(c.id, { verified: !c.verified }).then(
-                          () => setItems((list) => list.map((x) => (x.id === c.id ? { ...x, verified: !c.verified } : x))),
+                          () => setItems((list) => list.flatMap((x) => (x.id !== c.id ? [x] : which === "verification" ? [] : [{ ...x, verified: !c.verified, verificationPending: false }]))),
                           (e) => toast(errorMessage(e), "error"),
                         )
                       }
                     >
-                      {c.verified ? "Unverify" : "Verify"}
+                      {c.verified ? "Unverify" : c.verificationPending ? "Approve" : "Verify"}
+                    </Button>
+                  )}
+                  {c.verificationPending && (
+                    <Button size="sm" onClick={() => setRejecting(c)}>
+                      Turn down
                     </Button>
                   )}
                   {(c.adult || c.explicit) && (
@@ -152,6 +163,23 @@ function AdminCommunitiesPageContent() {
         <LoadMore hasMore={hasMore} loading={loadingMore} onClick={() => void loadMore()} />
       </Panel>
       <ConfirmDialog
+        open={!!rejecting}
+        title={`Turn down ${rejecting?.name ?? ""}?`}
+        description="The note goes to its owner, so say why. They can apply again."
+        confirm="Turn down"
+        onCancel={() => setRejecting(null)}
+        onConfirm={async (note) => {
+          if (!rejecting) return;
+          try {
+            await AdminService.communityFlags(rejecting.id, { rejectVerification: true, note });
+            setItems((list) => list.flatMap((x) => (x.id !== rejecting.id ? [x] : which === "verification" ? [] : [{ ...x, verificationPending: false }])));
+            setRejecting(null);
+          } catch (err) {
+            toast(errorMessage(err), "error");
+          }
+        }}
+      />
+      <ConfirmDialog
         open={!!pending}
         title={`Delete ${pending?.name ?? ""}?`}
         description={`Deletes the community with all ${pending?.memberCount ?? 0} memberships, its groups, channels, messages and posts. This can't be undone. To deal with one bad actor, suspend them instead.`}
@@ -176,7 +204,9 @@ function AdminCommunitiesPageContent() {
 export default function AdminCommunitiesPage() {
   return (
     <AdminGate>
-      <AdminCommunitiesPageContent />
+      <Suspense fallback={null}>
+        <AdminCommunitiesPageContent />
+      </Suspense>
     </AdminGate>
   );
 }

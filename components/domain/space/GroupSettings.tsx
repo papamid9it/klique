@@ -11,12 +11,13 @@ import { Icon } from "@/components/ui/Icon";
 import { SaveBar, SettingsBlock, SettingsShell, type SettingsGroup } from "@/components/ui/SettingsShell";
 import { LIMITS } from "@/lib/constants";
 import type { SubcommunityDTO } from "@/lib/types";
+import { InvitesPanel } from "./InvitesPanel";
 import { MembersPanel } from "./MembersPanel";
 import { MinPointsForm } from "./MinPoints";
 import { ConfirmModal } from "./parts";
 
-export type GroupTab = "overview" | "points" | "members" | "delete";
-const TITLES: Record<GroupTab, string> = { overview: "Overview", points: "Points needed", members: "Members", delete: "Delete group" };
+export type GroupTab = "overview" | "points" | "members" | "invites" | "delete";
+const TITLES: Record<GroupTab, string> = { overview: "Overview", points: "Points needed", members: "Members", invites: "Invite links", delete: "Delete group" };
 
 /** Discord-style full-screen group settings. */
 export function GroupSettings({ g, tab, onTab, onClose, onChanged }: { g: SubcommunityDTO; tab: string; onTab: (t: GroupTab) => void; onClose: () => void; onChanged: () => Promise<void> | void }) {
@@ -52,6 +53,7 @@ export function GroupSettings({ g, tab, onTab, onClose, onChanged }: { g: Subcom
         { id: "overview", label: "Overview", icon: "sliders" },
         { id: "points", label: "Points needed", icon: "asterisk", hidden: !g.viewer.canManage },
         { id: "members", label: "Members", icon: "users" },
+        { id: "invites", label: "Invite links", icon: "link", hidden: !g.viewer.canManage },
       ],
     },
     { items: [{ id: "delete", label: "Delete group", icon: "trash", danger: true, hidden: !canDelete }] },
@@ -65,7 +67,7 @@ export function GroupSettings({ g, tab, onTab, onClose, onChanged }: { g: Subcom
             <TextField label="Group name" value={name} onChange={(e) => setName(e.target.value)} maxLength={LIMITS.communityName} required />
             <TextArea label="Description" value={description} onChange={(e) => setDescription(e.target.value)} maxLength={LIMITS.communityDescription} counter={LIMITS.communityDescription} />
             <p className="flex items-center gap-2 text-xs text-ink-muted">
-              <Icon name="lock" size={12} /> Private group: only people added from {g.parent.name} can see it, up to {LIMITS.groupMembers}.
+              <Icon name="lock" size={12} /> Private group: only people you add from {g.parent.name} or send a link can see it, up to {LIMITS.groupMembers}.
             </p>
           </div>
           <SaveBar
@@ -92,6 +94,7 @@ export function GroupSettings({ g, tab, onTab, onClose, onChanged }: { g: Subcom
         />
       )}
       {active === "members" && <MembersPanel slug={parent} subSlug={g.slug} group={{ name: g.name, communityName: g.parent.name, memberCount: g.memberCount ?? 0, canAdd: g.viewer.canManage, onChanged: () => void onChanged() }} />}
+      {active === "invites" && <InvitesPanel slug={parent} subSlug={g.slug} spaceName={g.name} />}
       {active === "delete" && (
         <SettingsBlock danger>
           <p className="text-sm font-medium">Delete this group</p>

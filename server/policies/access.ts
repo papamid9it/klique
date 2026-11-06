@@ -12,7 +12,7 @@ import type { IUser } from "../models/User";
 import { isSiteAdmin } from "./hosting";
 import { kliqueId } from "../services/klique-id";
 import { CommunityRole, type ICommunityRole } from "../models/CommunityRole";
-import { ADMIN_PERMISSIONS, ALL_PERMISSIONS, isPermission, type Permission } from "@/lib/roles";
+import { GROUP_POWERS, ADMIN_PERMISSIONS, ALL_PERMISSIONS, isPermission, type Permission } from "@/lib/roles";
 
 /**
  * AUTHORIZATION POLICIES — the single source of truth for "who may do what".
@@ -56,6 +56,9 @@ export interface SpaceAccess extends ViewerAccess {
 
 /** where "admin" sits when the Admin role hasn't been made yet (migrations/roles makes it at this position) */
 export const ADMIN_RANK = 1000;
+/** someone a group's owner gave powers to: above its plain members, below everyone with a rank in the community */
+export const GROUP_MOD_RANK = 1;
+export const groupPowersOf = (m: Pick<IMembership, "powers"> | null | undefined): Permission[] => (m?.powers ?? []).filter((p): p is Permission => isPermission(p) && (GROUP_POWERS as readonly string[]).includes(p));
 const OWNER_RANK = 1e9;
 
 /** A member's permissions, rank and role ids from their community membership and the roles it holds. */
@@ -91,6 +94,21 @@ export async function rolesOf(m: Pick<IMembership, "roleIds" | "status"> | null)
 export function timeoutOf(m: Pick<IMembership, "timeoutUntil" | "role" | "status"> | null | undefined): string | null {
   if (!m || m.status !== "active" || m.role === "owner" || !m.timeoutUntil) return null;
   return +new Date(m.timeoutUntil) > Date.now() ? new Date(m.timeoutUntil).toISOString() : null;
+}
+
+/** Are they stopped from writing in Posts and on Boards right now? Owners never are. */
+export function postBanOf(m: Pick<IMembership, "postBan" | "role" | "status"> | null | undefined): { until: string | null; reason: string | null } | null {
+  const ban = m?.postBan;
+  if (!m || !ban || m.status !== "active" || m.role === "owner") return null;
+  if (ban.until && +new Date(ban.until) <= Date.now()) return null;
+  return { until: ban.until ? new Date(ban.until).toISOString() : null, reason: ban.reason || null };
+}
+
+/** Writing in the Posts section or on a Board (chat isn't affected). */
+export function assertNotPostBanned(access: Pick<SpaceAccess, "postBan">) {
+  const ban = access.postBan;
+  if (!ban) return;
+  throw forbidden(ban.until ? `You can't write in Posts or on Boards here until ${new Date(ban.until).toLocaleString("en-NG", { dateStyle: "medium", timeStyle: "short", timeZone: "Africa/Lagos" })}. You can still chat.` : "You've been stopped from writing in Posts and on Boards here. You can still chat.");
 }
 
 /** "You're timed out here until 3:40 PM." (with the reason they were given) */
@@ -169,6 +187,7 @@ export function communityAccessFrom(
     canManage: isManager(role),
     canView: isPublic ? true : role !== null,
     canPost: role !== null && !timedOutUntil && !needsRules,
+    postBan: postBanOf(membership),
     needsRules,
     welcomePending,
     timedOutUntil,
@@ -214,7 +233,9 @@ export function subAccessFrom(
     ...(() => {
       const fromParent = rolePowers(parentRole, parentRoles);
       const own = rolePowers(overseer ? "owner" : role, []);
-      return { perms: [...new Set([...fromParent.perms, ...own.perms])], rank: Math.max(fromParent.rank, own.rank), roleIds: fromParent.roleIds };
+      // what the group's owner let them do here (a moderator, under whatever title)
+      const given = role ? groupPowersOf(subMembership) : [];
+      return { perms: [...new Set([...fromParent.perms, ...own.perms, ...given])], rank: Math.max(fromParent.rank, own.rank, given.length ? GROUP_MOD_RANK : 0), roleIds: fromParent.roleIds };
     })(),
     pointsToPost: short,
     banned,
@@ -266,8 +287,9 @@ async function rawSpaceAccess(space: Space, viewer: IUser | null): Promise<Space
           status: "pending",
         }));
     const access = communityAccessFrom(community, m, pending, gateOf(viewer), await rolesOf(m));
-    // site admins can do anything a moderator can, anywhere
-    return isSiteAdmin(viewer) ? { ...access, perms: [...ALL_PERMISSIONS] } : access;
+    // site admins see every community without joining it, private rooms too, and can do anything a moderator can.
+    // They only read: posting still takes joining.
+    return isSiteAdmin(viewer) ? { ...access, canView: true, canModerate: true, perms: [...ALL_PERMISSIONS] } : access;
   }
 
   // ---- subcommunity ----
@@ -357,11 +379,12 @@ export function publishedEvents(viewer: Pick<IUser, "_id"> | null): Record<strin
 export async function canReviewEvent(event: Pick<IEvent, "communityId" | "subcommunityId">, viewer: IUser | null): Promise<boolean> {
   if (!viewer || !event.communityId) return false;
   if (isSiteAdmin(viewer)) return true;
-  const rows = await Membership.find({ userId: viewer._id, communityId: event.communityId, status: "active", subcommunityId: { $in: [null, event.subcommunityId ?? null] } }).select("subcommunityId role roleIds status").lean<Pick<IMembership, "subcommunityId" | "role" | "roleIds" | "status">[]>();
+  const rows = await Membership.find({ userId: viewer._id, communityId: event.communityId, status: "active", subcommunityId: { $in: [null, event.subcommunityId ?? null] } }).select("subcommunityId role roleIds status powers").lean<Pick<IMembership, "subcommunityId" | "role" | "roleIds" | "status" | "powers">[]>();
   const parentRow = rows.find((m) => !m.subcommunityId) ?? null;
   const parent = parentRow?.role ?? null;
-  const own = event.subcommunityId ? (rows.find((m) => m.subcommunityId && String(m.subcommunityId) === String(event.subcommunityId))?.role ?? null) : parent;
-  if (isManager(own) || (!!event.subcommunityId && parent === "owner")) return true;
+  const ownRow = event.subcommunityId ? rows.find((m) => m.subcommunityId && String(m.subcommunityId) === String(event.subcommunityId)) : undefined;
+  const own = event.subcommunityId ? (ownRow?.role ?? null) : parent;
+  if (isManager(own) || (!!event.subcommunityId && parent === "owner") || groupPowersOf(ownRow).includes("manageEvents")) return true;
   // a community role with "Manage events"
   return rolePowers(parent, await rolesOf(parentRow)).perms.includes("manageEvents");
 }
@@ -443,7 +466,7 @@ export function canSetRole(actor: Role | null, target: Role, next: Role): boolea
  */
 export function canSeeChannel(channel: Pick<IChannel, "visibility"> & Partial<Pick<IChannel, "overrides" | "categoryOverrides">>, access: SpaceAccess, invited = false): boolean {
   if (!access.canView) return false;
-  if (access.canManage) return true;
+  if (access.canManage || access.canModerate) return true;
   // a role's allow or deny (any allow wins over a deny; a channel's own beats its category's)
   const say = roleSay(channel, access, "view");
   if (say === "allow" && access.isMember) return true;
@@ -479,12 +502,8 @@ function roleSay(channel: Partial<Pick<IChannel, "overrides" | "categoryOverride
   return deny ? "deny" : null;
 }
 
-/** Who may start a group in a community, from its `groupPolicy` setting. */
-export function canCreateGroup(community: Pick<ICommunity, "groupPolicy">, access: Pick<SpaceAccess, "isMember" | "canManage">): boolean {
-  const policy = community.groupPolicy ?? "admins";
-  if (policy === "off" || !access.isMember) return false;
-  return policy === "members" ? true : access.canManage;
-}
+/** Only a community's owner starts groups in it. */
+export const canCreateGroup = (access: Pick<SpaceAccess, "role">): boolean => access.role === "owner";
 
 /**
  * Space-role shortcut for list pages that batch lookups (the rail): can someone with this role in the

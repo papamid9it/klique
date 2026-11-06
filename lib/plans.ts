@@ -29,8 +29,6 @@ export interface PlanConfig {
   communitiesCreate: Record<PlanId, number>;
   /** communities you may be a member of (Klique HQ doesn't count) */
   communitiesJoin: Record<PlanId, number>;
-  /** groups you may start in any one community */
-  groupsCreate: Record<PlanId, number>;
   /** bots (channel webhooks) each community they own can have */
   webhooks: Record<PlanId, number>;
   /** custom emoji each community they own can have */
@@ -45,7 +43,6 @@ export const DEFAULT_PLAN_CONFIG: PlanConfig = {
   mediaSlots: { free: 2, lite: 4, pro: 6 },
   communitiesCreate: { free: 5, lite: 10, pro: 25 },
   communitiesJoin: { free: 50, lite: 100, pro: 200 },
-  groupsCreate: { free: 1, lite: 3, pro: 10 },
   webhooks: { free: 2, lite: 5, pro: 10 },
   emojiSlots: { free: 20, lite: 50, pro: 100 },
 };
@@ -69,10 +66,9 @@ export function planPerks(plan: PlanId, c: PlanConfig): string[] {
   const kliques = [`Start ${plan === "pro" ? "unlimited kliques" : `${c.create[plan]} kliques a month`}`, join === null ? "Join as many kliques as you like" : `Be in ${join} kliques at once`];
   const slots = c.mediaSlots[plan];
   const media = `${slots} photos or videos in your gallery, any mix`;
-  const g = c.groupsCreate[plan];
   const w = c.webhooks[plan];
   const em = c.emojiSlots[plan];
-  const spaces = [`Create ${c.communitiesCreate[plan]} communities, join up to ${c.communitiesJoin[plan]}`, `Start ${g} ${g === 1 ? "group" : "groups"} in each community`, ...(w ? [`${w} ${w === 1 ? "bot" : "bots"} (webhooks) in each community you own`] : []), `${em} custom emoji in each community you own`, ...(plan === "pro" ? ["Use your communities' emoji anywhere"] : [])];
+  const spaces = [`Create ${c.communitiesCreate[plan]} communities, join up to ${c.communitiesJoin[plan]}`, ...(w ? [`${w} ${w === 1 ? "bot" : "bots"} (webhooks) in each community you own`] : []), `${em} custom emoji in each community you own`, ...(plan === "pro" ? ["Use your communities' emoji anywhere"] : [])];
   if (plan === "free") return [...kliques, media, ...spaces];
   if (plan === "lite") return [...kliques, media, ...spaces, "Lite badge by your name"];
   return [...kliques, media, ...spaces, "Pro badge by your name", "Your kliques shown a little higher"];
@@ -97,7 +93,6 @@ export function planConfigOf(v: unknown): PlanConfig {
     mediaSlots: per(o.mediaSlots, d.mediaSlots, MEDIA_SLOTS_MAX),
     communitiesCreate: per(o.communitiesCreate, d.communitiesCreate, 10_000),
     communitiesJoin: per(o.communitiesJoin, d.communitiesJoin, 10_000),
-    groupsCreate: per(o.groupsCreate, d.groupsCreate, 1000),
     webhooks: per(o.webhooks, d.webhooks, 50),
     emojiSlots: per(o.emojiSlots, d.emojiSlots, 500),
   };

@@ -1,5 +1,6 @@
 import ApiClient from "@/app/ApiCore";
 import { emitAppEvent } from "@/lib/appEvents";
+import type { GroupPower } from "@/lib/roles";
 import type {
   Envelope,
   InviteDTO,
@@ -40,6 +41,12 @@ export const SpaceService = {
     api.get<Envelope<Paginated<MemberDTO>>>(`${base(slug, subSlug)}/members`, { page, q }),
   changeRole: (slug: string, userId: string, role: Exclude<Role, "owner">, subSlug?: string) =>
     api.patch<Envelope<{ userId: string; role: Role }>>(`${base(slug, subSlug)}/members/${userId}`, { role }),
+  /** Stop someone writing in Posts and on Boards (seconds: how long, null: until it's lifted, 0: lift it). */
+  setPostBan: (slug: string, userId: string, seconds: number | null, reason = "") =>
+    api.post<Envelope<{ userId: string; postBan: { until: string | null; reason: string | null } | null }>>(`/api/communities/${slug}/members/${userId}/post-ban`, { seconds, reason }),
+  /** A group's owner: the title someone has in the group, and what it lets them do. */
+  setGroupMod: (slug: string, subSlug: string, userId: string, input: { title: string; powers: GroupPower[] }) =>
+    api.put<Envelope<{ userId: string; title: string | null; powers: GroupPower[] }>>(`${base(slug, subSlug)}/members/${userId}/mod`, input),
   /** Owner only: make this member the owner (you become an admin). */
   transferOwnership: (slug: string, userId: string, subSlug?: string) =>
     api.post<Envelope<{ ownerId: string }>>(`${base(slug, subSlug)}/members/${userId}/owner`),

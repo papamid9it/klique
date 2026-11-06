@@ -260,8 +260,10 @@ export async function listChannels(viewer: IUser | null, space: Space, access: S
   const groups: ChannelGroupDTO[] = [];
   if (!space.sub && viewer) {
     const subMs = await Membership.find({ userId: viewer._id, communityId, subcommunityId: { $ne: null }, status: "active" }).lean<IMembership[]>();
-    if (subMs.length) {
-      const subs = await Subcommunity.find({ _id: { $in: subMs.map((m) => m.subcommunityId) } }).sort({ createdAt: 1 }).lean<ISubcommunity[]>();
+    // the community's owner and site admins see all of them, in or not
+    const overseer = siteAdmin || access.role === "owner";
+    if (subMs.length || overseer) {
+      const subs = await Subcommunity.find(overseer ? { communityId } : { _id: { $in: subMs.map((m) => m.subcommunityId) } }).sort({ createdAt: 1 }).lean<ISubcommunity[]>();
       const parentM = await Membership.findOne({ userId: viewer._id, communityId, subcommunityId: null }).lean<IMembership>();
       for (const sub of subs) await ensureDefaultGroupChannels(sub._id, communityId, sub.ownerId);
       const subChannels = await Channel.find({ communityId, subcommunityId: { $in: subs.map((s) => s._id) }, topicId: null }).sort({ position: 1, createdAt: 1 }).lean<IChannel[]>();
@@ -270,7 +272,8 @@ export async function listChannels(viewer: IUser | null, space: Space, access: S
         const gAccess = subAccessFrom(sub, parentM, m, isSiteAdmin(viewer), viewer.points ?? 0);
         const rows = subChannels.filter((c) => sid(c.subcommunityId!) === sid(sub._id) && canSeeChannel(c, gAccess, invited.has(sid(c._id))) && (VOICE_ENABLED || c.type !== "voice"));
         const gUnread = new Map<string, number>();
-        const gMentions = await countMentions(viewer._id, rows, readBy, gUnread, suppress);
+        // nothing is unread in a group you're only looking in on
+        const gMentions = m ? await countMentions(viewer._id, rows, readBy, gUnread, suppress) : new Map<string, number>();
         const gCounts = gAccess.canManage ? await guestCounts(rows) : undefined;
         groups.push({
           id: sid(sub._id),
