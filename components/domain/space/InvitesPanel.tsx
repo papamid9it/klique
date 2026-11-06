@@ -48,7 +48,7 @@ export function InvitesPanel({ slug, subSlug, spaceName }: { slug: string; subSl
       await navigator.clipboard.writeText(url);
       toast("Invite link copied", "success");
     } catch {
-      window.prompt("Copy this link", url);
+      toast(`Couldn't copy it. Here's the link: ${url}`, "error");
     }
   }
 

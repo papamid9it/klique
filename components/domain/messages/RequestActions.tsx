@@ -4,15 +4,17 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
 import { MessageService } from "@/app/services/MessageService";
+import { useConfirm } from "@/components/providers/ConfirmProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import { Button } from "@/components/ui/Button";
 
 /** Accept, Delete or Block a message request (Delete and Block are quiet: the sender isn't told). */
 export function RequestActions({ id, name, onDone, compact }: { id: string; name: string; onDone: (action: "accept" | "delete" | "block") => void; compact?: boolean }) {
   const toast = useToast();
+  const confirm = useConfirm();
   const [busy, setBusy] = useState<string | null>(null);
   async function act(action: "accept" | "delete" | "block") {
-    if (action === "block" && !window.confirm(`Block ${name}? They won't be able to message you, and this request is deleted.`)) return;
+    if (action === "block" && !(await confirm({ title: `Block ${name}?`, body: "They won't be able to message you, and this request is deleted.", confirmLabel: "Block" }))) return;
     setBusy(action);
     try {
       await MessageService.answerRequest(id, action);

@@ -5,6 +5,7 @@ import { useState } from "react";
 import { CommunityService } from "@/app/services/CommunityService";
 import { CommunityCard } from "@/components/domain/CommunityCard";
 import { Button } from "@/components/ui/Button";
+import { MoreOnScroll } from "@/components/ui/MoreOnScroll";
 import { Icon } from "@/components/ui/Icon";
 import { Modal } from "@/components/ui/Modal";
 import { CardGridSkeleton } from "@/components/ui/Skeleton";
@@ -95,11 +96,7 @@ export function CommunitiesBrowser({ initialInterest, scope = "discover" }: { in
               <CommunityCard key={c.id} community={c} tag={c.interest ? undefined : undefined} />
             ))}
           </div>
-          {hasMore && (
-            <div className="mt-6 flex justify-center">
-              <Button onClick={loadMore} loading={loadingMore}>Load more</Button>
-            </div>
-          )}
+          <MoreOnScroll hasMore={hasMore} loading={loadingMore} count={items.length} onLoad={loadMore} className="mt-3" />
         </>
       )}
     </div>

@@ -22,6 +22,7 @@ import { PersonRow } from "@/components/domain/PersonRow";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useProfileCard } from "@/components/providers/ProfileCardProvider";
 import { useMood } from "@/components/providers/ThemeProvider";
+import { useConfirm } from "@/components/providers/ConfirmProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import { ImageField } from "@/components/ui/ImageField";
 import { Button } from "@/components/ui/Button";
@@ -109,6 +110,7 @@ function RadioCards<T extends string>({ name, value, options, onChange, disabled
 type ProfileDraft = { displayName: string; bio: string; avatarUrl: string; place: Place; neighborhood: string };
 
 function ProfileForm({ me, onDraft }: { me: UserMe; onDraft?: (d: ProfileDraft) => void }) {
+  const confirm = useConfirm();
   const categories = useCategories();
   const card = useProfileCard();
   const { setUser } = useAuth();
@@ -142,7 +144,7 @@ function ProfileForm({ me, onDraft }: { me: UserMe; onDraft?: (d: ProfileDraft) 
   const genderLocked = me.gender === "woman" || me.gender === "man";
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!genderLocked && gender !== "unspecified" && !window.confirm(`Set your gender to ${gender}? You can't change it yourself after this.`)) return;
+    if (!genderLocked && gender !== "unspecified" && !(await confirm({ title: `Set your gender to ${gender}?`, body: "You can't change it yourself after this.", confirmLabel: "Set it", danger: false }))) return;
     setBusy(true);
     setError(null);
     setFieldErrors({});

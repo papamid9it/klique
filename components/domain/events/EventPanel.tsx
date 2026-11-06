@@ -1,7 +1,12 @@
 "use client";
 
+import { useToast } from "@/components/providers/ToastProvider";
+import { errorMessage } from "@/app/ApiCore";
+import { Spinner } from "@/components/ui/Button";
+import { useLoadOnScroll } from "@/lib/hooks/useLoadOnScroll";
+import { friendsGoingLine } from "@/lib/constants";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useProfileCard } from "@/components/providers/ProfileCardProvider";
 import { Modal } from "@/components/ui/Modal";
 import { UserName } from "@/components/ui/UserName";
@@ -16,7 +21,7 @@ import { Cover } from "@/components/ui/Cover";
 import { Icon } from "@/components/ui/Icon";
 import { compactCount, dateChip } from "@/lib/format";
 import { useApi } from "@/lib/hooks/useApi";
-import type { EventDTO, UserBrief } from "@/lib/types";
+import type { EventDTO, UserBrief, AttendeesDTO } from "@/lib/types";
 
 /** A small event row in the panel: a date badge, the title and where. */
 function MiniEvent({ e }: { e: EventDTO }) {
@@ -41,10 +46,41 @@ function MiniEvent({ e }: { e: EventDTO }) {
  * An event's own left panel: back to Home or all events, the community it's in (with Join), who's going (a list
  * that opens profiles) and its crews, what else that community has coming up, and similar events nearby.
  */
-export function EventPanel({ event, people, namesHidden }: { event: EventDTO; people: UserBrief[]; namesHidden: boolean }) {
+export function EventPanel({ event, people: firstPeople, nextCursor, friends = [], friendCount = 0 }: { event: EventDTO; people: UserBrief[]; nextCursor: string | null; friends?: UserBrief[]; friendCount?: number }) {
   const { where, ready } = usePlace();
   const card = useProfileCard();
+  const toast = useToast();
   const [goingOpen, setGoingOpen] = useState(false);
+  // who's going comes a page at a time, however many there are; a fresh first page means the list changed
+  const [later, setLater] = useState<{ people: UserBrief[]; next: string | null } | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  useEffect(() => setLater(null), [firstPeople]);
+  // friends first, then everyone else in the order they said yes
+  const friendSet = new Set(friends.map((f) => f.id));
+  const people = [...friends, ...[...firstPeople, ...(later?.people ?? [])].filter((p) => !friendSet.has(p.id))];
+  const cursor = later ? later.next : nextCursor;
+  async function showMore() {
+    if (!cursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      let next: string | null = cursor;
+      const found: UserBrief[] = [];
+      // a page can be all private people: carry on until there's someone to show, or nobody left
+      while (next && !found.length) {
+        const page: AttendeesDTO = (await EventService.attendees(event.id, next)).data;
+        found.push(...page.people);
+        next = page.nextCursor;
+      }
+      setLater((l) => ({ people: [...(l?.people ?? []), ...found], next }));
+    } catch (e) {
+      toast(errorMessage(e), "error");
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+  const endOfList = useLoadOnScroll<HTMLDivElement>(() => void showMore(), goingOpen && !!cursor && !loadingMore);
+  // only once they've all loaded can we say the rest keep it private
+  const namesHidden = !cursor && event.goingCount > people.length;
   const slug = event.community?.slug;
   const community = useApi(slug ? () => CommunityService.get(slug) : null, [slug], { key: slug ? `community:${slug}` : undefined });
   const more = useApi(slug ? () => EventService.list({ community: slug }) : null, [slug], { key: slug ? `event-panel:community:${slug}` : undefined });
@@ -86,9 +122,9 @@ export function EventPanel({ event, people, namesHidden }: { event: EventDTO; pe
         <li>
           <button type="button" onClick={() => setGoingOpen(true)} className="flex h-10 w-full items-center gap-3 rounded-control px-3 text-left text-[14px] font-medium text-ink-muted transition hover:bg-raised/60 hover:text-ink">
             <Icon name="users" size={16} />
-            <span className="flex-1">Who&apos;s going</span>
+            <span className="min-w-0 flex-1 truncate">{friendCount ? friendsGoingLine(friends, friendCount) : "Who's going"}</span>
             <span className="flex -space-x-1.5">
-              {people.slice(0, 3).map((p) => (
+              {people.slice(0, 5).map((p) => (
                 <Avatar key={p.id} name={p.displayName} src={p.avatarUrl} size={20} className="ring-2 ring-canvas" />
               ))}
             </span>
@@ -123,22 +159,23 @@ export function EventPanel({ event, people, namesHidden }: { event: EventDTO; pe
           <ul className="-mx-2 max-h-[60dvh] space-y-0.5 overflow-y-auto">
             {people.map((p) => (
               <li key={p.id}>
-                <button type="button" onClick={() => card.openFull(p.handle)} className="flex w-full items-center gap-3 rounded-control px-2 py-2 text-left transition hover:bg-raised">
+                <button type="button" onClick={() => { setGoingOpen(false); card.openFull(p.handle); }} className="flex w-full items-center gap-3 rounded-control px-2 py-2 text-left transition hover:bg-raised">
                   <Avatar name={p.displayName} src={p.avatarUrl} frame={p.avatarFrame} size={36} />
                   <span className="min-w-0">
                     <span className="block truncate text-[14px] font-semibold">
                       <UserName name={p.displayName} effect={p.nameEffect} />
                     </span>
-                    <span className="block truncate font-mono text-[11px] text-ink-muted">@{p.handle}</span>
+                    <span className="block truncate font-mono text-[11px] text-ink-muted">@{p.handle}{friendSet.has(p.id) ? " · Friend" : ""}</span>
                   </span>
                 </button>
               </li>
             ))}
           </ul>
         ) : (
-          <p className="text-sm text-ink-muted">Nobody yet. Be the first.</p>
+          <p className="text-sm text-ink-muted">{event.goingCount > 0 ? "The people going keep that private." : "Nobody yet. Be the first."}</p>
         )}
-        {namesHidden && <p className="mt-3 text-[12.5px] text-ink-muted">Some people keep their attendance private.</p>}
+        {cursor && <div ref={endOfList} className="flex justify-center py-3 text-ink-muted"><Spinner /></div>}
+        {namesHidden && people.length > 0 && <p className="mt-3 text-[12.5px] text-ink-muted">Some people keep their attendance private.</p>}
       </Modal>
     </PagePanel>
   );

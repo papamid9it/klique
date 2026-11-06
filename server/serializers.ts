@@ -344,6 +344,7 @@ export async function toEvents(events: IEvent[], viewer: IUser | null): Promise<
       neighborhood: e.neighborhood,
       online: !!e.online,
       ticketUrl: e.ticketUrl ?? null,
+      ticketLabel: e.ticketLabel || null,
       onlineUrl: e.online ? (e.onlineUrl ?? null) : null,
       venue: e.venue,
       startsAt: e.startsAt.toISOString(),

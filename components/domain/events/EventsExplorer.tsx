@@ -7,6 +7,7 @@ import { EventService } from "@/app/services/EventService";
 import { ScopeButton } from "@/components/domain/places/ScopeButton";
 import { usePlace } from "@/components/providers/PlaceProvider";
 import { Button } from "@/components/ui/Button";
+import { MoreOnScroll } from "@/components/ui/MoreOnScroll";
 import { Icon } from "@/components/ui/Icon";
 import { Modal } from "@/components/ui/Modal";
 import { cx } from "@/components/ui/cx";
@@ -69,11 +70,7 @@ function MyEvents({ scope, onBack }: { scope: Mine; onBack: () => void }) {
             {items.map((e) => (
               <EventRow key={e.id} event={e} onChange={(next) => setItems((list) => list.map((x) => (x.id === next.id ? next : x)))} />
             ))}
-            {hasMore && (
-              <div className="flex justify-center pt-3">
-                <Button onClick={loadMore} loading={loadingMore}>Load more</Button>
-              </div>
-            )}
+            <MoreOnScroll hasMore={hasMore} loading={loadingMore} count={items.length} onLoad={loadMore} />
           </div>
         )}
       </div>
@@ -407,11 +404,7 @@ export function EventsExplorer() {
                   </div>
                 </section>
               ))}
-              {hasMore && (
-                <div className="flex justify-center">
-                  <Button onClick={loadMore} loading={loadingMore}>Load more</Button>
-                </div>
-              )}
+              <MoreOnScroll hasMore={hasMore} loading={loadingMore} count={items.length} onLoad={loadMore} />
             </div>
           )}
         </div>

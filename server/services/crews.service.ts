@@ -721,7 +721,8 @@ export async function myCommunityCrews(viewer: IUser, slug: string): Promise<MyC
 /* Start, edit, delete                                                 */
 /* ------------------------------------------------------------------ */
 
-type KliqueInput = z.infer<typeof crewCreateSchema>;
+type EventKliqueInput = z.infer<typeof crewCreateSchema>;
+type KliqueInput = EventKliqueInput & { interest: NonNullable<EventKliqueInput["interest"]> };
 
 async function startKlique(viewer: IUser, input: KliqueInput, where: { event: IEvent | null; community: Pick<ICommunity, "_id" | "country" | "city"> | null; place?: { country: string; city: string } }): Promise<CrewDTO> {
   const person = personBlock(viewer, "start");
@@ -782,13 +783,14 @@ async function startKlique(viewer: IUser, input: KliqueInput, where: { event: IE
 }
 
 /** A klique for going to an event together. */
-export async function createCrew(viewer: IUser, eventId: string, input: KliqueInput): Promise<CrewDTO> {
+export async function createCrew(viewer: IUser, eventId: string, input: EventKliqueInput): Promise<CrewDTO> {
   if (isMinor(viewer)) throw notFound("We couldn't find that event.");
   const event = await visibleEvent(viewer, oid(eventId, "event"));
   assertEventOpen(event);
   const blocked = await spaceBlock(viewer, event);
   if (blocked) throw forbidden(blocked);
-  return startKlique(viewer, input, { event, community: null });
+  const community = event.communityId ? await Community.findById(event.communityId).select("interest").lean<Pick<ICommunity, "interest">>() : null;
+  return startKlique(viewer, { ...input, interest: community?.interest ?? event.interest }, { event, community: null });
 }
 
 /** A community's klique: anything its members want to do together. `community: null` is all communities, in a place. */

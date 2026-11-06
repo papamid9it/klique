@@ -12,13 +12,14 @@ import { useAuth } from "@/components/providers/AuthProvider";
 import { usePlace } from "@/components/providers/PlaceProvider";
 import { useRealtimeEvent } from "@/components/providers/RealtimeProvider";
 import { Button, Spinner } from "@/components/ui/Button";
+import { MoreOnScroll } from "@/components/ui/MoreOnScroll";
 import { Dropdown } from "@/components/ui/Dropdown";
 import { Icon } from "@/components/ui/Icon";
 import { RowSkeleton } from "@/components/ui/Skeleton";
 import { SlideOver } from "@/components/ui/SlideOver";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { cx } from "@/components/ui/cx";
-import { useApi, useDebounced } from "@/lib/hooks/useApi";
+import { useApi, useDebounced, usePaged } from "@/lib/hooks/useApi";
 import { useCategories } from "@/lib/hooks/useCategories";
 import { softNavigate } from "@/lib/nav";
 import { parseScope, scopeLabel, scopeToString } from "@/lib/places";
@@ -392,7 +393,6 @@ function JoinedList({ where, wait, onDiscover }: { where: string; wait: boolean;
 function KliquesPage() {
   const { requireAuth } = useAuth();
   const f = useFilters();
-  const [pages, setPages] = useState(1);
   const [sheet, setSheet] = useState(false);
   const [starting, setStarting] = useState(false);
   const filters: KliqueFilters = {
@@ -403,12 +403,15 @@ function KliquesPage() {
     community: f.community && f.community !== "mine" ? f.community : undefined,
     mine: f.community === "mine" || undefined,
     open: f.hideFull || undefined,
-    limit: PAGE * pages,
+    limit: PAGE,
   };
   const key = `kliques-browse:${JSON.stringify(filters)}`;
-  const { data, loading, refreshing, error, reload } = useApi(() => CrewService.list(filters), [key], { key, keepPrevious: true, wait: !f.ready });
+  const { items, loading, refreshing, loadingMore, error, hasMore, loadMore, reload } = usePaged<CrewCardDTO>(
+    (page) => CrewService.list({ ...filters, page }).then((r) => ({ ...r, data: { ...r.data, page } })),
+    [key],
+    { key, keepPrevious: true, wait: !f.ready },
+  );
   useRealtimeEvent(() => void reload(), { filter: (e) => e.type === "crew" && !e.chat, debounceMs: 800 });
-  const items: CrewCardDTO[] = data?.items ?? [];
   const active = [f.community, f.when !== "any" ? f.when : "", f.interest, f.q, f.hideFull ? "open" : ""].filter(Boolean).length;
 
   return (
@@ -442,9 +445,9 @@ function KliquesPage() {
 
       {f.tab === "joined" ? (
         <JoinedList where={f.where} wait={!f.ready} onDiscover={() => f.set({ tab: "" })} />
-      ) : !data && loading ? (
+      ) : !items.length && loading ? (
         <RowSkeleton rows={3} />
-      ) : error && !data ? (
+      ) : error && !items.length ? (
         <ErrorState message={error} onRetry={reload} />
       ) : !items.length ? (
         <EmptyState
@@ -473,13 +476,7 @@ function KliquesPage() {
               <Spinner /> Updating…
             </p>
           )}
-          {data?.hasMore && (
-            <div className="mt-6 flex justify-center">
-              <Button onClick={() => setPages((n) => n + 1)} loading={refreshing}>
-                Show more
-              </Button>
-            </div>
-          )}
+          <MoreOnScroll hasMore={hasMore} loading={loadingMore} count={items.length} onLoad={loadMore} className="mt-3" />
         </>
       )}
 

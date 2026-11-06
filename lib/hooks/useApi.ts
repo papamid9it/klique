@@ -207,6 +207,8 @@ type PagedSnapshot<T> = { items: T[]; page: number; hasMore: boolean };
  * `keepPrevious` leaves the old items on screen while new deps load, instead of blanking to a skeleton.
  * `key` remembers the list (see useApi), so coming back to it is instant.
  */
+const MAX_REFRESH_PAGES = 5;
+
 export function usePaged<T>(
   fetchPage: (page: number) => Promise<Envelope<{ items: T[]; page: number; hasMore: boolean }>>,
   deps: unknown[],
@@ -249,12 +251,17 @@ export function usePaged<T>(
       if (blank) setLoading(true);
       else setRefreshing(true);
       try {
-        const res = await fetchRef.current(1);
+        // scrolled down a way: refresh everything on screen, so the list doesn't shrink under them; too deep, leave it be
+        const pages = blank ? 1 : snap.current.page;
+        if (pages > MAX_REFRESH_PAGES) return;
+        const all = await Promise.all(Array.from({ length: pages }, (_, i) => fetchRef.current(i + 1)));
         if (mine !== ticket.current) return;
-        setItemsRaw(res.data.items);
-        setPage(1);
-        setHasMore(res.data.hasMore);
-        remember({ items: res.data.items, page: 1, hasMore: res.data.hasMore });
+        const items = all.flatMap((r) => r.data.items);
+        const more = all[all.length - 1].data.hasMore;
+        setItemsRaw(items);
+        setPage(pages);
+        setHasMore(more);
+        remember({ items, page: pages, hasMore: more });
         setError(null);
       } catch (e) {
         if (mine !== ticket.current) return;
@@ -304,8 +311,8 @@ export function usePaged<T>(
       });
       setPage(page + 1);
       setHasMore(res.data.hasMore);
-    } catch (e) {
-      setError(errorMessage(e));
+    } catch {
+      /* what's on screen stays; the end of the list offers to try again */
     } finally {
       setLoadingMore(false);
     }

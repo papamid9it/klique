@@ -56,6 +56,7 @@ function NewEventForm() {
   const [neighborhood, setNeighborhood] = useState("");
   const [venue, setVenue] = useState("");
   const [ticketUrl, setTicketUrl] = useState("");
+  const [ticketLabel, setTicketLabel] = useState("");
   const [onlineUrl, setOnlineUrl] = useState("");
   const [date, setDate] = useState("");
   const [start, setStart] = useState("");
@@ -149,6 +150,7 @@ function NewEventForm() {
       neighborhood,
       online,
       ticketUrl: tickets || null,
+      ticketLabel: ticketLabel.trim(),
       onlineUrl: joinLink || null,
       currency: cur,
       venue: venue.trim(),
@@ -232,7 +234,7 @@ function NewEventForm() {
       <p className="eyebrow">Step {step} of 2 · {step === 1 ? "the event" : "preview and publish"}</p>
       {step === 1 ? (
       <>
-      <ImageField kind="photo" label="Cover image (optional)" value={cover} onChange={setCover} error={errors.coverImage} hint="A wide picture works best. We'll use artwork if you skip it." />
+      <ImageField kind="photo" label="Cover image (optional)" value={cover} onChange={setCover} reposition={{ aspect: 16 / 9 }} error={errors.coverImage} hint="A wide picture works best. We'll use artwork if you skip it." />
       <TextField label="Title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={LIMITS.eventTitle} error={errors.title} placeholder="Sunday sunset skate" />
       <TextArea label="Description" value={description} onChange={(e) => setDescription(e.target.value)} maxLength={LIMITS.eventDescription} counter={LIMITS.eventDescription} error={errors.description} hint="What should people expect? What should they bring?" />
       <div className="grid gap-4 sm:grid-cols-2">
@@ -285,7 +287,8 @@ function NewEventForm() {
         </div>
         <TextField label="Capacity (optional)" type="number" inputMode="numeric" min={1} value={capacity} onChange={(e) => setCapacity(e.target.value)} error={errors.capacity} hint="Leave empty for unlimited spots." />
       </div>
-      <TextField label="Ticket link (optional)" type="url" inputMode="url" value={ticketUrl} onChange={(e) => setTicketUrl(e.target.value)} onBlur={() => setTicketUrl((v) => normalizeLink(v))} error={errors.ticketUrl} placeholder="https://tix.africa/…" hint="Shows as a Get tickets button on the event." />
+      <TextField label="Ticket link (optional)" type="url" inputMode="url" value={ticketUrl} onChange={(e) => setTicketUrl(e.target.value)} onBlur={() => setTicketUrl((v) => normalizeLink(v))} error={errors.ticketUrl} placeholder="https://tix.africa/…" hint="Shows as a button on the event. People see where it goes before they leave Klique." />
+      <TextField label="Button name (optional)" value={ticketLabel} onChange={(e) => setTicketLabel(e.target.value)} maxLength={LIMITS.ticketLabel} error={errors.ticketLabel} placeholder="Get tickets" hint="Like See more, Buy tickets or Main site. Empty shows Get tickets." />
       {communitySlug && communitySlug !== KLIQUE_SLUG && <ContributionFields value={chipIn} onChange={setChipIn} error={errors.contribution} />}
 
       <fieldset className="space-y-4 rounded-card border border-line bg-surface p-4">

@@ -7,22 +7,24 @@ import { CommunitiesPanel } from "@/components/layout/CommunitiesPanel";
 import { PageBanner, PillTabs } from "@/components/layout/PageTitle";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { Button } from "@/components/ui/Button";
+import { MoreOnScroll } from "@/components/ui/MoreOnScroll";
 import { Icon } from "@/components/ui/Icon";
 import { CardGridSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { usePaged } from "@/lib/hooks/useApi";
 import type { EventDTO } from "@/lib/types";
 
-type Scope = "saved" | "going" | "hosted";
+type Scope = "saved" | "going" | "hosted" | "past";
 const TABS: { id: Scope; label: string; empty: string; hint: string }[] = [
   { id: "saved", label: "Saved", empty: "Nothing saved yet", hint: "Tap the bookmark on any event to keep it here." },
   { id: "going", label: "Going", empty: "You're not going to anything yet", hint: "RSVP to an event and it'll show up here." },
   { id: "hosted", label: "Hosting", empty: "You aren't hosting anything", hint: "Put something on the calendar for your scene." },
+  { id: "past", label: "Past", empty: "Nothing here yet", hint: "Events you went to or hosted show up here after they happen." },
 ];
 
 function List({ scope }: { scope: Scope }) {
   const tab = TABS.find((t) => t.id === scope)!;
-  const { items, loading, loadingMore, error, hasMore, loadMore, reload, setItems } = usePaged<EventDTO>((page) => EventService.list({ scope, page }), [scope], { key: `my-events:${scope}` });
+  const { items, loading, loadingMore, error, hasMore, loadMore, reload, setItems } = usePaged<EventDTO>((page) => EventService.list(scope === "past" ? { scope: "mine", past: true, page } : { scope, page }), [scope], { key: `my-events:${scope}` });
   if (loading) return <CardGridSkeleton count={4} />;
   if (error) return <ErrorState message={error} onRetry={reload} />;
   if (items.length === 0) {
@@ -53,26 +55,26 @@ function List({ scope }: { scope: Scope }) {
       </p>
       <div className="grid gap-5 min-[540px]:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
         {items.map((e) => (
-          <EventCard
-            key={e.id}
-            event={e}
-            onChange={(next) =>
-              setItems((list) => {
-                // drop it from the list if the change removed it from this tab
-                const gone = (scope === "saved" && !next.viewer.saved) || (scope === "going" && next.viewer.rsvp !== "going");
-                return gone ? list.filter((x) => x.id !== next.id) : list.map((x) => (x.id === next.id ? next : x));
-              })
-            }
-          />
+          <div key={e.id} className="flex flex-col gap-2">
+            <EventCard
+                event={e}
+              onChange={(next) =>
+                setItems((list) => {
+                  // drop it from the list if the change removed it from this tab
+                  const gone = (scope === "saved" && !next.viewer.saved) || (scope === "going" && next.viewer.rsvp !== "going");
+                  return gone ? list.filter((x) => x.id !== next.id) : list.map((x) => (x.id === next.id ? next : x));
+                })
+              }
+            />
+            {scope === "hosted" && e.viewer.canEdit && (
+              <Button href={`/events/${e.id}?edit=1`} size="sm">
+                <Icon name="edit" size={14} /> Edit event
+              </Button>
+            )}
+          </div>
         ))}
       </div>
-      {hasMore && (
-        <div className="mt-6 flex justify-center">
-          <Button onClick={loadMore} loading={loadingMore}>
-            Load more
-          </Button>
-        </div>
-      )}
+      <MoreOnScroll hasMore={hasMore} loading={loadingMore} count={items.length} onLoad={loadMore} className="mt-3" />
     </>
   );
 }
@@ -104,6 +106,7 @@ export default function SavedPage() {
                 { id: "saved", label: "Saved", icon: <Icon name="bookmark" size={15} /> },
                 { id: "going", label: "Going", icon: <Icon name="check" size={15} /> },
                 { id: "hosted", label: "Hosting", icon: <Icon name="calendar" size={15} /> },
+                { id: "past", label: "Past", icon: <Icon name="clock" size={15} /> },
               ]}
             />
           ) : undefined

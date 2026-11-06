@@ -4,6 +4,7 @@ import { useState } from "react";
 import { TopicService } from "@/app/services/TopicService";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { Button } from "@/components/ui/Button";
+import { MoreOnScroll } from "@/components/ui/MoreOnScroll";
 import { Icon } from "@/components/ui/Icon";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { RowSkeleton } from "@/components/ui/Skeleton";
@@ -106,13 +107,7 @@ function Board({ slug, communityName, isMember, board, openId }: { slug: string;
         </ul>
       )}
 
-      {hasMore && !loading && (
-        <div className="flex justify-center pt-1">
-          <Button variant="secondary" onClick={() => void loadMore()} loading={loadingMore}>
-            Load more
-          </Button>
-        </div>
-      )}
+      {!loading && <MoreOnScroll hasMore={hasMore} loading={loadingMore} count={items.length} onLoad={loadMore} />}
 
       {creating && (
         <TopicFormModal

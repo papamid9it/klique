@@ -20,12 +20,16 @@ import { EmptyState, ErrorState } from "@/components/ui/States";
 import { cx } from "@/components/ui/cx";
 
 import { useApi } from "@/lib/hooks/useApi";
+import { useLoadOnScroll } from "@/lib/hooks/useLoadOnScroll";
 import type { FriendStatusDTO, UserBrief } from "@/lib/types";
 import { UserName } from "@/components/ui/UserName";
 import { useRealtimeEvent } from "@/components/providers/RealtimeProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 
 type Tab = "all" | "pending" | "add";
+
+/** How many friends show at first, and how many more each scroll adds. */
+const FRIENDS_STEP = 20;
 
 /** Friends hub, Discord-style: All · Pending · Add friend, with "people you may know" beside it. */
 export default function FriendsPage() {
@@ -49,6 +53,7 @@ export default function FriendsPage() {
     { filter: (e) => e.type === "notify" && e.category === "friends", debounceMs: 400 },
   );
   const [q, setQ] = useState("");
+  const [shown, setShown] = useState(FRIENDS_STEP);
   const [handle, setHandle] = useState("");
   const [adding, setAdding] = useState(false);
   const [added, setAdded] = useState<string | null>(null);
@@ -88,6 +93,8 @@ export default function FriendsPage() {
     }
   }
 
+  const list = (friends.data ?? []).filter((f) => !q.trim() || f.user.displayName.toLowerCase().includes(q.trim().toLowerCase()) || f.user.handle.includes(q.trim().toLowerCase().replace(/^@/, "")));
+  const moreFriends = useLoadOnScroll<HTMLDivElement>(() => setShown((n) => n + FRIENDS_STEP), shown < list.length);
   if (status === "loading") return <div className="p-6"><RowSkeleton rows={5} /></div>;
   if (!authed) {
     return (
@@ -99,7 +106,6 @@ export default function FriendsPage() {
     );
   }
 
-  const list = (friends.data ?? []).filter((f) => !q.trim() || f.user.displayName.toLowerCase().includes(q.trim().toLowerCase()) || f.user.handle.includes(q.trim().toLowerCase().replace(/^@/, "")));
   const tabs: { id: Tab; label: string; count?: number }[] = [
     { id: "all", label: "All", count: friends.data?.length },
     { id: "pending", label: "Pending", count: incoming.length || undefined },
@@ -165,7 +171,7 @@ export default function FriendsPage() {
                 <>
                   <p className="eyebrow mb-2 px-2">All friends — {list.length}</p>
                   <ul>
-                    {list.map((f) =>
+                    {list.slice(0, shown).map((f) =>
                       personRow(
                         f.user,
                         <>
@@ -198,6 +204,7 @@ export default function FriendsPage() {
                       ),
                     )}
                   </ul>
+                  {shown < list.length && <div ref={moreFriends} className="h-px" />}
                 </>
               )}
             </>

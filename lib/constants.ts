@@ -111,6 +111,16 @@ export function isInterestId(id: unknown): id is InterestId {
 /* Limits shared by validators and UI                                  */
 /* ------------------------------------------------------------------ */
 
+/** At most three names: "Amara is going", "Amara, Tobi and Kunle are going", "Amara, Tobi, Kunle and 997 more friends are going". */
+export function friendsGoingLine(friends: { displayName: string }[], count: number): string {
+  const names = friends.slice(0, 3).map((f) => f.displayName.split(" ")[0]);
+  if (!names.length) return "";
+  const rest = count - names.length;
+  if (rest > 0) return `${names.join(", ")} and ${rest} more ${rest === 1 ? "friend" : "friends"} are going`;
+  if (names.length === 1) return `${names[0]} is going`;
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]} are going`;
+}
+
 /** Recent videos someone must be able to see before tapping a post opens reels (otherwise it opens the post). */
 export const REELS_MIN_VIDEOS = 10;
 
@@ -134,6 +144,8 @@ export const LIMITS = {
   bio: 280,
   pronouns: 40,
   communityName: 60,
+  /** the name on an event's link button */
+  ticketLabel: 30,
   communityDescription: 1200,
   eventTitle: 100,
   eventDescription: 4000,

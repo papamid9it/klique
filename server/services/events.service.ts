@@ -33,6 +33,7 @@ import {
 import { toEvents } from "../serializers";
 import type { eventCreateSchema, eventListQuery, eventOverviewQuery, eventUpdateSchema } from "../validators/schemas";
 import { hiddenUserIds } from "./blocks";
+import { Friendship, type IFriendship } from "../models/Friendship";
 import { assertPlace, PAGE_SIZE, recountRsvps, sid } from "./helpers";
 import { notify } from "./push.service";
 import { resolveSpaceFor } from "./spaces.service";
@@ -110,6 +111,10 @@ export async function listEvents(viewer: IUser | null, q: ListQuery): Promise<Pa
     if (!viewer) throw unauthorized();
     if (q.scope === "hosted") {
       and.push({ hostId: viewer._id });
+    } else if (q.scope === "mine") {
+      // everything of yours: what you host and what you said you'd go to
+      const rows = await Rsvp.find({ userId: viewer._id, status: "going" }).select("eventId").lean<{ eventId: Types.ObjectId }[]>();
+      and.push({ $or: [{ hostId: viewer._id }, { _id: { $in: rows.map((r) => r.eventId) } }] });
     } else if (q.scope === "going") {
       const rows = await Rsvp.find({ userId: viewer._id, status: "going" }).select("eventId").lean<{ eventId: Types.ObjectId }[]>();
       and.push({ _id: { $in: rows.map((r) => r.eventId) } });
@@ -287,6 +292,7 @@ export async function createEvent(viewer: IUser, input: z.infer<typeof eventCrea
     city: input.city,
     online: input.online,
     ticketUrl: input.ticketUrl || null,
+    ticketLabel: input.ticketLabel ?? "",
     onlineUrl: input.online ? input.onlineUrl || null : null,
     currency: input.currency ?? currencyOf(input.country),
     neighborhood: input.neighborhood,
@@ -387,6 +393,22 @@ export async function pendingEvents(viewer: IUser, communityId: Types.ObjectId):
 /** "Sat 18 Oct, 4:00 PM" in Lagos time. */
 export const when = (d: Date) => d.toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true, timeZone: "Africa/Lagos" });
 
+/** What an edit changed that someone going would want to know (a new picture, say, isn't worth a notification). */
+function whatChanged(event: IEvent, set: Partial<IEvent>): string[] {
+  const moved = <T,>(next: T | undefined, now: T) => next !== undefined && (next ?? "") !== (now ?? "");
+  const out: string[] = [];
+  if (moved(set.title, event.title)) out.push("the name");
+  if (moved(set.description, event.description)) out.push("the details");
+  if (moved(set.priceNaira, event.priceNaira) || moved(set.currency, event.currency)) out.push("the price");
+  if (set.endsAt !== undefined && +new Date(set.endsAt ?? 0) !== +new Date(event.endsAt ?? 0)) out.push("the end time");
+  if (moved(set.online, event.online) || moved(set.onlineUrl, event.onlineUrl)) out.push("how to join");
+  if (moved(set.ticketUrl, event.ticketUrl) || moved(set.ticketLabel, event.ticketLabel)) out.push("the ticket link");
+  if (moved(set.city, event.city) || moved(set.neighborhood, event.neighborhood)) out.push("the area");
+  return out;
+}
+
+const listOf = (words: string[]) => (words.length < 2 ? (words[0] ?? "") : `${words.slice(0, -1).join(", ")} and ${words[words.length - 1]}`);
+
 export async function updateEvent(viewer: IUser, id: string, patch: z.infer<typeof eventUpdateSchema>): Promise<EventDTO> {
   const event = await loadVisibleEvent(viewer, id);
   if (sid(event.hostId) !== sid(viewer._id)) throw forbidden("Only the host can edit this event.");
@@ -411,6 +433,7 @@ export async function updateEvent(viewer: IUser, id: string, patch: z.infer<type
   if (patch.city !== undefined) set.city = patch.city;
   if (patch.online !== undefined) set.online = patch.online;
   if (patch.ticketUrl !== undefined) set.ticketUrl = patch.ticketUrl || null;
+  if (patch.ticketLabel !== undefined) set.ticketLabel = patch.ticketLabel;
   if (patch.onlineUrl !== undefined) set.onlineUrl = patch.onlineUrl || null;
   if (patch.online === false) set.onlineUrl = null;
   if (patch.currency !== undefined) set.currency = patch.currency;
@@ -440,10 +463,11 @@ export async function updateEvent(viewer: IUser, id: string, patch: z.infer<type
   if (set.startsAt !== undefined || set.endsAt !== undefined) await syncCrewExpiry({ _id: event._id, startsAt: (set.startsAt as Date | undefined) ?? event.startsAt, endsAt: set.endsAt !== undefined ? (set.endsAt as Date | null) : event.endsAt });
   if (set.coverImage !== undefined && event.coverImage && !sameFile(event.coverImage, set.coverImage)) deleteUploads([event.coverImage]);
 
-  // People who said they're going hear about a cancellation or a new time.
+  // People who said they're going hear about a cancellation, a new time or place, or anything else that changed for them.
   const cancelledNow = patch.cancelled === true && !event.cancelled;
   const movedNow = !cancelledNow && patch.startsAt !== undefined && +patch.startsAt !== +event.startsAt;
   const placeNow = !cancelledNow && !movedNow && patch.venue !== undefined && patch.venue.trim() !== (event.venue ?? "").trim() && !!patch.venue.trim();
+  const placeMoved = movedNow && patch.venue !== undefined && patch.venue.trim() !== (event.venue ?? "").trim() && !!patch.venue.trim();
   if (placeNow) {
     const going = await Rsvp.find({ eventId: event._id, status: "going", userId: { $ne: viewer._id } }).select("userId").lean<{ userId: Types.ObjectId }[]>();
     notify(going.map((g) => g.userId), { title: "New place", body: `${set.title ?? event.title} is now at ${patch.venue}.`, data: { type: "event", id } }, { category: "events", ref: `event:${id}` });
@@ -454,8 +478,18 @@ export async function updateEvent(viewer: IUser, id: string, patch: z.infer<type
       going.map((g) => g.userId),
       cancelledNow
         ? { title: "Event cancelled", body: `${set.title ?? event.title} has been cancelled.`, data: { type: "event", id } }
-        : { title: "New time", body: `${set.title ?? event.title} is now ${when(patch.startsAt as Date)}.`, data: { type: "event", id } },
+        : { title: "New time", body: `${set.title ?? event.title} is now ${when(patch.startsAt as Date)}${placeMoved ? ` at ${patch.venue}` : ""}.`, data: { type: "event", id } },
       { category: "events", ref: `event:${id}` },
+    );
+  }
+  const edits = cancelledNow || movedNow || placeNow ? [] : whatChanged(event, set);
+  if (edits.length) {
+    const going = await Rsvp.find({ eventId: event._id, status: "going", userId: { $ne: viewer._id } }).select("userId").lean<{ userId: Types.ObjectId }[]>();
+    // a host fixing things a few times: one line in the inbox, one push
+    notify(
+      going.map((g) => g.userId),
+      { title: "Event updated", body: `${set.title ?? event.title}: ${listOf(edits)} changed.`, data: { type: "event", id } },
+      { category: "events", ref: `event:${id}`, groupKey: `event-edit:${id}`, pushOnce: true, many: () => `${set.title ?? event.title} has been updated` },
     );
   }
   return getEvent(viewer, id);
@@ -560,33 +594,48 @@ export async function getAttendees(viewer: IUser | null, id: string, after?: str
     .select("userId")
     .lean<{ _id: Types.ObjectId; userId: Types.ObjectId }[]>();
 
+  const SELECT = "handle displayName avatarUrl avatarFrame nameEffect plan planUntil email country city";
   const users = await User.find({
     _id: { $in: rsvps.map((r) => r.userId) },
     $or: [{ attendancePublic: true }, { _id: viewer._id }],
   })
-    .select("handle displayName avatarUrl avatarFrame nameEffect plan planUntil email country city")
+    .select(SELECT)
     .lean<IUser[]>();
+
+  const brief = (u: IUser): UserBrief => ({
+    id: sid(u._id),
+    handle: u.handle,
+    displayName: u.displayName,
+    avatarUrl: u.avatarUrl,
+    avatarFrame: u.avatarFrame ?? null,
+    nameEffect: u.nameEffect ?? null,
+    country: u.country ?? "NG",
+    city: u.city,
+  });
 
   // in the order they said they were going, skipping anyone who keeps it private
   const byId = new Map(users.map((u) => [sid(u._id), u]));
   const showable = rsvps.filter((r) => byId.has(sid(r.userId)));
   const page = showable.slice(0, ATTENDEE_PAGE);
   const lastRead = showable.length > ATTENDEE_PAGE ? page[page.length - 1] : rsvps.length === ATTENDEE_SCAN ? rsvps[rsvps.length - 1] : null;
+  const people = page.map((r) => brief(byId.get(sid(r.userId))!));
 
-  const people: UserBrief[] = page.map((r) => {
-    const u = byId.get(sid(r.userId))!;
-    return {
-      id: sid(u._id),
-      handle: u.handle,
-      displayName: u.displayName,
-      avatarUrl: u.avatarUrl,
-      avatarFrame: u.avatarFrame ?? null,
-      nameEffect: u.nameEffect ?? null,
-      country: u.country ?? "NG",
-      city: u.city,
-    };
-  });
-  return { ...base, people, namesHidden: event.goingCount > people.length, nextCursor: lastRead ? sid(lastRead._id) : null };
+  // friends going lead the list, wherever they are in it (the first page says who)
+  let friendInfo: { friends?: UserBrief[]; friendCount?: number } = {};
+  if (!after) {
+    const links = await Friendship.find({ status: "accepted", $or: [{ requesterId: viewer._id }, { recipientId: viewer._id }] })
+      .select("requesterId recipientId")
+      .limit(2000)
+      .lean<Pick<IFriendship, "requesterId" | "recipientId">[]>();
+    const friendIds = links.map((l) => (sid(l.requesterId) === sid(viewer._id) ? l.recipientId : l.requesterId)).filter((id) => !hidden.some((h) => sid(h) === sid(id)));
+    if (friendIds.length) {
+      const goingIds = (await Rsvp.find({ eventId: event._id, status: "going", userId: { $in: friendIds } }).select("userId").lean<{ userId: Types.ObjectId }[]>()).map((r) => r.userId);
+      const show = { _id: { $in: goingIds }, attendancePublic: true };
+      const [count, rows] = await Promise.all([User.countDocuments(show), User.find(show).select(SELECT).limit(3).lean<IUser[]>()]);
+      friendInfo = { friends: rows.map(brief), friendCount: count };
+    }
+  }
+  return { ...base, people, namesHidden: event.goingCount > people.length, nextCursor: lastRead ? sid(lastRead._id) : null, ...friendInfo };
 }
 
 /* ------------------------------------------------------------------ */

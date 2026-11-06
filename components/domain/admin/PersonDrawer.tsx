@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
 import { AdminService } from "@/app/services/AdminService";
+import { useConfirm } from "@/components/providers/ConfirmProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import { profileHref } from "@/components/providers/ProfileCardProvider";
 import { Avatar } from "@/components/ui/Avatar";
@@ -42,6 +43,7 @@ function Stat({ label, value }: { label: string; value: number }) {
 /** Everything about one account, plus the actions an admin can take on it. */
 export function PersonDrawer({ userId, onClose, onChange }: { userId: string | null; onClose: () => void; onChange: (u: AdminUserDTO) => void }) {
   const toast = useToast();
+  const confirm = useConfirm();
   const { data, loading, error, reload } = useApi(userId ? () => AdminService.user(userId) : null, [userId]);
   const [busy, setBusy] = useState(false);
   const [suspending, setSuspending] = useState(false);
@@ -131,9 +133,9 @@ export function PersonDrawer({ userId, onClose, onChange }: { userId: string | n
                 <select
                   value={u.gender}
                   disabled={busy}
-                  onChange={(e) => {
+                  onChange={async (e) => {
                     const gender = e.target.value as typeof u.gender;
-                    if (window.confirm(`Change @${u.handle}'s gender? People can't change it themselves once it's set, and this is logged.`)) void update({ gender }, "Gender corrected");
+                    if (await confirm({ title: `Change @${u.handle}'s gender?`, body: "People can't change it themselves once it's set, and this is logged.", confirmLabel: "Change it", danger: false })) void update({ gender }, "Gender corrected");
                   }}
                   className="h-9 rounded-control border border-line bg-raised px-2"
                 >

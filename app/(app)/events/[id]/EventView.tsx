@@ -63,6 +63,7 @@ function EditModal({ event, open, onClose, onSaved }: { event: EventDTO; open: b
   const [neighborhood, setNeighborhood] = useState(event.neighborhood);
   const [venue, setVenue] = useState(event.venue);
   const [ticketUrl, setTicketUrl] = useState(event.ticketUrl ?? "");
+  const [ticketLabel, setTicketLabel] = useState(event.ticketLabel ?? "");
   const [onlineUrl, setOnlineUrl] = useState(event.onlineUrl ?? "");
   const [date, setDate] = useState(s.date);
   const [start, setStart] = useState(s.time);
@@ -117,6 +118,7 @@ function EditModal({ event, open, onClose, onSaved }: { event: EventDTO; open: b
         neighborhood,
         online,
         ticketUrl: tickets,
+        ticketLabel: ticketLabel.trim(),
         onlineUrl: joinLink,
         currency,
         venue: venue.trim(),
@@ -173,8 +175,9 @@ function EditModal({ event, open, onClose, onSaved }: { event: EventDTO; open: b
           </div>
           <TextField label="Capacity" type="number" min={1} value={capacity} onChange={(e) => setCapacity(e.target.value)} error={errors.capacity} hint="Empty = unlimited" />
         </div>
-        <TextField label="Ticket link (optional)" type="url" inputMode="url" value={ticketUrl} onChange={(e) => setTicketUrl(e.target.value)} onBlur={() => setTicketUrl((v) => normalizeLink(v))} error={errors.ticketUrl} placeholder="https://tix.africa/…" hint="Shows as a Get tickets button." />
-        <ImageField kind="photo" label="Cover image" value={cover} onChange={setCover} error={errors.coverImage} />
+        <TextField label="Ticket link (optional)" type="url" inputMode="url" value={ticketUrl} onChange={(e) => setTicketUrl(e.target.value)} onBlur={() => setTicketUrl((v) => normalizeLink(v))} error={errors.ticketUrl} placeholder="https://tix.africa/…" hint="Shows as a button on the event. People see where it goes before they leave Klique." />
+        <TextField label="Button name (optional)" value={ticketLabel} onChange={(e) => setTicketLabel(e.target.value)} maxLength={LIMITS.ticketLabel} error={errors.ticketLabel} placeholder="Get tickets" hint="Like See more, Buy tickets or Main site. Empty shows Get tickets." />
+        <ImageField kind="photo" label="Cover image" value={cover} onChange={setCover} error={errors.coverImage} reposition={{ aspect: 16 / 9 }} />
         {event.community && !event.community.official && <ContributionFields value={chipIn} onChange={setChipIn} error={errors.contribution} />}
         {formError && (
           <p role="alert" className="text-sm font-medium text-danger">
@@ -239,6 +242,15 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
   const [joining, setJoining] = useState(false);
   const attendees = useApi(() => EventService.attendees(event.id), [event.id, event.goingCount, event.interestedCount], { key: `attendees:${event.id}` });
   const [editing, setEditing] = useState(false);
+  // "Edit" from your list of events you're hosting
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("edit")) return;
+    url.searchParams.delete("edit");
+    window.history.replaceState(window.history.state, "", url);
+    if (event.viewer.canEdit) setEditing(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [deleting, setDeleting] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   // site admins may delete anything (logged in the admin audit log)
@@ -306,7 +318,7 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
 
   return (
     <article>
-      <EventPanel event={event} people={people} namesHidden={!!attendees.data?.namesHidden} />
+      <EventPanel event={event} people={people} nextCursor={attendees.data?.nextCursor ?? null} friends={attendees.data?.friends} friendCount={attendees.data?.friendCount} />
       <Link href="/events" className="mb-4 inline-flex items-center gap-1.5 text-sm text-ink-muted hover:text-ink lg:hidden">
         <Icon name="arrow-left" size={15} /> All events
       </Link>
@@ -489,7 +501,7 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
             <div className="space-y-2 rounded-card border border-line bg-surface p-4">
               {event.ticketUrl && (
                 <a href={event.ticketUrl} target="_blank" rel="noopener noreferrer nofollow" className={buttonClass("primary", "md", "w-full")}>
-                  <Icon name="ticket" size={16} /> Get tickets
+                  <Icon name="ticket" size={16} /> {event.ticketLabel || "Get tickets"}
                 </a>
               )}
               {event.onlineUrl && (

@@ -56,7 +56,7 @@ export function ShareButton({
       await navigator.clipboard.writeText(url);
       toast("Link copied", "success");
     } catch {
-      window.prompt("Copy this link", url);
+      toast(`Couldn't copy it. Here's the link: ${url}`, "error");
     }
     setOpen(false);
   }

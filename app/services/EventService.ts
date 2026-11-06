@@ -18,8 +18,8 @@ export interface EventListParams {
   /** limit to one community (and optionally one of its groups) */
   community?: string;
   sub?: string;
-  /** "going" | "saved" | "hosted" need a signed-in user */
-  scope?: "all" | "going" | "saved" | "hosted";
+  /** "going" | "saved" | "hosted" | "mine" (hosted or going) need a signed-in user */
+  scope?: "all" | "going" | "saved" | "hosted" | "mine";
   past?: boolean;
   page?: number;
 }
@@ -35,6 +35,7 @@ export interface EventInput {
   online?: boolean;
   /** "" or null clears it */
   ticketUrl?: string | null;
+  ticketLabel?: string;
   onlineUrl?: string | null;
   venue: string;
   /** ISO 8601 */
@@ -78,7 +79,7 @@ export const EventService = {
   unsave: (id: string) => api.delete<Envelope<EventDTO>>(`/api/events/${id}/save`),
   /** its community's owner pins it, so it comes first on the community's events */
   pin: (id: string, on: boolean) => api.post<Envelope<{ id: string; pinned: boolean }>>(`/api/events/${id}/pin`, { on }),
-  attendees: (id: string) => api.get<Envelope<AttendeesDTO>>(`/api/events/${id}/attendees`),
+  attendees: (id: string, after?: string) => api.get<Envelope<AttendeesDTO>>(`/api/events/${id}/attendees`, after ? { after } : undefined),
 };
 
 export interface EventsOverviewDTO {

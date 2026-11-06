@@ -32,6 +32,8 @@ export interface IEvent {
   online: boolean;
   /** where to buy tickets (the host's own page) */
   ticketUrl?: string | null;
+  /** the name on its button ("See more", "Main site"); empty is "Get tickets" */
+  ticketLabel?: string;
   /** the link to join an online event (Zoom, Meet, a stream…) */
   onlineUrl?: string | null;
   capacity: number | null;
@@ -80,6 +82,7 @@ const EventSchema = new Schema<IEvent>(
     currency: { type: String, default: "NGN" },
     online: { type: Boolean, default: false },
     ticketUrl: { type: String, default: null, maxlength: 500 },
+    ticketLabel: { type: String, default: "", maxlength: 30 },
     onlineUrl: { type: String, default: null, maxlength: 500 },
     capacity: { type: Number, default: null, min: 1 },
     coverImage: { type: String, default: null },

@@ -254,7 +254,7 @@ export function PollCard({ id }: { id: string }) {
           <ul className="-mx-2 max-h-[50dvh] space-y-0.5 overflow-y-auto">
             {voters.people.map((u) => (
               <li key={u.id}>
-                <button type="button" onClick={() => card.openFull(u.handle)} className="flex w-full items-center gap-3 rounded-control px-2 py-2 text-left hover:bg-raised">
+                <button type="button" onClick={() => { setVoters(null); card.openFull(u.handle); }} className="flex w-full items-center gap-3 rounded-control px-2 py-2 text-left hover:bg-raised">
                   <Avatar name={u.displayName} src={u.avatarUrl} frame={u.avatarFrame} size={32} />
                   <span className="min-w-0">
                     <span className="block truncate text-[14px] font-semibold">

@@ -9,6 +9,7 @@ import { InboxEmptyArt, InboxSide } from "@/components/domain/notifications/Inbo
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useRealtimeEvent } from "@/components/providers/RealtimeProvider";
 import { Button } from "@/components/ui/Button";
+import { MoreOnScroll } from "@/components/ui/MoreOnScroll";
 import { Icon, type IconName } from "@/components/ui/Icon";
 import { RowSkeleton } from "@/components/ui/Skeleton";
 import { ErrorState } from "@/components/ui/States";
@@ -193,13 +194,7 @@ function NotificationsContent() {
                 </ul>
               </section>
             ))}
-            {data?.hasMore && (
-              <div className="flex justify-center">
-                <Button onClick={() => void loadMore()} loading={loadingMore}>
-                  Load older
-                </Button>
-              </div>
-            )}
+            <MoreOnScroll hasMore={!!data?.hasMore} loading={loadingMore} count={items.length} onLoad={loadMore} />
           </div>
         )}
       </div>

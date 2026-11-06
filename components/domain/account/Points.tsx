@@ -9,6 +9,7 @@ import { useRealtimeEvent } from "@/components/providers/RealtimeProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
+import { MoreOnScroll } from "@/components/ui/MoreOnScroll";
 import { Switch } from "@/components/ui/Field";
 import { Icon } from "@/components/ui/Icon";
 import { Modal } from "@/components/ui/Modal";
@@ -316,11 +317,7 @@ export function HypeTab({ me, onStyle }: { me: UserMe; onStyle: () => void }) {
           </ul>
         )}
         {more && (
-          <div className="mt-3 flex justify-center">
-            <Button size="sm" onClick={() => void loadOlder()} loading={loadingMore}>
-              Load older
-            </Button>
-          </div>
+          <MoreOnScroll hasMore loading={loadingMore} count={txns.length} onLoad={loadOlder} />
         )}
       </section>
 

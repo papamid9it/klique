@@ -7,6 +7,7 @@ import { RowSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { Icon } from "@/components/ui/Icon";
 import { usePaged } from "@/lib/hooks/useApi";
+import { useSteps } from "@/lib/hooks/useSteps";
 import type { EventDTO } from "@/lib/types";
 import { useRealtimeEvent } from "@/components/providers/RealtimeProvider";
 
@@ -19,6 +20,7 @@ export function SpaceEvents({ slug, subSlug, canHost, canSubmit }: { slug: strin
   );
   // a new event was posted here (or one changed): the list updates by itself
   useRealtimeEvent(() => void reload(), { filter: (e) => e.type === "notify" && e.category === "events", debounceMs: 800 });
+  const steps = useSteps(items.length, hasMore, loadingMore, loadMore, `${slug}:${subSlug ?? ""}`);
   const hostHref = `/events/new?community=${encodeURIComponent(slug)}${subSlug ? `&sub=${encodeURIComponent(subSlug)}` : ""}`;
 
   return (
@@ -41,14 +43,14 @@ export function SpaceEvents({ slug, subSlug, canHost, canSubmit }: { slug: strin
       ) : (
         <>
           <div className="space-y-2.5">
-            {items.map((e) => (
+            {items.slice(0, steps.shown).map((e) => (
               <EventRow key={e.id} event={e} onChange={(next) => setItems((prev) => prev.map((x) => (x.id === next.id ? next : x)))} />
             ))}
           </div>
-          {hasMore && (
+          {steps.canMore && (
             <div className="flex justify-center">
-              <Button onClick={loadMore} loading={loadingMore}>
-                Load more
+              <Button onClick={steps.more} loading={steps.waiting}>
+                See more
               </Button>
             </div>
           )}

@@ -340,6 +340,7 @@ const eventFields = {
   currency: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/).optional(),
   online: z.boolean().default(false),
   ticketUrl: clearableUrl,
+  ticketLabel: z.string().trim().max(LIMITS.ticketLabel, `Keep it to ${LIMITS.ticketLabel} characters`).optional(),
   onlineUrl: clearableUrl,
   capacity: z.number().int().min(1).max(100_000).optional().nullable(),
   coverImage: clearableUrl,
@@ -370,6 +371,7 @@ export const eventUpdateSchema = z.object({
   currency: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/).optional(),
   online: z.boolean().optional(),
   ticketUrl: clearableUrl,
+  ticketLabel: z.string().trim().max(LIMITS.ticketLabel, `Keep it to ${LIMITS.ticketLabel} characters`).optional(),
   onlineUrl: clearableUrl,
   capacity: z.number().int().min(1).max(100_000).optional().nullable(),
   coverImage: clearableUrl,
@@ -388,7 +390,7 @@ export const eventListQuery = pageQuery.extend({
   q: z.preprocess(blankToUndef, z.string().trim().max(60).optional()),
   community: z.preprocess(blankToUndef, z.string().trim().max(80).optional()),
   sub: z.preprocess(blankToUndef, z.string().trim().max(80).optional()),
-  scope: z.enum(["all", "going", "saved", "hosted"]).default("all"),
+  scope: z.enum(["all", "going", "saved", "hosted", "mine"]).default("all"),
   past: z.preprocess((v) => v === "true" || v === true, z.boolean()).default(false),
   sort: z.enum(["soonest", "popular", "new"]).default("soonest"),
 });
@@ -715,7 +717,8 @@ const crewFields = {
 };
 
 /** an event's klique (the event is in the address) */
-export const crewCreateSchema = z.object(crewFields);
+/** for an event: what it's about comes from the event's community, whatever is sent */
+export const crewCreateSchema = z.object({ ...crewFields, interest: interestId.optional() });
 /** which community it's for, by slug; null is all communities, which also needs a place (it has no community to take one from) */
 export const kliqueCreateSchema = z.object({ ...crewFields, community: z.string().trim().min(1).max(80).nullable(), country: z.string().trim().toUpperCase().max(2).optional(), city: z.string().trim().max(60).optional() });
 

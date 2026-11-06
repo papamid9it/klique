@@ -69,7 +69,7 @@ export function StartCrewModal({ event, community, open, onClose, onCreated }: {
     if (communitySlug === ALL && !place.city.trim()) next.city = "Which city is it in?";
     if (title.trim().length < 8) next.title = "Say what you're doing, e.g. “Who wants to watch Dune at Filmhouse Lekki on Saturday?”";
     if (!coverImage) next.coverImage = "Add a cover picture. Kliques with a picture get far more people.";
-    if (!interest) next.interest = "Pick what it's about.";
+    if (!event && !interest) next.interest = "Pick what it's about.";
     if (area.trim().length < 2) next.area = "Which area? A neighbourhood or landmark.";
     if (meetupPoint.trim().length < 2) next.meetupPoint = "Where should everyone meet?";
     if (!date || !time) next.meetupAt = "Pick a date and time.";
@@ -125,14 +125,16 @@ export function StartCrewModal({ event, community, open, onClose, onCreated }: {
           {!event && !community && communitySlug === ALL && <PlaceFields value={place} onChange={setPlace} errors={errors} />}
           <ImageField kind="photo" label="Cover picture" value={coverImage} onChange={setCoverImage} error={errors.coverImage} hint={avatar && coverImage === avatar ? "Your profile picture for now. Tap Change to use the place, the movie poster, the vibe." : "Required. The place, the movie poster, the vibe. No explicit pictures."} reposition={{ aspect: 16 / 9 }} />
           <TextField label="What's the plan?" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} placeholder={event ? `Who's going to ${event.title} from Yaba?` : "Who wants to watch a movie at the cinema on Saturday?"} error={errors.title} hint="Write it like a question to your friends." />
-          <SelectField label="What it's about" value={interest} onChange={(e) => setInterest(e.target.value)} error={errors.interest} hint="People into this see it first.">
-            <option value="">Pick one…</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </SelectField>
+          {!event && (
+            <SelectField label="What it's about" value={interest} onChange={(e) => setInterest(e.target.value)} error={errors.interest} hint="People into this see it first.">
+              <option value="">Pick one…</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </SelectField>
+          )}
           <div className="grid gap-4 sm:grid-cols-2">
             <TextField label="Date" type="date" value={date} onChange={(e) => setDate(e.target.value)} error={errors.meetupAt} />
             <TextField label="Time" type="time" value={time} onChange={(e) => setTime(e.target.value)} hint="Lagos time (WAT)" />

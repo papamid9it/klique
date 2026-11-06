@@ -9,6 +9,7 @@ import { useAuth } from "@/components/providers/AuthProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
+import { MoreOnScroll } from "@/components/ui/MoreOnScroll";
 import { TextArea, TextField } from "@/components/ui/Field";
 import { RowSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/States";
@@ -118,13 +119,7 @@ export function PostsPanel({ slug, subSlug, canPost }: { slug: string; subSlug?:
               </li>
             ))}
           </ul>
-          {hasMore && (
-            <div className="flex justify-center">
-              <Button onClick={loadMore} loading={loadingMore}>
-                Load more
-              </Button>
-            </div>
-          )}
+          <MoreOnScroll hasMore={hasMore} loading={loadingMore} count={items.length} onLoad={loadMore} />
         </>
       )}
 

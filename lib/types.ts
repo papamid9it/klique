@@ -524,6 +524,8 @@ export interface EventDTO {
   online: boolean;
   /** the host's ticket page ("Get tickets") */
   ticketUrl: string | null;
+  /** the name the host gave that button; none is "Get tickets" */
+  ticketLabel: string | null;
   /** the link to join an online event ("Join online") */
   onlineUrl: string | null;
   venue: string;
@@ -766,6 +768,10 @@ export interface AttendeesDTO {
   namesHidden: boolean;
   /** pass as `after` for the next people; null when there are no more */
   nextCursor: string | null;
+  /** up to 3 of the viewer's friends who are going and show it, on the first page only */
+  friends?: UserBrief[];
+  /** how many friends in all */
+  friendCount?: number;
 }
 
 /* ---------------------------- discovery ----------------------------- */

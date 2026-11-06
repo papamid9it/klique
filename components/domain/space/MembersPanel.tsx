@@ -14,6 +14,7 @@ import { ProfileTrigger } from "@/components/providers/ProfileCardProvider";
 import { RowSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { useDebounced, useNow, usePaged } from "@/lib/hooks/useApi";
+import { useSteps } from "@/lib/hooks/useSteps";
 import type { MemberDTO, Role } from "@/lib/types";
 import { ConfirmModal, RoleBadge } from "./parts";
 import { AddMembersModal } from "./AddMembersModal";
@@ -122,6 +123,8 @@ export function MembersPanel({ slug, subSlug, group }: { slug: string; subSlug?:
       </div>
     ) : null;
 
+  const steps = useSteps(items.length, hasMore, loadingMore, loadMore, `${slug}:${subSlug ?? ""}:${dq}`);
+
   const search = (
     <label className="relative mb-4 block">
       <span className="sr-only">Search members by name</span>
@@ -134,11 +137,7 @@ export function MembersPanel({ slug, subSlug, group }: { slug: string; subSlug?:
   if (error) return <div>{addBar}{search}<ErrorState message={error} onRetry={reload} /></div>;
   if (!items.length) return <div>{addBar}{search}<EmptyState icon="users" title={dq ? `No members match “${dq}”` : "No members to show"} compact /></div>;
 
-  return (
-    <div className="space-y-2">
-      {addBar}
-      {search}
-      {items.map((m) => (
+  const rows = items.slice(0, steps.shown).map((m) => (
         <PersonRow
           key={m.user.id}
           user={m.user}
@@ -165,7 +164,13 @@ export function MembersPanel({ slug, subSlug, group }: { slug: string; subSlug?:
             </div>
           }
         />
-      ))}
+  ));
+
+  return (
+    <div className="space-y-2">
+      {addBar}
+      {search}
+      {rows}
       {opened && (
         <Modal open onClose={() => setOpenId(null)} title={opened.user.displayName} description={`@${opened.user.handle} · Joined ${new Date(opened.joinedAt).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}`} size="sm">
           <div className="space-y-4">
@@ -209,11 +214,9 @@ export function MembersPanel({ slug, subSlug, group }: { slug: string; subSlug?:
           }}
         />
       )}
-      {hasMore && (
+      {steps.canMore && (
         <div className="flex justify-center pt-2">
-          <Button onClick={loadMore} loading={loadingMore}>
-            Load more
-          </Button>
+          <Button onClick={steps.more} loading={steps.waiting}>See more</Button>
         </div>
       )}
 

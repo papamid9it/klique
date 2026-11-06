@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import ApiClient from "@/app/ApiCore";
 import { PostCard } from "@/components/domain/feed/PostCard";
-import { Button } from "@/components/ui/Button";
+import { MoreOnScroll } from "@/components/ui/MoreOnScroll";
 import { RowSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { cx } from "@/components/ui/cx";
@@ -77,13 +77,7 @@ export default function TagPage() {
           ))}
         </ul>
       )}
-      {hasMore && items.length > 0 && (
-        <div className="mt-6 flex justify-center">
-          <Button onClick={() => void loadMore()} loading={loadingMore}>
-            Show more
-          </Button>
-        </div>
-      )}
+      {items.length > 0 && <MoreOnScroll hasMore={hasMore} loading={loadingMore} count={items.length} onLoad={loadMore} className="mt-3" />}
     </div>
   );
 }

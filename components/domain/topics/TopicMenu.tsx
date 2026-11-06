@@ -55,7 +55,7 @@ export function TopicMenu({ topic, onChange, onRemoved, className }: { topic: To
         const url = absoluteUrl(topicHref(topic));
         navigator.clipboard.writeText(url).then(
           () => toast("Link copied", "success"),
-          () => window.prompt("Copy this link", url),
+          () => toast(`Couldn't copy it. Here's the link: ${url}`, "error"),
         );
       },
     },

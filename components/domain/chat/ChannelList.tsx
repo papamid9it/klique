@@ -40,7 +40,7 @@ async function copy(text: string, toast: (m: string, t?: "success" | "error") =>
     await navigator.clipboard.writeText(text);
     toast(done, "success");
   } catch {
-    window.prompt("Copy this link", text);
+    toast(`Couldn't copy it. Here's the link: ${text}`, "error");
   }
 }
 

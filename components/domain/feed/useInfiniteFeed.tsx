@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
-import { Button } from "@/components/ui/Button";
+import { Button, Spinner } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { recallApi, rememberApi } from "@/lib/hooks/useApi";
@@ -188,8 +188,8 @@ export function FeedFooter({ hasMore, error, onRetry, sentinel, end }: { hasMore
   }
   if (hasMore) {
     return (
-      <div ref={sentinel} role="status" aria-label="Loading more posts">
-        <PostSkeleton />
+      <div ref={sentinel} role="status" aria-label="Loading more posts" className="flex min-h-12 items-center justify-center py-3 text-ink-muted">
+        <Spinner />
       </div>
     );
   }

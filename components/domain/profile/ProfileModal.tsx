@@ -258,7 +258,7 @@ function ProfileBody({ handle, onClose, onOpenPerson, tryOn }: { handle: string;
             friends.length ? (
               <>
                 {friends.slice(0, SHOWN).map((u) => <PersonListRow key={u.id} u={u} onOpen={onOpenPerson} />)}
-                {friends.length > SHOWN && <SeeAll label={`See all · ${friends.length}`} onClick={() => setAll("friends")} />}
+                {friends.length > SHOWN && <SeeAll label="See all" onClick={() => setAll("friends")} />}
               </>
             ) : (
               <Empty>{view.isSelf ? "No friends yet. Add people from their profile." : "No mutual friends yet."}</Empty>
@@ -266,12 +266,12 @@ function ProfileBody({ handle, onClose, onOpenPerson, tryOn }: { handle: string;
           ) : tab === "created" ? (
             <>
               {created.slice(0, SHOWN).map((c) => <CommunityListRow key={c.id} c={c} onNavigate={onClose} />)}
-              {created.length > SHOWN && <SeeAll label={`See all · ${created.length}`} onClick={() => setAll("created")} />}
+              {created.length > SHOWN && <SeeAll label="See all" onClick={() => setAll("created")} />}
             </>
           ) : sharedCommunities.length ? (
             <>
               {sharedCommunities.slice(0, SHOWN).map((c) => <CommunityListRow key={c.id} c={c} onNavigate={onClose} />)}
-              {sharedCommunities.length > SHOWN && <SeeAll label={`See all · ${sharedCommunities.length}`} onClick={() => setAll("communities")} />}
+              {sharedCommunities.length > SHOWN && <SeeAll label="See all" onClick={() => setAll("communities")} />}
             </>
           ) : (
             <Empty>You don&apos;t share a community yet.</Empty>
