@@ -33,10 +33,10 @@ function readDismissed(): string[] {
  * elsewhere now and then, sponsored cards, rows of more events and communities to join in between.
  */
 export default function HomePage() {
-  const { where, label } = usePlace();
+  const { where, label, ready } = usePlace();
   const now = useNow(600_000);
   const { user } = useAuth();
-  const { data, loading, error, reload, setData } = useApi(() => DiscoverService.discover(where), [where], { key: `discover:${where}` });
+  const { data, loading, error, reload, setData } = useApi(() => DiscoverService.discover(where), [where], { key: `discover:${where}`, wait: !ready });
   const patchCommunity = (c: CommunityCardDTO) => setData((d) => (d ? { ...d, suggestedCommunities: d.suggestedCommunities.map((x) => (x.id === c.id ? c : x)) } : d));
   // an RSVP shows wherever that event appears
   const patchEvent = (e: EventDTO) => {
@@ -45,7 +45,7 @@ export default function HomePage() {
   };
   const events = rankEvents(data, user?.interests ?? []);
   // kliques you could join, best for you first: the first few in their own row, the rest between posts
-  const kliques = useApi(user ? () => CrewService.forYou({ limit: 30 }) : null, [user?.id, where], { key: `kliques-for-you:${user?.id ?? ""}:${where}` });
+  const kliques = useApi(user ? () => CrewService.forYou({ limit: 30 }) : null, [user?.id, where], { key: `kliques-for-you:${user?.id ?? ""}:${where}`, wait: !ready });
   const [dismissed, setDismissed] = useState<string[]>([]);
   useEffect(() => setDismissed(readDismissed()), []);
   const dismiss = (id: string) =>
@@ -89,7 +89,7 @@ export default function HomePage() {
           phone's top bar (61px) and at the very top on big screens */}
       <div ref={bar} className="eyebrow sticky top-[61px] z-20 -mx-4 -mt-6 mb-1 flex items-center gap-3 bg-canvas px-4 py-2.5 sm:-mx-8 sm:px-8 lg:top-0 lg:-mx-10 lg:-mt-9 lg:px-10" suppressHydrationWarning>
         <span className="min-w-0 flex-1 truncate">
-          {now ? formatEyebrowDate(now) : " "} · {label}
+          {now ? formatEyebrowDate(now) : " "}{ready ? ` · ${label}` : ""}
         </span>
         {/* new posts since the newest one on screen: a pill just under the bar, like X and Reddit */}
         <NewPostsPill authors={newer} onClick={() => void refresh()} className="absolute top-full left-1/2 mt-2.5 -translate-x-1/2" />

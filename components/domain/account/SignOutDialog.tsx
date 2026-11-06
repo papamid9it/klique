@@ -29,8 +29,9 @@ export function SignOutHost() {
     setBusy(true);
     try {
       if (ask?.everywhere) await AuthService.logoutEverywhere();
-      await signOut();
       setAsk(null);
+      // signed out here whatever happens; after "everywhere" this session is already gone, so the call can fail
+      await signOut().catch(() => {});
     } catch (e) {
       toast(errorMessage(e), "error");
     } finally {

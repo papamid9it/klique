@@ -18,8 +18,6 @@ export interface ISubcommunity {
   /** starter channels created once */
   channelsReady?: boolean;
   /** points (lib/points) someone needs to be added, and to post. 0: anyone. */
-  minPointsJoin?: number;
-  minPointsPost?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -34,8 +32,6 @@ const SubcommunitySchema = new Schema<ISubcommunity>(
     ownerId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     memberCount: { type: Number, default: 0 },
     channelsReady: { type: Boolean, default: false },
-    minPointsJoin: { type: Number, default: 0, min: 0, max: 1_000_000 },
-    minPointsPost: { type: Number, default: 0, min: 0, max: 1_000_000 },
   },
   { timestamps: true },
 );

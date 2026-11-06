@@ -98,12 +98,12 @@ export function formatEyebrowDate(input: string | Date): string {
   return `${p.weekday}, ${p.month} ${p.day}`.toUpperCase();
 }
 
-/** 1200 -> "1.2K" */
+/** 1k, 1.2k, 125k, 1m, 1.3m, 123m, 1b. Rounds up to the next unit rather than say "1000k". */
 export function compactCount(n: number): string {
   if (n < 1000) return String(n);
-  if (n < 10_000) return (n / 1000).toFixed(1).replace(/\.0$/, "") + "K";
-  if (n < 1_000_000) return Math.round(n / 1000) + "K";
-  return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
+  const [size, unit] = n < 999_500 ? [1e3, "k"] : n < 999_500_000 ? [1e6, "m"] : [1e9, "b"];
+  const v = n / size;
+  return (v < 100 ? v.toFixed(1).replace(/\.0$/, "") : String(Math.round(v))) + unit;
 }
 
 export function pluralize(n: number, one: string, many = one + "s") {

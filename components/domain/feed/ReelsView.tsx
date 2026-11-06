@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
 import { FeedService } from "@/app/services/FeedService";
 import { ReportDialog } from "@/components/domain/ReportDialog";
 import { absoluteUrl } from "@/components/domain/ShareButton";
 import { ProfileTrigger } from "@/components/providers/ProfileCardProvider";
+import { useAuth } from "@/components/providers/AuthProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import { Avatar } from "@/components/ui/Avatar";
 import { Icon, type IconName } from "@/components/ui/Icon";
@@ -144,8 +145,13 @@ function Reel({ post: p, active, held, muted, onMuted, onChange, onComments, onR
               <Link href={`/communities/${p.community.slug}?view=posts`} className="truncate text-[13px] font-medium text-white/85 hover:underline">{p.community.name}</Link>
             </div>
             {p.caption && (
-              <button type="button" onClick={() => setMore((m) => !m)} className={`pointer-events-auto mt-1.5 block w-fit max-w-full text-left text-sm leading-snug [&_a]:text-white [&_a]:underline ${more ? "max-h-40 overflow-y-auto" : "line-clamp-2"}`}>
+              <div className={`pointer-events-auto mt-1.5 text-sm leading-snug [&_a]:text-white [&_a]:underline ${more ? "max-h-40 overflow-y-auto" : "line-clamp-2"}`}>
                 <RichText text={p.caption} refs={p.refs} formatted />
+              </div>
+            )}
+            {p.caption.length > 90 && (
+              <button type="button" onClick={() => setMore((m) => !m)} className="pointer-events-auto mt-0.5 text-[13px] font-semibold text-white/80 hover:text-white">
+                {more ? "Less" : "More"}
               </button>
             )}
           </div>
@@ -189,11 +195,22 @@ function Reels({ start }: { start?: string }) {
   const [muted, setMuted] = useState(true);
   const [commentsOn, setCommentsOn] = useState<FeedPostDTO | null>(null);
   const [reporting, setReporting] = useState<FeedPostDTO | null>(null);
+  const { status, requireAuth } = useAuth();
+  useEffect(() => {
+    if (status === "anon") requireAuth({ redirect: true });
+  }, [status, requireAuth]);
+  // opened from a link there may be nothing to go back to
+  const leave = useCallback(() => {
+    if (window.history.length > 1) router.back();
+    else router.replace("/");
+  }, [router]);
   const box = useRef<HTMLDivElement>(null);
   // now and then, between reels
-  const events = useApi(() => EventService.list({ page: 1 }), [], { key: "reels-events" });
-  const kliques = useApi(() => CrewService.forYou({ limit: 30 }), [], { key: "reels-kliques" });
-  const ads = useAds("home-feed", { count: 3 }, true);
+  // nothing goes between the first few, so these wait until someone gets that far
+  const farEnough = items.length >= 8;
+  const events = useApi(farEnough ? () => EventService.list({ page: 1 }) : null, [farEnough], { key: "reels-events" });
+  const kliques = useApi(farEnough ? () => CrewService.forYou({ limit: 30 }) : null, [farEnough], { key: "reels-kliques" });
+  const ads = useAds("home-feed", { count: 3 }, farEnough);
   const [eventsNow, setEventsNow] = useState<Record<string, EventDTO>>({});
   const paging = useRef({ page: 0, at: undefined as number | undefined, hasMore: true, busy: false });
 
@@ -216,8 +233,8 @@ function Reels({ start }: { start?: string }) {
   }, [start, toast]);
 
   useEffect(() => {
-    void loadMore();
-  }, [loadMore]);
+    if (status === "authed") void loadMore();
+  }, [loadMore, status]);
 
   useEffect(() => {
     if (items.length && active >= items.length - 3) void loadMore();
@@ -235,17 +252,19 @@ function Reels({ start }: { start?: string }) {
         e.preventDefault();
         go(active + (e.key === "ArrowDown" ? 1 : -1));
       }
-      if (e.key === "Escape") router.back();
+      if (e.key === "Escape") leave();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [active, go, router, commentsOn, reporting]);
+  }, [active, go, leave, commentsOn, reporting]);
 
-  const slots = mixReels(items.length, kliques.data?.items ?? [], (events.data?.items ?? []).filter((e) => !e.isPast && !e.review), ads.length, REEL_SEED);
-  const entries = items.flatMap((p, i) => {
-    const slot = slots.get(i);
-    return slot ? [{ post: p, at: i }, { slot, at: i }] : [{ post: p, at: i }];
-  });
+  const entries = useMemo(() => {
+    const slots = mixReels(items.length, kliques.data?.items ?? [], (events.data?.items ?? []).filter((e) => !e.isPast && !e.review), ads.length, REEL_SEED);
+    return items.flatMap((p, i) => {
+      const slot = slots.get(i);
+      return slot ? [{ post: p, at: i }, { slot, at: i }] : [{ post: p, at: i }];
+    });
+  }, [items, kliques.data, events.data, ads.length]);
 
   const change = (p: FeedPostDTO) => {
     setItems((now) => now.map((x) => (x.id === p.id ? p : x)));
@@ -275,7 +294,7 @@ function Reels({ start }: { start?: string }) {
           </div>
         ) : null}
       </div>
-      <button type="button" aria-label="Close" onClick={() => router.back()} className="absolute top-3 left-3 inline-flex size-11 items-center justify-center rounded-full bg-black/50 text-white hover:bg-black/70">
+      <button type="button" aria-label="Close" onClick={leave} className="absolute top-3 left-3 inline-flex size-11 items-center justify-center rounded-full bg-black/50 text-white hover:bg-black/70">
         <Icon name="arrow-left" size={21} />
       </button>
       <div className="absolute top-1/2 right-5 hidden -translate-y-1/2 flex-col gap-3 sm:flex">

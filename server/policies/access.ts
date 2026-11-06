@@ -207,7 +207,7 @@ export function communityAccessFrom(
  * its owner and admins add people from the community.
  */
 export function subAccessFrom(
-  sub: Partial<Pick<ISubcommunity, "minPointsPost">> | null,
+  community: Partial<Pick<ICommunity, "official" | "minPointsPost">> | null,
   parentMembership: IMembership | null,
   subMembership: IMembership | null,
   viewerIsSiteAdmin = false,
@@ -218,7 +218,8 @@ export function subAccessFrom(
   const role = activeRole(subMembership);
   const banned = subMembership?.status === "banned";
   const overseer = parentRole === "owner" || viewerIsSiteAdmin;
-  const short = role && points !== undefined ? pointsShort(sub?.minPointsPost, overseer ? "owner" : role, { points, siteAdmin: viewerIsSiteAdmin }) : 0;
+  // a group has no points rules of its own: its community's apply, and managers of either never need any
+  const short = role && points !== undefined ? pointsShort(community?.minPointsPost, overseer || isManager(parentRole) ? "owner" : role, { points, siteAdmin: viewerIsSiteAdmin }, !!community?.official) : 0;
   // a timeout in the community holds in its groups too
   const timedOutUntil = timeoutOf(parentMembership);
   return {
@@ -299,7 +300,7 @@ async function rawSpaceAccess(space: Space, viewer: IUser | null): Promise<Space
     findMembership(viewer._id, community._id, null),
     findMembership(viewer._id, community._id, sub._id),
   ]);
-  return subAccessFrom(sub, parentM, subM, isSiteAdmin(viewer), viewer.points ?? 0, await rolesOf(parentM));
+  return subAccessFrom(community, parentM, subM, isSiteAdmin(viewer), viewer.points ?? 0, await rolesOf(parentM));
 }
 
 /* ---------------------------- assertions ---------------------------- */

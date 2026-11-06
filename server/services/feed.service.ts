@@ -453,6 +453,14 @@ export async function reactToComment(viewer: IUser, space: Space, access: SpaceA
 
 const HOUR = 3_600_000;
 /** Newer, busier posts first; videos rank above pictures, and pictures above text-only posts (still shown, lower). */
+/** All that ranking needs: Home and reels rank hundreds of posts for every page, and only draw a few. */
+const RANK_FIELDS = "communityId authorId upCount commentCount createdAt media.kind";
+/** The whole posts for the few on this page, in the same order. */
+async function fullPosts(rows: Pick<IFeedPost, "_id">[]): Promise<IFeedPost[]> {
+  const byId = new Map((await FeedPost.find({ _id: { $in: rows.map((r) => r._id) } }).lean<IFeedPost[]>()).map((p) => [sid(p._id), p]));
+  return rows.flatMap((r) => byId.get(sid(r._id)) ?? []);
+}
+
 /** Verified communities' posts (checked by hand by the Klique team) rank this much higher in your feed, and more among suggestions and reels. */
 const VERIFIED_LIFT = 1.5;
 const VERIFIED_SUGGEST_LIFT = 2.5;
@@ -513,7 +521,7 @@ export async function reelsFeed(viewer: IUser, page: number, at?: number, start?
     hiddenUserIds(viewer._id),
   ]);
   const now = at && at <= Date.now() && at > Date.now() - 24 * HOUR ? at : Date.now();
-  const rows = await FeedPost.find({ communityId: { $in: communities.map((c) => c._id) }, "media.0": { $exists: true }, explicit: { $ne: true }, hiddenAt: null, createdAt: { $gte: new Date(now - 90 * 24 * HOUR), $lte: new Date(now) }, ...(hidden.length ? { authorId: { $nin: hidden } } : {}) }).sort({ createdAt: -1 }).limit(500).lean<IFeedPost[]>();
+  const rows = await FeedPost.find({ communityId: { $in: communities.map((c) => c._id) }, "media.0": { $exists: true }, explicit: { $ne: true }, hiddenAt: null, createdAt: { $gte: new Date(now - 90 * 24 * HOUR), $lte: new Date(now) }, ...(hidden.length ? { authorId: { $nin: hidden } } : {}) }).select(RANK_FIELDS).sort({ createdAt: -1 }).limit(500).lean<IFeedPost[]>();
   const yours = new Set(mineIds.map(sid));
   const lifted = verifiedSet(communities);
   const score = (p: IFeedPost) => liftedRank(p, now, lifted, VERIFIED_SUGGEST_LIFT) + (yours.has(sid(p.communityId)) ? 1 : 0);
@@ -526,9 +534,11 @@ export async function reelsFeed(viewer: IUser, page: number, at?: number, start?
     for (let n = 0; n < 3 && v < videos.length; n++) mixed.push(videos[v++]);
     if (ph < photos.length) mixed.push(photos[ph++]);
   }
-  const tapped = start && Types.ObjectId.isValid(start) ? (rows.find((p) => sid(p._id) === start) ?? (await FeedPost.findOne({ _id: start, "media.0": { $exists: true }, hiddenAt: null, explicit: { $ne: true }, communityId: { $in: communities.map((c) => c._id) } }).lean<IFeedPost>())) : null;
+  // the post they tapped comes first if they may see it, even from a community reels leave out (their own 18+ one)
+  const startRow = start && Types.ObjectId.isValid(start) ? await FeedPost.findOne({ _id: start, "media.0": { $exists: true }, hiddenAt: null, explicit: { $ne: true } }).select(RANK_FIELDS).lean<IFeedPost>() : null;
+  const tapped = startRow && (await Community.exists({ _id: startRow.communityId, explicit: { $ne: true }, $or: [{ _id: { $in: mineIds } }, { privacy: "public", adult: { $ne: true } }] })) ? startRow : null;
   const ordered = tapped ? [tapped, ...mixed.filter((p) => sid(p._id) !== sid(tapped._id))] : mixed;
-  const slice = ordered.slice((page - 1) * PAGE, page * PAGE);
+  const slice = await fullPosts(ordered.slice((page - 1) * PAGE, page * PAGE));
   return { items: await toPosts(slice, viewer), page, hasMore: ordered.length > page * PAGE, at: now };
 }
 
@@ -547,8 +557,8 @@ export async function homeFeed(viewer: IUser, page: number, at?: number): Promis
   const now = at && at <= Date.now() && at > Date.now() - 24 * HOUR ? at : Date.now();
   const notHidden = { hiddenAt: null, ...(hidden.length ? { authorId: { $nin: hidden } } : {}) };
   const [pool, suggestions] = await Promise.all([
-    open.length ? FeedPost.find({ communityId: { $in: open.map((c) => c._id) }, createdAt: { $gte: new Date(now - 60 * 24 * HOUR), $lte: new Date(now) }, ...notHidden }).sort({ createdAt: -1 }).limit(400).lean<IFeedPost[]>() : [],
-    elsewhere.length ? FeedPost.find({ communityId: { $in: elsewhere.map((c) => c._id) }, createdAt: { $gte: new Date(now - 14 * 24 * HOUR), $lte: new Date(now) }, ...notHidden }).sort({ createdAt: -1 }).limit(200).lean<IFeedPost[]>() : [],
+    open.length ? FeedPost.find({ communityId: { $in: open.map((c) => c._id) }, createdAt: { $gte: new Date(now - 60 * 24 * HOUR), $lte: new Date(now) }, ...notHidden }).select(RANK_FIELDS).sort({ createdAt: -1 }).limit(400).lean<IFeedPost[]>() : [],
+    elsewhere.length ? FeedPost.find({ communityId: { $in: elsewhere.map((c) => c._id) }, createdAt: { $gte: new Date(now - 14 * 24 * HOUR), $lte: new Date(now) }, ...notHidden }).select(RANK_FIELDS).sort({ createdAt: -1 }).limit(200).lean<IFeedPost[]>() : [],
   ]);
   // ties broken by id, so every page sees the same order and pages never overlap
   const idOrder = (a: IFeedPost, b: IFeedPost) => (sid(b._id) > sid(a._id) ? 1 : sid(b._id) < sid(a._id) ? -1 : 0);
@@ -566,7 +576,7 @@ export async function homeFeed(viewer: IUser, page: number, at?: number): Promis
   while (s < suggestions.length) merged.push({ post: suggestions[s++], trending: true });
 
   const slice = merged.slice((page - 1) * PAGE, page * PAGE);
-  const dtos = await toPosts(slice.map((x) => x.post), viewer);
+  const dtos = await toPosts(await fullPosts(slice.map((x) => x.post)), viewer);
   const byId = new Map(dtos.map((d) => [d.id, d]));
   const items: HomeFeedItem[] = slice.flatMap((x) => (byId.has(sid(x.post._id)) ? [{ post: byId.get(sid(x.post._id))!, trending: x.trending }] : []));
   return { items, page, hasMore: merged.length > page * PAGE, at: now };

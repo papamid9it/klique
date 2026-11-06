@@ -56,11 +56,17 @@ function spansOf(text: string, marks: Omit<FormatSpan, "text">, out: FormatSpan[
 /** Quick check, so most messages skip the work. */
 export const hasFormat = (text: string) => /[*_~`]|^>/m.test(text);
 
+/** A line this full of marks isn't formatting, it's someone typing a wall of stars: it would take long to pick apart. */
+const MAX_MARKS = 200;
+const tooManyMarks = (line: string) => (line.match(/[*_~`]/g)?.length ?? 0) > MAX_MARKS;
+
 export function formatLines(text: string): FormatLine[] {
   return text.split("\n").map((line) => {
     const quote = /^> ?/.test(line);
+    const words = quote ? line.replace(/^> ?/, "") : line;
+    if (tooManyMarks(words)) return { quote, spans: [{ text: words }] };
     const spans: FormatSpan[] = [];
-    spansOf(quote ? line.replace(/^> ?/, "") : line, {}, spans);
+    spansOf(words, {}, spans);
     return { quote, spans };
   });
 }

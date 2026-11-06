@@ -118,6 +118,14 @@ async function addMember(space: Space, userId: Types.ObjectId, role: Role = "mem
   await recountMembers(space.community._id, space.sub?._id ?? null);
 }
 
+/**
+ * The points a community asks for to get in, or into one of its groups (0: fine). Lite and Pro don't need them, site
+ * admins never do, and the Klique community never asks.
+ */
+export function joinPointsShort(community: ICommunity, person: Pick<IUser, "points" | "email" | "plan" | "planUntil">): number {
+  return planOf(person) === "free" ? pointsShort(community.minPointsJoin, null, gateOf(person), !!community.official) : 0;
+}
+
 export async function joinSpace(
   viewer: IUser,
   space: Space,
@@ -143,9 +151,9 @@ export async function joinSpace(
   // 1) Invite link — the one way into a private space without approval.
   if (input.inviteCode) {
     if (space.sub) {
-      // a link gets you past asking, not past what the group asks of everyone (site admins never need points)
-      const short = pointsShort(space.sub.minPointsJoin, null, gateOf(viewer));
-      if (short) throw forbidden(`${space.sub.name} needs ${short.toLocaleString("en-NG")} points to join. You have ${(viewer.points ?? 0).toLocaleString("en-NG")}.`);
+      // a link gets you past asking, not past the community's points rule, which its groups use too
+      const short = joinPointsShort(space.community, viewer);
+      if (short) throw forbidden(`${space.community.name} needs ${short.toLocaleString("en-NG")} points to join. You have ${(viewer.points ?? 0).toLocaleString("en-NG")}.`);
       const inGroup = await Membership.countDocuments({ ...spaceFilter(space), status: "active" });
       if (inGroup >= LIMITS.groupMembers) throw conflict(`This group is full (${LIMITS.groupMembers} people).`);
       await requireParentSeat(viewer, space, true);
@@ -157,9 +165,7 @@ export async function joinSpace(
     return { status: "joined", message: `Welcome to ${spaceLabel(space)}.` };
   }
 
-  // the points this community asks for, to join or to ask to (site admins never need any; Klique never asks)
-  // Lite and Pro members don't need points to join a community (a group's points still count, for everyone)
-  const short = planOf(viewer) === "free" ? pointsShort(space.community.minPointsJoin, null, gateOf(viewer), !!space.community.official) : 0;
+  const short = joinPointsShort(space.community, viewer);
   if (short) throw forbidden(`${space.community.name} needs ${short.toLocaleString("en-NG")} points to join. You have ${(viewer.points ?? 0).toLocaleString("en-NG")}.`);
 
   // raid protection (AutoMod) may have locked joining for a while: paused, or through approval
@@ -475,7 +481,7 @@ export async function removeMember(viewer: IUser, space: Space, access: SpaceAcc
     [target.userId],
     ban
       ? { title: `You were banned from ${spaceLabel(space)}`, body: `${space.sub ? "You can't come back to this group." : "You can't join this community again."} If you think that's a mistake, contact its owner.`, data: { href: "/communities" } }
-      : { title: `You were removed from ${spaceLabel(space)}`, body: space.sub ? "An admin of this group removed you." : "You can join again.", data: { href: space.sub ? `/communities/${space.community.slug}` : `/communities/${space.community.slug}` } },
+      : { title: `You were removed from ${spaceLabel(space)}`, body: space.sub ? "An admin of this group removed you." : "You can join again.", data: { href: `/communities/${space.community.slug}` } },
     { category: "community", ref: `removed:${sid(space.sub?._id ?? space.community._id)}` },
   );
 

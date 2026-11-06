@@ -43,7 +43,7 @@ import { Community } from "../models/Community";
 import { Membership, type IMembership } from "../models/Membership";
 import { Subcommunity, type ISubcommunity } from "../models/Subcommunity";
 import { User, type IUser } from "../models/User";
-import {
+import { assertNotPostBanned,
   assertCanView,
   canPostInChannel,
   canSeeChannel,
@@ -269,7 +269,7 @@ export async function listChannels(viewer: IUser | null, space: Space, access: S
       const subChannels = await Channel.find({ communityId, subcommunityId: { $in: subs.map((s) => s._id) }, topicId: null }).sort({ position: 1, createdAt: 1 }).lean<IChannel[]>();
       for (const sub of subs) {
         const m = subMs.find((x) => sid(x.subcommunityId!) === sid(sub._id)) ?? null;
-        const gAccess = subAccessFrom(sub, parentM, m, isSiteAdmin(viewer), viewer.points ?? 0);
+        const gAccess = subAccessFrom(space.community, parentM, m, isSiteAdmin(viewer), viewer.points ?? 0);
         const rows = subChannels.filter((c) => sid(c.subcommunityId!) === sid(sub._id) && canSeeChannel(c, gAccess, invited.has(sid(c._id))) && (VOICE_ENABLED || c.type !== "voice"));
         const gUnread = new Map<string, number>();
         // nothing is unread in a group you're only looking in on
@@ -657,6 +657,8 @@ export async function postMessage(viewer: IUser, space: Space, access: SpaceAcce
   const { sticker, images = [], replyToId } = input;
   const stickerUrl = input.stickerUrl && !sticker ? assertStickerUrl(input.stickerUrl) : null;
   const { channel, invited } = await loadChannel(viewer, space, access, channelSlug);
+  // replies on a board post live in its chat: stopped from Boards means these too, not ordinary chat
+  if (channel.topicId) assertNotPostBanned(access);
   // custom emoji: :name: shortcuts, and only emoji they may use here
   const body = await normalizeEmoji(viewer, channel.communityId, input.body);
   if (!canPostInChannel(channel, access, invited)) {
@@ -884,6 +886,7 @@ export async function editMessage(viewer: IUser, space: Space, access: SpaceAcce
   if (sid(msg.authorId) !== sid(viewer._id)) throw forbidden("You can only edit your own messages.");
   if (msg.sticker || msg.stickerUrl) throw forbidden("Stickers can't be edited. Delete it and send another.");
   if (msg.pollId) throw forbidden("Polls can't be edited. Delete it and start another.");
+  if (channel.topicId) assertNotPostBanned(access);
   if (!canPostInChannel(channel, access, invited)) throw forbidden("You can't post here any more, so you can't edit this.");
   rateLimit(`chat-edit:${sid(viewer._id)}`, 30, 60_000);
   const body = newBody ?? msg.body;

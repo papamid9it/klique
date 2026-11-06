@@ -72,6 +72,8 @@ export interface CacheOptions {
    * shown at once on the next mount or when the deps come back to it, and refetched in the background.
    */
   key?: string;
+  /** Not yet: stay in the loading state and ask nothing, until what the request depends on is known (e.g. the place). */
+  wait?: boolean;
 }
 
 export interface ApiOptions extends CacheOptions {
@@ -100,7 +102,7 @@ export interface ApiState<T> {
  *   const { data, loading, error, reload } = useApi(() => EventService.get(id), [id]);
  * Pass `null` as the fetcher to skip (e.g. while waiting for a dependency).
  */
-export function useApi<T>(fetcher: (() => Promise<Envelope<T>>) | null, deps: unknown[], { key, keepPrevious = false }: ApiOptions = {}): ApiState<T> {
+export function useApi<T>(fetcher: (() => Promise<Envelope<T>>) | null, deps: unknown[], { key, keepPrevious = false, wait = false }: ApiOptions = {}): ApiState<T> {
   const cacheKey = fetcher ? key : undefined;
   const [data, setDataRaw] = useState<T | null>(() => cacheGet<T>(cacheKey) ?? null);
   const [loading, setLoading] = useState(fetcher !== null && data === null);
@@ -165,6 +167,7 @@ export function useApi<T>(fetcher: (() => Promise<Envelope<T>>) | null, deps: un
   }, [setData]);
 
   useEffect(() => {
+    if (wait) return;
     const cached = cacheGet<T>(keyRef.current);
     // nothing cached for the new deps: keep the old result up while fetching, if asked to
     const hold = cached === undefined && keepPrevious && shown.current !== null && fetcherRef.current !== null;
@@ -176,7 +179,7 @@ export function useApi<T>(fetcher: (() => Promise<Envelope<T>>) | null, deps: un
       ticket.current++;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
+  }, [...deps, wait]);
 
   const reload = useCallback(() => run(false), [run]);
   return { data, loading, refreshing, error, status, reload, setData };
@@ -207,7 +210,7 @@ type PagedSnapshot<T> = { items: T[]; page: number; hasMore: boolean };
 export function usePaged<T>(
   fetchPage: (page: number) => Promise<Envelope<{ items: T[]; page: number; hasMore: boolean }>>,
   deps: unknown[],
-  { keepPrevious = false, key }: { keepPrevious?: boolean } & CacheOptions = {},
+  { keepPrevious = false, key, wait = false }: { keepPrevious?: boolean } & CacheOptions = {},
 ): PagedState<T> {
   const [initial] = useState(() => cacheGet<PagedSnapshot<T>>(key));
   const [items, setItemsRaw] = useState<T[]>(initial?.items ?? []);
@@ -267,6 +270,7 @@ export function usePaged<T>(
   );
 
   useEffect(() => {
+    if (wait) return;
     const cached = cacheGet<PagedSnapshot<T>>(keyRef.current);
     if (cached) {
       snap.current = cached;
@@ -285,7 +289,7 @@ export function usePaged<T>(
       ticket.current++;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
+  }, [...deps, wait]);
 
   const loadMore = useCallback(async () => {
     const mine = ticket.current;

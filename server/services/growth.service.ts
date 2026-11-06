@@ -44,7 +44,8 @@ async function work(communityId: Types.ObjectId, memberCount: number, plan: "lit
   }>([
     // the indexes on channel and _id: an _id starts with the moment it was made
     { $match: { channelId: { $in: channels.map((x) => x._id) }, _id: { $gte: since(30) }, deletedAt: null } },
-    { $addFields: { at: { $toDate: "$_id" } } },
+    // only what's counted: every message in 30 days goes through this
+    { $project: { authorId: 1, channelId: 1, at: { $toDate: "$_id" } } },
     {
       $facet: {
         authors: [{ $group: { _id: "$authorId", n: { $sum: 1 } } }, { $sort: { n: -1 } }],

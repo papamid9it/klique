@@ -1,7 +1,6 @@
 "use client";
 
 import { compactCount } from "@/lib/format";
-import { VerifiedCheck } from "@/components/ui/VerifiedCheck";
 import { PlanBadge } from "@/components/domain/account/PlanTab";
 import { ProfileEffect } from "@/components/ui/ProfileEffect";
 import { themeStyle } from "@/components/ui/profileTheme";
@@ -14,7 +13,7 @@ import { useAuth } from "@/components/providers/AuthProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
-import { Icon } from "@/components/ui/Icon";
+import { Icon, type IconName } from "@/components/ui/Icon";
 import { SocialRow } from "@/components/ui/SocialIcons";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { UserName } from "@/components/ui/UserName";
@@ -23,25 +22,31 @@ import { useApi } from "@/lib/hooks/useApi";
 import type { ProfileView } from "@/lib/types";
 import { PresenceDot, ProfileActions, ProfileBanner } from "./ProfileParts";
 import { StatusPicker } from "./StatusPicker";
+import { VerifiedCheck } from "@/components/ui/VerifiedCheck";
 
-/** The little points pill next to a handle. */
-/** Everyone across the communities they created (with the gold check if any is verified): Klique's follower count. */
-export function MembersPill({ view }: { view: Pick<ProfileView, "communityReach" | "communityReachVerified"> }) {
-  const n = view.communityReach;
-  if (n === null || n === undefined) return null;
+function Count({ n, icon, label, title, verified }: { n: number; icon: IconName; label: string; title: string; verified?: boolean }) {
   return (
-    <span title="Members across the communities they created" className="inline-flex items-center gap-1 rounded-full bg-raised px-2 py-0.5 font-mono text-[11px] font-semibold text-ink">
-      {compactCount(n)} {n === 1 ? "member" : "members"}
-      {view.communityReachVerified && <VerifiedCheck on size={12} />}
+    <span title={title} className="flex flex-col">
+      <span className="text-[15px] leading-tight font-semibold text-ink">{compactCount(n)}</span>
+      <span className="mt-0.5 flex items-center gap-1 text-[12px] whitespace-nowrap text-ink-muted">
+        <Icon name={icon} size={12} className="shrink-0" /> {label}
+        {verified && <VerifiedCheck on size={13} />}
+      </span>
     </span>
   );
 }
 
-export function PointsPill({ n }: { n: number }) {
+/**
+ * Under the handle, number on top: their points, and everyone across the communities they created (Klique's regulars:
+ * none shown if they created none or hide it; a gold check if any is verified).
+ */
+export function ProfileCounts({ view, points }: { view: Pick<ProfileView, "communityReach" | "communityReachVerified">; points: number }) {
+  const reach = view.communityReach;
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-raised px-2 py-0.5 font-mono text-[11px] font-semibold text-ink" title="Earned by hosting, showing up and good reactions from others">
-      <Icon name="asterisk" size={11} className="text-accent-text" /> {n.toLocaleString("en-NG")} points
-    </span>
+    <div className="mt-2 flex items-start gap-5">
+      <Count n={points} icon="asterisk" label={points === 1 ? "point" : "points"} title="Earned by hosting, showing up and good reactions from others" />
+      {reach !== null && reach !== undefined && <Count n={reach} icon="users" label={reach === 1 ? "regular" : "regulars"} title="Members across the communities they created" verified={view.communityReachVerified} />}
+    </div>
   );
 }
 
@@ -90,9 +95,8 @@ export function ProfileCard({ handle, onClose, onExpand }: { handle: string; onC
         <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[13px] text-ink-muted">
           <span className="font-mono text-xs">@{p.handle}</span>
           {p.pronouns && <span>· {p.pronouns}</span>}
-          {view.visible && <PointsPill n={p.points} />}
-          {view.visible && <MembersPill view={view} />}
         </p>
+        {view.visible && <ProfileCounts view={view} points={p.points} />}
         {view.visible && <SocialRow socials={p.socials} className="mt-2.5" />}
         {view.visible && p.bio && <p className="mt-3 line-clamp-3 text-[13px] leading-relaxed whitespace-pre-wrap">{p.bio}</p>}
         {/* their photos and videos: swipe through */}

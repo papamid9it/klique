@@ -14,9 +14,9 @@ import { DesktopPrompt } from "@/components/domain/DesktopPrompt";
 
 export function RightRail() {
   const router = useRouter();
-  const { where } = usePlace();
+  const { where, ready } = usePlace();
   const [q, setQ] = useState("");
-  const { data, loading, error } = useApi(() => DiscoverService.discover(where), [where], { key: `discover:${where}` });
+  const { data, loading, error } = useApi(() => DiscoverService.discover(where), [where], { key: `discover:${where}`, wait: !ready });
 
   const [railAd] = useAds("home-rail");
   const picks = data?.suggestedCommunities.filter((c) => !c.viewer.isMember).slice(0, 3) ?? [];

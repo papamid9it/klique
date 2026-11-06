@@ -177,7 +177,8 @@ function SearchFiltersList({ f }: { f: Filtering }) {
 function SearchView() {
   const router = useRouter();
   const params = useSearchParams();
-  const { where, label } = usePlace();
+  const { where, label, ready } = usePlace();
+  const inPlace = ready ? ` in ${label === "Everywhere" ? "the whole world" : label}` : "";
   const f = useSearchFilters();
   const [sheet, setSheet] = useState(false);
   const urlQ = params.get("q") ?? "";
@@ -212,7 +213,7 @@ function SearchView() {
   }
   const asked: SearchFilters = { ...f.filters, where, type: tab, interest: f.filters.interest || undefined };
   const askedKey = JSON.stringify(asked);
-  const { data, loading, error, reload, setData } = useApi(q ? () => DiscoverService.search(q, asked) : null, [q, askedKey]);
+  const { data, loading, error, reload, setData } = useApi(q ? () => DiscoverService.search(q, asked) : null, [q, askedKey], { wait: !ready });
 
   const [searchAd] = useAds("search", { q }, !!q);
   const updateEvent = (next: EventDTO) => setData((d) => (d ? { ...d, events: d.events.map((x) => (x.id === next.id ? next : x)) } : d));
@@ -251,7 +252,7 @@ function SearchView() {
           ) : undefined
         }
       >
-        Communities, events and people in {label === "Everywhere" ? "the whole world" : label}.
+        Communities, events and people{inPlace}.
       </PageBanner>
 
       <div role="search" aria-label="Search klique" className="mb-8 flex flex-wrap items-center gap-3">
@@ -277,7 +278,7 @@ function SearchView() {
 
       {!q ? (
         <EmptyState icon="search" title="Search klique">
-          Look up communities, events and people in {label === "Everywhere" ? "the whole world" : label}.
+          Look up communities, events and people{inPlace}.
         </EmptyState>
       ) : loading ? (
         <CardGridSkeleton count={4} />

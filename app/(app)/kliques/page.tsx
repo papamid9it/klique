@@ -42,7 +42,10 @@ function useFilters() {
   const sp = useSearchParams();
   const router = useRouter();
   const place = usePlace();
-  const where = parseScope(sp.get("where")) ? sp.get("where")! : place.where;
+  const fromLink = !!parseScope(sp.get("where"));
+  const where = fromLink ? sp.get("where")! : place.where;
+  // a place in the address is known at once; otherwise wait for the remembered one
+  const ready = fromLink || place.ready;
   const community = sp.get("c") ?? ""; // "", "mine" or a community's slug
   const w = sp.get("when");
   const when: When = w === "today" || w === "weekend" || w === "week" ? w : "any";
@@ -62,7 +65,7 @@ function useFilters() {
     },
     [router],
   );
-  return { where, community, when, interest, q, hideFull, tab, set };
+  return { where, ready, community, when, interest, q, hideFull, tab, set };
 }
 type Filters = ReturnType<typeof useFilters>;
 
@@ -141,8 +144,8 @@ function FilterControls({ f }: { f: Filters }) {
         <input type="search" value={q} onChange={(e) => setQ(e.target.value)} maxLength={40} placeholder="Cinema, football, Lekki…" className="h-10 w-full rounded-control border border-line bg-surface pr-3 pl-9 text-[14px] text-ink placeholder:text-ink-muted/70 focus:border-accent-text focus:outline-none" />
       </label>
 
-      <Group id="place" title="Place" summary={scope ? scopeLabel(scope) : undefined} defaultOpen>
-        {scope && <ScopeButton value={scope} onChange={(s) => f.set({ where: scopeToString(s) })} className="w-full" />}
+      <Group id="place" title="Place" summary={f.ready && scope ? scopeLabel(scope) : undefined} defaultOpen>
+        {scope && <ScopeButton value={f.ready ? scope : undefined} onChange={(s) => f.set({ where: scopeToString(s) })} className="w-full" />}
       </Group>
 
       <Group id="community" title="Community" summary={communitySummary} active={!!f.community}>
@@ -284,8 +287,8 @@ function NextUp({ k }: { k: JoinedKliqueDTO }) {
 }
 
 /** A few kliques to join, right beside the ones you're in. */
-function JoinedSuggestions({ where, onDiscover }: { where: string; onDiscover: () => void }) {
-  const { data } = useApi(() => CrewService.forYou({ where, limit: 3 }), [where], { key: `kliques-joined-for-you:${where}` });
+function JoinedSuggestions({ where, wait, onDiscover }: { where: string; wait: boolean; onDiscover: () => void }) {
+  const { data } = useApi(() => CrewService.forYou({ where, limit: 3 }), [where], { key: `kliques-joined-for-you:${where}`, wait });
   const items = data?.items ?? [];
   if (!items.length) return null;
   return (
@@ -316,7 +319,7 @@ function JoinedSuggestions({ where, onDiscover }: { where: string; onDiscover: (
 }
 
 /** The kliques you're in or asked to join, with a filter panel, what's next, and more to join. */
-function JoinedList({ where, onDiscover }: { where: string; onDiscover: () => void }) {
+function JoinedList({ where, wait, onDiscover }: { where: string; wait: boolean; onDiscover: () => void }) {
   const { status } = useAuth();
   const [show, setShow] = useState<JoinedShow>("all");
   const { data, loading, error, reload } = useApi(status === "authed" ? () => CrewService.joined() : null, [status], { key: "kliques-joined" });
@@ -373,7 +376,7 @@ function JoinedList({ where, onDiscover }: { where: string; onDiscover: () => vo
         <div className="min-w-0">{list}</div>
         <aside className="min-w-0 space-y-4 xl:sticky xl:top-4">
           {next && <NextUp k={next} />}
-          <JoinedSuggestions where={where} onDiscover={onDiscover} />
+          <JoinedSuggestions where={where} wait={wait} onDiscover={onDiscover} />
           <p className="px-1 text-xs leading-relaxed text-ink-muted">Meet in public, and tell someone where you&apos;re going. A klique and its chat disappear a day after it happens.</p>
         </aside>
       </div>
@@ -403,7 +406,7 @@ function KliquesPage() {
     limit: PAGE * pages,
   };
   const key = `kliques-browse:${JSON.stringify(filters)}`;
-  const { data, loading, refreshing, error, reload } = useApi(() => CrewService.list(filters), [key], { key, keepPrevious: true });
+  const { data, loading, refreshing, error, reload } = useApi(() => CrewService.list(filters), [key], { key, keepPrevious: true, wait: !f.ready });
   useRealtimeEvent(() => void reload(), { filter: (e) => e.type === "crew" && !e.chat, debounceMs: 800 });
   const items: CrewCardDTO[] = data?.items ?? [];
   const active = [f.community, f.when !== "any" ? f.when : "", f.interest, f.q, f.hideFull ? "open" : ""].filter(Boolean).length;
@@ -438,7 +441,7 @@ function KliquesPage() {
       </div>
 
       {f.tab === "joined" ? (
-        <JoinedList where={f.where} onDiscover={() => f.set({ tab: "" })} />
+        <JoinedList where={f.where} wait={!f.ready} onDiscover={() => f.set({ tab: "" })} />
       ) : !data && loading ? (
         <RowSkeleton rows={3} />
       ) : error && !data ? (

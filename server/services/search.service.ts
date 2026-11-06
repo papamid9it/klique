@@ -279,7 +279,7 @@ export async function searchDirectMessages(viewer: IUser, raw: string, conversat
   const { Message } = await import("../models/Message");
   const convFilter: Record<string, unknown> = { participants: viewer._id };
   if (conversationId) convFilter._id = conversationId;
-  const convs = await Conversation.find(convFilter).select("_id participants").lean<{ _id: Types.ObjectId; participants: Types.ObjectId[] }[]>();
+  const convs = await Conversation.find(convFilter).select("_id participants group").lean<{ _id: Types.ObjectId; participants: Types.ObjectId[]; group?: { name: string } | null }[]>();
   if (!convs.length) return { query: q.text, filters: describe(q), hits: [] };
   const fromUsers = q.from.length ? await User.find({ handle: { $in: q.from } }).select("_id").lean<{ _id: Types.ObjectId }[]>() : [];
   if (q.from.length && !fromUsers.length) return { query: q.text, filters: describe(q), hits: [] };
@@ -303,6 +303,7 @@ export async function searchDirectMessages(viewer: IUser, raw: string, conversat
   if (!words.length && !has.length && !q.from.length && !q.before && !q.after) return { query: q.text, filters: describe(q), hits: [] };
   const rows = await Message.find(filter).sort({ createdAt: -1 }).limit(50).lean<{ _id: Types.ObjectId; conversationId: Types.ObjectId; senderId: Types.ObjectId; body: string; images?: string[]; sticker?: string | null; stickerUrl?: string | null; createdAt: Date }[]>();
   const other = new Map(convs.map((c) => [sid(c._id), c.participants.find((p) => sid(p) !== sid(viewer._id)) ?? c.participants[0]]));
+  const groupNames = new Map(convs.flatMap((c) => (c.group ? [[sid(c._id), c.group.name] as const] : [])));
   const briefs = await loadBriefs([...rows.map((r) => r.senderId), ...other.values()]);
   return {
     query: q.text,
@@ -310,7 +311,8 @@ export async function searchDirectMessages(viewer: IUser, raw: string, conversat
     hits: rows.map((m) => ({
       kind: "message" as const,
       id: sid(m._id),
-      title: briefs.get(sid(other.get(sid(m.conversationId))!))?.displayName ?? "Chat",
+      // a group goes by its own name, not one of the people in it
+      title: groupNames.get(sid(m.conversationId)) ?? briefs.get(sid(other.get(sid(m.conversationId))!))?.displayName ?? "Chat",
       snippet: snippetOf(m.body || (m.images?.length ? "Photo" : m.sticker || m.stickerUrl ? "Sticker" : ""), words),
       author: briefs.get(sid(m.senderId)) ?? null,
       at: m.createdAt.toISOString(),

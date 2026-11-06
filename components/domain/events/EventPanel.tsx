@@ -42,13 +42,13 @@ function MiniEvent({ e }: { e: EventDTO }) {
  * that opens profiles) and its crews, what else that community has coming up, and similar events nearby.
  */
 export function EventPanel({ event, people, namesHidden }: { event: EventDTO; people: UserBrief[]; namesHidden: boolean }) {
-  const { where } = usePlace();
+  const { where, ready } = usePlace();
   const card = useProfileCard();
   const [goingOpen, setGoingOpen] = useState(false);
   const slug = event.community?.slug;
   const community = useApi(slug ? () => CommunityService.get(slug) : null, [slug], { key: slug ? `community:${slug}` : undefined });
   const more = useApi(slug ? () => EventService.list({ community: slug }) : null, [slug], { key: slug ? `event-panel:community:${slug}` : undefined });
-  const similar = useApi(() => EventService.list({ interest: event.interest, where }), [event.interest, where], { key: `event-panel:similar:${where}:${event.interest}` });
+  const similar = useApi(() => EventService.list({ interest: event.interest, where }), [event.interest, where], { key: `event-panel:similar:${where}:${event.interest}`, wait: !ready });
   const fromCommunity = (more.data?.items ?? []).filter((e) => e.id !== event.id && !e.isPast).slice(0, 3);
   const alike = (similar.data?.items ?? []).filter((e) => e.id !== event.id && !e.isPast && !fromCommunity.some((x) => x.id === e.id)).slice(0, 3);
   const c = community.data;

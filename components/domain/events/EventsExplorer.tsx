@@ -117,12 +117,12 @@ export function EventsExplorer() {
   const { status } = useAuth();
   const [mine, setMine] = useState<Mine | null>(() => (MINE.some((m) => m.id === sp.get("mine")) ? (sp.get("mine") as Mine) : null));
 
-  const { where, scope } = place;
-  const overview = useApi(() => EventService.overview({ where, interest: interest || undefined }), [where, interest], { key: `events-overview:${where}:${interest}` });
+  const { where, scope, ready } = place;
+  const overview = useApi(() => EventService.overview({ where, interest: interest || undefined }), [where, interest], { key: `events-overview:${where}:${interest}`, wait: !ready });
   const { items, loading, loadingMore, error, hasMore, loadMore, reload, setItems } = usePaged<EventDTO>(
     (page) => EventService.list({ where, interest: interest || undefined, price: free ? "free" : "any", format, date: day ? "any" : date, day: day || undefined, q: dq || undefined, page }),
     [where, interest, free, format, date, day, dq],
-    { keepPrevious: true, key: `events:${where}:${interest}:${free}:${format}:${date}:${day}:${dq}` },
+    { keepPrevious: true, key: `events:${where}:${interest}:${free}:${format}:${date}:${day}:${dq}`, wait: !ready },
   );
 
   // Ads: a promoted row on top and one further down; none when looking at a single day, so that list stays as asked.
@@ -155,7 +155,7 @@ export function EventsExplorer() {
     if (continent) shortcuts.push({ level: "continent", continent });
   }
   shortcuts.push({ level: "world" });
-  const unique = shortcuts.filter((s, i) => shortcuts.findIndex((x) => scopeToString(x) === scopeToString(s)) === i);
+  const unique = ready ? shortcuts.filter((s, i) => shortcuts.findIndex((x) => scopeToString(x) === scopeToString(s)) === i) : [];
 
   const todayKey = now ? lagosKey(now) : null;
   const tomorrowKey = now ? lagosKey(new Date(now.getTime() + 86_400_000)) : null;
@@ -188,7 +188,7 @@ export function EventsExplorer() {
           ))}
         </PanelSection>
       )}
-      <PanelSection title="Where" collapse={{ id: "events-where", summary: scopeLabel(scope), defaultOpen: false }}>
+      <PanelSection title="Where" collapse={{ id: "events-where", summary: ready ? scopeLabel(scope) : undefined, defaultOpen: false }}>
         {unique.map((sc) => (
           <li key={scopeToString(sc)}>
             <PanelItem onClick={() => (setMine(null), place.setScope(sc))} on={!mine && scopeToString(sc) === place.where} glyph={scopeFlag(sc)}>

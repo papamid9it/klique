@@ -238,8 +238,9 @@ export function toSubcommunity(
     description: redact ? "" : s.description,
     visibility: s.visibility,
     memberCount: redact ? null : s.memberCount,
-    minPointsJoin: s.minPointsJoin ?? 0,
-    minPointsPost: s.minPointsPost ?? 0,
+    // a group has no points rules of its own: its community's apply
+    minPointsJoin: parent.official ? 0 : (parent.minPointsJoin ?? 0),
+    minPointsPost: parent.official ? 0 : (parent.minPointsPost ?? 0),
     locked: redact,
     createdAt: s.createdAt.toISOString(),
     parent: {

@@ -22,7 +22,7 @@ import { useApi } from "@/lib/hooks/useApi";
 import { VerifiedCheck } from "@/components/ui/VerifiedCheck";
 import type { CommunityCardDTO, EventDTO, UserBrief, UserProfile } from "@/lib/types";
 import { longDate, monthYear, PresenceDot, ProfileActions, ProfileBanner, useMutualCommunities, ZoomAvatar } from "./ProfileParts";
-import { MembersPill, PointsPill } from "./ProfileCard";
+import { ProfileCounts } from "./ProfileCard";
 import { UserName } from "@/components/ui/UserName";
 import { SocialRow } from "@/components/ui/SocialIcons";
 
@@ -161,9 +161,8 @@ function ProfileBody({ handle, onClose, onOpenPerson, tryOn }: { handle: string;
           <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[13px] text-ink-muted">
             <span className="font-mono">@{p.handle}</span>
             {p.pronouns && <span>· {p.pronouns}</span>}
-            {view.visible && <PointsPill n={p.points} />}
-            {view.visible && <MembersPill view={view} />}
           </p>
+          {view.visible && <ProfileCounts view={view} points={p.points} />}
           {view.visible && <SocialRow socials={p.socials} className="mt-3" />}
 
           <div className="mt-4">

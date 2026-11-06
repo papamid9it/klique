@@ -25,9 +25,9 @@ export function useAds(slot: AdSlot, ctx: { interest?: string; q?: string; exclu
 
 /** Same, plus whether the answer is in: for a spot that would otherwise swap from one thing to another. */
 export function useAdSlot(slot: AdSlot, ctx: { interest?: string; q?: string; exclude?: string; count?: number } = {}, enabled = true) {
-  const { where } = usePlace();
+  const { where, ready: placeKnown } = usePlace();
   // kept per slot, so coming back to a page doesn't shuffle its ads in late (and move what's on screen)
-  const { data, loading } = useApi(enabled ? () => AdService.forSlot(slot, { where, ...ctx }) : null, [slot, where, ctx.interest, ctx.q, ctx.exclude, ctx.count, enabled], { key: `ads:${slot}:${where}:${ctx.interest ?? ""}:${ctx.q ?? ""}:${ctx.exclude ?? ""}:${ctx.count ?? 1}` });
+  const { data, loading } = useApi(enabled ? () => AdService.forSlot(slot, { where, ...ctx }) : null, [slot, where, ctx.interest, ctx.q, ctx.exclude, ctx.count, enabled], { key: `ads:${slot}:${where}:${ctx.interest ?? ""}:${ctx.q ?? ""}:${ctx.exclude ?? ""}:${ctx.count ?? 1}`, wait: !placeKnown });
   return { ads: data ?? [], ready: !enabled || !loading };
 }
 

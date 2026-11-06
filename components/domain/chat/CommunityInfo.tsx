@@ -2,9 +2,7 @@
 
 import { placeLabel } from "@/lib/places";
 import { ProfileTrigger } from "@/components/providers/ProfileCardProvider";
-import Link from "next/link";
 import { ChannelService } from "@/app/services/ChannelService";
-import { EventService } from "@/app/services/EventService";
 import { MemberCount } from "@/components/domain/CommunityRow";
 import { JoinButton } from "@/components/domain/JoinButton";
 import { ShareButton } from "@/components/domain/ShareButton";
@@ -16,7 +14,6 @@ import { Cover } from "@/components/ui/Cover";
 import { Icon } from "@/components/ui/Icon";
 import { Skeleton } from "@/components/ui/Skeleton";
 
-import { formatDateShort } from "@/lib/format";
 import { useApi } from "@/lib/hooks/useApi";
 import type { CommunityDTO } from "@/lib/types";
 import { UserName } from "@/components/ui/UserName";
@@ -28,8 +25,6 @@ import { UserName } from "@/components/ui/UserName";
 export function CommunityInfo({ community: c, onJoined, onNavigate }: { community: CommunityDTO; onJoined: (c: CommunityDTO) => void; onNavigate?: () => void }) {
   const base = `/communities/${c.slug}`;
   const staff = useApi(() => ChannelService.staff({ slug: c.slug }), [c.slug, c.viewer.role], { key: `staff:${c.slug}:${c.viewer.role}` });
-  const events = useApi(() => EventService.list({ community: c.slug, page: 1 }), [c.slug], { key: `info-events:${c.slug}` });
-  const upcoming = (events.data?.items ?? []).slice(0, 3);
   const v = c.viewer;
 
   return (
@@ -114,35 +109,6 @@ export function CommunityInfo({ community: c, onJoined, onNavigate }: { communit
               </li>
             ))}
           </ul>
-        )}
-      </section>
-
-      <section aria-labelledby="up-h">
-        <div className="mb-3 flex items-center justify-between">
-          <h3 id="up-h" className="eyebrow">
-            Coming up
-          </h3>
-          {upcoming.length > 0 && (
-            <Link href={`${base}?view=events`} onClick={onNavigate} className="text-xs font-semibold text-accent-text hover:underline">
-              See all
-            </Link>
-          )}
-        </div>
-        {events.loading ? (
-          <Skeleton className="h-16" />
-        ) : upcoming.length ? (
-          <ul className="space-y-2">
-            {upcoming.map((e) => (
-              <li key={e.id}>
-                <Link href={`/events/${e.id}`} onClick={onNavigate} className="block rounded-card border border-line bg-surface p-3 hover:bg-raised">
-                  <p className="truncate text-sm font-semibold">{e.title}</p>
-                  <p className="mt-0.5 font-mono text-[11px] text-ink-muted">{formatDateShort(e.startsAt)}</p>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-sm text-ink-muted">No events planned yet.</p>
         )}
       </section>
     </div>

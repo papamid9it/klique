@@ -17,7 +17,7 @@ import type { CommunityCardDTO } from "@/lib/types";
 
 export function CommunitiesBrowser({ initialInterest, scope = "discover" }: { initialInterest?: InterestId; scope?: "discover" | "joined" }) {
   const categories = useCategories();
-  const { where } = usePlace();
+  const { where, ready } = usePlace();
   const [interest, setInterest] = useState<InterestId | "">(initialInterest ?? "");
   // Follow the sidebar's ?interest= links without remounting (a remount blanks the grid and flickers).
   const [seenInitial, setSeenInitial] = useState(initialInterest);
@@ -31,7 +31,7 @@ export function CommunitiesBrowser({ initialInterest, scope = "discover" }: { in
   const { items, loading, loadingMore, error, hasMore, loadMore, reload } = usePaged<CommunityCardDTO>(
     (page) => CommunityService.list({ where: scope === "joined" ? undefined : where, interest: interest || undefined, q: dq || undefined, scope, page }),
     [where, interest, dq, scope],
-    { keepPrevious: true, key: `communities:${scope}:${where}:${interest}:${dq}` },
+    { keepPrevious: true, key: `communities:${scope}:${where}:${interest}:${dq}`, wait: !ready },
   );
   const filtered = !!(interest || q);
   const [kindsOpen, setKindsOpen] = useState(false);

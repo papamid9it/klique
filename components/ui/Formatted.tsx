@@ -1,4 +1,4 @@
-import { Fragment, type ReactNode } from "react";
+import { Fragment, useMemo, type ReactNode } from "react";
 import { formatLines, hasFormat, type FormatSpan } from "@/lib/textFormat";
 import { cx } from "./cx";
 
@@ -11,8 +11,9 @@ function Span({ s, plain }: { s: FormatSpan; plain: (text: string) => ReactNode 
 
 /** Someone's words with their formatting (lib/textFormat). `plain` draws the parts in between: links, @names, emoji. */
 export function Formatted({ text, plain }: { text: string; plain: (text: string) => ReactNode }) {
-  if (!hasFormat(text)) return <>{plain(text)}</>;
-  const lines = formatLines(text);
+  // parsed once per message, not on every render of the chat
+  const lines = useMemo(() => (hasFormat(text) ? formatLines(text) : null), [text]);
+  if (!lines) return <>{plain(text)}</>;
   return (
     <>
       {lines.map((line, i) => {

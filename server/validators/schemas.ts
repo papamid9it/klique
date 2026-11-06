@@ -174,8 +174,6 @@ export const subCreateSchema = z.object({
 export const subUpdateSchema = z.object({
   name: text(LIMITS.communityName, 3).optional(),
   description: optText(LIMITS.communityDescription),
-  minPointsJoin: minPoints,
-  minPointsPost: minPoints,
 });
 
 export const groupAddSchema = z.object({ userIds: z.array(objectId).min(1, "Pick at least one person").max(50) });
