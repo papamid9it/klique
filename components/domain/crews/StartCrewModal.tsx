@@ -122,7 +122,7 @@ export function StartCrewModal({ event, community, open, onClose, onCreated }: {
             </SelectField>
           )}
           {!event && !community && communitySlug === ALL && <PlaceFields value={place} onChange={setPlace} errors={errors} />}
-          <ImageField kind="photo" label="Cover picture" value={coverImage} onChange={setCoverImage} error={errors.coverImage} required hint="Required. The place, the movie poster, the vibe. No explicit pictures." reposition={{ aspect: 16 / 9 }} />
+          <ImageField kind="photo" label="Cover picture" value={coverImage} onChange={setCoverImage} error={errors.coverImage} required hint="Required. The place, the movie poster, the vibe. No explicit pictures." reposition={{ aspect: 4 / 5 }} />
           <TextField label="What's the plan?" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} placeholder={event ? `Who's going to ${event.title} from Yaba?` : "Who wants to watch a movie at the cinema on Saturday?"} error={errors.title} hint="Write it like a question to your friends." />
           {!event && (
             <SelectField label="What it's about" value={interest} onChange={(e) => setInterest(e.target.value)} error={errors.interest} hint="People into this see it first.">

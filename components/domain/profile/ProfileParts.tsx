@@ -3,7 +3,6 @@
 import { StatusPicker } from "./StatusPicker";
 import { StillImage } from "@/components/ui/StillImage";
 import { isAnimatedPicture } from "@/lib/cosmetics";
-import { PROFILE_DESIGNS_ENABLED } from "@/lib/constants";
 import { useCalm } from "@/lib/hooks/useCalm";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -55,7 +54,7 @@ export function ProfileBanner({ handle, className, bannerUrl, bannerColor }: { h
     // shown as the person positioned it (lib/focal). An animated
     // (GIF) banner holds still for people who turn motion down or use data saver.
     const pic =
-      (calm || !PROFILE_DESIGNS_ENABLED) && isAnimatedPicture(bannerUrl) ? (
+      calm && isAnimatedPicture(bannerUrl) ? (
         <StillImage src={cdn(bannerUrl, { w: 1200 })} style={focalStyle(splitFocal(bannerUrl).focal)} className="size-full object-cover" />
       ) : (
         // eslint-disable-next-line @next/next/no-img-element

@@ -10,6 +10,7 @@ import { crewHref } from "@/components/domain/crews/parts";
 import { useRealtimeEvent } from "@/components/providers/RealtimeProvider";
 import { Button } from "@/components/ui/Button";
 import { Cover } from "@/components/ui/Cover";
+import { Icon } from "@/components/ui/Icon";
 import { RowSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { communityNews, rankMyCommunities } from "@/lib/constants";
@@ -64,7 +65,11 @@ export function CommunitiesHome() {
 
   const places = rankMyCommunities(mine.data ?? []);
   const next = (going.data?.items ?? []).find((e) => !e.isPast);
-  const forYou = (kliques.data?.items ?? []).slice(0, 3);
+  // few picks for you: fill up with other open kliques nearby you're not in, then offer to start one
+  const short = !!kliques.data && kliques.data.items.length < 3;
+  const nearby = useApi(short && ready ? () => CrewService.list({ open: true, where, limit: 12 }) : null, [short, ready, where], { key: `home-places-kliques-near:${where}` });
+  const picked = kliques.data?.items ?? [];
+  const forYou = [...picked, ...(nearby.data?.items ?? []).filter((k) => !k.viewer.standing && !picked.some((p) => p.id === k.id))].slice(0, 3);
   const events = [...(next ? [next] : []), ...(discover.data?.eventsForYou ?? []).filter((e) => !e.isPast && e.id !== next?.id)].slice(0, 3);
   const more = places.slice(5, 9);
 
@@ -132,6 +137,15 @@ export function CommunitiesHome() {
                   <Row key={k.id} href={crewHref(k)} src={k.coverImage} seed={k.id} interest={k.interest} title={k.title}
                     line={`${formatDateShort(k.meetupAt)} · ${k.memberCount} of ${k.maxMembers} going`} />
                 ))}
+                {forYou.length < 3 && (
+                  <Link href="/kliques?start=1" className="flex min-w-0 items-center gap-3 rounded-card border border-dashed border-line p-2 hover:border-ink-muted/50">
+                    <span className="flex size-14 shrink-0 items-center justify-center rounded-control bg-raised text-ink-muted"><Icon name="plus" size={20} /></span>
+                    <span className="min-w-0">
+                      <span className="block truncate font-semibold">Start a klique</span>
+                      <span className="block truncate text-sm text-ink-muted">Pick a plan, a time and a place. People join you.</span>
+                    </span>
+                  </Link>
+                )}
               </div>
             </section>
           )}

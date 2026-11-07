@@ -679,7 +679,7 @@ function EditCrewModal({ crew, onClose, onSaved }: { crew: CrewDTO; onClose: () 
   return (
     <Modal open onClose={onClose} title="Edit klique" description="Everyone in the klique is told if the meetup point or time changes.">
       <form onSubmit={save} className="space-y-4" noValidate>
-        <ImageField kind="photo" label="Cover picture" value={coverImage} onChange={setCoverImage} error={errors.coverImage} required reposition={{ aspect: 16 / 9 }} />
+        <ImageField kind="photo" label="Cover picture" value={coverImage} onChange={setCoverImage} error={errors.coverImage} required reposition={{ aspect: 4 / 5 }} />
         <TextField label="What's the plan?" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} error={errors.title} />
         <TextField label="Area" value={area} onChange={(e) => setArea(e.target.value)} maxLength={40} error={errors.area} />
         <TextField label="Meetup point" value={meetupPoint} onChange={(e) => setMeetupPoint(e.target.value)} maxLength={120} error={errors.meetupPoint} />

@@ -80,18 +80,16 @@ function AvatarPic({ name, src, size, className }: { name: string; src?: string 
     // the person may have moved or zoomed their picture in its circle (lib/focal)
     const { src: file, focal } = splitFocal(src);
     const animated = isAnimatedPicture(file);
-    const still = (extra?: string) => (
+    const still = () => (
       <StillImage
         src={cdn(file, { w: size * 2, h: size * 2, fit: "face" })}
         onError={() => setFailed(true)}
         style={focal.z > 1 ? { ...focalStyle(focal), width: "100%", height: "100%" } : { ...style, ...focalStyle(focal) }}
-        className={cx("shrink-0 rounded-full object-cover", focal.z <= 1 && className, extra)}
+        className={cx("shrink-0 rounded-full object-cover", focal.z <= 1 && className)}
       />
     );
-    // a GIF also waits on its first frame in crowded places, and plays where it's the focus or its row is pointed at
-    // (globals.css: kq-gif / kq-gif-still)
-    // (animated pictures are a profile design: while designs are off, they hold still)
-    const img = (calm || !PROFILE_DESIGNS_ENABLED) && animated ? (
+    // a GIF plays everywhere; it holds on its first frame only for people who turn motion down or use data saver
+    const img = calm && animated ? (
       still()
     ) : (
       // eslint-disable-next-line @next/next/no-img-element
@@ -103,24 +101,16 @@ function AvatarPic({ name, src, size, className }: { name: string; src?: string 
         loading="lazy"
         onError={() => setFailed(true)}
         style={focal.z > 1 ? { ...focalStyle(focal), width: "100%", height: "100%" } : { ...style, ...focalStyle(focal) }}
-        className={cx("shrink-0 rounded-full object-cover", focal.z <= 1 && className, animated && "kq-gif")}
+        className={cx("shrink-0 rounded-full object-cover", focal.z <= 1 && className)}
       />
-    );
-    const shown = animated && !calm ? (
-      <>
-        {still("kq-gif-still")}
-        {img}
-      </>
-    ) : (
-      img
     );
     // zoomed in: clip to the circle so the enlarged picture doesn't spill out
     return focal.z > 1 ? (
       <span style={style} className={cx("inline-block shrink-0 overflow-hidden rounded-full", className)}>
-        {shown}
+        {img}
       </span>
     ) : (
-      shown
+      img
     );
   }
   return (

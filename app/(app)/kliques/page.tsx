@@ -361,7 +361,9 @@ function KliquesPage() {
   const { requireAuth } = useAuth();
   const f = useFilters();
   const [sheet, setSheet] = useState(false);
-  const [starting, setStarting] = useState(false);
+  // "Start a klique" on Home lands here with ?start=1: the form opens straight away
+  const startNow = useSearchParams().get("start") === "1";
+  const [starting, setStarting] = useState(startNow);
   const filters: KliqueFilters = {
     where: f.where,
     interest: f.interest || undefined,

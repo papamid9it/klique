@@ -362,7 +362,7 @@ html[data-motion="off"] .kq-ring, html[data-motion="off"] .kq-glow, html[data-mo
  * frame would run at once and drag the page. So they wait, paused (nothing animating, no repaints), until you point
  * at, focus or tap the row they're in, or the name itself. Where one person is the focus (the profile popout, the
  * full profile's side, Profile style) a `kq-live` wrapper keeps them moving.
- * GIF pictures follow the same rule (Avatar: kq-gif / kq-gif-still).
+ * (GIF pictures just play: components/ui/Avatar.)
  */
 /* !important: each design's `animation` shorthand would otherwise reset the play state to running */
 .kq-name, .kq-name::before, .kq-name::after, .kq-ring, .kq-glow, .kq-orbit { animation-play-state: paused !important; }
@@ -371,9 +371,6 @@ html[data-motion="off"] .kq-ring, html[data-motion="off"] .kq-glow, html[data-mo
 :is(.kq-live, li:hover, li:focus-within, a:hover, a:focus-visible, button:hover, button:focus-visible, .group:hover, .group:focus-within) .kq-name::before,
 :is(.kq-live, li:hover, li:focus-within, a:hover, a:focus-visible, button:hover, button:focus-visible, .group:hover, .group:focus-within) .kq-name::after,
 .kq-name:hover, .kq-name:hover::before, .kq-name:hover::after { animation-play-state: running !important; }
-.kq-gif { display: none; }
-:is(.kq-live, li:hover, li:focus-within, a:hover, button:hover, .group:hover, .kq-frame:hover) .kq-gif, .kq-gif:hover { display: inline-block; }
-:is(.kq-live, li:hover, li:focus-within, a:hover, button:hover, .group:hover, .kq-frame:hover) .kq-gif-still { display: none; }
 
 /* double-tap upvote on a feed post: pops where you tapped, floats up and fades */
 .vote-burst {

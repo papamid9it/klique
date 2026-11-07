@@ -210,7 +210,7 @@ export async function toCommunityDetail(
     canCreateGroup: canCreateGroup(access),
     feedPolicy: c.feedPolicy ?? "off",
     // the Posts section: owners/admins when it's on, everyone who's a member when members may post
-    canPostToFeed: (c.feedPolicy ?? "off") !== "off" && !access.banned && (access.canManage || (c.feedPolicy === "members" && access.canPost && !access.pointsToPost)),
+    canPostToFeed: (c.feedPolicy ?? "off") !== "off" && !access.banned && !access.postBan && (access.canManage || (c.feedPolicy === "members" && access.canPost && !access.pointsToPost)),
     // Klique: only site admins post its events (its owner here; the others from Admin → Events)
     canHostEvents: isKlique(c) ? access.role === "owner" : canHostInSpace(access),
     memberEvents: c.memberEvents !== false,
