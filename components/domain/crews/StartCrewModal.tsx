@@ -14,7 +14,6 @@ import { useCategories } from "@/lib/hooks/useCategories";
 import type { CrewDTO, CrewJoinMode, EventDTO } from "@/lib/types";
 import { fromLagos, lagosInputs } from "./parts";
 import { AudienceFields, audienceInput, checkAudience, type AudienceValue } from "./AudienceFields";
-import { splitFocal } from "@/lib/focal";
 import { PlaceFields } from "@/components/domain/places/PlaceFields";
 import { DEFAULT_COUNTRY, type Place } from "@/lib/places";
 import { useAuth } from "@/components/providers/AuthProvider";
@@ -39,8 +38,8 @@ export function StartCrewModal({ event, community, open, onClose, onCreated }: {
   const [title, setTitle] = useState("");
   const { user } = useAuth();
   // your profile picture to start with (change it to anything); without one it starts empty and a picture is required
-  const avatar = user?.avatarUrl ? splitFocal(user.avatarUrl).src : "";
-  const [coverImage, setCoverImage] = useState(avatar);
+  // no stand-in picture: a klique needs a photo of its own
+  const [coverImage, setCoverImage] = useState("");
   const [place, setPlace] = useState<Place>({ country: user?.country || DEFAULT_COUNTRY, region: user?.region ?? "", city: user?.city ?? "" });
   const [interest, setInterest] = useState(event?.interest ?? community?.interest ?? "");
   const [area, setArea] = useState("");
@@ -123,7 +122,7 @@ export function StartCrewModal({ event, community, open, onClose, onCreated }: {
             </SelectField>
           )}
           {!event && !community && communitySlug === ALL && <PlaceFields value={place} onChange={setPlace} errors={errors} />}
-          <ImageField kind="photo" label="Cover picture" value={coverImage} onChange={setCoverImage} error={errors.coverImage} hint={avatar && coverImage === avatar ? "Your profile picture for now. Tap Change to use the place, the movie poster, the vibe." : "Required. The place, the movie poster, the vibe. No explicit pictures."} reposition={{ aspect: 16 / 9 }} />
+          <ImageField kind="photo" label="Cover picture" value={coverImage} onChange={setCoverImage} error={errors.coverImage} required hint="Required. The place, the movie poster, the vibe. No explicit pictures." reposition={{ aspect: 16 / 9 }} />
           <TextField label="What's the plan?" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} placeholder={event ? `Who's going to ${event.title} from Yaba?` : "Who wants to watch a movie at the cinema on Saturday?"} error={errors.title} hint="Write it like a question to your friends." />
           {!event && (
             <SelectField label="What it's about" value={interest} onChange={(e) => setInterest(e.target.value)} error={errors.interest} hint="People into this see it first.">

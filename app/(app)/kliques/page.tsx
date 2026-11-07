@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Switch } from "@/components/ui/Field";
 import { Suspense, useCallback, useEffect, useState, type ReactNode } from "react";
 import { CrewService, type KliqueFilters } from "@/app/services/CrewService";
-import { Faces, KliqueCard, crewHref, goingLine } from "@/components/domain/crews/parts";
+import { Faces, KliquePhotoCard, crewHref, goingLine } from "@/components/domain/crews/parts";
 import { StartCrewModal } from "@/components/domain/crews/StartCrewModal";
 import { ScopeButton } from "@/components/domain/places/ScopeButton";
 import { PagePanel } from "@/components/layout/PagePanel";
@@ -229,39 +229,6 @@ function untilLabel(k: Pick<CrewCardDTO, "meetupAt" | "closed">) {
   return `In ${days} ${days === 1 ? "day" : "days"}`;
 }
 
-/** One klique you're in: tapping it opens its chat (or, while you're asking, its details). */
-function JoinedRow({ k }: { k: JoinedKliqueDTO }) {
-  const where = k.event?.title ?? k.community?.name ?? "All communities";
-  const standing = k.viewer.standing;
-  const last = k.lastMessage;
-  return (
-    <SoftLink href={crewHref(k)} className={cx("flex items-center gap-3.5 rounded-card border border-line bg-surface p-3 transition hover:bg-raised/60", k.closed && "opacity-70")}>
-      <Cover src={k.coverImage ?? k.host.avatarUrl} seed={k.id} interest={k.interest} className="size-[72px] shrink-0 overflow-hidden rounded-control" />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <p className="truncate font-semibold">{k.title}</p>
-          {standing === "host" && <span className="shrink-0 rounded-full bg-raised px-2 py-0.5 text-[11px] font-semibold text-accent-text">Hosting</span>}
-          {standing === "pending" && <span className="shrink-0 rounded-full border border-line px-2 py-0.5 text-[11px] font-semibold text-ink-muted">Asked</span>}
-        </div>
-        <p className="truncate text-[13px] text-ink-muted">
-          {where} · {formatDateShort(k.meetupAt)} · {k.area}
-        </p>
-        <p className={cx("truncate text-sm", k.unreadCount ? "font-medium text-ink" : "text-ink-muted")}>
-          {standing === "pending" ? "Waiting for the host to let you in." : last ? `${last.mine ? "You" : last.author}: ${last.text}` : "No messages yet. Say hi."}
-        </p>
-      </div>
-      <div className="hidden shrink-0 flex-col items-end gap-1.5 sm:flex">
-        <span className="text-xs font-medium text-ink-muted">{untilLabel(k)}</span>
-        <span className="flex items-center gap-1.5 text-xs text-ink-muted">
-          <Faces people={k.faces} total={k.memberCount} size={22} />
-          {k.memberCount}/{k.maxMembers}
-        </span>
-      </div>
-      {k.unreadCount > 0 && <span className="flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full bg-accent px-1.5 text-xs font-bold text-accent-ink">{k.unreadCount > 98 ? "99+" : k.unreadCount}</span>}
-    </SoftLink>
-  );
-}
-
 /** Your soonest klique, big: when it is, where, who's going, and the way into its chat. */
 function NextUp({ k }: { k: JoinedKliqueDTO }) {
   return (
@@ -342,10 +309,10 @@ function JoinedList({ where, wait, onDiscover }: { where: string; wait: boolean;
     ) : !shown.length ? (
       <p className="rounded-card border border-line bg-surface p-6 text-center text-sm text-ink-muted">Nothing here right now.</p>
     ) : (
-      <ul className="space-y-2">
+      <ul className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(max(190px, calc((100% - 3rem) / 4)), 1fr))" }}>
         {shown.map((k) => (
           <li key={k.id}>
-            <JoinedRow k={k} />
+            <KliquePhotoCard crew={k} unread={k.unreadCount} />
           </li>
         ))}
       </ul>
@@ -463,11 +430,11 @@ function KliquesPage() {
         </EmptyState>
       ) : (
         <>
-          {/* columns follow the grid's own width (it sits beside the panels): as many 240px+ cards as fit, at most 4 */}
-          <ul className={cx("grid gap-4", refreshing && "opacity-70 transition-opacity")} style={{ gridTemplateColumns: "repeat(auto-fill, minmax(max(240px, calc((100% - 3rem) / 4)), 1fr))" }}>
+          {/* photo cards: as many 190px+ as fit, at most four across */}
+          <ul className={cx("grid gap-4", refreshing && "opacity-70 transition-opacity")} style={{ gridTemplateColumns: "repeat(auto-fill, minmax(max(190px, calc((100% - 3rem) / 4)), 1fr))" }}>
             {items.map((k) => (
               <li key={k.id}>
-                <KliqueCard crew={k} wide />
+                <KliquePhotoCard crew={k} />
               </li>
             ))}
           </ul>

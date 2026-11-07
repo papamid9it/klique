@@ -6,6 +6,8 @@ import { CrewService } from "@/app/services/CrewService";
 import { DiscoverService } from "@/app/services/DiscoverService";
 import { EventsRow, HomeFeed, TOP_EVENTS, rankEvents } from "@/components/domain/home/HomeFeed";
 import { useAuth } from "@/components/providers/AuthProvider";
+import { CommunitiesHome } from "@/components/domain/home/CommunitiesHome";
+import { useHomeStyle } from "@/lib/hooks/useHomeStyle";
 import { usePlace } from "@/components/providers/PlaceProvider";
 import { BackToTop } from "@/components/domain/feed/BackToTop";
 import { NewPostsPill, useRefreshKeys } from "@/components/domain/feed/NewPosts";
@@ -32,7 +34,17 @@ function readDismissed(): string[] {
  * communities (with a klique, an event or an ad between every few), with a trending post from
  * elsewhere now and then, sponsored cards, rows of more events and communities to join in between.
  */
+/** Home: the feed (Casual), or just your communities (Communities), as picked in Settings on this device. */
 export default function HomePage() {
+  const style = useHomeStyle();
+  const { status } = useAuth();
+  // the choice is read in the browser: nothing shows until then, so neither style flashes before the right one
+  if (style === null || (style === "communities" && status === "loading")) return <div className="min-h-dvh" aria-busy="true" />;
+  if (style === "communities" && status === "authed") return <CommunitiesHome />;
+  return <CasualHome />;
+}
+
+function CasualHome() {
   const { where, label, ready } = usePlace();
   const now = useNow(600_000);
   const { user } = useAuth();

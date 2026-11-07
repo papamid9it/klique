@@ -745,6 +745,8 @@ export const planVerifySchema = z.object({ reference: z.string().trim().regex(/^
 export const planGrantSchema = z.object({ who: z.string().trim().min(1).max(60), plan: z.enum(["lite", "pro"]), days: z.number().int().min(1).max(366) });
 
 /** /kliques and "Kliques for you": `when` is today, this weekend or the next 7 days */
+export const homeStyleSchema = z.object({ style: z.enum(["casual", "communities"]), platform: z.enum(["phone", "site", "desktop"]) });
+
 export const kliqueListQuery = z.object({
   interest: z.preprocess(blankToUndef, interestId.optional()),
   when: z.preprocess(blankToUndef, z.enum(["today", "weekend", "week"]).optional()),

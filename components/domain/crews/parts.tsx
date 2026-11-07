@@ -162,6 +162,61 @@ export function KliqueCard({ crew, wide, joinable = true, onDismiss }: { crew: C
 }
 
 /**
+ * A klique as its photo: the picture fills the card, with who's hosting, the plan, who's going and the way in on a dark
+ * fade at the bottom. The Kliques page's grid.
+ */
+export function KliquePhotoCard({ crew, joinable = true, className = "aspect-[4/5]", unread = 0, onDismiss }: { crew: CrewCardDTO; joinable?: boolean; /** its size; a 4:5 photo by default */ className?: string; /** unread chat messages, on your own kliques */ unread?: number; /** "Not interested", under the card */ onDismiss?: () => void }) {
+  const href = crewHref(crew);
+  const s = crew.viewer.standing;
+  const left = Math.max(0, crew.maxMembers - crew.memberCount);
+  const where = crew.event ? crew.event.title : crew.community ? crew.community.name : "All communities";
+  const chip = "rounded-full bg-black/60 px-2.5 py-1 text-xs font-semibold text-white backdrop-blur";
+  const card = (
+    <article className={cx("relative overflow-hidden rounded-[20px] bg-raised", className, s && "ring-2 ring-accent-text")}>
+      <Cover src={crew.coverImage} seed={crew.id} interest={crew.interest} className="absolute inset-0" />
+      {/* the whole picture opens it; the button below stays its own */}
+      <SoftLink href={href} aria-label={crew.title} className="absolute inset-0" />
+      <span className="pointer-events-none absolute top-2.5 left-2.5 flex gap-1.5">
+        <span className={chip}>{formatDateShort(crew.meetupAt)}</span>
+      </span>
+      <span className="pointer-events-none absolute top-2.5 right-2.5 flex gap-1.5">
+        {audienceTag(crew) && <span className={chip}>{audienceTag(crew)}</span>}
+        {unread > 0 ? <span className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-black">{unread > 99 ? "99+" : unread} new</span> : <span className={chip}>{getInterest(crew.interest).short}</span>}
+      </span>
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/60 to-transparent px-3.5 pt-14 pb-3.5 text-white">
+        <p className="flex min-w-0 items-center gap-1.5 text-xs text-white/85">
+          <Avatar name={crew.host.displayName} src={crew.host.avatarUrl} size={20} />
+          <span className="truncate">
+            <span className="font-semibold text-white">{crew.host.displayName}</span> · {where}
+          </span>
+        </p>
+        <h3 className="mt-1.5 line-clamp-2 text-[17px] leading-snug font-bold break-words">{crew.title}</h3>
+        <p className="mt-0.5 truncate text-xs text-white/85">
+          {crew.area}
+          {!crew.closed && ` · ${crew.isFull ? "Full" : `${left} ${left === 1 ? "spot" : "spots"} left`}`}
+        </p>
+        <div className="mt-2.5 flex items-center gap-2">
+          <Faces people={crew.faces} total={crew.memberCount} size={22} />
+          <span className="min-w-0 flex-1 truncate text-xs text-white/90">{goingLine(crew)}</span>
+          <SoftLink href={href} className="pointer-events-auto inline-flex h-8 shrink-0 items-center rounded-full bg-white px-3.5 text-xs font-bold text-black hover:bg-white/90">
+            {actionLabel(crew, joinable)}
+          </SoftLink>
+        </div>
+      </div>
+    </article>
+  );
+  if (!onDismiss) return card;
+  return (
+    <div>
+      {card}
+      <button type="button" onClick={onDismiss} className="mt-1.5 text-[11.5px] text-ink-muted hover:text-ink hover:underline">
+        Not interested
+      </button>
+    </div>
+  );
+}
+
+/**
  * One klique in a list, laid out like an event row: meetup time · faces · the hook line and who's hosting ·
  * head count · a button into the klique.
  */

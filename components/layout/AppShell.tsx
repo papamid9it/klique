@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
+import { reportHomeStyle } from "@/lib/hooks/useHomeStyle";
 import { useEffect, type ReactNode } from "react";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { MobileNav } from "./MobileNav";
@@ -33,6 +34,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     (window as unknown as { kliqueDesktop?: { setBadge?: (n: number) => void } }).kliqueDesktop?.setBadge?.(unread);
   }, [unread]);
+  // which Home style this device uses, counted for the admin overview (once per visit)
+  useEffect(() => {
+    if (status === "authed") reportHomeStyle();
+  }, [status]);
   const mustOnboard = status === "authed" && !!user && !user.onboarded && pathname !== "/welcome";
   useEffect(() => {
     // ?why=finish: the welcome page says why they're back there instead of silently bouncing them

@@ -20,7 +20,7 @@ import { EmptyState } from "@/components/ui/States";
 import { eventPhoto } from "@/lib/fake";
 import { compactCount, dateChip, formatTime } from "@/lib/format";
 import { useEventActions } from "@/lib/hooks/useEventActions";
-import { KliqueCard } from "@/components/domain/crews/parts";
+import { KliquePhotoCard } from "@/components/domain/crews/parts";
 import type { CommunityCardDTO, CrewCardDTO, DiscoverDTO, EventDTO, FeedPostDTO, HomeFeedItem, UserBrief } from "@/lib/types";
 import { VerifiedCheck } from "@/components/ui/VerifiedCheck";
 
@@ -261,7 +261,7 @@ export function KliquesRow({ kliques, onDismiss }: { kliques: CrewCardDTO[]; onD
     <Carousel id="kliques-for-you" title="Kliques for you" item={240}>
       {kliques.slice(0, TOP_KLIQUES).map((k) => (
         <li key={k.id} className="flex shrink-0 snap-start">
-          <KliqueCard crew={k} onDismiss={() => onDismiss(k.id)} />
+          <KliquePhotoCard crew={k} className="aspect-[4/5] w-60 shrink-0 snap-start" onDismiss={() => onDismiss(k.id)} />
         </li>
       ))}
     </Carousel>
@@ -367,7 +367,7 @@ export function HomeFeed({
                 {kliques[n] && (
                   <li>
                     <p className="eyebrow mb-2">Klique for you</p>
-                    <KliqueCard crew={kliques[n]} wide onDismiss={onDismissKlique ? () => onDismissKlique(kliques[n].id) : undefined} />
+                    <KliquePhotoCard crew={kliques[n]} className="aspect-[4/5] max-h-[540px] w-full" onDismiss={onDismissKlique ? () => onDismissKlique(kliques[n].id) : undefined} />
                   </li>
                 )}
               </Fragment>
@@ -420,7 +420,7 @@ export function HomeFeed({
               {slot?.kind === "klique" && (
                 <li>
                   <p className="eyebrow mb-2">Klique for you</p>
-                  <KliqueCard crew={slot.klique} wide onDismiss={onDismissKlique ? () => onDismissKlique(slot.klique.id) : undefined} />
+                  <KliquePhotoCard crew={slot.klique} className="aspect-[4/5] max-h-[540px] w-full" onDismiss={onDismissKlique ? () => onDismissKlique(slot.klique.id) : undefined} />
                 </li>
               )}
               {joinable.length > 0 && (

@@ -15,7 +15,7 @@ import type { CrewCardDTO, EventDTO } from "@/lib/types";
 import { CrewService } from "@/app/services/CrewService";
 import { useRealtimeEvent } from "@/components/providers/RealtimeProvider";
 import { CrewResults, useEventCrews } from "./CrewSearch";
-import { KliqueCard, crewHref } from "./parts";
+import { KliquePhotoCard, crewHref } from "./parts";
 import { StartCrewModal } from "./StartCrewModal";
 
 const KLIQUE_PAGE = 30;
@@ -68,10 +68,10 @@ export function CrewsBoard({ slug, sub, eventId, community, onChanged }: { slug:
         <ErrorState message={kliques.error} onRetry={kliques.reload} />
       ) : list.length ? (
         <>
-          <ul className="grid gap-4 sm:grid-cols-2">
+          <ul className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(max(190px, calc((100% - 2rem) / 3)), 1fr))" }}>
             {list.slice(0, steps.shown).map((k) => (
               <li key={k.id}>
-                <KliqueCard crew={k} wide />
+                <KliquePhotoCard crew={k} />
               </li>
             ))}
           </ul>

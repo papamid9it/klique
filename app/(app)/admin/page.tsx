@@ -147,6 +147,14 @@ function AdminOverviewPageContent() {
               }
             />
           </div>
+          <div className="mt-3 rounded-card border border-line bg-surface p-4">
+            <p className="text-sm font-semibold">Home style · last 30 days</p>
+            <p className="mt-1 text-sm text-ink-muted">
+              Casual {o.homeStyles.casual} · Communities {o.homeStyles.communities}
+              {o.homeStyles.casual + o.homeStyles.communities ? ` (${Math.round((o.homeStyles.communities / (o.homeStyles.casual + o.homeStyles.communities)) * 100)}% Communities)` : ""}
+            </p>
+            <p className="mt-1 text-xs text-ink-muted">{o.homeStyles.byPlatform.map((p) => `${p.platform[0].toUpperCase()}${p.platform.slice(1)}: ${p.casual} Casual, ${p.communities} Communities`).join(" · ")}</p>
+          </div>
           <p className="mt-3 text-xs text-ink-muted">
             <Link href="/admin/people?filter=suspended" className="hover:text-ink hover:underline">
               {pluralize(o.people.suspended, "suspended account")}

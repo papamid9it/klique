@@ -6,6 +6,7 @@ import { unhideAfterReview } from "./safety.service";
 import { Payment, Payout } from "../models/Money";
 import { Promotion } from "../models/Promotion";
 import { HypePurchase } from "../models/Wallet";
+import { HomeStyleReport } from "../models/HomeStyleReport";
 import { FeedComment, FeedPost, FeedVote, type IFeedPost } from "../models/FeedPost";
 import { Reaction } from "../models/Reaction";
 import { VOICE_ENABLED } from "@/lib/constants";
@@ -568,6 +569,26 @@ const perDay = (match: object, date: unknown = "$createdAt") => [{ $match: match
 const sumOf = (match: object, field: string) => [{ $match: match }, { $group: { _id: null, n: { $sum: field } } }];
 const first = (rows: { n: number }[]) => rows[0]?.n ?? 0;
 
+/** Who uses which Home style, from devices seen in the last 30 days: people on each, and the split by device kind. */
+async function homeStyles(since: Date): Promise<AdminOverviewDTO["homeStyles"]> {
+  const rows = await HomeStyleReport.aggregate<{ _id: { platform: string; style: string }; n: number }>([
+    { $match: { seenAt: { $gte: since } } },
+    { $group: { _id: { platform: "$platform", style: "$style" }, n: { $sum: 1 } } },
+  ]);
+  const people = await HomeStyleReport.aggregate<{ _id: string; n: number }>([
+    { $match: { seenAt: { $gte: since } } },
+    { $group: { _id: { userId: "$userId", style: "$style" } } },
+    { $group: { _id: "$_id.style", n: { $sum: 1 } } },
+  ]);
+  const count = (platform: string, style: string) => rows.find((r) => r._id.platform === platform && r._id.style === style)?.n ?? 0;
+  const of = (style: string) => people.find((r) => r._id === style)?.n ?? 0;
+  return {
+    casual: of("casual"),
+    communities: of("communities"),
+    byPlatform: (["phone", "site", "desktop"] as const).map((platform) => ({ platform, casual: count(platform, "casual"), communities: count(platform, "communities") })),
+  };
+}
+
 /** People who posted, commented or sent a message (community chat or DM) between these moments. */
 async function activePeople(from: Date, to: Date): Promise<number> {
   const _id = { $gte: idAt(from), $lt: idAt(to) };
@@ -655,6 +676,7 @@ export async function adminOverview(days: (typeof OVERVIEW_RANGES)[number] = 30)
     series,
     recent: await toAudit(recent),
     hostMinMembers: min,
+    homeStyles: await homeStyles(new Date(now - 30 * DAY)),
   };
 }
 

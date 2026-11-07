@@ -23,6 +23,7 @@ import { useAuth } from "@/components/providers/AuthProvider";
 import { useProfileCard } from "@/components/providers/ProfileCardProvider";
 import { useMood } from "@/components/providers/ThemeProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
+import { HomeStyleCard } from "@/components/domain/home/HomeStyleCard";
 import { useToast } from "@/components/providers/ToastProvider";
 import { ImageField } from "@/components/ui/ImageField";
 import { Button } from "@/components/ui/Button";
@@ -757,7 +758,12 @@ export default function SettingsPage() {
               </button>
               <h1 className="text-xl font-semibold tracking-[-0.02em]">{TITLES[tab]}</h1>
             </div>
-            {tab === "account" && <AccountTab me={user} go={select} onSignOut={out} onEverywhere={everywhere} />}
+            {tab === "account" && (
+              <>
+                <HomeStyleCard />
+                <AccountTab me={user} go={select} onSignOut={out} onEverywhere={everywhere} />
+              </>
+            )}
             {tab === "profile" && <ProfileTab me={user} />}
             {tab === "gallery" && <ProfileMediaEditor me={user} />}
             {tab === "socials" && <SocialsEditor me={user} />}

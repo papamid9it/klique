@@ -16,7 +16,7 @@ import { cx } from "@/components/ui/cx";
 import { CrewService } from "@/app/services/CrewService";
 import { EventService } from "@/app/services/EventService";
 import { SponsoredCard, useAds } from "@/components/domain/ads/Sponsored";
-import { KliqueCard } from "@/components/domain/crews/parts";
+import { KliquePhotoCard } from "@/components/domain/crews/parts";
 import { EventFeedCard } from "@/components/domain/home/HomeFeed";
 import { mixReels, newFeedSeed } from "@/lib/feedMix";
 import { useApi } from "@/lib/hooks/useApi";
@@ -307,7 +307,7 @@ function Reels({ start }: { start?: string }) {
           ) : e.slot?.kind === "event" ? (
             <Between key={`event:${e.slot.event.id}`} label="An event for you"><EventFeedCard e={eventsNow[e.slot.event.id] ?? e.slot.event} onChange={(x) => setEventsNow((m) => ({ ...m, [x.id]: x }))} /></Between>
           ) : e.slot?.kind === "klique" ? (
-            <Between key={`klique:${e.slot.klique.id}`} label="A klique for you"><p className="eyebrow mb-2">Klique for you</p><KliqueCard crew={e.slot.klique} wide /></Between>
+            <Between key={`klique:${e.slot.klique.id}`} label="A klique for you"><p className="eyebrow mb-2">Klique for you</p><KliquePhotoCard crew={e.slot.klique} className="aspect-[4/5] max-h-[540px] w-full" /></Between>
           ) : null,
         )}
         {loading ? (

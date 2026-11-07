@@ -141,6 +141,20 @@ export const POST_FRAMES: { label: string; ratio: number | null }[] = [
 /** The shape a post shows at: the frame its poster picked, or the shape of its first picture or video. */
 export const postFrame = (first?: { aspect?: number | null; frame?: number | null } | null) => postShape(first?.frame ?? first?.aspect);
 
+/** What Home shows: Casual is the scrolling feed; Communities is just the places you joined, with no scrolling. */
+export const HOME_STYLES = ["casual", "communities"] as const;
+export type HomeStyle = (typeof HOME_STYLES)[number];
+
+/** Your communities, the one needing you most first: mentions, then new messages, then the latest activity. Muted ones go last. */
+export function rankMyCommunities<T extends { mentions: number; unreadCount: number; muted?: boolean; pinned?: boolean; lastActivityAt: string | null }>(list: T[]): T[] {
+  const at = (c: T) => (c.lastActivityAt ? +new Date(c.lastActivityAt) : 0);
+  return [...list].sort((a, b) => Number(!!a.muted) - Number(!!b.muted) || b.mentions - a.mentions || b.unreadCount - a.unreadCount || Number(!!b.pinned) - Number(!!a.pinned) || at(b) - at(a));
+}
+
+/** Why a community is worth opening now, or null when it's quiet. */
+export const communityNews = (c: { mentions: number; unreadCount: number }) =>
+  c.mentions ? `${c.mentions} ${c.mentions === 1 ? "mention" : "mentions"}` : c.unreadCount ? `${c.unreadCount >= 99 ? "99+" : c.unreadCount} new ${c.unreadCount === 1 ? "message" : "messages"}` : null;
+
 export const LIMITS = {
   /** groups are private: at most this many people, owner included */
   groupMembers: 1000,

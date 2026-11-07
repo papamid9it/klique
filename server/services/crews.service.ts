@@ -712,6 +712,9 @@ export async function myCommunityCrews(viewer: IUser, slug: string): Promise<MyC
     const e = c.eventId ? eventById.get(sid(c.eventId)) : null;
     if (c.eventId && (!e || !(await canViewEvent(e, viewer)))) continue;
     const r = rows.find((x) => sid(x.crewId) === sid(c._id))!;
+    // only what you can still open: a request that was never answered goes once it can't be joined, and once a
+    // klique is over only the people in it keep it (opening it would just say it's gone)
+    if (r.status !== "active" && (kliqueClosed(c, e ?? null) || kliqueOver(c, e ?? null))) continue;
     out.push({ id: sid(c._id), title: c.title, area: c.area, eventId: e ? sid(e._id) : null, eventTitle: e?.title ?? null, meetupAt: c.meetupAt.toISOString(), memberCount: c.memberCount, standing: standingOf(r)!, sub: c.subcommunityId ? (subById.get(sid(c.subcommunityId)) ?? null) : null, unreadCount: unread.get(sid(c._id)) ?? 0 });
   }
   return out;
@@ -734,6 +737,10 @@ async function startKlique(viewer: IUser, input: KliqueInput, where: { event: IE
   const limit = await kliqueCreateBlock(viewer);
   if (limit) throw new ApiError(403, limit, { code: "plan_limit" });
   validateMeetup(input.meetupAt, where.event);
+  // a picture of the plan, uploaded for it: your profile picture isn't one (older apps put it in by default)
+  if (viewer.avatarUrl && input.coverImage.split("#")[0] === viewer.avatarUrl.split("#")[0]) {
+    throw new ApiError(422, "Add a picture for your klique: the place, the movie poster, the vibe.", { errors: { coverImage: "Upload a picture for this klique." } });
+  }
   rateLimit(`crew-create:${sid(viewer._id)}`, 10, DAY_MS);
 
   const { event, community, place } = where;

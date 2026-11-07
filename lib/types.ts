@@ -1647,6 +1647,8 @@ export interface AdminOverviewDTO {
   days: number;
   /** per day, oldest first (YYYY-MM-DD, UTC): sign-ups, feed posts, and messages (community chat and DMs) */
   series: { day: string; signups: number; posts: number; messages: number }[];
+  /** Home style, from devices seen in the last 30 days: people on each (someone on both counts in both), and per device kind */
+  homeStyles: { casual: number; communities: number; byPlatform: { platform: "phone" | "site" | "desktop"; casual: number; communities: number }[] };
   recent: AuditEntryDTO[];
   /** the size from which a community counts as large */
   hostMinMembers: number;
