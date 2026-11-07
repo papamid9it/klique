@@ -57,6 +57,7 @@ export function ChannelList({
   view,
   boards,
   activeBoard,
+  activeTopic = null,
   onBoardsChanged,
   onChanged,
   onNavigate,
@@ -76,6 +77,8 @@ export function ChannelList({
   boards: BoardDTO[];
   /** slug of the board being viewed */
   activeBoard: string | null;
+  /** the post open beside its board (its unread count is read) */
+  activeTopic?: string | null;
   onBoardsChanged: () => void;
   onChanged: () => void;
   onNavigate?: () => void;
@@ -576,6 +579,28 @@ export function ChannelList({
                       <span className="truncate">{b.name}</span>
                       {b.topicCount > 0 && <span className={cx("ml-auto font-mono text-[11px] text-ink-muted", manage && "group-hover/board:hidden")}>{compactCount(b.topicCount)}</span>}
                     </SoftLink>
+                    {!!b.mine?.length && (
+                      <ul aria-label={`Your posts in ${b.name}`} className="relative mt-0.5 mb-1 ml-[18px] space-y-0.5 border-l border-line pl-2">
+                        {b.mine.map((p) => {
+                          const open = on && activeTopic === p.id;
+                          const n = open ? 0 : p.unread;
+                          return (
+                            <li key={p.id}>
+                              <SoftLink
+                                href={`${base}?view=topics&b=${b.slug}&t=${p.id}`}
+                                scroll={false}
+                                onClick={onNavigate}
+                                aria-current={open ? "page" : undefined}
+                                className={cx("flex h-8 items-center gap-2 rounded-control px-2 text-[13px] transition", open ? "bg-raised text-ink" : n ? "font-semibold text-ink hover:bg-raised/60" : "text-ink-muted hover:bg-raised/60 hover:text-ink")}
+                              >
+                                <span className="truncate">{p.title}</span>
+                                {n > 0 && <span className="ml-auto shrink-0 font-mono text-[11px] font-bold text-ink">{n >= 99 ? "99+" : n} new</span>}
+                              </SoftLink>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
                     {manage && (
                       <div className="absolute top-1.5 right-1 hidden group-focus-within/board:block group-hover/board:block">
                         <Dropdown

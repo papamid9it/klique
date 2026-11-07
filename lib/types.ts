@@ -1158,6 +1158,16 @@ export interface BoardDTO {
   topicCount: number;
   /** the viewer may start a topic in it right now */
   canPost: boolean;
+  /** posts here you wrote, follow or replied in, newest activity first (at most 5); shown under the board in the sidebar */
+  mine?: BoardPostDTO[];
+}
+
+/** One of your posts under its board in the sidebar. */
+export interface BoardPostDTO {
+  id: Id;
+  title: string;
+  /** replies by others you haven't read (capped at 99) */
+  unread: number;
 }
 
 /** What the desktop sidebar beside a board shows (refreshed live as people post and comment). */
@@ -1359,7 +1369,8 @@ export interface TopicDetailDTO {
   messages: ChatPage;
 }
 
-export type TopicSort = "hot" | "new" | "top";
+/** active: the post with the newest comment first (a new comment bumps it up) */
+export type TopicSort = "active" | "hot" | "new" | "top";
 
 /* ------------------------------- voice ------------------------------- */
 

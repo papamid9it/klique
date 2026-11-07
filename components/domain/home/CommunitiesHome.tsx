@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { CommunityService } from "@/app/services/CommunityService";
 import { CrewService } from "@/app/services/CrewService";
+import { DiscoverService } from "@/app/services/DiscoverService";
+import { usePlace } from "@/components/providers/PlaceProvider";
 import { EventService } from "@/app/services/EventService";
 import { crewHref } from "@/components/domain/crews/parts";
 import { useRealtimeEvent } from "@/components/providers/RealtimeProvider";
@@ -14,7 +16,8 @@ import { communityNews, rankMyCommunities } from "@/lib/constants";
 import { eventPhoto } from "@/lib/fake";
 import { formatDateShort, relativeStamp } from "@/lib/format";
 import { useApi } from "@/lib/hooks/useApi";
-import type { CrewCardDTO, EventDTO, MyCommunityDTO } from "@/lib/types";
+import type { InterestId } from "@/lib/constants";
+import type { MyCommunityDTO } from "@/lib/types";
 
 const SHADE = "absolute inset-x-0 bottom-0 bg-black/40 px-3 py-2 text-white";
 const PILL = "absolute top-2.5 right-2.5 inline-flex h-7 min-w-7 items-center justify-center rounded-full bg-white px-2 text-sm font-bold text-black";
@@ -34,51 +37,36 @@ function Place({ c, big }: { c: MyCommunityDTO; big?: boolean }) {
   );
 }
 
-function NextUp({ e }: { e: EventDTO }) {
-  const d = new Date(e.startsAt);
+/** One line in "Coming up" or "Kliques for you": a small photo and two lines of text. */
+function Row({ href, src, seed, interest, title, line }: { href: string; src: string | null; seed: string; interest: InterestId; title: string; line: string }) {
   return (
-    <Link href={`/events/${e.id}`} className="flex h-full flex-col overflow-hidden rounded-card border border-line bg-surface">
-      <Cover src={eventPhoto(e.id, e.coverImage)} seed={e.id} interest={e.interest} className="h-24 shrink-0">
-        <span className="absolute top-2.5 left-2.5 flex w-12 flex-col items-center rounded-control bg-black/60 py-1 text-white">
-          <span className="text-xs">{d.toLocaleDateString("en-GB", { month: "short", timeZone: "Africa/Lagos" })}</span>
-          <span className="text-lg leading-5 font-bold">{d.toLocaleDateString("en-GB", { day: "numeric", timeZone: "Africa/Lagos" })}</span>
-        </span>
-      </Cover>
-      <span className="p-3">
-        <span className="block text-sm text-ink-muted">You&apos;re going · {formatDateShort(e.startsAt)}</span>
-        <span className="line-clamp-2 font-semibold">{e.title}</span>
-      </span>
-    </Link>
-  );
-}
-
-function KliqueTile({ k }: { k: CrewCardDTO }) {
-  return (
-    <Link href={crewHref(k)} className="flex h-full flex-col overflow-hidden rounded-card border border-line bg-surface">
-      <Cover src={k.coverImage} seed={k.id} interest={k.interest} className="h-24 shrink-0" />
-      <span className="p-3">
-        <span className="line-clamp-2 font-semibold">{k.title}</span>
-        <span className="mt-0.5 block text-sm text-ink-muted">
-          {formatDateShort(k.meetupAt)} · {k.memberCount} of {k.maxMembers} going
-        </span>
+    <Link href={href} className="flex min-w-0 items-center gap-3 rounded-card border border-line bg-surface p-2 hover:border-ink-muted/50">
+      <Cover src={src} seed={seed} interest={interest} className="size-14 shrink-0 rounded-control" />
+      <span className="min-w-0">
+        <span className="block truncate font-semibold">{title}</span>
+        <span className="block truncate text-sm text-ink-muted">{line}</span>
       </span>
     </Link>
   );
 }
 
 /**
- * Home in the Communities style: the places you joined (the one that needs you most big), your next event, and kliques
- * you could join. It fits the screen: no feed, no scrolling. The panels either side stay as they are.
+ * Home in the Communities style: the places you joined (the one that needs you most big), more of them, what's coming
+ * up (your next event first) and kliques you could join. No feed; at most a little scrolling. The panels either side stay as they are.
  */
 export function CommunitiesHome() {
   const mine = useApi(() => CommunityService.mine(), [], { key: "home-places" });
   const going = useApi(() => EventService.list({ scope: "going" }), [], { key: "home-places-going" });
-  const kliques = useApi(() => CrewService.forYou({ limit: 2 }), [], { key: "home-places-kliques" });
+  const kliques = useApi(() => CrewService.forYou({ limit: 3 }), [], { key: "home-places-kliques" });
+  const { where, ready } = usePlace();
+  const discover = useApi(() => DiscoverService.discover(where), [where], { key: `discover:${where}`, wait: !ready });
   useRealtimeEvent(() => void mine.reload(), { filter: (e) => e.type === "channel" || (e.type === "crew" && !!e.chat) || (e.type === "notify" && e.category === "community"), debounceMs: 1500 });
 
   const places = rankMyCommunities(mine.data ?? []);
   const next = (going.data?.items ?? []).find((e) => !e.isPast);
-  const forYou = (kliques.data?.items ?? []).slice(0, 2);
+  const forYou = (kliques.data?.items ?? []).slice(0, 3);
+  const events = [...(next ? [next] : []), ...(discover.data?.eventsForYou ?? []).filter((e) => !e.isPast && e.id !== next?.id)].slice(0, 3);
+  const more = places.slice(5, 9);
 
   return (
     <div className="px-4 py-6 lg:px-7">
@@ -100,23 +88,49 @@ export function CommunitiesHome() {
         </div>
       )}
 
-      {(next || forYou.length > 0) && (
-        <div className="mt-6 grid gap-3 md:grid-cols-3">
-          {next && (
-            <section aria-labelledby="next-up" className="flex flex-col">
-              <h2 id="next-up" className="mb-2 text-sm font-semibold text-ink-muted">Next up</h2>
-              <div className="flex-1"><NextUp e={next} /></div>
+      {more.length > 0 && (
+        <section aria-labelledby="more-places" className="mt-6">
+          <h2 id="more-places" className="mb-2 text-sm font-semibold text-ink-muted">More of your places</h2>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            {more.map((c) => (
+              <Link key={c.id} href={`/communities/${c.slug}`} className="flex items-center gap-3 rounded-card border border-line bg-surface p-2.5 hover:border-ink-muted/50">
+                <Cover src={c.coverImage} seed={c.id} interest={c.interest} className="size-11 shrink-0 rounded-control" />
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-semibold">{c.name}</span>
+                  <span className="block truncate text-xs text-ink-muted">{communityNews(c) ?? (c.lastActivityAt ? relativeStamp(c.lastActivityAt) : "Quiet lately")}</span>
+                </span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {(events.length > 0 || forYou.length > 0) && (
+        <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
+          {events.length > 0 && (
+            <section aria-labelledby="coming-up" className="min-w-0">
+              <div className="mb-2 flex items-baseline justify-between">
+                <h2 id="coming-up" className="text-sm font-semibold text-ink-muted">Coming up</h2>
+                <Link href="/events" className="text-sm font-semibold text-ink-muted hover:text-ink">All events</Link>
+              </div>
+              <div className="flex flex-col gap-2">
+                {events.map((e) => (
+                  <Row key={e.id} href={`/events/${e.id}`} src={eventPhoto(e.id, e.coverImage)} seed={e.id} interest={e.interest} title={e.title}
+                    line={`${e.id === next?.id ? "You're going · " : ""}${formatDateShort(e.startsAt)}${e.community ? ` · ${e.community.name}` : ""}`} />
+                ))}
+              </div>
             </section>
           )}
           {forYou.length > 0 && (
-            <section aria-labelledby="kliques-for-you" className={next ? "flex flex-col md:col-span-2" : "flex flex-col md:col-span-3"}>
+            <section aria-labelledby="kliques-for-you" className="min-w-0">
               <div className="mb-2 flex items-baseline justify-between">
                 <h2 id="kliques-for-you" className="text-sm font-semibold text-ink-muted">Kliques for you</h2>
                 <Link href="/kliques" className="text-sm font-semibold text-ink-muted hover:text-ink">See more</Link>
               </div>
-              <div className="grid flex-1 grid-cols-2 gap-3">
+              <div className="flex flex-col gap-2">
                 {forYou.map((k) => (
-                  <KliqueTile key={k.id} k={k} />
+                  <Row key={k.id} href={crewHref(k)} src={k.coverImage} seed={k.id} interest={k.interest} title={k.title}
+                    line={`${formatDateShort(k.meetupAt)} · ${k.memberCount} of ${k.maxMembers} going`} />
                 ))}
               </div>
             </section>

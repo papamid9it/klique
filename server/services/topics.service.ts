@@ -193,7 +193,8 @@ export async function listTopics(viewer: IUser | null, space: Space, access: Spa
       { $limit: PAGE + 1 },
     ]);
   } else {
-    const sort: Record<string, 1 | -1> = q.sort === "top" ? { pinned: -1, likeCount: -1, createdAt: -1 } : { pinned: -1, createdAt: -1 };
+    const sort: Record<string, 1 | -1> =
+      q.sort === "top" ? { pinned: -1, likeCount: -1, createdAt: -1 } : q.sort === "active" ? { pinned: -1, lastActivityAt: -1, _id: -1 } : { pinned: -1, createdAt: -1 };
     rows = await Topic.find(match).sort(sort).skip(skip).limit(PAGE + 1).lean<ITopic[]>();
   }
   return { items: await toTopics(rows.slice(0, PAGE), viewer), page: q.page, hasMore: rows.length > PAGE };

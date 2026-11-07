@@ -230,7 +230,7 @@ export const memberListQuery = pageQuery.extend({
 /* -------------------------------- topics ---------------------------- */
 
 export const topicListQuery = pageQuery.extend({
-  sort: z.enum(["hot", "new", "top"]).default("hot"),
+  sort: z.enum(["active", "hot", "new", "top"]).default("active"),
   board: z.preprocess(blankToUndef, z.string().trim().max(40).optional()),
   q: z.preprocess(blankToUndef, z.string().trim().max(60).optional()),
   tag: z.preprocess(blankToUndef, z.string().trim().toLowerCase().max(LIMITS.topicTag).optional()),

@@ -1,11 +1,12 @@
 import { Types } from "mongoose";
 import { deleteUploads } from "./media.service";
 import type { z } from "zod";
-import type { BoardDTO, BoardSidebarDTO } from "@/lib/types";
+import type { BoardDTO, BoardPostDTO, BoardSidebarDTO } from "@/lib/types";
 import { LIMITS } from "@/lib/constants";
 import { ApiError, forbidden, notFound } from "../http/errors";
 import { rateLimit } from "../http/rate-limit";
-import { Board, Topic, TopicComment, TopicLike, type IBoard, type ITopic } from "../models/Topic";
+import { Board, Topic, TopicComment, TopicFollow, TopicLike, type IBoard, type ITopic } from "../models/Topic";
+import { Channel, ChannelMessage, ChannelRead } from "../models/Channel";
 import { assertCanView, type Space, type SpaceAccess } from "../policies/access";
 import type { IUser } from "../models/User";
 import type { boardCreateSchema, boardUpdateSchema } from "../validators/schemas";
@@ -45,7 +46,10 @@ export async function listBoards(viewer: IUser | null, space: Space, access: Spa
   assertCommunity(space);
   assertCanView(access, "boards");
   const rows = await ensureBoards(space, space.community.ownerId);
-  const counts = await Topic.aggregate<{ _id: Types.ObjectId; n: number }>([{ $match: { communityId: space.community._id } }, { $group: { _id: "$boardId", n: { $sum: 1 } } }]);
+  const [counts, mine] = await Promise.all([
+    Topic.aggregate<{ _id: Types.ObjectId; n: number }>([{ $match: { communityId: space.community._id } }, { $group: { _id: "$boardId", n: { $sum: 1 } } }]),
+    viewer ? myBoardPosts(viewer, space.community._id) : new Map<string, BoardPostDTO[]>(),
+  ]);
   const byId = new Map(counts.map((c) => [sid(c._id), c.n]));
   return rows.map((b) => ({
     id: sid(b._id),
@@ -56,7 +60,52 @@ export async function listBoards(viewer: IUser | null, space: Space, access: Spa
     postPolicy: b.postPolicy,
     topicCount: byId.get(sid(b._id)) ?? 0,
     canPost: !!viewer && canPostIn(b, access),
+    ...(mine.get(sid(b._id))?.length ? { mine: mine.get(sid(b._id)) } : {}),
   }));
+}
+
+/** How many of your posts show under each board in the sidebar. */
+const MINE_PER_BOARD = 5;
+
+/**
+ * Your posts in a community, by board, like Discord shows the forum posts you're in under the forum: ones you wrote,
+ * follow or replied in (writing or replying follows a post), newest activity first, with replies you haven't read.
+ */
+async function myBoardPosts(viewer: IUser, communityId: Types.ObjectId): Promise<Map<string, BoardPostDTO[]>> {
+  const out = new Map<string, BoardPostDTO[]>();
+  const follows = await TopicFollow.find({ userId: viewer._id }).sort({ _id: -1 }).limit(1000).select("topicId").lean<{ topicId: Types.ObjectId }[]>();
+  if (!follows.length) return out;
+  const hidden = await hiddenUserIds(viewer._id);
+  const topics = await Topic.find({ _id: { $in: follows.map((f) => f.topicId) }, communityId, ...(hidden.length ? { authorId: { $nin: hidden } } : {}) })
+    .sort({ lastActivityAt: -1 })
+    .select("_id title boardId")
+    .limit(200)
+    .lean<Pick<ITopic, "_id" | "title" | "boardId">[]>();
+  const picked: Pick<ITopic, "_id" | "title" | "boardId">[] = [];
+  for (const t of topics) {
+    if (!t.boardId) continue;
+    const list = out.get(sid(t.boardId)) ?? [];
+    if (list.length >= MINE_PER_BOARD) continue;
+    list.push({ id: sid(t._id), title: t.title, unread: 0 });
+    out.set(sid(t.boardId), list);
+    picked.push(t);
+  }
+  // unread replies: each post's chat against how far you've read it
+  const chats = await Channel.find({ topicId: { $in: picked.map((t) => t._id) }, lastMessageId: { $ne: null } }).select("_id topicId lastMessageId").lean<{ _id: Types.ObjectId; topicId: Types.ObjectId; lastMessageId: Types.ObjectId }[]>();
+  if (!chats.length) return out;
+  const reads = await ChannelRead.find({ userId: viewer._id, channelId: { $in: chats.map((c) => c._id) } }).select("channelId lastReadMessageId muted").lean<{ channelId: Types.ObjectId; lastReadMessageId: Types.ObjectId | null; muted?: boolean }[]>();
+  const readOf = new Map(reads.map((r) => [sid(r.channelId), r]));
+  const unread = new Map<string, number>();
+  await Promise.all(
+    chats.map(async (c) => {
+      const r = readOf.get(sid(c._id));
+      if (r?.muted || (r?.lastReadMessageId && sid(r.lastReadMessageId) >= sid(c.lastMessageId))) return;
+      const n = await ChannelMessage.countDocuments({ channelId: c._id, authorId: { $ne: viewer._id }, deletedAt: null, ...(r?.lastReadMessageId ? { _id: { $gt: r.lastReadMessageId } } : {}) }, { limit: 99 });
+      if (n) unread.set(sid(c.topicId), n);
+    }),
+  );
+  for (const list of out.values()) for (const p of list) p.unread = unread.get(p.id) ?? 0;
+  return out;
 }
 
 /** Finds the board a topic goes in: by slug, or the first board when none is given. */

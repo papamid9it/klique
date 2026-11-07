@@ -90,6 +90,9 @@ TopicSchema.index({ communityId: 1, pinned: -1, createdAt: -1 });
 TopicSchema.index({ communityId: 1, pinned: -1, likeCount: -1, createdAt: -1 });
 TopicSchema.index({ communityId: 1, createdAt: -1 });
 TopicSchema.index({ boardId: 1, pinned: -1, createdAt: -1 });
+// "Active": the board sorted by its newest comment
+TopicSchema.index({ boardId: 1, pinned: -1, lastActivityAt: -1 });
+TopicSchema.index({ communityId: 1, pinned: -1, lastActivityAt: -1 });
 TopicSchema.index({ authorId: 1, createdAt: -1 });
 
 TopicSchema.index({ boardId: 1, tags: 1 });

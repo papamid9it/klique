@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { TopicService } from "@/app/services/TopicService";
 import { useAuth } from "@/components/providers/AuthProvider";
+import { useRealtimeEvent } from "@/components/providers/RealtimeProvider";
 import { Button } from "@/components/ui/Button";
 import { MoreOnScroll } from "@/components/ui/MoreOnScroll";
 import { Icon } from "@/components/ui/Icon";
@@ -18,6 +19,7 @@ import { topicHref } from "./TopicMenu";
 import { softNavigate } from "@/lib/nav";
 
 const SORTS: { id: TopicSort; label: string }[] = [
+  { id: "active", label: "Active" },
   { id: "hot", label: "Hot" },
   { id: "new", label: "New" },
   { id: "top", label: "Top" },
@@ -35,7 +37,7 @@ export function TopicsPanel({ slug, communityName, isMember, openId, board }: { 
 
 function Board({ slug, communityName, isMember, board, openId }: { slug: string; communityName: string; isMember: boolean; board: BoardDTO; openId: string | null }) {
   const { requireAuth } = useAuth();
-  const [sort, setSort] = useState<TopicSort>("hot");
+  const [sort, setSort] = useState<TopicSort>("active");
   const [q, setQ] = useState("");
   const [tag, setTag] = useState<string | null>(null);
   const dq = useDebounced(q.trim(), 350);
@@ -44,9 +46,22 @@ function Board({ slug, communityName, isMember, board, openId }: { slug: string;
     keepPrevious: true,
     key: `topics:${slug}:${board.slug}:${sort}:${dq}:${tag ?? ""}`,
   });
+  // someone else replies to a post on this board: refresh, so in "Active" it moves up
+  useRealtimeEvent(() => void reload(), { filter: (e) => sort === "active" && e.type === "topic" && items.some((x) => x.id === e.topicId), debounceMs: 1500 });
   // likes, comments and edits made in the open topic show here too
   useTopicEvents((e) => {
-    if (e.type === "changed") setItems((prev) => (prev.some((x) => x.id === e.topic.id && x !== e.topic) ? prev.map((x) => (x.id === e.topic.id ? e.topic : x)) : prev));
+    if (e.type === "changed")
+      setItems((prev) => {
+        const was = prev.find((x) => x.id === e.topic.id);
+        if (!was || was === e.topic) return prev;
+        // a new comment bumps the post to the top in "Active" (under the pinned ones)
+        if (sort === "active" && e.topic.lastActivityAt > was.lastActivityAt && !e.topic.pinned) {
+          const rest = prev.filter((x) => x.id !== e.topic.id);
+          const at = rest.findIndex((x) => !x.pinned);
+          return at < 0 ? [...rest, e.topic] : [...rest.slice(0, at), e.topic, ...rest.slice(at)];
+        }
+        return prev.map((x) => (x.id === e.topic.id ? e.topic : x));
+      });
     else setItems((prev) => (prev.some((x) => x.id === e.id) ? prev.filter((x) => x.id !== e.id) : prev));
   });
 

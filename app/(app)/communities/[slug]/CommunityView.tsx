@@ -4,7 +4,7 @@ import { AgeGate } from "@/components/domain/space/AgeGate";
 import { placeLabel } from "@/lib/places";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ChannelService } from "@/app/services/ChannelService";
 import { CommunityService } from "@/app/services/CommunityService";
 import { SpaceService } from "@/app/services/SpaceService";
@@ -116,6 +116,18 @@ function CommunityWorkspace({ slug }: { slug: string }) {
   const gSlug = sp.get("g");
   const boardsApi = useApi(canUse ? () => TopicService.boards(slug) : null, [slug, user?.id, c?.id, c?.viewer.isMember, c?.locked], { key: `boards:${slug}` });
   const boards = useMemo(() => boardsApi.data ?? [], [boardsApi.data]);
+  // your posts under each board: a reply moves them up and adds to "new"
+  useRealtimeEvent(() => void boardsApi.reload(), { filter: (e) => e.type === "topic" && e.communityId === c?.id, debounceMs: 1500 });
+  // opening or leaving a post reads it: refresh so its "new" count goes
+  const openPost = sp.get("t");
+  const reloadBoards = boardsApi.reload;
+  const seenPost = useRef(openPost);
+  useEffect(() => {
+    if (seenPost.current === openPost) return;
+    seenPost.current = openPost;
+    const t = setTimeout(() => void reloadBoards(), 800);
+    return () => clearTimeout(t);
+  }, [openPost, reloadBoards]);
   const group = useApi(canUse && gSlug ? () => SubcommunityService.get(slug, gSlug) : null, [slug, gSlug, user?.id, c?.id], { key: `group:${slug}:${gSlug}` });
   const g = gSlug ? group.data : null;
   const gReadable = !!g && !g.moderationOnly && g.viewer.canView;
@@ -339,7 +351,7 @@ function CommunityWorkspace({ slug }: { slug: string }) {
     );
   const channelTree = (onNavigate?: () => void) =>
     listData ? (
-      <ChannelList community={c} data={listData} activeChannel={activeChannel?.slug ?? null} activeGroup={gSlug} view={view} boards={boards} activeBoard={activeBoard?.slug ?? null} onBoardsChanged={() => void boardsApi.reload()} onChanged={() => void reloadChannels()} onNavigate={onNavigate} onLeave={() => setLeaving(true)} onReport={() => setReporting(true)} onAbout={() => (onNavigate?.(), setAboutOpen(true))} crews={myCrews.data ?? []} activeCrew={crewOpen} />
+      <ChannelList community={c} data={listData} activeChannel={activeChannel?.slug ?? null} activeGroup={gSlug} view={view} boards={boards} activeBoard={activeBoard?.slug ?? null} activeTopic={view === "topics" ? sp.get("t") : null} onBoardsChanged={() => void boardsApi.reload()} onChanged={() => void reloadChannels()} onNavigate={onNavigate} onLeave={() => setLeaving(true)} onReport={() => setReporting(true)} onAbout={() => (onNavigate?.(), setAboutOpen(true))} crews={myCrews.data ?? []} activeCrew={crewOpen} />
     ) : channels.error ? (
       <div className="p-4">
         <ErrorState title="Couldn't load channels" message={channels.error} onRetry={channels.reload} />
