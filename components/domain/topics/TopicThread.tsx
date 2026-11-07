@@ -132,7 +132,8 @@ export function TopicDetailProvider({ slug, topicId, children }: { slug: string;
  * normal chat (pictures, stickers, reactions, @mentions, "Jump to present").
  * `onClose` puts the board's sidebar back; `bare` leaves the close button to the drawer it sits in.
  */
-export function TopicSide({ onClose, bare }: { onClose: () => void; bare?: boolean }) {
+/** `full`: the post fills the page (opened from your posts in the sidebar), with no board list beside it */
+export function TopicSide({ onClose, bare, full }: { onClose: () => void; bare?: boolean; full?: boolean }) {
   // from a notification: ?m=<message id> opens on that message
   const focus = useSearchParams().get("m");
   const { preview: t, data: loaded, error, status, reload, slug, setTopic, topicId } = useDetail();
@@ -197,7 +198,7 @@ export function TopicSide({ onClose, bare }: { onClose: () => void; bare?: boole
           onRead={() => undefined}
           placeholder="Reply…"
           closedNote={t.locked ? "This post is locked. Only owners and admins can reply." : undefined}
-          intro={(empty) => <PostIntro t={t} empty={empty} />}
+          intro={(empty) => <PostIntro t={t} empty={empty} full={full} />}
         />
       )}
     </div>
@@ -228,7 +229,7 @@ function PostSkeleton() {
 }
 
 /** The post at the start of its chat: who and when, the title, tags, the picture, then the text. */
-function PostIntro({ t, empty }: { t: TopicDTO; empty: boolean }) {
+function PostIntro({ t, empty, full }: { t: TopicDTO; empty: boolean; full?: boolean }) {
   const { user } = useAuth();
   const now = useNow();
   return (
@@ -266,7 +267,7 @@ function PostIntro({ t, empty }: { t: TopicDTO; empty: boolean }) {
           ))}
         </ul>
       )}
-      <TopicMedia media={t.media.slice(0, 1)} tall className="mt-3" mine={!!user && t.author.handle === user.handle} />
+      <TopicMedia media={t.media.slice(0, 1)} tall className={full ? "mt-3 max-w-2xl" : "mt-3"} mine={!!user && t.author.handle === user.handle} />
       {t.body && (
         <p className="mt-3 text-[15px] leading-relaxed break-words whitespace-pre-wrap">
           <Formatted text={t.body} plain={(words) => <Linkified text={words} />} />

@@ -567,18 +567,39 @@ export function ChannelList({
               {boards.map((b) => {
                 const on = view === "topics" && activeBoard === b.slug;
                 return (
-                  <li key={b.id} className="group/board relative">
-                    <SoftLink
-                      href={`${base}?view=topics&b=${b.slug}`}
-                      scroll={false}
-                      onClick={onNavigate}
-                      aria-current={on ? "page" : undefined}
-                      className={cx("flex h-9 items-center gap-2.5 rounded-control px-2.5 text-[14px] font-medium transition", on ? "bg-raised text-ink" : "text-ink-muted hover:bg-raised/60 hover:text-ink")}
-                    >
-                      <Icon name={b.postPolicy === "admins" ? "megaphone" : "topics"} size={16} />
-                      <span className="truncate">{b.name}</span>
-                      {b.topicCount > 0 && <span className={cx("ml-auto font-mono text-[11px] text-ink-muted", manage && "group-hover/board:hidden")}>{compactCount(b.topicCount)}</span>}
-                    </SoftLink>
+                  <li key={b.id}>
+                    {/* the hover that shows the options is the board row only, not your posts under it */}
+                    <div className="group/board relative">
+                      <SoftLink
+                        href={`${base}?view=topics&b=${b.slug}`}
+                        scroll={false}
+                        onClick={onNavigate}
+                        aria-current={on ? "page" : undefined}
+                        className={cx("flex h-9 items-center gap-2.5 rounded-control px-2.5 text-[14px] font-medium transition", on ? "bg-raised text-ink" : "text-ink-muted hover:bg-raised/60 hover:text-ink")}
+                      >
+                        <Icon name={b.postPolicy === "admins" ? "megaphone" : "topics"} size={16} />
+                        <span className="truncate">{b.name}</span>
+                        {b.topicCount > 0 && <span className={cx("ml-auto font-mono text-[11px] text-ink-muted", manage && "group-hover/board:hidden")}>{compactCount(b.topicCount)}</span>}
+                      </SoftLink>
+                      {manage && (
+                        <div className="absolute top-1.5 right-1 hidden group-focus-within/board:block group-hover/board:block">
+                          <Dropdown
+                            label={`${b.name} options`}
+                            align="right"
+                            items={[
+                              { label: "Edit board", icon: "edit", onSelect: () => setBoardModal({ board: b }) },
+                              { type: "sep" },
+                              { label: "Delete board", icon: "trash", danger: true, onSelect: () => setDeletingBoard(b) },
+                            ]}
+                            trigger={({ props }) => (
+                              <button {...props} aria-label={`${b.name} options`} title="Board options" className="inline-flex size-6 items-center justify-center rounded-full text-ink-muted hover:bg-line hover:text-ink">
+                                <Icon name="more" size={14} />
+                              </button>
+                            )}
+                          />
+                        </div>
+                      )}
+                    </div>
                     {!!b.mine?.length && (
                       <ul aria-label={`Your posts in ${b.name}`} className="relative mt-0.5 mb-1 ml-[18px] space-y-0.5 border-l border-line pl-2">
                         {b.mine.map((p) => {
@@ -587,7 +608,7 @@ export function ChannelList({
                           return (
                             <li key={p.id}>
                               <SoftLink
-                                href={`${base}?view=topics&b=${b.slug}&t=${p.id}`}
+                                href={`${base}?view=topics&b=${b.slug}&t=${p.id}&full=1`}
                                 scroll={false}
                                 onClick={onNavigate}
                                 aria-current={open ? "page" : undefined}
@@ -600,24 +621,6 @@ export function ChannelList({
                           );
                         })}
                       </ul>
-                    )}
-                    {manage && (
-                      <div className="absolute top-1.5 right-1 hidden group-focus-within/board:block group-hover/board:block">
-                        <Dropdown
-                          label={`${b.name} options`}
-                          align="right"
-                          items={[
-                            { label: "Edit board", icon: "edit", onSelect: () => setBoardModal({ board: b }) },
-                            { type: "sep" },
-                            { label: "Delete board", icon: "trash", danger: true, onSelect: () => setDeletingBoard(b) },
-                          ]}
-                          trigger={({ props }) => (
-                            <button {...props} aria-label={`${b.name} options`} title="Board options" className="inline-flex size-6 items-center justify-center rounded-full text-ink-muted hover:bg-line hover:text-ink">
-                              <Icon name="more" size={14} />
-                            </button>
-                          )}
-                        />
-                      </div>
                     )}
                   </li>
                 );

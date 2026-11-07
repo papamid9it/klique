@@ -363,10 +363,13 @@ function CommunityWorkspace({ slug }: { slug: string }) {
     );
 
   const threadId = view === "topics" && !g ? sp.get("t") : null;
+  // ?full=1: the post fills the page (opened from your posts under the board in the sidebar), like Discord
+  const postFull = !!threadId && sp.get("full") === "1";
   // closing the topic brings the community info back; the board underneath never moved
   const closeTopic = () => {
     const q = new URLSearchParams(sp.toString());
     q.delete("t");
+    q.delete("full");
     softNavigate(`/communities/${slug}?${q.toString()}`);
   };
   // ?th=<thread slug>: a thread open in the side panel (community channels)
@@ -383,7 +386,7 @@ function CommunityWorkspace({ slug }: { slug: string }) {
   const boardSide = view === "topics" && !g && !threadId && activeBoard ? activeBoard : null;
   // Posts gets one too (about the community, top posters, events)
   const postsSide = view === "posts" && !g && !!c && (c.feedPolicy ?? "off") !== "off";
-  const sideKind = threadId ? "comments" : threadSlug ? "thread" : voiceChannel ? "voice" : boardSide ? "board" : postsSide ? "posts" : null;
+  const sideKind = threadId && !postFull ? "comments" : threadSlug ? "thread" : voiceChannel ? "voice" : boardSide ? "board" : postsSide ? "posts" : null;
   // the wide-screen-only panels: no header button, no slide-over on narrow screens
   const panelOnly = sideKind === "board" || sideKind === "posts";
   const side = (onNavigate?: () => void) =>
@@ -464,7 +467,7 @@ function CommunityWorkspace({ slug }: { slug: string }) {
       <section className="flex min-w-0 flex-1 flex-col" aria-label={view ? viewTable[view].label : "Conversation"}>
         {/* an open crew brings its own header (with the info button), like a channel's */}
         {!(crewOpen && !gp) && (
-        <header className="flex min-h-14 items-center gap-2 border-b border-line px-3 sm:px-5">
+        <header className={cx("flex min-h-14 items-center gap-2 border-b border-line px-3 sm:px-5", postFull && "lg:hidden")}>
           <button type="button" onClick={() => setLeftOpen(true)} aria-label="Open channels" className="inline-flex size-10 shrink-0 items-center justify-center rounded-full text-ink hover:bg-raised lg:hidden">
             <Icon name="menu" size={20} />
           </button>
@@ -526,6 +529,10 @@ function CommunityWorkspace({ slug }: { slug: string }) {
           <Scroll inner>
             <FeedPanel c={c} />
           </Scroll>
+        ) : postFull ? (
+          <div className="min-h-0 flex-1">
+            <TopicSide onClose={closeTopic} full />
+          </div>
         ) : view === "topics" && !g ? (
           // the post list fills the room between the channels and an open post
           <Scroll inner fill>
@@ -596,11 +603,13 @@ function CommunityWorkspace({ slug }: { slug: string }) {
         )}
       </section>
 
-      {sideKind && (
-        <aside className={cx("hidden shrink-0 border-l border-line xl:block", sideKind === "comments" || sideKind === "thread" ? "w-[30rem] overflow-hidden 2xl:w-[34rem]" : panelOnly ? "w-[22rem] overflow-hidden 2xl:w-[24rem]" : "w-[24rem] overflow-hidden")} aria-label={sideLabel}>
+      {sideKind === "comments" || sideKind === "thread" ? (
+        <ResizableSide label={sideLabel}>{side()}</ResizableSide>
+      ) : sideKind ? (
+        <aside className={cx("hidden shrink-0 border-l border-line xl:block", panelOnly ? "w-[22rem] overflow-hidden 2xl:w-[24rem]" : "w-[24rem] overflow-hidden")} aria-label={sideLabel}>
           {side()}
         </aside>
-      )}
+      ) : null}
 
       {settingsReq && canSettings && (g ? (
         <GroupSettings
@@ -704,3 +713,83 @@ function Scroll({ children, inner, wide, full, fill }: { children: ReactNode; in
   );
 }
 
+
+const SIDE_WIDTH_KEY = "klique:side-width";
+
+/**
+ * The chat panel beside a board (an open post, a thread): drag its left edge to make it wider or narrower, or use the
+ * arrow keys on the edge. It never gets so wide the list in the middle disappears; double-click the edge to reset.
+ * The width is remembered on this device.
+ */
+function ResizableSide({ label, children }: { label: string; children: ReactNode }) {
+  const [width, setWidth] = useState<number | null>(null);
+  useEffect(() => {
+    try {
+      const saved = Number(localStorage.getItem(SIDE_WIDTH_KEY));
+      if (saved) setWidth(saved);
+    } catch {
+      /* storage blocked: the default width */
+    }
+  }, []);
+  const save = (w: number | null) => {
+    try {
+      if (w) localStorage.setItem(SIDE_WIDTH_KEY, String(w));
+      else localStorage.removeItem(SIDE_WIDTH_KEY);
+    } catch {
+      /* fine */
+    }
+  };
+  // at least 360px; at most what leaves the channels and about 420px of list beside it (CSS max-width enforces it too)
+  const clamp = (w: number) => Math.round(Math.max(360, Math.min(w, window.innerWidth - 760)));
+  const drag = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const from = e.clientX;
+    const start = e.currentTarget.parentElement!.getBoundingClientRect().width;
+    let last = start;
+    const move = (ev: PointerEvent) => {
+      last = clamp(start + (from - ev.clientX));
+      setWidth(last);
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      save(last);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  };
+  const nudge = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    e.preventDefault();
+    const next = clamp((width ?? e.currentTarget.parentElement!.getBoundingClientRect().width) + (e.key === "ArrowLeft" ? 32 : -32));
+    setWidth(next);
+    save(next);
+  };
+  return (
+    <aside
+      aria-label={label}
+      style={width ? { width, minWidth: 360, maxWidth: "calc(100vw - 760px)" } : { minWidth: 360, maxWidth: "calc(100vw - 760px)" }}
+      className={cx("relative hidden shrink-0 overflow-hidden border-l border-line xl:block", !width && "w-[30rem] 2xl:w-[34rem]")}
+    >
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize the panel"
+        title="Drag to resize · double-click to reset"
+        tabIndex={0}
+        onPointerDown={drag}
+        onKeyDown={nudge}
+        onDoubleClick={() => {
+          setWidth(null);
+          save(null);
+        }}
+        className="absolute inset-y-0 left-0 z-20 w-2 cursor-col-resize transition-colors hover:bg-ink-muted/25 focus-visible:bg-ink-muted/40 focus-visible:outline-none"
+      />
+      {children}
+    </aside>
+  );
+}
