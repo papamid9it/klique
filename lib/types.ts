@@ -1139,6 +1139,10 @@ export interface TopicMediaDTO {
   url: string;
   /** still frame shown before a video plays */
   poster: string | null;
+  /** its width ÷ height, saved with a post so it always shows at the same height (none on older posts) */
+  aspect?: number | null;
+  /** the frame the poster picked for their post (on its first picture); none follows `aspect` */
+  frame?: number | null;
 }
 
 /** A named section of a community's topics, set up by its admins. */

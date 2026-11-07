@@ -29,7 +29,7 @@ export interface IFeedPost {
   hiddenAt?: Date | null;
   /** a one-off id the app sends with "Post", so a repeat of the same send never makes a second post */
   clientKey?: string | null;
-  media: { kind: "image" | "video"; url: string; poster: string | null }[];
+  media: { kind: "image" | "video"; url: string; poster: string | null; aspect?: number | null; frame?: number | null }[];
   /** denormalised vote and comment counts (FeedVote / FeedComment keep them in step) */
   upCount: number;
   downCount: number;
@@ -52,7 +52,7 @@ const FeedPostSchema = new Schema<IFeedPost>(
     plainBackdrop: { type: Boolean, default: false },
     hiddenAt: { type: Date, default: null },
     clientKey: { type: String, default: undefined },
-    media: { type: [new Schema({ kind: { type: String, enum: ["image", "video"], required: true }, url: { type: String, required: true }, poster: { type: String, default: null } }, { _id: false })], default: [] },
+    media: { type: [new Schema({ kind: { type: String, enum: ["image", "video"], required: true }, url: { type: String, required: true }, poster: { type: String, default: null }, aspect: { type: Number, default: null }, frame: { type: Number, default: null } }, { _id: false })], default: [] },
     upCount: { type: Number, default: 0 },
     downCount: { type: Number, default: 0 },
     commentCount: { type: Number, default: 0 },

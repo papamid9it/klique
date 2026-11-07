@@ -124,6 +124,23 @@ export function friendsGoingLine(friends: { displayName: string }[], count: numb
 /** Recent videos someone must be able to see before tapping a post opens reels (otherwise it opens the post). */
 export const REELS_MIN_VIDEOS = 10;
 
+/**
+ * A post's frame on Home, site and phone alike: width ÷ height, from a quarter taller than square (4:5) to a wide 1.91:1.
+ * Taller pictures and videos fit inside it, over a blur of themselves. Unknown (an older post) is square.
+ */
+export const postShape = (aspect?: number | null) => (aspect ? Math.min(1.91, Math.max(4 / 5, aspect)) : 1);
+
+/** The frames someone can pick for their post. Original follows the picture's own shape. */
+export const POST_FRAMES: { label: string; ratio: number | null }[] = [
+  { label: "Original", ratio: null },
+  { label: "Square", ratio: 1 },
+  { label: "Tall", ratio: 4 / 5 },
+  { label: "Wide", ratio: 16 / 9 },
+];
+
+/** The shape a post shows at: the frame its poster picked, or the shape of its first picture or video. */
+export const postFrame = (first?: { aspect?: number | null; frame?: number | null } | null) => postShape(first?.frame ?? first?.aspect);
+
 export const LIMITS = {
   /** groups are private: at most this many people, owner included */
   groupMembers: 1000,

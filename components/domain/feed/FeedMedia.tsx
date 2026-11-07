@@ -5,6 +5,7 @@ import { GifPlaceholder } from "@/components/domain/topics/TopicMedia";
 import { Icon } from "@/components/ui/Icon";
 import { cx } from "@/components/ui/cx";
 import { cdn, videoPoster, videoSrc } from "@/lib/cdn";
+import { postFrame, postShape } from "@/lib/constants";
 import { isGif } from "@/lib/data-saver";
 import { useAutoplay } from "@/lib/hooks/useAutoplay";
 import { useDataSaver } from "@/lib/hooks/useDataSaver";
@@ -14,7 +15,7 @@ import type { TopicMediaDTO } from "@/lib/types";
 
 /** Shape of each picture or video once known, so a post comes back (Back, the next visit) at the same size. */
 const shapes = new Map<string, number>();
-const clamp = (r: number) => Math.min(1.91, Math.max(0.8, r));
+const clamp = (r: number) => postShape(r);
 
 /* ---------------- feed videos: one plays at a time, sound remembered for the visit ---------------- */
 
@@ -245,7 +246,7 @@ const FeedVideo = forwardRef<VideoHandle, { url: string; poster: string | null; 
 export function FeedMedia({ media, className, onOpen, onDoubleTap, fill, withSound, openLabel = "Open the post", zoomHint }: { media: TopicMediaDTO[]; className?: string; /** a tap: gets which picture or video was tapped */ onOpen?: (index: number) => void; onDoubleTap?: () => void; fill?: boolean; withSound?: boolean; /** what a tap does, for screen readers */ openLabel?: string; /** show a small "zoom" sign on pictures (a tap opens them big) */ zoomHint?: boolean }) {
   const first = media[0];
   const firstKey = first ? (first.kind === "video" ? (first.poster ?? videoPoster(first.url) ?? first.url) : first.url) : "";
-  const [ratio, setRatio] = useState<number | null>(() => shapes.get(firstKey) ?? null);
+  const [ratio, setRatio] = useState<number | null>(() => (media[0]?.frame || media[0]?.aspect ? postFrame(media[0]) : (shapes.get(firstKey) ?? null)));
   const [i, setI] = useState(0);
   const [loaded, setLoaded] = useState<Set<number>>(new Set());
   const [broken, setBroken] = useState<Set<number>>(new Set());

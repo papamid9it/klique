@@ -144,7 +144,8 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
   // no live connection (not set up, or offline for a while): check the unread counts now and then instead
   useEffect(() => {
     if (!authed || connected) return;
-    const t = window.setInterval(() => document.visibilityState === "visible" && void refresh(), 45_000);
+    // the desktop app checks even when it's hidden in the tray: that's when its red dot matters most
+    const t = window.setInterval(() => (document.visibilityState === "visible" || "kliqueDesktop" in window) && void refresh(), 45_000);
     return () => window.clearInterval(t);
   }, [authed, connected, refresh]);
 

@@ -28,6 +28,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { user, status } = useAuth();
   // Not finished joining (new, or an older account that never did it): /welcome first, once.
+  // in the desktop app: the red dot on its icons
+  const unread = status === "authed" && user ? (user.unreadNotifications ?? 0) + (user.unreadMessages ?? 0) : 0;
+  useEffect(() => {
+    (window as unknown as { kliqueDesktop?: { setBadge?: (n: number) => void } }).kliqueDesktop?.setBadge?.(unread);
+  }, [unread]);
   const mustOnboard = status === "authed" && !!user && !user.onboarded && pathname !== "/welcome";
   useEffect(() => {
     // ?why=finish: the welcome page says why they're back there instead of silently bouncing them

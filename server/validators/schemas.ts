@@ -237,7 +237,7 @@ export const topicListQuery = pageQuery.extend({
 });
 /** http(s) links, or the bundled sample files under /mock/ */
 const mediaUrl = z.string().trim().max(2000).refine((v) => /^https?:\/\//i.test(v) || /^\/mock\/[\w.-]+$/.test(v), "Use a full link (https://…)");
-const mediaItem = z.object({ kind: z.enum(["image", "video"]), url: mediaUrl, poster: z.union([mediaUrl, z.null()]).optional() });
+const mediaItem = z.object({ kind: z.enum(["image", "video"]), url: mediaUrl, poster: z.union([mediaUrl, z.null()]).optional(), aspect: z.number().min(0.1).max(10).optional().nullable(), frame: z.number().min(0.5).max(2).optional().nullable() });
 /** a community post's media: pictures, or one video on its own */
 const mediaList = z
   .array(mediaItem)

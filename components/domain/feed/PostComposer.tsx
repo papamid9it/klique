@@ -16,7 +16,7 @@ import { cx } from "@/components/ui/cx";
 import { FEED_TITLE_MAX, TEXT_BACKGROUNDS, TEXT_CARD_MAX, textStyleOf, type TextBackgroundId } from "@/lib/feedText";
 import { LongPost, TextCard } from "./TextPost";
 import { cdn, videoPoster } from "@/lib/cdn";
-import { LIMITS } from "@/lib/constants";
+import { LIMITS, POST_FRAMES, postFrame } from "@/lib/constants";
 import { useUploadStatus } from "@/lib/hooks/useUploads";
 import { checkFile } from "@/lib/uploads";
 import type { FeedPostDTO, TopicMediaDTO } from "@/lib/types";
@@ -42,7 +42,9 @@ export function PostComposer({ slug, communityName, explicitAllowed, onClose, on
   // pictures or a video: first choose them, then a second page to see how it looks and finish it
   const [step, setStep] = useState<1 | 2>(1);
   const [previewAt, setPreviewAt] = useState(0);
-  const [previewIn, setPreviewIn] = useState<"reels" | "home">("reels");
+  const [previewIn, setPreviewIn] = useState<"reels" | "home">("home");
+  // the frame they pick for the post; Original follows its first picture
+  const [frame, setFrame] = useState<number | null>(null);
   // reels switched off (or not known yet): nothing here mentions them
   const reelsOn = useApi(() => FeedService.reelsReady(), []).data?.on === true;
   const [plainBackdrop, setPlainBackdrop] = useState(false);
@@ -68,7 +70,7 @@ export function PostComposer({ slug, communityName, explicitAllowed, onClose, on
       for (const f of list) {
         setProgress(0);
         const up = await UploadService.upload(kind, f, { onProgress: setProgress });
-        setMedia((x) => [...x, { kind: kind === "video" ? "video" : "image", url: up.url, poster: up.poster }]);
+        setMedia((x) => [...x, { kind: kind === "video" ? "video" : "image", url: up.url, poster: up.poster, aspect: up.width && up.height ? up.width / up.height : null }]);
       }
     } catch (e) {
       toast(errorMessage(e), "error");
@@ -87,7 +89,7 @@ export function PostComposer({ slug, communityName, explicitAllowed, onClose, on
     sending.current = true;
     setBusy(true);
     try {
-      const res = await FeedService.create(slug, { ...(mode === "media" ? { caption: caption.trim(), media, plainBackdrop } : { caption: caption.trim(), title: title.trim(), textBg, media: [] }), ...(explicitAllowed ? { explicit } : {}), clientKey });
+      const res = await FeedService.create(slug, { ...(mode === "media" ? { caption: caption.trim(), media: media.map((m, i) => (i === 0 && frame ? { ...m, frame } : m)), plainBackdrop } : { caption: caption.trim(), title: title.trim(), textBg, media: [] }), ...(explicitAllowed ? { explicit } : {}), clientKey });
       toast("Posted", "success");
       onPosted(res.data);
     } catch (err) {
@@ -188,7 +190,7 @@ export function PostComposer({ slug, communityName, explicitAllowed, onClose, on
         </fieldset>
         ) : (
         <div className="grid gap-5 sm:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]">
-          <PostPreview media={media} at={Math.min(previewAt, media.length - 1)} onAt={setPreviewAt} caption={caption} plain={plainBackdrop} where={reelsOn ? previewIn : "home"} onWhere={setPreviewIn} reelsOn={reelsOn} />
+          <PostPreview media={media} at={Math.min(previewAt, media.length - 1)} onAt={setPreviewAt} caption={caption} plain={plainBackdrop} where={reelsOn ? previewIn : "home"} onWhere={setPreviewIn} reelsOn={reelsOn} frame={frame} onFrame={setFrame} />
           <div className="min-w-0 space-y-4">
             <FormatButton area={captionRef} value={caption} onChange={setCaption} />
             <TextArea ref={captionRef} label="Caption (optional)" value={caption} onChange={(e) => setCaption(e.target.value)} onKeyDown={(e) => suggest.onKeyDown(e)} maxLength={LIMITS.feedCaption} counter={LIMITS.feedCaption} placeholder="Say something about it… @someone #tag" />
@@ -281,15 +283,22 @@ function TextFields({ title, setTitle, caption, setCaption, textBg, setTextBg, c
 
 
 /** The second page's preview: how it will look in reels and on Home, updating as you type. */
-function PostPreview({ media, at, onAt, caption, plain, where, onWhere, reelsOn }: { reelsOn: boolean; media: TopicMediaDTO[]; at: number; onAt: (i: number) => void; caption: string; plain: boolean; where: "reels" | "home"; onWhere: (w: "reels" | "home") => void }) {
+function PostPreview({ media, at, onAt, caption, plain, where, onWhere, reelsOn, frame, onFrame }: { frame: number | null; onFrame: (f: number | null) => void; reelsOn: boolean; media: TopicMediaDTO[]; at: number; onAt: (i: number) => void; caption: string; plain: boolean; where: "reels" | "home"; onWhere: (w: "reels" | "home") => void }) {
   const item = media[at];
+  // the post's height comes from its first picture, as it will on Home; a GIF's shape is known once it's loaded
+  const [measured, setMeasured] = useState<number | null>(null);
+  const first = media[0];
+  const shape = postFrame({ aspect: first.aspect ?? measured, frame });
+  const measure = (w: number, h: number) => {
+    if (item === first && w && h) setMeasured(w / h);
+  };
   const still = item.kind === "video" ? (item.poster ?? videoPoster(item.url)) : item.url;
   const reels = where === "reels";
   const shown = item.kind === "video" ? (
-    <video key={item.url} src={item.url} poster={still ?? undefined} muted loop autoPlay playsInline className={cx("relative", reels ? "max-h-full max-w-full object-contain" : "size-full object-cover")} />
+    <video key={item.url} src={item.url} poster={still ?? undefined} muted loop autoPlay playsInline onLoadedMetadata={(e) => measure(e.currentTarget.videoWidth, e.currentTarget.videoHeight)} className={cx("relative", reels ? "max-h-full max-w-full object-contain" : "size-full object-contain")} />
   ) : (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={item.url} alt="" className={cx("relative", reels ? "max-h-full max-w-full object-contain" : "size-full object-cover")} />
+    <img src={item.url} alt="" onLoad={(e) => measure(e.currentTarget.naturalWidth, e.currentTarget.naturalHeight)} className={cx("relative", reels ? "max-h-full max-w-full object-contain" : "size-full object-contain")} />
   );
   return (
     <div className="space-y-2">
@@ -312,8 +321,21 @@ function PostPreview({ media, at, onAt, caption, plain, where, onWhere, reelsOn 
         </div>
       ) : (
         <div className="overflow-hidden rounded-card border border-line bg-surface">
-          <div className="aspect-[4/5] max-h-[44dvh] w-full overflow-hidden bg-raised">{shown}</div>
+          <div style={{ aspectRatio: String(shape) }} className="relative max-h-[540px] w-full overflow-hidden bg-black">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            {still && <img src={still} alt="" aria-hidden="true" className="absolute inset-0 size-full scale-125 object-cover opacity-70 blur-3xl" />}
+            {shown}
+          </div>
           {caption.trim() && <p className="line-clamp-2 p-2.5 text-[13px]">{caption}</p>}
+        </div>
+      )}
+      {!reels && (
+        <div role="radiogroup" aria-label="Post frame" className="grid grid-cols-4 gap-1 rounded-control bg-raised p-1">
+          {POST_FRAMES.map((f) => (
+            <button key={f.label} type="button" role="radio" aria-checked={frame === f.ratio} onClick={() => onFrame(f.ratio)} className={cx("h-8 rounded-[9px] text-[13px] font-semibold transition", frame === f.ratio ? "bg-ink text-canvas" : "text-ink-muted hover:text-ink")}>
+              {f.label}
+            </button>
+          ))}
         </div>
       )}
       {media.length > 1 && (

@@ -92,7 +92,7 @@ async function toPosts(rows: IFeedPost[], viewer: IUser | null): Promise<FeedPos
         explicit: !!p.explicit,
         ...(p.plainBackdrop ? { plainBackdrop: true } : {}),
         textBg: p.media.length ? null : (p.textBg ?? null),
-        media: p.media.map((m) => ({ kind: m.kind, url: m.url, poster: m.poster ?? null })),
+        media: p.media.map((m) => ({ kind: m.kind, url: m.url, poster: m.poster ?? null, aspect: m.aspect ?? null, frame: m.frame ?? null })),
         upCount: p.upCount,
         downCount: p.downCount,
         myVote: voteOf.get(sid(p._id)) ?? 0,
@@ -212,7 +212,7 @@ export async function createPost(viewer: IUser, space: Space, access: SpaceAcces
     textBg: style === "card" ? (input.textBg ?? "sunset") : null,
     // only a community that allows explicit content takes explicit posts
     explicit: !!space.community.explicit && input.explicit,
-    media: input.media.map((m) => ({ kind: m.kind, url: m.url, poster: m.poster ?? null })),
+    media: input.media.map((m) => ({ kind: m.kind, url: m.url, poster: m.poster ?? null, aspect: m.aspect ?? null, frame: m.frame ?? null })),
     });
   } catch (e) {
     // two copies of the same send at the same moment: the other one won, so hand back that post
