@@ -331,12 +331,14 @@ export async function sendMessage(viewer: IUser, id: string, input: string | { b
     },
   );
   emitDm([viewer._id, ...others], convo._id);
-  // no buzz for a request: it waits quietly in their Requests
+  // a request (someone who isn't your friend writing first): it waits in Requests, and you hear about it once, as a
+  // decision to make (the Friends setting), not as a chat buzz
   if (convo.group) {
     // someone who blocked the sender stays in the group, but isn't buzzed for them
     const blockers = new Set((await Block.find({ blockerId: { $in: others }, blockedId: viewer._id }).select("blockerId").lean<{ blockerId: Types.ObjectId }[]>()).map((b) => sid(b.blockerId)));
     notify(others.filter((p) => !blockers.has(sid(p))), { title: convo.group.name, body: `${viewer.displayName}: ${preview}`, data: { type: "dm", conversationId: sid(convo._id) } }, { actorId: viewer._id, category: "messages", ref: `dm:${sid(convo._id)}` });
   } else if (!pendingRequest) notify([otherId], { title: viewer.displayName, body: preview, data: { type: "dm", conversationId: sid(convo._id) } }, { actorId: viewer._id, category: "messages", ref: `dm:${sid(convo._id)}` });
+  else notify([otherId], { title: `${viewer.displayName} wants to message you`, body: preview, data: { type: "dm", conversationId: sid(convo._id) } }, { actorId: viewer._id, category: "friends", groupKey: "msg-req", many: (n) => `${n} new message requests`, ref: `dm:${sid(convo._id)}` });
   const row = msg.toObject() as IMessage;
   const replies = await replyRefs([row]);
   return toMessage(row, viewer._id, [], row.replyToId ? (replies.get(sid(row.replyToId)) ?? null) : null);
