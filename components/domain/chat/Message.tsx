@@ -8,7 +8,8 @@ import { Avatar } from "@/components/ui/Avatar";
 import { cx } from "@/components/ui/cx";
 import { formatTime } from "@/lib/format";
 import type { ChannelMessageDTO, MentionDTO } from "@/lib/types";
-import type { ReactionKind } from "@/lib/reactions";
+import { REACTIONS, type ReactionKind } from "@/lib/reactions";
+import { useQuickReactions } from "@/lib/hooks/useQuickReactions";
 import { ChatImages } from "./ChatImages";
 import { Cards } from "./Cards";
 import { Embeds } from "./Embeds";
@@ -22,7 +23,7 @@ import { MASS_WORDS } from "@/lib/mentions";
 import { BotTag } from "@/components/domain/space/WebhooksPanel";
 import { PlanBadge } from "@/components/domain/account/PlanTab";
 import { EmojiText } from "@/components/ui/CustomEmoji";
-import { GiftButton, GiftRow } from "@/components/domain/gifts/Gifts";
+import { GiftButton } from "@/components/domain/gifts/Gifts";
 import { isEmojiOnly } from "@/lib/emoji-tokens";
 import { Formatted } from "@/components/ui/Formatted";
 
@@ -77,6 +78,23 @@ function PlainBody({ text, mentions, meId, mass }: { text: string; mentions: Men
   }
   if (last < text.length) out.push(text.slice(last));
   return <>{out.map((n, i) => (typeof n === "string" ? <EmojiText key={`t${i}`} text={n} /> : n))}</>;
+}
+
+/** Your three most-used reactions, one tap each (in the message's hover bar). */
+function QuickReactions({ onPick }: { onPick: (k: ReactionKind) => void }) {
+  const quick = useQuickReactions();
+  return (
+    <>
+      {quick.map((k) => {
+        const r = REACTIONS.find((x) => x.id === k)!;
+        return (
+          <button key={k} type="button" onClick={() => onPick(k)} aria-label={`React ${r.label}`} title={r.label} className="inline-flex size-8 items-center justify-center rounded-full text-[17px] leading-none transition hover:bg-raised">
+            {r.emoji}
+          </button>
+        );
+      })}
+    </>
+  );
 }
 
 export const Message = memo(function Message({
@@ -221,7 +239,7 @@ export const Message = memo(function Message({
               </>
             )}
             {!m.pending && <ReactionBar reactions={m.reactions} canReact={!!canReact && !!onReact} onToggle={(k) => onReact?.(m, k)} />}
-            {gifts && !m.pending && !m.deleted && !m.bot && <GiftRow target={{ type: "reply", id: m.id }} className="mt-1" />}
+            {gifts && !m.pending && !m.deleted && !m.bot && <GiftButton onlyGiven size="sm" target={{ type: "reply", id: m.id }} authorId={m.author.id} className="mt-1" />}
             {m.thread && !m.deleted && (
               <button type="button" onClick={() => onOpenThread?.(m.thread!.slug)} className="mt-1 inline-flex max-w-full items-center gap-1.5 rounded-control border border-line bg-raised/60 px-2.5 py-1 text-[13px] text-ink-muted hover:border-ink-muted/50 hover:text-ink">
                 <Icon name="message" size={13} />
@@ -237,9 +255,16 @@ export const Message = memo(function Message({
       </div>
       {(items.length > 0 || (canReact && onReact)) && !m.pending && !m.deleted && !editing && (
         <div className="absolute -top-3 right-4 flex items-center rounded-full border border-line bg-surface pointer-events-none opacity-0 shadow-sm transition group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100 sm:right-6 [@media(pointer:coarse)]:hidden">
+          {/* Discord's idea, our look: your three most-used reactions, any reaction, Reply, Gift, then ⋯ for the rest */}
+          {canReact && onReact && <QuickReactions onPick={(k) => onReact(m, k)} />}
           {canReact && onReact && <ReactButton onPick={(k) => onReact(m, k)} />}
+          {onReply && (
+            <button type="button" onClick={() => onReply(m)} aria-label="Reply" title="Reply" className="inline-flex size-8 items-center justify-center rounded-full text-ink-muted transition hover:bg-raised hover:text-ink">
+              <Icon name="reply" size={16} />
+            </button>
+          )}
           {gifts && !m.bot && <GiftButton target={{ type: "reply", id: m.id }} authorId={m.author.id} />}
-          {items.length > 0 && <OverflowMenu items={items} label="Message actions" compact />}
+          {items.length > 0 && <OverflowMenu items={items.filter((it) => it.label !== "Reply")} label="Message actions" compact />}
         </div>
       )}
       {sheet.open && <MessageSheet open onClose={sheet.close} onReact={canReact && onReact ? (k) => onReact(m, k) : undefined} items={items} copyText={m.body || undefined} />}

@@ -15,7 +15,7 @@ import { relativeStamp } from "@/lib/format";
 import { useNow } from "@/lib/hooks/useApi";
 import type { FeedPostDTO } from "@/lib/types";
 import { ShareButton } from "@/components/domain/ShareButton";
-import { GiftButton, GiftRow } from "@/components/domain/gifts/Gifts";
+import { GiftButton } from "@/components/domain/gifts/Gifts";
 import { compactCount } from "@/lib/format";
 import { VoteControl, postHref, useVote } from "./PostCard";
 import { PostComments } from "./PostComments";
@@ -115,7 +115,6 @@ export function PostView({ post, onChange, onClose, focusComment }: { post: Feed
                 <ShareButton path={postHref(post)} text={post.title || post.caption ? `${(post.title || post.caption).slice(0, 80)} · ${post.community.name}` : `A post in ${post.community.name}`} variant="pill" size="sm" />
                 <GiftButton target={{ type: "post", id: post.id }} authorId={post.author.id} off={!!post.community.explicit} variant="pill" />
               </div>
-              <GiftRow target={{ type: "post", id: post.id }} />
             </div>
           }
         />

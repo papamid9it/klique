@@ -75,19 +75,20 @@ export function GiftArt({ gift, size }: { gift: Pick<GiftDTO, "name" | "emoji" |
 }
 
 /** The gifts on an item, compact: 🌹×3 👑×1 (never who sent them). */
-export function GiftRow({ target, className }: { target: GiftTarget; className?: string }) {
-  const s = useSummary(target);
+/** The gift shown on an item's button: the one given most (a tie goes to the more valuable). */
+function topGift(s: GiftSummaryDTO | null) {
   if (!s?.total) return null;
-  return (
-    <ul aria-label={`${s.total} ${s.total === 1 ? "gift" : "gifts"}`} className={cx("flex flex-wrap items-center gap-1", className)}>
-      {s.items.map((g) => (
-        <li key={g.giftId} title={`${g.name} × ${g.count}`} className="inline-flex h-7 items-center gap-1 rounded-full bg-raised/70 px-2 text-[12.5px] font-semibold text-ink-muted">
-          <GiftArt gift={g} size={16} />
-          <span className="font-mono tabular-nums">×{g.count}</span>
-        </li>
-      ))}
-    </ul>
-  );
+  return [...s.items].sort((x, y) => y.count - x.count || y.price - x.price)[0] ?? null;
+}
+
+/** Each gift hops on its own beat, from its id, so a feed never has them all moving at once (and no timers). */
+const hopDelay = (id: string) => `-${[...id].reduce((n, c) => (n * 31 + c.charCodeAt(0)) % 9973, 7) % 16}s`;
+
+/** Fixed to the screen, so a scrolling panel or a card's edge never cuts it off: below the button, or above when there's no room. */
+function placeTray(el: HTMLElement): React.CSSProperties {
+  const r = el.getBoundingClientRect();
+  const left = Math.max(16, Math.min(r.left, window.innerWidth - 352));
+  return window.innerHeight - r.bottom > 440 ? { top: r.bottom + 8, left } : { bottom: window.innerHeight - r.top + 8, left };
 }
 
 /* ------------------------------------------------------------------ */
@@ -100,37 +101,64 @@ let trayCache: GiftTrayDTO | null = null;
  * Send a gift, like an emoji picker: the gifts with their Hype price, your balance (and a link to top up), and "Send
  * anonymously". Pick one, then Send. Not shown on your own things, in explicit communities, or signed out.
  */
-export function GiftButton({ target, authorId, off, size = "md", variant = "plain", icon, className }: { /** the icon's size, to match the buttons beside it exactly */ icon?: number; target: GiftTarget; authorId: string; /** an explicit community, or anywhere gifts don't belong */ off?: boolean; size?: "sm" | "md"; /** "pill": beside the post's Comments and Share pills; "plain": beside the react (smile) button */ variant?: "pill" | "plain"; className?: string }) {
+export function GiftButton({ target, authorId, off, size = "md", variant = "plain", icon, className, onlyGiven }: { /** shown only once it has gifts (a chat message's reaction area) */ onlyGiven?: boolean; /** the icon's size, to match the buttons beside it exactly */ icon?: number; target: GiftTarget; authorId: string; /** an explicit community, or anywhere gifts don't belong */ off?: boolean; size?: "sm" | "md"; /** "pill": beside the post's Comments and Share pills; "plain": beside the react (smile) button */ variant?: "pill" | "plain"; className?: string }) {
   const { user } = useAuth();
+  const s = useSummary(target);
   const [open, setOpen] = useState<React.CSSProperties | null>(null);
-  if (!user || off || user.id === authorId) return null;
-  // fixed to the screen, so a scrolling panel or a card's edge never cuts it off: below the button, or above when there's no room
-  const place = (el: HTMLElement) => {
-    const r = el.getBoundingClientRect();
-    const left = Math.max(16, Math.min(r.left, window.innerWidth - 336));
-    return window.innerHeight - r.bottom > 420 ? { top: r.bottom + 8, left } : { bottom: window.innerHeight - r.top + 8, left };
-  };
+  const top = topGift(s);
+  const canGift = !!user && !off && user.id !== authorId;
+  // Reddit's awards: no gifts yet, the plain gift icon; with gifts, the top gift and how many in all (no "×")
+  if ((!canGift || onlyGiven) && !top) return null;
+  const iconSize = icon ?? (variant === "pill" ? 17 : size === "sm" ? 14 : 16);
+  const face = top ? (
+    <>
+      <span className="gift-hop" style={{ "--gift-delay": hopDelay(target.id) } as React.CSSProperties}>
+        <GiftArt gift={top} size={iconSize + 3} />
+      </span>
+      <span className="font-mono text-[12.5px] font-semibold tabular-nums">{s!.total}</span>
+    </>
+  ) : (
+    <Icon name="gift" size={iconSize} />
+  );
+  const box = cx("inline-flex items-center justify-center gap-1 rounded-full text-ink-muted", variant === "pill" ? "h-9 bg-raised/70 px-3.5" : top ? (size === "sm" ? "h-7 px-1.5" : "h-8 px-2") : size === "sm" ? "size-7" : "size-8");
+  if (!canGift) return <span aria-label={`${s!.total} ${s!.total === 1 ? "gift" : "gifts"}`} className={cx(box, className)}>{face}</span>;
   return (
     <span className={cx("relative inline-flex", className)}>
       <button type="button" onClick={(e) => {
           // measured now: the event's element is gone by the time a state updater runs
-          const at = open ? null : place(e.currentTarget);
+          const at = open ? null : placeTray(e.currentTarget);
           setOpen(at);
-        }} aria-label="Send a gift" aria-expanded={!!open} title="Send a gift" className={cx("inline-flex items-center justify-center rounded-full text-ink-muted transition hover:text-ink", variant === "pill" ? "h-9 bg-raised/70 px-3.5 hover:bg-raised" : cx("hover:bg-raised", size === "sm" ? "size-7" : "size-8"), open && "bg-raised text-ink")}>
+        }} aria-label={top ? `${s!.total} ${s!.total === 1 ? "gift" : "gifts"}. Send a gift` : "Send a gift"} aria-expanded={!!open} title="Send a gift" className={cx(box, "transition hover:text-ink", variant === "pill" ? "hover:bg-raised" : "hover:bg-raised", open && "bg-raised text-ink")}>
         {/* the same line icon, size and colour as the buttons beside it; only the tray shows the colourful gifts */}
-        <Icon name="gift" size={icon ?? (variant === "pill" ? 17 : size === "sm" ? 14 : 16)} />
+        {face}
       </button>
-      {open && <GiftTray target={target} style={open} onClose={() => setOpen(null)} />}
+      {open && <GiftTray target={target} style={open} initial={top?.giftId} onClose={() => setOpen(null)} />}
     </span>
   );
 }
 
-function GiftTray({ target, style, onClose }: { target: GiftTarget; style: React.CSSProperties; onClose: () => void }) {
+/** What this has been given so far, at the top of the tray: 🌹 3  ❤️ 1 (never who). */
+function TrayReceived({ target }: { target: GiftTarget }) {
+  const s = useSummary(target);
+  if (!s?.total) return null;
+  return (
+    <ul aria-label="Gifts so far" className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line pb-2">
+      {s.items.map((g) => (
+        <li key={g.giftId} title={g.name} className="inline-flex items-center gap-1 text-[13px] font-semibold text-ink-muted">
+          <GiftArt gift={g} size={18} />
+          <span className="font-mono tabular-nums">{g.count}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function GiftTray({ target, style, initial, onClose }: { target: GiftTarget; style: React.CSSProperties; /** a gift to start picked (tapped in a gift row) */ initial?: string; onClose: () => void }) {
   const toast = useToast();
   const ref = useRef<HTMLDivElement>(null);
   const [data, setData] = useState<GiftTrayDTO | null>(trayCache);
   const [error, setError] = useState<string | null>(null);
-  const [picked, setPicked] = useState<GiftDTO | null>(null);
+  const [picked, setPicked] = useState<GiftDTO | null>(() => trayCache?.gifts.find((g) => g.id === initial) ?? null);
   const [anonymous, setAnonymous] = useState(false);
   const [busy, setBusy] = useState(false);
   // one key per gift picked here: the same send twice (a double click, a slow network) is one gift
@@ -141,6 +169,7 @@ function GiftTray({ target, style, onClose }: { target: GiftTarget; style: React
       (r) => {
         trayCache = r.data;
         setData(r.data);
+        if (initial) setPicked((p) => p ?? r.data.gifts.find((g) => g.id === initial) ?? null);
       },
       (e) => setError(errorMessage(e)),
     );
@@ -152,7 +181,8 @@ function GiftTray({ target, style, onClose }: { target: GiftTarget; style: React
       document.removeEventListener("pointerdown", away);
       document.removeEventListener("keydown", esc);
     };
-  }, [onClose]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function send() {
     if (!picked || busy) return;
@@ -176,7 +206,8 @@ function GiftTray({ target, style, onClose }: { target: GiftTarget; style: React
 
   const short = picked && data ? picked.hype > data.balance : false;
   return (
-    <div ref={ref} role="dialog" aria-label="Send a gift" style={style} className="fixed z-50 w-[20rem] max-w-[calc(100vw-2rem)] rounded-card border border-line bg-surface p-3 shadow-xl">
+    <div ref={ref} role="dialog" aria-label="Send a gift" style={style} className="fixed z-50 w-[21rem] max-w-[calc(100vw-2rem)] rounded-card border border-line bg-surface p-3 shadow-xl">
+      <TrayReceived target={target} />
       <div className="mb-2 flex items-center gap-2">
         <p className="flex-1 text-sm font-semibold">Send a gift</p>
         <span className="font-mono text-[12px] text-ink-muted">{data ? `${data.balance.toLocaleString("en-NG")} Hype` : ""}</span>
@@ -190,7 +221,7 @@ function GiftTray({ target, style, onClose }: { target: GiftTarget; style: React
         <p className="p-2 text-sm text-ink-muted">Gifts are switched off for now.</p>
       ) : (
         <>
-          <div className="grid max-h-64 grid-cols-4 gap-1 overflow-y-auto">
+          <div className="-mx-1 grid max-h-[min(24rem,55vh)] grid-cols-4 gap-1.5 overflow-y-auto p-1.5 [scrollbar-width:thin]">
             {data.gifts.map((g) => (
               <button
                 key={g.id}

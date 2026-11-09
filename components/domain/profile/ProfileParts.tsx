@@ -79,7 +79,8 @@ export function ProfileBanner({ handle, className, bannerUrl, bannerColor }: { h
 const PRESENCE_TONE: Record<Presence, string | null> = { online: "var(--success)", idle: "#f0b232", dnd: "var(--danger)", invisible: null };
 
 /**
- * The status dot on a profile picture: the status the person set (none when they're invisible).
+ * The status dot on a profile picture: the status the person set, while they are really around (the server sends
+ * no dot when they are invisible or have not been seen for 5 minutes: shownPresence in server/serializers).
  * `self`: it's your own picture, so it follows the status you just picked, and Invisible shows as a hollow grey dot.
  */
 export function PresenceDot({ presence, className, self }: { presence: Presence; className?: string; self?: boolean }) {

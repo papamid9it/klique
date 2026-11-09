@@ -75,6 +75,20 @@ const badgeOf = (u: Partial<Pick<IUser, "plan" | "planUntil" | "email">>): UserB
   return p === "free" ? null : p;
 };
 
+/** Someone counts as here when the app or site heard from them this recently (any signed-in request bumps lastSeenAt). */
+export const ONLINE_WINDOW_MS = 5 * 60_000;
+/**
+ * The status others see: what they picked (Online, Idle, Do not disturb), but only while they're really around.
+ * Away longer than ONLINE_WINDOW_MS, or Invisible, shows no dot at all (offline), like Discord. You see your own
+ * picked status from your own account (UserMe), never this.
+ */
+export function shownPresence(u: Pick<IUser, "presence" | "lastSeenAt">): IUser["presence"] & string {
+  const picked = u.presence ?? "online";
+  if (picked === "invisible") return "invisible";
+  const seen = u.lastSeenAt ? +new Date(u.lastSeenAt) : 0;
+  return Date.now() - seen <= ONLINE_WINDOW_MS ? picked : "invisible";
+}
+
 export const toProfile = (u: IUser): UserProfile => ({
   ...toBrief(u),
   bio: u.bio,
@@ -87,7 +101,7 @@ export const toProfile = (u: IUser): UserProfile => ({
   joinedAt: u.createdAt.toISOString(),
   points: u.points ?? 0,
   pronouns: u.pronouns ?? "",
-  presence: u.presence ?? "online",
+  presence: shownPresence(u),
   profileTheme: u.profileTheme ?? null,
   profileEffect: u.profileEffect ?? null,
   media: (u.media ?? []).map((m) => ({ kind: m.kind, url: m.url, poster: m.poster ?? null })),

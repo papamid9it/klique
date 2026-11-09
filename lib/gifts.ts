@@ -1,7 +1,7 @@
 /**
  * Gifts, paid with Hype. Hype is back (Nov 2026) as a wallet used ONLY for gifts (no designs): 1 Hype = ₦10. It's
  * bought on the website with Paystack, or in the phone app with Apple or Google (consumable products `hype_<n>`),
- * and spent on gifts people send to posts, comments, board posts and board replies. The person who gets a gift
+ * and spent on gifts people send to posts, comments, board posts and community chat messages (never DMs or klique chats). The person who gets a gift
  * earns a share of its naira value (70% by default) as cash, paid out through Payouts after a hold. Klique keeps the
  * rest. Hype itself is never cash for the buyer: no refunds, no cashing out. Shared by the site, server and apps.
  *

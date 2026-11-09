@@ -15,6 +15,7 @@ import { Gift, GiftSend, HypeEntry, HypeTopup, type HypeEntryKind, type IGift, t
 import { Payout, type IPayout, type PayoutBank } from "../models/Money";
 import { Board, Topic, type IBoard, type ITopic } from "../models/Topic";
 import { User, type IUser } from "../models/User";
+import { Subcommunity } from "../models/Subcommunity";
 import { spaceAccess } from "../policies/access";
 import { isSiteAdmin } from "../policies/hosting";
 import { GHOST, loadBriefs } from "../serializers";
@@ -272,26 +273,34 @@ async function resolveTarget(type: GiftTargetType, id: string): Promise<Target> 
     ({ authorId, communityId } = c);
     href = `/p/${sid(c.postId)}`;
     label = "your comment";
-  } else if (type === "topic" || type === "reply") {
-    let topic: ITopic | null;
-    let msgId: string | null = null;
-    if (type === "topic") topic = await Topic.findById(_id).lean<ITopic>();
-    else {
-      const m = await ChannelMessage.findById(_id).select("authorId channelId deletedAt").lean<IChannelMessage>();
-      if (!m || m.deletedAt || !m.authorId) throw notFound("That reply is gone.");
-      const ch = await Channel.findById(m.channelId).select("topicId").lean<IChannel>();
-      // gifts are for board replies only, never ordinary chat
-      if (!ch?.topicId) throw badRequest("Gifts can only be sent to board replies, not chat messages.");
-      topic = await Topic.findById(ch.topicId).lean<ITopic>();
-      authorId = m.authorId;
-      msgId = id;
+  } else if (type === "reply") {
+    // a message in a community's chat: a channel, a thread or a board post's replies (DMs, group DMs and klique
+    // chats are kept elsewhere and never take gifts)
+    const m = await ChannelMessage.findById(_id).select("authorId channelId deletedAt").lean<IChannelMessage>();
+    if (!m || m.deletedAt || !m.authorId) throw notFound("That message is gone.");
+    const ch = await Channel.findById(m.channelId).select("topicId communityId subcommunityId slug parentChannelId").lean<IChannel>();
+    if (!ch) throw notFound("That chat is gone.");
+    authorId = m.authorId;
+    communityId = ch.communityId;
+    const c = await Community.findById(ch.communityId).select("slug").lean<Pick<ICommunity, "slug">>();
+    if (ch.topicId) {
+      const topic = await Topic.findById(ch.topicId).select("boardId").lean<ITopic>();
+      const b = topic?.boardId ? await Board.findById(topic.boardId).select("slug").lean<Pick<IBoard, "slug">>() : null;
+      href = `/communities/${c?.slug}?view=topics&b=${b?.slug ?? ""}&t=${sid(ch.topicId)}&m=${id}`;
+      label = "your reply";
+    } else {
+      const sub = ch.subcommunityId ? await Subcommunity.findById(ch.subcommunityId).select("slug").lean<{ slug: string }>() : null;
+      href = ch.parentChannelId ? `/communities/${c?.slug}?th=${ch.slug}&m=${id}` : `/communities/${c?.slug}?c=${ch.slug}${sub ? `&g=${sub.slug}` : ""}&m=${id}`;
+      label = "your message";
     }
+  } else if (type === "topic") {
+    const topic = await Topic.findById(_id).lean<ITopic>();
     if (!topic) throw notFound("That board post is gone.");
-    authorId ??= topic.authorId;
+    authorId = topic.authorId;
     communityId = topic.communityId;
     const [c, b] = await Promise.all([Community.findById(topic.communityId).select("slug").lean<Pick<ICommunity, "slug">>(), topic.boardId ? Board.findById(topic.boardId).select("slug").lean<Pick<IBoard, "slug">>() : null]);
-    href = `/communities/${c?.slug}?view=topics&b=${b?.slug ?? ""}&t=${sid(topic._id)}${msgId ? `&m=${msgId}` : ""}`;
-    label = type === "topic" ? "your board post" : "your reply";
+    href = `/communities/${c?.slug}?view=topics&b=${b?.slug ?? ""}&t=${sid(topic._id)}`;
+    label = "your board post";
   } else throw badRequest("Gifts can't go there.");
   if (!authorId) throw badRequest("That can't take gifts.");
   const community = communityId ? await Community.findById(communityId).lean<ICommunity>() : null;

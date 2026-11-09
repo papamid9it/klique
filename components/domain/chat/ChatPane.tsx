@@ -33,6 +33,7 @@ import { ReplyingTo } from "./ReplyQuote";
 import { AttachedSticker, StickerPicker, type StickerChoice } from "./Reactions";
 import { PollComposer } from "./Polls";
 import { EmojiPicker } from "./EmojiPicker";
+import { countReaction } from "@/lib/hooks/useQuickReactions";
 import { TypingLine } from "./TypingLine";
 import { useTyping } from "@/lib/hooks/useTyping";
 import { emitAppEvent } from "@/lib/appEvents";
@@ -279,7 +280,7 @@ export function ChatPane({
                           <span className="h-px flex-1 bg-line" />
                         </li>
                       )}
-                      <Message gifts={gifts} m={m} showHead={showHead} mine={!!user && m.author.id === user.id} meId={user?.id ?? null} onDelete={(msg) => (shiftHeld() ? void chat.remove(msg.id).then((err) => err && toast(err, "error")) : setDeleting(msg))} onEdit={(msg, body) => chat.edit(msg.id, body)} onReport={user ? setReporting : undefined} onReply={isMember && channel.canPost ? setReplyTo : undefined} onPin={(msg, pinned) => void chat.pin(msg.id, pinned).then((err) => (err ? toast(err, "error") : setPinTick((n) => n + 1)))} onJump={jump} canReact={isMember && !!user} onReact={(msg, kind) => void chat.react(msg.id, kind).then((err) => err && toast(err, "error"))} onSaveSticker={user ? saveSticker : undefined} onOpenThread={onOpenThread} onCardPress={src.pressButton && isMember ? pressCard : undefined} onThread={onOpenThread && space && !space.sub && isMember && !channel.thread ? (msg) => onOpenThread(msg.thread ? msg.thread.slug : draftThread({ space, channelSlug: channel.slug, messageId: msg.id, author: msg.author.displayName, body: msg.body })) : undefined} />
+                      <Message gifts={gifts ?? !!space} m={m} showHead={showHead} mine={!!user && m.author.id === user.id} meId={user?.id ?? null} onDelete={(msg) => (shiftHeld() ? void chat.remove(msg.id).then((err) => err && toast(err, "error")) : setDeleting(msg))} onEdit={(msg, body) => chat.edit(msg.id, body)} onReport={user ? setReporting : undefined} onReply={isMember && channel.canPost ? setReplyTo : undefined} onPin={(msg, pinned) => void chat.pin(msg.id, pinned).then((err) => (err ? toast(err, "error") : setPinTick((n) => n + 1)))} onJump={jump} canReact={isMember && !!user} onReact={(msg, kind) => (countReaction(kind), void chat.react(msg.id, kind).then((err) => err && toast(err, "error")))} onSaveSticker={user ? saveSticker : undefined} onOpenThread={onOpenThread} onCardPress={src.pressButton && isMember ? pressCard : undefined} onThread={onOpenThread && space && !space.sub && isMember && !channel.thread ? (msg) => onOpenThread(msg.thread ? msg.thread.slug : draftThread({ space, channelSlug: channel.slug, messageId: msg.id, author: msg.author.displayName, body: msg.body })) : undefined} />
                     </div>
                   );
                 })}

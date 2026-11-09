@@ -22,7 +22,7 @@ import type { TopicDetailDTO, TopicDTO } from "@/lib/types";
 import { Linkified, LikeButton } from "./parts";
 import { TopicMedia } from "./TopicMedia";
 import { TopicMenu } from "./TopicMenu";
-import { GiftButton, GiftRow } from "@/components/domain/gifts/Gifts";
+import { GiftButton } from "@/components/domain/gifts/Gifts";
 
 /* ------------------------------------------------------------------ */
 /* Keeping the list and the open post in step                          */
@@ -276,7 +276,6 @@ function PostIntro({ t, empty, full }: { t: TopicDTO; empty: boolean; full?: boo
         </p>
       )}
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <GiftRow target={{ type: "topic", id: t.id }} />
         <GiftButton target={{ type: "topic", id: t.id }} authorId={t.author.id} />
       </div>
       <div className="mt-5 flex items-center gap-3 text-[11px] font-semibold tracking-wide text-ink-muted uppercase">

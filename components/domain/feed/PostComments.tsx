@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
 import { FeedService, newClientKey } from "@/app/services/FeedService";
-import { GiftButton, GiftRow } from "@/components/domain/gifts/Gifts";
+import { GiftButton } from "@/components/domain/gifts/Gifts";
 import { AttachedSticker, ReactButton, ReactionBar, StickerPicker, StickerView, type StickerChoice } from "@/components/domain/chat/Reactions";
 import { EditedTag, MessageEditor } from "@/components/domain/chat/MessageEditor";
 import { useAuth } from "@/components/providers/AuthProvider";
@@ -307,7 +307,6 @@ export function PostComments({ post, onCount, pinned, top, focus }: { post: Feed
           </>
         )}
         {!c.deleted && <ReactionBar reactions={c.reactions} canReact={canWrite && !!user} onToggle={(k) => void react(c, k)} className="mt-1" />}
-        {!c.deleted && <GiftRow target={{ type: "comment", id: c.id }} className="mt-1" />}
         {/* Instagram's line under the comment: when · Reply · react */}
         <div className="mt-1 flex items-center gap-1 text-[12.5px] font-semibold text-ink-muted">
           <time dateTime={c.createdAt} className="pr-1 font-normal">

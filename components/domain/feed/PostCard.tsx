@@ -8,7 +8,7 @@ import { errorMessage } from "@/app/ApiCore";
 import { FeedService } from "@/app/services/FeedService";
 import { SpaceService } from "@/app/services/SpaceService";
 import { OverflowMenu } from "@/components/domain/OverflowMenu";
-import { GiftButton, GiftRow } from "@/components/domain/gifts/Gifts";
+import { GiftButton } from "@/components/domain/gifts/Gifts";
 import { ShareButton, absoluteUrl } from "@/components/domain/ShareButton";
 import { FeedMedia } from "./FeedMedia";
 import { LongPost, TextCard } from "./TextPost";
@@ -206,7 +206,6 @@ export function PostCard({ post: p, onChange, onRemoved, onOpenComments, showCom
         <ShareButton path={postHref(p)} text={p.title || p.caption ? `${(p.title || p.caption).slice(0, 80)} · ${p.community.name}` : `A post in ${p.community.name}`} variant="pill" size="sm" />
         <GiftButton target={{ type: "post", id: p.id }} authorId={p.author.id} off={!!p.community.explicit} variant="pill" />
       </div>
-      <GiftRow target={{ type: "post", id: p.id }} className="mt-2" />
 
       {fitting && (
         <Modal open onClose={() => setFitting(false)} title="How it shows" size="sm">

@@ -12,7 +12,7 @@ import { LikeButton } from "./parts";
 import { TopicMenu, topicHref } from "./TopicMenu";
 import { prefetchTopic, seedTopic } from "./TopicThread";
 import { UserName } from "@/components/ui/UserName";
-import { GiftButton, GiftRow } from "@/components/domain/gifts/Gifts";
+import { GiftButton } from "@/components/domain/gifts/Gifts";
 
 /**
  * One post in a board, like a Discord forum post card: tags, title, who wrote it and the start of the text, a
@@ -63,6 +63,10 @@ export function TopicRow({ topic: t, onChange, onRemoved, onTag, active }: { top
             <Icon name="message" size={14} />
             <span className="font-mono tabular-nums">{compactCount(t.commentCount)}</span>
           </span>
+          {/* the gift button right after the replies, then any gifts it has */}
+          <span className="relative">
+            <GiftButton target={{ type: "topic", id: t.id }} authorId={t.author.id} size="sm" />
+          </span>
           <span aria-hidden="true">·</span>
           <time dateTime={t.lastActivityAt} className="px-1">
             {now ? `Active ${relativeStamp(t.lastActivityAt, now)}` : ""}
@@ -72,10 +76,6 @@ export function TopicRow({ topic: t, onChange, onRemoved, onTag, active }: { top
               <Icon name="bell" size={12} /> Following
             </span>
           )}
-          <GiftRow target={{ type: "topic", id: t.id }} className="relative" />
-          <span className="relative">
-            <GiftButton target={{ type: "topic", id: t.id }} authorId={t.author.id} size="sm" />
-          </span>
           <span className="ml-auto">
             <TopicMenu topic={t} onChange={onChange} onRemoved={onRemoved} />
           </span>

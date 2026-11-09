@@ -43,7 +43,7 @@ function request(ids: string[]) {
 
 /**
  * Text with custom emoji (`<:name:id>`) as little pictures; unknown or deleted ones read `:name:`. Inline they're the
- * size of a normal emoji (1.375em of the text around them, like Discord); `jumbo` (a message that's only emoji) shows
+ * a little bigger than a normal emoji (1.6em of the text around them); `jumbo` (a message that's only emoji) shows
  * them at 48px. `size` sets a fixed size in pixels instead.
  */
 export function EmojiText({ text, size, jumbo }: { text: string; size?: number; jumbo?: boolean }) {
@@ -58,7 +58,7 @@ export function EmojiText({ text, size, jumbo }: { text: string; size?: number; 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ids.join(",")]);
   if (!ids.length) return <>{text}</>;
-  const box = jumbo ? `${JUMBO_PX}px` : size ? `${size}px` : "1.375em";
+  const box = jumbo ? `${JUMBO_PX}px` : size ? `${size}px` : "1.6em";
   // asked for at twice the largest size it shows, for sharp screens
   const ask = (jumbo ? JUMBO_PX : (size ?? 32)) * 2;
   const out: ReactNode[] = [];
@@ -68,9 +68,12 @@ export function EmojiText({ text, size, jumbo }: { text: string; size?: number; 
     if (at > last) out.push(<Fragment key={`t${at}`}>{text.slice(last, at)}</Fragment>);
     const e = known.get(m[2]);
     out.push(
-      e ? (
+      e === undefined ? (
+        // still loading: keep its place (never flash ":name:" first)
+        <span key={`e${at}`} aria-label={`:${m[1]}:`} className={jumbo ? "mr-1 inline-block align-bottom" : "mx-px inline-block align-[-0.35em]"} style={{ width: box, height: box }} />
+      ) : e ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img key={`e${at}`} src={e.animated ? e.url : cdn(e.url, { w: ask })} alt={`:${e.name}:`} title={`:${e.name}:`} loading="lazy" className={jumbo ? "mr-1 inline-block object-contain align-bottom" : "mx-px inline-block object-contain align-[-0.3em]"} style={{ width: box, height: box }} />
+        <img key={`e${at}`} src={e.animated ? e.url : cdn(e.url, { w: ask })} alt={`:${e.name}:`} title={`:${e.name}:`} loading="lazy" className={jumbo ? "mr-1 inline-block object-contain align-bottom" : "mx-px inline-block object-contain align-[-0.35em]"} style={{ width: box, height: box }} />
       ) : (
         <Fragment key={`e${at}`}>{`:${m[1]}:`}</Fragment>
       ),

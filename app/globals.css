@@ -501,3 +501,24 @@ html[data-motion="off"] .donate-btn:hover, html[data-motion="off"] .donate-btn:f
     font-size: 16px !important;
   }
 }
+
+/*
+ * A gift on a post or message (components/domain/gifts): now and then (each its own beat, from --gift-delay), a quick
+ * hop and tilt, like Reddit's awards. Transform only, so long feeds stay smooth; still for reduced-motion users.
+ */
+@keyframes gift-hop {
+  0%, 92%, 100% { transform: none; }
+  94% { transform: translateY(-18%) rotate(-10deg) scale(1.15); }
+  96% { transform: translateY(0) rotate(8deg) scale(1.05); }
+  98% { transform: rotate(-4deg); }
+}
+.gift-hop {
+  display: inline-block;
+  transform-origin: 50% 85%;
+  animation: gift-hop 16s ease-in-out infinite;
+  animation-delay: var(--gift-delay, 0s);
+}
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-motion="on"]) .gift-hop { animation: none; }
+}
+html[data-motion="off"] .gift-hop { animation: none; }

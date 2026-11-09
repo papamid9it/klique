@@ -60,7 +60,7 @@ export default async function PaymentTermsPage() {
       <Section n={2} title="Hype and gifts" id="gifts">
         <ul>
           <li>
-            Hype is used only to send gifts to posts, comments, board posts and board replies. <strong>1 Hype is ₦10.</strong> You can buy it on the website (paid with Paystack) or in the phone app (paid with Apple or Google, where packs cost more because the stores take a share).
+            Hype is used only to send gifts to posts, comments, board posts and messages in community chats (not private messages, group messages or klique chats). <strong>1 Hype is ₦10.</strong> You can buy it on the website (paid with Paystack) or in the phone app (paid with Apple or Google, where packs cost more because the stores take a share).
           </li>
           <li>
             <strong>Hype can&apos;t be refunded, cashed out, or moved to another account.</strong> It isn&apos;t money for the person who buys it, and a gift can&apos;t be taken back once it&apos;s sent. Check the gift before you send it.
