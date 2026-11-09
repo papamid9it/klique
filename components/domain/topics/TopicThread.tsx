@@ -186,7 +186,7 @@ export function TopicSide({ onClose, bare, full }: { onClose: () => void; bare?:
           <SpaceError status={status} message={error} onRetry={reload} />
         </div>
       ) : !data || !t ? (
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="relative min-h-0 flex-1 overflow-y-auto">
           <PostSkeleton />
         </div>
       ) : (

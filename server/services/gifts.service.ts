@@ -609,5 +609,3 @@ export async function adminGiftsCsv(kind: "purchases" | "sends", r: Range): Prom
   return ["date,from,from_handle,anonymous,to,to_handle,gift,price_naira,receiver_naira,klique_naira,target,community", ...rep.sends.map((g) => [g.createdAt, g.from.displayName, g.from.handle, g.anonymous, g.to.displayName, g.to.handle, g.gift.name, g.price, g.receiverAmount, g.kliqueAmount, `${g.target.type}:${g.target.id}`, g.community?.name ?? ""].map(esc).join(","))].join("\n");
 }
 
-/** Site admins see anonymous senders; everyone else never does. */
-export const canSeeAnonymous = (u: IUser | null) => isSiteAdmin(u);

@@ -110,7 +110,7 @@ const crewTabHref = (crew: CrewDTO, tab: string | null) => {
 /** A scrolling page column, for everything that isn't the chat (loading, the way in, the requests list). */
 function Page({ children }: { children: ReactNode }) {
   return (
-    <div className="h-full min-h-0 flex-1 overflow-y-auto">
+    <div className="relative h-full min-h-0 flex-1 overflow-y-auto">
       <div className="mx-auto max-w-3xl px-4 py-6 sm:px-8">{children}</div>
     </div>
   );
@@ -403,7 +403,7 @@ function Crew({ crew, tab, embedded, onChange, onGone, onRead, onMenu, reload }:
   // not in the klique: no chat, so the details (and the way in) fill the page (site admins still see the chat, to moderate)
   if (!inCrew && !v.canChat) {
     return (
-      <div className="h-full min-h-0 flex-1 overflow-y-auto">
+      <div className="relative h-full min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-3xl px-4 py-6 sm:px-8">
           {onMenu && (
             <button type="button" onClick={onMenu} aria-label="Open channels" className="mb-2 -ml-2 inline-flex size-10 items-center justify-center rounded-full text-ink hover:bg-raised lg:hidden">

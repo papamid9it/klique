@@ -97,6 +97,12 @@ function assertTrustedOrigin(req: NextRequest, usedBearer: boolean) {
   throw new ApiError(403, "Blocked: this origin isn't allowed to call the API.", { code: "bad_origin" });
 }
 
+/** What someone with no date of birth may still do: see and change their own account (to add it), and sign in or out. */
+function DOB_FREE(req: NextRequest) {
+  const path = req.nextUrl.pathname;
+  return path === "/api/me" || path.startsWith("/api/auth/") || path === "/api/realtime/token" || path === "/api/app/version" || path === "/api/app/mobile-version";
+}
+
 /* ------------------------------------------------------------------ */
 /* The wrapper                                                         */
 /* ------------------------------------------------------------------ */
@@ -151,6 +157,9 @@ export function withApi<P = Record<string, never>, A extends AuthMode = "optiona
           // "online now" (for @here): at most one write every couple of minutes per person, never in the way
           if (viewer && (!viewer.lastSeenAt || Date.now() - +viewer.lastSeenAt > 120_000)) void User.updateOne({ _id: viewer._id }, { $set: { lastSeenAt: new Date() } }).catch(() => {});
           if (viewer?.suspendedAt) throw new ApiError(403, "This account has been suspended. Contact support if you think that's a mistake.", { code: "suspended" });
+          // no date of birth yet (a Google sign-up, or an account from before it was asked): nothing else until it's
+          // given, so age rules (18+ communities, kliques) always have it. The site and app show "When's your birthday?"
+          if (viewer && !viewer.dob && !DOB_FREE(req)) throw new ApiError(428, "Add your date of birth to carry on.", { code: "dob_required" });
         }
       }
       if (opts.auth === "required" && !viewer) throw unauthorized();

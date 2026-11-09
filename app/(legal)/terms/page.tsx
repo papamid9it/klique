@@ -19,7 +19,7 @@ export default function TermsPage() {
     >
       <Section n={1} title="Who can use klique">
         <ul>
-          <li>You must be at least 13 years old. If you&apos;re under 18, you confirm a parent or guardian has agreed to these terms.</li>
+          <li>You must be at least 18 years old to use klique. We ask for your date of birth when you sign up (or the first time you sign in, if we don&apos;t have it yet), and it can be set once.</li>
           <li>You must give accurate sign-up details and keep your password secret. You&apos;re responsible for what happens on your account.</li>
           <li>One person, one account. Don&apos;t impersonate anyone or create accounts to get around a suspension.</li>
         </ul>

@@ -265,7 +265,8 @@ export async function listChannels(viewer: IUser | null, space: Space, access: S
     if (subMs.length || overseer) {
       const subs = await Subcommunity.find(overseer ? { communityId } : { _id: { $in: subMs.map((m) => m.subcommunityId) } }).sort({ createdAt: 1 }).lean<ISubcommunity[]>();
       const parentM = await Membership.findOne({ userId: viewer._id, communityId, subcommunityId: null }).lean<IMembership>();
-      for (const sub of subs) await ensureDefaultGroupChannels(sub._id, communityId, sub.ownerId);
+      // a new group's first two channels, once (skipped for every group that already has them: no write per request)
+      await Promise.all(subs.filter((sub) => !sub.channelsReady).map((sub) => ensureDefaultGroupChannels(sub._id, communityId, sub.ownerId)));
       const subChannels = await Channel.find({ communityId, subcommunityId: { $in: subs.map((s) => s._id) }, topicId: null }).sort({ position: 1, createdAt: 1 }).lean<IChannel[]>();
       for (const sub of subs) {
         const m = subMs.find((x) => sid(x.subcommunityId!) === sid(sub._id)) ?? null;

@@ -22,31 +22,35 @@ export type GiftTarget = { type: GiftTargetType; id: string };
 
 const known = new Map<string, GiftSummaryDTO>();
 const waiting = new Set<string>();
-const listeners = new Set<() => void>();
+// per item: only the buttons showing that item redraw when its gifts change (not every gift on the screen)
+const listeners = new Map<string, Set<() => void>>();
 let timer: ReturnType<typeof setTimeout> | null = null;
+
+const tell = (key: string) => listeners.get(key)?.forEach((l) => l());
+
+/** Ask for everything wanted in the last moment in one request (100 at a time; the rest go in the next one). */
+function flush() {
+  timer = null;
+  const batch = [...waiting].slice(0, 100);
+  batch.forEach((k) => waiting.delete(k));
+  GiftService.summaries(batch).then((r) => r.data).then(
+    (res) => batch.forEach((k) => known.set(k, res[k] ?? { total: 0, items: [] })),
+    () => batch.forEach((k) => known.set(k, { total: 0, items: [] })),
+  ).finally(() => {
+    batch.forEach(tell);
+    if (waiting.size && !timer) timer = setTimeout(flush, 40);
+  });
+}
 
 function want(key: string) {
   if (known.has(key) || waiting.has(key)) return;
   waiting.add(key);
-  if (timer) return;
-  timer = setTimeout(async () => {
-    timer = null;
-    const batch = [...waiting].slice(0, 100);
-    batch.forEach((k) => waiting.delete(k));
-    try {
-      const res = await GiftService.summaries(batch);
-      for (const k of batch) known.set(k, res.data[k] ?? { total: 0, items: [] });
-    } catch {
-      for (const k of batch) known.set(k, { total: 0, items: [] });
-    }
-    listeners.forEach((l) => l());
-    if (waiting.size) want([...waiting][0]);
-  }, 40);
+  if (!timer) timer = setTimeout(flush, 40);
 }
 
 function setSummary(key: string, s: GiftSummaryDTO) {
   known.set(key, s);
-  listeners.forEach((l) => l());
+  tell(key);
 }
 
 function useSummary(target: GiftTarget): GiftSummaryDTO | null {
@@ -54,9 +58,13 @@ function useSummary(target: GiftTarget): GiftSummaryDTO | null {
   const [, tick] = useState(0);
   useEffect(() => {
     const l = () => tick((n) => n + 1);
-    listeners.add(l);
+    const set = listeners.get(key) ?? new Set();
+    listeners.set(key, set.add(l));
     want(key);
-    return () => void listeners.delete(l);
+    return () => {
+      set.delete(l);
+      if (!set.size) listeners.delete(key);
+    };
   }, [key]);
   return known.get(key) ?? null;
 }
@@ -173,6 +181,8 @@ function GiftTray({ target, style, initial, onClose, onSent }: { target: GiftTar
   const key = useRef(newClientKey());
 
   useEffect(() => {
+    // the celebration's code comes in now, while they pick, so it's ready the moment they send
+    void import("./GiftBurst");
     GiftService.tray().then(
       (r) => {
         trayCache = r.data;

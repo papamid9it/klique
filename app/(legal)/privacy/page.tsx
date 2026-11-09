@@ -66,7 +66,7 @@ export default function PrivacyPage() {
       </Section>
 
       <Section n={7} title="Children">
-        <p>klique is for people aged 13 and over. If you believe a child under 13 has an account, tell us{REPORT_EMAIL && <> at <ReportEmail /></>} and we&apos;ll delete it.</p>
+        <p>klique is for people aged 18 and over. If you believe someone under 18 has an account, tell us{REPORT_EMAIL && <> at <ReportEmail /></>} and we&apos;ll delete it.</p>
       </Section>
 
       <Section n={8} title="Security">

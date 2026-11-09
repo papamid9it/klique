@@ -262,6 +262,13 @@ export const REPORT_REASONS = [
 export type ReportReason = (typeof REPORT_REASONS)[number]["id"];
 
 /**
+ * The youngest anyone may be to use Klique (checked by the server at sign-up and when a date of birth is first added).
+ * Under it: no account, and an account with no date of birth yet can't carry on.
+ */
+export const MIN_SIGNUP_AGE = 18;
+export const tooYoungText = () => `You need to be ${MIN_SIGNUP_AGE} or older to use Klique.`;
+
+/**
  * How a picture or video post shows its media inside the post's frame (feed cards, community Posts, the post page):
  * cover fills the frame, cropped to fit (the default, and old posts); black shows all of it on black bars;
  * backdrop shows all of it over a blurred, darkened copy of itself. The full-screen viewer always shows it whole.

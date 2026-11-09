@@ -7,7 +7,8 @@ import { Community, type ICommunity } from "../models/Community";
 import { Membership } from "../models/Membership";
 import { Rsvp } from "../models/Rsvp";
 import { User, type IUser } from "../models/User";
-import { isAdult } from "../policies/adult";
+import { ageOn, isAdult } from "../policies/adult";
+import { MIN_SIGNUP_AGE, tooYoungText } from "@/lib/constants";
 import { toBrief, toCommunityCards, toMe, toProfile } from "../serializers";
 import { shownMedia } from "./profile-media.service";
 import { deleteUploads } from "./media.service";
@@ -47,6 +48,7 @@ export async function updateMe(viewer: IUser, patch: z.infer<typeof profileUpdat
   // date of birth: once; after that only Klique (an admin) changes it
   if (patch.dob !== undefined && patch.dob !== (viewer.dob ? viewer.dob.toISOString().slice(0, 10) : null)) {
     if (viewer.dobSetAt) throw forbidden("Your date of birth is set. Contact Klique support to change it.");
+    if ((ageOn(new Date(`${patch.dob}T00:00:00Z`)) ?? 0) < MIN_SIGNUP_AGE) throw new ApiError(422, tooYoungText(), { errors: { dob: tooYoungText() }, code: "too_young" });
     set.dob = new Date(`${patch.dob}T00:00:00Z`);
     set.dobSetAt = new Date();
   }

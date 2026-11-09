@@ -461,7 +461,7 @@ function CommunityWorkspace({ slug }: { slug: string }) {
 
   return (
     <TopicDetailProvider slug={slug} topicId={threadId}>
-    <div className="flex h-dvh min-h-0">
+    <div className="relative flex h-dvh min-h-0 overflow-hidden">
       <aside className="hidden w-64 shrink-0 border-r border-line bg-surface/40 lg:block">{list()}</aside>
 
       <section className="flex min-w-0 flex-1 flex-col" aria-label={view ? viewTable[view].label : "Conversation"}>
@@ -707,7 +707,9 @@ function CommunityWorkspace({ slug }: { slug: string }) {
 /** Scrollable page area. `inner` constrains width for non-chat views; `wide` and `full` loosen it. */
 function Scroll({ children, inner, wide, full, fill }: { children: ReactNode; inner?: boolean; wide?: boolean; full?: boolean; fill?: boolean }) {
   return (
-    <div className={inner ? "min-h-0 flex-1 overflow-y-auto" : "h-dvh overflow-y-auto"}>
+    // relative: anything absolutely placed inside (screen-reader text, a chart's tooltip) is held by this scroller.
+    // Without it, it belongs to the whole page, and the page itself scrolled, leaving the side columns cut short.
+    <div className={inner ? "relative min-h-0 flex-1 overflow-y-auto" : "relative h-dvh overflow-y-auto"}>
       {inner ? <div className={cx("mx-auto px-4 py-6 sm:px-8", fill ? "max-w-none" : full ? "max-w-6xl" : wide ? "max-w-5xl" : "max-w-3xl")}>{children}</div> : <div className="p-4 sm:p-8">{children}</div>}
     </div>
   );

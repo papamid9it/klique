@@ -11,6 +11,8 @@ import { assertPlace } from "./helpers";
 import { sendVerification } from "./account.service";
 import { unreadTotal } from "./messaging.service";
 import type { UserMe } from "@/lib/types";
+import { MIN_SIGNUP_AGE, tooYoungText } from "@/lib/constants";
+import { ageOn } from "../policies/adult";
 
 export interface AuthResult {
   user: UserMe;
@@ -24,6 +26,7 @@ export async function signup(input: z.infer<typeof signupSchema>): Promise<AuthR
     User.exists({ handle: input.handle }),
   ]);
   assertPlace(input, true);
+  if ((ageOn(new Date(`${input.dob}T00:00:00Z`)) ?? 0) < MIN_SIGNUP_AGE) throw new ApiError(422, tooYoungText(), { errors: { dob: tooYoungText() }, code: "too_young" });
   const errors: Record<string, string> = {};
   if (emailTaken) errors.email = "An account with that email already exists.";
   if (handleTaken) errors.handle = "That handle is already taken.";

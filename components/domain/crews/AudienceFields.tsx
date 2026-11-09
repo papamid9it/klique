@@ -77,6 +77,16 @@ export function AudienceFields({ value, onChange, canWomen, canMen, errors, minS
               </span>
             </label>
           ))}
+        {/* no gender on their profile yet: say where to set it, so women-only and men-only can show */}
+        {!canWomen && !canMen && (
+          <p className="text-xs text-ink-muted">
+            Want a women-only or men-only klique? Set your gender in{" "}
+            <a href="/settings?tab=profile" className="font-semibold text-accent-text underline">
+              Settings, Profile
+            </a>{" "}
+            first.
+          </p>
+        )}
         {value.audience === "mixed" && (
           <div className="grid grid-cols-2 gap-3 pt-1">
             <TextField label="Spots for women" type="number" inputMode="numeric" min={0} max={99} value={value.womenSpots} onChange={(e) => set({ womenSpots: e.target.value })} />

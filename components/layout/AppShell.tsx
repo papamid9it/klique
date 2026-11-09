@@ -12,6 +12,7 @@ import { CommunityPreloader } from "./CommunityPreloader";
 import { Sidebar } from "./Sidebar";
 import { HomePanel } from "./HomePanel";
 import { usePagePath } from "@/lib/nav";
+import { BirthdayGate } from "@/components/domain/account/BirthdayGate";
 
 /** /communities/<slug> (not /communities/new) is the chat workspace and owns its own panes; so does a crew (its chat). */
 const isWorkspace = (p: string) => /^\/communities\/(?!new$)[^/]+\/?$/.test(p) || /^\/kliques\/[^/]+\/?$/.test(p) || p === "/messages" || p.startsWith("/messages/");
@@ -38,11 +39,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (status === "authed") reportHomeStyle();
   }, [status]);
-  const mustOnboard = status === "authed" && !!user && !user.onboarded && pathname !== "/welcome";
+  // no date of birth yet: that comes first, before /welcome and everything else (the server insists too)
+  const needsBirthday = status === "authed" && !!user && !user.dob;
+  const mustOnboard = !needsBirthday && status === "authed" && !!user && !user.onboarded && pathname !== "/welcome";
   useEffect(() => {
     // ?why=finish: the welcome page says why they're back there instead of silently bouncing them
     if (mustOnboard) router.replace("/welcome?why=finish");
   }, [mustOnboard, router]);
+  if (needsBirthday) return <BirthdayGate />;
   if (mustOnboard) return null;
   // /welcome is a full-screen flow of its own
   if (pathname === "/welcome") return <>{children}</>;
