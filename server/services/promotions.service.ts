@@ -241,6 +241,8 @@ export async function handlePaystackWebhook(rawBody: string, signature: string |
     if (evt.data.reference.startsWith("kad_")) await (await import("./ad-campaigns.service")).fulfilCampaign(evt.data.reference, data);
     // Hype packs (kpt_…)
     else if (evt.data.reference.startsWith("kpt_")) await (await import("./wallet.service")).fulfilHypePurchase(evt.data.reference, data);
+    // Hype for gifts (khy_…)
+    else if (evt.data.reference.startsWith("khy_")) await (await import("./gifts.service")).fulfilTopup(evt.data.reference, data);
     // donations (kdn_…) and event contributions (kct_…)
     else if (evt.data.reference.startsWith("kdn_") || evt.data.reference.startsWith("kct_")) await (await import("./money.service")).fulfilPayment(evt.data.reference, data);
     else await fulfil(evt.data.reference, data);

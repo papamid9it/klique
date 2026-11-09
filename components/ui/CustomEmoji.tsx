@@ -4,6 +4,9 @@ import { Fragment, useEffect, useState, type ReactNode } from "react";
 import ApiClient from "@/app/ApiCore";
 import { cdn } from "@/lib/cdn";
 import { EMOJI_TOKEN, emojiIdsIn } from "@/lib/emoji-tokens";
+
+/** big emoji in a message that's only emoji (Discord's jumbo size) */
+export const JUMBO_PX = 48;
 import type { Envelope } from "@/lib/types";
 
 const api = new ApiClient();
@@ -38,8 +41,12 @@ function request(ids: string[]) {
   }, 30);
 }
 
-/** Text with custom emoji (`<:name:id>`) as little pictures; unknown or deleted ones read `:name:`. */
-export function EmojiText({ text, size = 22 }: { text: string; size?: number }) {
+/**
+ * Text with custom emoji (`<:name:id>`) as little pictures; unknown or deleted ones read `:name:`. Inline they're the
+ * size of a normal emoji (1.375em of the text around them, like Discord); `jumbo` (a message that's only emoji) shows
+ * them at 48px. `size` sets a fixed size in pixels instead.
+ */
+export function EmojiText({ text, size, jumbo }: { text: string; size?: number; jumbo?: boolean }) {
   const ids = emojiIdsIn(text);
   const [, tick] = useState(0);
   useEffect(() => {
@@ -51,9 +58,9 @@ export function EmojiText({ text, size = 22 }: { text: string; size?: number }) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ids.join(",")]);
   if (!ids.length) return <>{text}</>;
-  // a message that's only emoji shows them bigger, like Discord
-  const onlyEmoji = !text.replace(EMOJI_TOKEN, "").trim();
-  const px = onlyEmoji ? Math.round(size * 2) : size;
+  const box = jumbo ? `${JUMBO_PX}px` : size ? `${size}px` : "1.375em";
+  // asked for at twice the largest size it shows, for sharp screens
+  const ask = (jumbo ? JUMBO_PX : (size ?? 32)) * 2;
   const out: ReactNode[] = [];
   let last = 0;
   for (const m of text.matchAll(EMOJI_TOKEN)) {
@@ -63,7 +70,7 @@ export function EmojiText({ text, size = 22 }: { text: string; size?: number }) 
     out.push(
       e ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img key={`e${at}`} src={e.animated ? e.url : cdn(e.url, { w: px * 2 })} alt={`:${e.name}:`} title={`:${e.name}:`} width={px} height={px} loading="lazy" className="inline-block object-contain align-[-0.3em]" style={{ width: px, height: px }} />
+        <img key={`e${at}`} src={e.animated ? e.url : cdn(e.url, { w: ask })} alt={`:${e.name}:`} title={`:${e.name}:`} loading="lazy" className={jumbo ? "mr-1 inline-block object-contain align-bottom" : "mx-px inline-block object-contain align-[-0.3em]"} style={{ width: box, height: box }} />
       ) : (
         <Fragment key={`e${at}`}>{`:${m[1]}:`}</Fragment>
       ),

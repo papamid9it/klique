@@ -88,7 +88,7 @@ const mask = (acct: string) => (acct.length > 4 ? `••••${acct.slice(-4)}
 
 async function payoutDtos(rows: IPayout[], full = false): Promise<PayoutDTO[]> {
   const people = full ? await loadBriefs(rows.map((r) => r.requestedById)) : new Map();
-  const communities = full ? new Map((await Community.find({ _id: { $in: rows.map((r) => r.communityId) } }).select("slug name").lean<Pick<ICommunity, "_id" | "slug" | "name">[]>()).map((c) => [sid(c._id), c])) : new Map<string, Pick<ICommunity, "_id" | "slug" | "name">>();
+  const communities = full ? new Map((await Community.find({ _id: { $in: rows.flatMap((r) => (r.communityId ? [r.communityId] : [])) } }).select("slug name").lean<Pick<ICommunity, "_id" | "slug" | "name">[]>()).map((c) => [sid(c._id), c])) : new Map<string, Pick<ICommunity, "_id" | "slug" | "name">>();
   return rows.map((r) => ({
     id: sid(r._id),
     amount: r.amount,
@@ -98,7 +98,9 @@ async function payoutDtos(rows: IPayout[], full = false): Promise<PayoutDTO[]> {
     note: r.note,
     createdAt: r.createdAt.toISOString(),
     decidedAt: r.decidedAt?.toISOString() ?? null,
-    ...(full ? { community: (() => { const c = communities.get(sid(r.communityId)); return c ? { slug: c.slug, name: c.name } : { slug: "", name: "Deleted community" }; })(), requestedBy: people.get(sid(r.requestedById)) ?? GHOST } : {}),
+    kind: r.kind ?? "community",
+    dueOn: r.dueOn?.toISOString() ?? null,
+    ...(full ? { community: r.kind === "gifts" || !r.communityId ? undefined : (() => { const c = communities.get(sid(r.communityId)); return c ? { slug: c.slug, name: c.name } : { slug: "", name: "Deleted community" }; })(), requestedBy: people.get(sid(r.requestedById)) ?? GHOST } : {}),
   }));
 }
 
@@ -368,6 +370,11 @@ export async function decidePayout(admin: IUser, id: string, decision: "paid" | 
   if (decision === "rejected" && !input.note?.trim()) throw new ApiError(422, "Say why, so the owner can fix it.", { errors: { note: "Required" } });
   const done = await Payout.findOneAndUpdate({ _id: p._id, status: "requested" }, { $set: { status: decision, reference: input.reference?.trim() ?? "", note: input.note?.trim() ?? "", decidedById: admin._id, decidedAt: new Date() } }, { returnDocument: "after" }).lean<IPayout>();
   if (!done) throw conflict("Someone else just decided on this payout.");
+  if (p.kind === "gifts") {
+    const gifts = await import("./gifts.service");
+    await gifts.afterPayoutDecision(done, admin);
+    return (await payoutDtos([done], true))[0];
+  }
   if (decision === "rejected") await Payment.updateMany({ payoutId: p._id }, { $set: { payoutId: null } });
   const c = await Community.findById(p.communityId).select("slug name").lean<Pick<ICommunity, "slug" | "name">>();
   notify(

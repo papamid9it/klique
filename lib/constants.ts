@@ -261,6 +261,19 @@ export const REPORT_REASONS = [
 ] as const;
 export type ReportReason = (typeof REPORT_REASONS)[number]["id"];
 
+/**
+ * How a picture or video post shows its media inside the post's frame (feed cards, community Posts, the post page):
+ * cover fills the frame, cropped to fit (the default, and old posts); black shows all of it on black bars;
+ * backdrop shows all of it over a blurred, darkened copy of itself. The full-screen viewer always shows it whole.
+ */
+export const MEDIA_FITS = [
+  { id: "cover", label: "Cover", hint: "Fills the frame, cropped to fit" },
+  { id: "black", label: "Black background", hint: "All of it, with black bars" },
+  { id: "backdrop", label: "Backdrop", hint: "All of it, over a blurred copy" },
+] as const;
+export type MediaFit = (typeof MEDIA_FITS)[number]["id"];
+export const MEDIA_FIT_IDS = MEDIA_FITS.map((f) => f.id) as [MediaFit, ...MediaFit[]];
+
 /** A topic has to be this lively (comments) before the home page calls it trending. */
 export const TRENDING_MIN_COMMENTS = 30;
 

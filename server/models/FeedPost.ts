@@ -24,6 +24,8 @@ export interface IFeedPost {
   /** marked explicit (only in explicit communities): its pictures and video stay blurred until tapped */
   /** in reels, a wider picture or video sits on plain black, not a blurred copy of itself */
   plainBackdrop?: boolean;
+  /** how the media shows in its frame (lib/constants MEDIA_FITS); missing on old posts = "cover" */
+  mediaFit?: "cover" | "black" | "backdrop";
   explicit?: boolean;
   /** hidden pending review (a "minor or non-consensual" report): nobody but site admins sees it */
   hiddenAt?: Date | null;
@@ -50,6 +52,7 @@ const FeedPostSchema = new Schema<IFeedPost>(
     textBg: { type: String, default: null },
     explicit: { type: Boolean, default: false },
     plainBackdrop: { type: Boolean, default: false },
+    mediaFit: { type: String, enum: ["cover", "black", "backdrop"], default: "cover" },
     hiddenAt: { type: Date, default: null },
     clientKey: { type: String, default: undefined },
     media: { type: [new Schema({ kind: { type: String, enum: ["image", "video"], required: true }, url: { type: String, required: true }, poster: { type: String, default: null }, aspect: { type: Number, default: null }, frame: { type: Number, default: null } }, { _id: false })], default: [] },

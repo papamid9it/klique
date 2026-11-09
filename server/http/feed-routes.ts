@@ -1,6 +1,6 @@
 import { feedCaptionSchema, feedCommentEditSchema, feedCommentSchema, feedPostSchema, feedReactSchema, feedVoteSchema, homeFeedQuery, reelsQuery } from "../validators/schemas";
 import { resolveSpaceFor } from "../services/spaces.service";
-import { assertReelsOn, addComment, createPost, deleteComment, deletePost, editCaption, editComment, feedSidebar, getPost, homeFeed, reelsFeed, reelsReady, postCommunitySlug, listComments, listPosts, reactToComment, setPostExplicit, vote } from "../services/feed.service";
+import { assertReelsOn, addComment, createPost, deleteComment, deletePost, editCaption, editComment, feedSidebar, getPost, homeFeed, reelsFeed, reelsReady, postCommunitySlug, listComments, listPosts, reactToComment, setPostExplicit, setPostMediaFit, vote } from "../services/feed.service";
 import { created, readJson, readQuery, withApi } from "./api";
 
 /** Handlers for a community's Posts section (`/api/communities/[slug]/feed/…`) and the home feed. Authorization lives in the service. */
@@ -38,8 +38,12 @@ export const postById = withApi<{ id: string }>({ auth: "optional", limit: { nam
 });
 
 export const feedEdit = withApi<Post, "required">({ auth: "required" }, async ({ req, params, viewer }) => {
-  const { caption, explicit } = await readJson(req, feedCaptionSchema);
+  const { caption, explicit, mediaFit } = await readJson(req, feedCaptionSchema);
   const { space, access } = await resolveSpaceFor(viewer, params.slug);
+  if (mediaFit !== undefined) {
+    const p = await setPostMediaFit(viewer, space, access, params.postId, mediaFit);
+    if (caption === undefined && explicit === undefined) return p;
+  }
   if (explicit !== undefined) {
     const p = await setPostExplicit(viewer, space, access, params.postId, explicit);
     if (caption === undefined) return p;

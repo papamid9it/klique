@@ -22,6 +22,7 @@ import type { TopicDetailDTO, TopicDTO } from "@/lib/types";
 import { Linkified, LikeButton } from "./parts";
 import { TopicMedia } from "./TopicMedia";
 import { TopicMenu } from "./TopicMenu";
+import { GiftButton, GiftRow } from "@/components/domain/gifts/Gifts";
 
 /* ------------------------------------------------------------------ */
 /* Keeping the list and the open post in step                          */
@@ -190,6 +191,7 @@ export function TopicSide({ onClose, bare, full }: { onClose: () => void; bare?:
         </div>
       ) : (
         <ChatPane focus={focus}
+          gifts
           key={data.thread.id}
           space={{ slug }}
           channel={data.thread}
@@ -267,12 +269,16 @@ function PostIntro({ t, empty, full }: { t: TopicDTO; empty: boolean; full?: boo
           ))}
         </ul>
       )}
-      <TopicMedia media={t.media.slice(0, 1)} tall className={full ? "mt-3 max-w-2xl" : "mt-3"} mine={!!user && t.author.handle === user.handle} />
+      <TopicMedia media={t.media} tall className={full ? "mt-3 max-w-2xl" : "mt-3"} mine={!!user && t.author.handle === user.handle} />
       {t.body && (
         <p className="mt-3 text-[15px] leading-relaxed break-words whitespace-pre-wrap">
           <Formatted text={t.body} plain={(words) => <Linkified text={words} />} />
         </p>
       )}
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <GiftRow target={{ type: "topic", id: t.id }} />
+        <GiftButton target={{ type: "topic", id: t.id }} authorId={t.author.id} />
+      </div>
       <div className="mt-5 flex items-center gap-3 text-[11px] font-semibold tracking-wide text-ink-muted uppercase">
         <span className="h-px flex-1 bg-line" />
         {empty ? "No replies yet" : `${t.commentCount} ${t.commentCount === 1 ? "reply" : "replies"}`}

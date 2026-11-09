@@ -111,7 +111,13 @@ export interface PayoutBank {
  */
 export interface IPayout {
   _id: Types.ObjectId;
-  communityId: Types.ObjectId;
+  /** "community": a community's donations and contributions; "gifts": one person's gift earnings (lib/gifts) */
+  kind?: "community" | "gifts";
+  /** null on a gifts payout */
+  communityId: Types.ObjectId | null;
+  /** gifts: the day it's due (the 3rd of the month after the request) and when the monthly run listed it for admins */
+  dueOn?: Date | null;
+  listedAt?: Date | null;
   requestedById: Types.ObjectId;
   amount: number;
   bank: PayoutBank;
@@ -128,7 +134,10 @@ const bankSchema = new Schema<PayoutBank>({ bankCode: { type: String, default: "
 
 const PayoutSchema = new Schema<IPayout>(
   {
-    communityId: { type: Schema.Types.ObjectId, ref: "Community", required: true },
+    kind: { type: String, enum: ["community", "gifts"], default: "community" },
+    communityId: { type: Schema.Types.ObjectId, ref: "Community", default: null },
+    dueOn: { type: Date, default: null },
+    listedAt: { type: Date, default: null },
     requestedById: { type: Schema.Types.ObjectId, ref: "User", required: true },
     amount: { type: Number, required: true, min: 1 },
     bank: { type: bankSchema, required: true },
@@ -142,5 +151,6 @@ const PayoutSchema = new Schema<IPayout>(
 );
 PayoutSchema.index({ communityId: 1, createdAt: -1 });
 PayoutSchema.index({ status: 1, createdAt: 1 });
+PayoutSchema.index({ kind: 1, requestedById: 1, createdAt: -1 });
 
 export const Payout: Model<IPayout> = defineModel<IPayout>("Payout", PayoutSchema);

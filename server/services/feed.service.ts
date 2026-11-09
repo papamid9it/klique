@@ -91,6 +91,7 @@ async function toPosts(rows: IFeedPost[], viewer: IUser | null): Promise<FeedPos
         title: p.title ?? "",
         explicit: !!p.explicit,
         ...(p.plainBackdrop ? { plainBackdrop: true } : {}),
+        mediaFit: p.mediaFit ?? "cover",
         textBg: p.media.length ? null : (p.textBg ?? null),
         media: p.media.map((m) => ({ kind: m.kind, url: m.url, poster: m.poster ?? null, aspect: m.aspect ?? null, frame: m.frame ?? null })),
         upCount: p.upCount,
@@ -209,6 +210,7 @@ export async function createPost(viewer: IUser, space: Space, access: SpaceAcces
     communityRefIds: refs.communityIds,
     title: input.media.length ? "" : input.title,
     plainBackdrop: input.plainBackdrop,
+    mediaFit: input.media.length ? input.mediaFit : "cover",
     textBg: style === "card" ? (input.textBg ?? "sunset") : null,
     // only a community that allows explicit content takes explicit posts
     explicit: !!space.community.explicit && input.explicit,
@@ -269,6 +271,15 @@ export async function editCaption(viewer: IUser, space: Space, access: SpaceAcce
   // only people newly tagged hear about it
   const before = new Set((p.mentionIds ?? []).map((id) => sid(id)));
   await tellTagged(viewer, space, refs.userIds.filter((id) => !before.has(sid(id))), `/p/${sid(p._id)}`, caption, "post");
+  return getPost(viewer, space, access, postId);
+}
+
+/** Change how a post's picture or video shows in its frame (its author). */
+export async function setPostMediaFit(viewer: IUser, space: Space, access: SpaceAccess, postId: string, fit: "cover" | "black" | "backdrop"): Promise<FeedPostDTO> {
+  assertFeed(space);
+  const p = await loadPost(space, postId);
+  if (sid(p.authorId) !== sid(viewer._id) || !access.isMember) throw forbidden("You can only edit your own posts.");
+  await FeedPost.updateOne({ _id: p._id }, { $set: { mediaFit: fit } });
   return getPost(viewer, space, access, postId);
 }
 

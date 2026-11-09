@@ -5,7 +5,7 @@ import { GifPlaceholder } from "@/components/domain/topics/TopicMedia";
 import { Icon } from "@/components/ui/Icon";
 import { cx } from "@/components/ui/cx";
 import { cdn, videoPoster, videoSrc } from "@/lib/cdn";
-import { postFrame, postShape } from "@/lib/constants";
+import { postFrame, postShape, type MediaFit } from "@/lib/constants";
 import { isGif } from "@/lib/data-saver";
 import { useAutoplay } from "@/lib/hooks/useAutoplay";
 import { useDataSaver } from "@/lib/hooks/useDataSaver";
@@ -69,7 +69,7 @@ interface VideoHandle {
  * or pauses (with a quick icon), the corner button turns sound on or off for every video this visit, and a thin
  * line shows how far it's got. With autoplay turned off it waits for a tap; with data saver on nothing even loads.
  */
-const FeedVideo = forwardRef<VideoHandle, { url: string; poster: string | null; active: boolean; withSound?: boolean; onShape: (w: number, h: number) => void; onReady: () => void }>(function FeedVideo({ url, poster, active, withSound, onShape, onReady }, ref) {
+const FeedVideo = forwardRef<VideoHandle, { url: string; poster: string | null; active: boolean; withSound?: boolean; cover?: boolean; onShape: (w: number, h: number) => void; onReady: () => void }>(function FeedVideo({ url, poster, active, withSound, cover, onShape, onReady }, ref) {
   const v = useRef<HTMLVideoElement>(null);
   const bar = useRef<HTMLSpanElement>(null);
   const saver = useDataSaver().on;
@@ -194,7 +194,7 @@ const FeedVideo = forwardRef<VideoHandle, { url: string; poster: string | null; 
           const el = e.currentTarget;
           if (bar.current && el.duration) bar.current.style.transform = `scaleX(${el.currentTime / el.duration})`;
         }}
-        className="pointer-events-none relative size-full object-contain"
+        className={cx("pointer-events-none relative size-full", cover ? "object-cover" : "object-contain")}
         aria-label="Video"
       >
         Your browser can&apos;t play this video.
@@ -237,13 +237,14 @@ const FeedVideo = forwardRef<VideoHandle, { url: string; poster: string | null; 
 /**
  * A post's pictures or video, Reddit style. The box takes its shape from the first picture (between 4:5 and
  * 1.91:1, at most 540px tall) and keeps it for the whole post, so going to the next picture never resizes anything.
- * Every picture sits inside it whole, over a blurred copy of itself. Pictures slide, the ones next to the current
+ * `fit` is the post's choice (lib/constants MEDIA_FITS): cover fills the frame, cropped; black shows each picture
+ * whole on black; backdrop shows it whole over a blurred, darkened copy of itself. Pictures slide, the ones next to the current
  * one are already loaded (all of them once the post is near the screen), and one still loading shimmers until it
  * fades in. In the feed (`onOpen`) one tap opens the post and a double tap calls `onDoubleTap` (an upvote) with a
  * burst where you tapped, every time; in the viewer a tap plays or pauses a video and a double tap upvotes too.
  * `fill` fills its parent instead (the post viewer, on wide screens), and `withSound` starts videos with sound.
  */
-export function FeedMedia({ media, className, onOpen, onDoubleTap, fill, withSound, openLabel = "Open the post", zoomHint }: { media: TopicMediaDTO[]; className?: string; /** a tap: gets which picture or video was tapped */ onOpen?: (index: number) => void; onDoubleTap?: () => void; fill?: boolean; withSound?: boolean; /** what a tap does, for screen readers */ openLabel?: string; /** show a small "zoom" sign on pictures (a tap opens them big) */ zoomHint?: boolean }) {
+export function FeedMedia({ media, className, onOpen, onDoubleTap, fill, withSound, openLabel = "Open the post", zoomHint, fit = "cover" }: { /** how each picture sits in the frame (the post's choice) */ fit?: MediaFit; media: TopicMediaDTO[]; className?: string; /** a tap: gets which picture or video was tapped */ onOpen?: (index: number) => void; onDoubleTap?: () => void; fill?: boolean; withSound?: boolean; /** what a tap does, for screen readers */ openLabel?: string; /** show a small "zoom" sign on pictures (a tap opens them big) */ zoomHint?: boolean }) {
   const first = media[0];
   const firstKey = first ? (first.kind === "video" ? (first.poster ?? videoPoster(first.url) ?? first.url) : first.url) : "";
   const [ratio, setRatio] = useState<number | null>(() => (media[0]?.frame || media[0]?.aspect ? postFrame(media[0]) : (shapes.get(firstKey) ?? null)));
@@ -325,10 +326,10 @@ export function FeedMedia({ media, className, onOpen, onDoubleTap, fill, withSou
           return (
             <div key={`${m.url}-${k}`} className="relative h-full w-full shrink-0 overflow-hidden" aria-hidden={k !== i} inert={k !== i}>
               {!ready && !broken.has(k) && <div aria-hidden="true" className="skeleton absolute inset-0 rounded-none" />}
-              {back && wanted(k) && (
-                // blurred copy fills the box around a picture that doesn't match its shape
+              {fit === "backdrop" && back && wanted(k) && (
+                // backdrop: a blurred, darkened copy fills the box around a picture that doesn't match its shape
                 // eslint-disable-next-line @next/next/no-img-element
-                <img loading="lazy" src={cdn(back, { w: 200 })} alt="" aria-hidden="true" decoding="async" className="absolute inset-0 size-full scale-125 object-cover opacity-70 blur-3xl" />
+                <img loading="lazy" src={cdn(back, { w: 200 })} alt="" aria-hidden="true" decoding="async" className="absolute inset-0 size-full scale-125 object-cover opacity-70 blur-3xl brightness-50" />
               )}
               {m.kind === "video" ? (
                 // a div, not a button: the sound button sits inside it
@@ -354,6 +355,7 @@ export function FeedMedia({ media, className, onOpen, onDoubleTap, fill, withSou
                     poster={poster}
                     active={k === i}
                     withSound={withSound}
+                    cover={fit === "cover"}
                     onShape={(w, h) => shape(k, w, h)}
                     onReady={() => done(k)}
                   />
@@ -380,7 +382,7 @@ export function FeedMedia({ media, className, onOpen, onDoubleTap, fill, withSou
                       decoding="async"
                       onLoad={(e) => (shape(k, e.currentTarget.naturalWidth, e.currentTarget.naturalHeight), done(k))}
                       onError={() => setBroken((b) => new Set(b).add(k))}
-                      className={cx("size-full object-contain transition-opacity duration-300 motion-reduce:transition-none", ready ? "opacity-100" : "opacity-0")}
+                      className={cx("size-full transition-opacity duration-300 motion-reduce:transition-none", fit === "cover" ? "object-cover" : "object-contain", ready ? "opacity-100" : "opacity-0")}
                     />
                   </button>
                 )

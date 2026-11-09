@@ -1,7 +1,7 @@
 import { MAX_AD_INTERESTS } from "@/lib/ads";
 import { z } from "zod";
 import { DATE_FILTERS } from "@/lib/dates";
-import { DM_POLICIES, LIMITS, PRESENCES, PROFILE_VISIBILITY, REPORT_REASONS, SLOW_MODE_STEPS } from "@/lib/constants";
+import { DM_POLICIES, LIMITS, MEDIA_FIT_IDS, PRESENCES, PROFILE_VISIBILITY, REPORT_REASONS, SLOW_MODE_STEPS } from "@/lib/constants";
 import { FRAME_IDS, NAME_EFFECT_IDS } from "@/lib/cosmetics";
 import { MOOD_PREFS } from "@/lib/moods";
 import { GROUP_POWERS, GROUP_TITLE_MAX } from "@/lib/roles";
@@ -257,6 +257,7 @@ export const feedPostSchema = z
     explicit: z.boolean().default(false),
     /** in reels: plain black behind a wider picture or video, not a blurred copy of it */
     plainBackdrop: z.boolean().default(false),
+    mediaFit: z.enum(MEDIA_FIT_IDS).default("cover"),
     media: mediaList.default([]),
     /** a random id per "New post" box: the same send twice makes one post */
     clientKey: clientKey.optional(),
@@ -264,7 +265,7 @@ export const feedPostSchema = z
   .refine((v) => v.media.length > 0 || v.caption.length > 0, { path: ["caption"], message: "Add a picture, a video or some text." })
   .refine((v) => v.media.length > 0 || v.caption.length <= TEXT_CARD_MAX || v.title.length > 0, { path: ["title"], message: "Add a title for a longer post." });
 /** edit a post: its caption (its author), or whether it's explicit (its author, or the community's owner and admins) */
-export const feedCaptionSchema = z.object({ caption: text(LIMITS.feedCaption).optional(), explicit: z.boolean().optional() }).refine((v) => v.caption !== undefined || v.explicit !== undefined, "Nothing to change.");
+export const feedCaptionSchema = z.object({ caption: text(LIMITS.feedCaption).optional(), explicit: z.boolean().optional(), mediaFit: z.enum(MEDIA_FIT_IDS).optional() }).refine((v) => v.caption !== undefined || v.explicit !== undefined || v.mediaFit !== undefined, "Nothing to change.");
 /** edit your own comment's text */
 export const feedCommentEditSchema = z.object({ body: text(LIMITS.feedComment) });
 export const feedVoteSchema = z.object({ value: z.union([z.literal(1), z.literal(-1), z.literal(0)]) });
@@ -298,8 +299,12 @@ export const boardUpdateSchema = z.object({
   postPolicy: z.enum(["members", "admins"]).optional(),
 });
 
-/** a board post carries at most one picture (no video) */
-const postImage = z.array(z.object({ kind: z.literal("image"), url: mediaUrl, poster: z.null().optional() })).max(1, "One picture per post");
+/** a board post's media: up to a few pictures, or one video on its own (the same rule as community posts) */
+const postImage = z
+  .array(z.object({ kind: z.enum(["image", "video"]), url: mediaUrl, poster: z.union([mediaUrl, z.null()]).optional() }))
+  .max(LIMITS.topicMedia, `Up to ${LIMITS.topicMedia} pictures`)
+  .refine((m) => m.filter((x) => x.kind === "video").length <= 1, "One video per post")
+  .refine((m) => !m.some((x) => x.kind === "video") || m.length === 1, "A video can't be mixed with pictures");
 const postTags = z.array(z.string().trim().max(LIMITS.topicTag, `Tags can be up to ${LIMITS.topicTag} characters`)).max(LIMITS.topicTags, `Up to ${LIMITS.topicTags} tags`);
 export const topicCreateSchema = z.object({
   /** which board (its slug); the first board when left out */
@@ -308,7 +313,7 @@ export const topicCreateSchema = z.object({
   body: text(LIMITS.topicBody).default(""),
   media: postImage.optional(),
   tags: postTags.optional(),
-}).refine((v) => v.body.length > 0 || (v.media?.length ?? 0) > 0, { path: ["body"], message: "Write something, or add a picture" });
+}).refine((v) => v.body.length > 0 || (v.media?.length ?? 0) > 0, { path: ["body"], message: "Write something, or add a picture or video" });
 export const topicUpdateSchema = z.object({
   title: text(LIMITS.topicTitle, 3).optional(),
   body: text(LIMITS.topicBody).optional(),
@@ -958,3 +963,43 @@ export const typingTargetSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("crew"), id: objectId }),
 ]);
 export const typingSchema = z.object({ target: typingTargetSchema, on: z.boolean() });
+
+/* -------------------------------- gifts ------------------------------ */
+
+const giftTarget = z.object({ type: z.enum(["post", "comment", "topic", "reply"]), id: objectId });
+export const giftSendSchema = z.object({
+  giftId: objectId,
+  target: giftTarget,
+  anonymous: z.boolean().default(false),
+  /** a random id per send: the same send twice makes one gift */
+  clientKey: z.string().regex(/^[A-Za-z0-9_-]{8,64}$/),
+});
+export const giftTopupSchema = z.object({ amount: z.number().int().min(1).max(10_000_000) });
+export const giftStoreTopupSchema = z.discriminatedUnion("platform", [
+  z.object({ platform: z.literal("apple"), transactionId: z.string().trim().min(1).max(100) }),
+  z.object({ platform: z.literal("google"), productId: z.string().trim().regex(/^hype_\d{1,7}$/), purchaseToken: z.string().trim().min(1).max(4000) }),
+]);
+export const giftSaveSchema = z.object({
+  name: z.string().trim().min(1, "Give it a name").max(40),
+  emoji: z.string().trim().max(16).default("🎁"),
+  artUrl: z.string().trim().max(600).nullable().optional(),
+  price: z.number().min(1).max(10_000_000),
+  active: z.boolean().default(true),
+  position: z.number().int().min(0).max(10_000).optional(),
+});
+export const giftConfigSchema = z.object({
+  enabled: z.boolean().optional(),
+  receiverPercent: z.number().int().min(0).max(100).optional(),
+  holdDays: z.number().int().min(0).max(90).optional(),
+  minPayout: z.number().int().min(100).max(10_000_000).optional(),
+  webPacks: z.array(z.number().int().min(100).max(500_000)).max(12).optional(),
+  storePacks: z.array(z.object({ productId: z.string().regex(/^hype_\d{1,7}$/), hype: z.number().int().min(1).max(1_000_000), price: z.number().int().min(1).max(100_000_000) })).max(12).optional(),
+  storeFeePercent: z.object({ apple: z.number().int().min(0).max(50).optional(), google: z.number().int().min(0).max(50).optional() }).optional(),
+});
+export const giftReportQuery = z.object({
+  from: z.preprocess(blankToUndef, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()),
+  to: z.preprocess(blankToUndef, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()),
+  group: z.enum(["day", "month"]).default("day"),
+  csv: z.enum(["purchases", "sends"]).optional(),
+});
+export const giftGrantSchema = z.object({ userId: objectId, amount: z.number().int().min(-1_000_000).max(1_000_000).refine((n) => n !== 0, "Not zero"), note: z.string().trim().max(200).default("") });

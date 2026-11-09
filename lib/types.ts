@@ -341,6 +341,8 @@ export interface FeedPostDTO {
   explicit: boolean;
   /** in reels: plain black behind a wider picture or video, not a blurred copy of it */
   plainBackdrop?: boolean;
+  /** how a picture or video shows in the post's frame: cover (cropped to fill), black (whole, black bars), backdrop (whole, blurred copy behind) */
+  mediaFit: "cover" | "black" | "backdrop";
   /** pictures, or one video; empty for a text post */
   media: TopicMediaDTO[];
   upCount: number;
@@ -1238,6 +1240,10 @@ export interface PayoutDTO {
   note: string;
   createdAt: ISODate;
   decidedAt: ISODate | null;
+  /** "gifts": one person's gift earnings (no community) */
+  kind: "community" | "gifts";
+  /** gifts: the day it's due (the 3rd of the month after the request) */
+  dueOn: ISODate | null;
   community?: { slug: string; name: string };
   requestedBy?: UserBrief;
 }
@@ -2006,4 +2012,105 @@ export interface AttendanceDTO {
   opensAt: ISODate;
   closesAt: ISODate;
   people: { user: UserBrief; attended: boolean }[];
+}
+
+/* ------------------------------- gifts ------------------------------- */
+
+/** A gift in the catalogue (lib/gifts.ts). `price` is naira, `hype` what it costs (₦10 a Hype). */
+export interface GiftDTO {
+  id: Id;
+  slug: string;
+  name: string;
+  emoji: string;
+  artUrl: string | null;
+  price: number;
+  hype: number;
+  /** admins only */
+  active?: boolean;
+  position?: number;
+}
+
+/** The gift tray: the catalogue and your balance. */
+export interface GiftTrayDTO {
+  gifts: GiftDTO[];
+  balance: number;
+  enabled: boolean;
+  hypeNaira: number;
+}
+
+/** The gifts on one post, comment, board post or board reply: one line per kind, most valuable first (never who). */
+export interface GiftSummaryDTO {
+  total: number;
+  items: { giftId: Id; name: string; emoji: string; artUrl: string | null; count: number; price: number }[];
+}
+
+export interface HypeEntryDTO {
+  id: Id;
+  amount: number;
+  balanceAfter: number;
+  kind: "topup" | "gift" | "grant" | "revoke" | "refund";
+  note: string;
+  createdAt: ISODate;
+}
+
+/** Your Hype for gifts: the balance, ways to top up (Paystack on the web, Apple or Google in the app), and history. */
+export interface GiftWalletDTO {
+  balance: number;
+  hypeNaira: number;
+  webPacks: { naira: number; hype: number }[];
+  customMin: number;
+  customMax: number;
+  canBuyWeb: boolean;
+  store: { apple: boolean; google: boolean; accountToken: string; packs: { productId: string; hype: number; price: number }[] };
+  history: HypeEntryDTO[];
+  hasMore: boolean;
+}
+
+/** A gift you got (or sent). `from` is null on an anonymous gift you didn't send: show "Someone". */
+export interface GiftReceivedDTO {
+  id: Id;
+  giftName: string;
+  emoji: string;
+  artUrl: string | null;
+  price: number;
+  hype: number;
+  /** naira the receiver earns */
+  earned: number;
+  anonymous: boolean;
+  from: UserBrief | null;
+  target: { type: "post" | "comment" | "topic" | "reply"; id: Id };
+  createdAt: ISODate;
+  holdUntil: ISODate;
+  paidOut: boolean;
+}
+export interface GiftSentDTO extends GiftReceivedDTO {
+  to: UserBrief;
+}
+
+/** Settings → Earnings. */
+export interface GiftEarningsDTO {
+  receiverPercent: number;
+  holdDays: number;
+  minPayout: number;
+  totals: { earned: number; onHold: number; available: number; requested: number; paid: number };
+  /** when the waiting request (or the next one) is paid: the 3rd of the month after it's made */
+  nextPayoutOn: ISODate;
+  waiting: PayoutDTO | null;
+  payouts: PayoutDTO[];
+  history: GiftReceivedDTO[];
+  hasMore: boolean;
+  bank: { bankName: string; accountName: string; accountNumber: string; bankCode: string } | null;
+  canRequest: boolean;
+}
+
+/** Admin → Gifts dashboard. Naira throughout. */
+export interface AdminGiftsReportDTO {
+  bought: {
+    total: { amount: number; count: number; hype: number; storeFees: number };
+    byPlatform: { platform: "web" | "apple" | "google"; amount: number; fees: number; count: number; hype: number }[];
+    series: { period: string; amount: number; count: number }[];
+  };
+  purchases: { id: Id; user: UserBrief; platform: "web" | "apple" | "google"; pack: string; hype: number; amount: number; storeFee: number; reference: string; test: boolean; paidAt: ISODate }[];
+  sends: { id: Id; from: UserBrief; to: UserBrief; anonymous: boolean; gift: { name: string; emoji: string }; price: number; receiverAmount: number; kliqueAmount: number; target: { type: "post" | "comment" | "topic" | "reply"; id: Id }; community: { slug: string; name: string } | null; createdAt: ISODate }[];
+  split: { giftValue: number; count: number; klique: number; receivers: number; receiversPaid: number; receiversRequested: number; receiversOwed: number };
 }

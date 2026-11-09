@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
 import { FeedService, newClientKey } from "@/app/services/FeedService";
+import { GiftButton, GiftRow } from "@/components/domain/gifts/Gifts";
 import { AttachedSticker, ReactButton, ReactionBar, StickerPicker, StickerView, type StickerChoice } from "@/components/domain/chat/Reactions";
 import { EditedTag, MessageEditor } from "@/components/domain/chat/MessageEditor";
 import { useAuth } from "@/components/providers/AuthProvider";
@@ -306,6 +307,7 @@ export function PostComments({ post, onCount, pinned, top, focus }: { post: Feed
           </>
         )}
         {!c.deleted && <ReactionBar reactions={c.reactions} canReact={canWrite && !!user} onToggle={(k) => void react(c, k)} className="mt-1" />}
+        {!c.deleted && <GiftRow target={{ type: "comment", id: c.id }} className="mt-1" />}
         {/* Instagram's line under the comment: when · Reply · react */}
         <div className="mt-1 flex items-center gap-1 text-[12.5px] font-semibold text-ink-muted">
           <time dateTime={c.createdAt} className="pr-1 font-normal">
@@ -317,6 +319,7 @@ export function PostComments({ post, onCount, pinned, top, focus }: { post: Feed
             </button>
           )}
           {canWrite && !c.deleted && <ReactButton onPick={(k) => void react(c, k)} align="left" className="[&>button]:size-7" />}
+          {!c.deleted && <GiftButton target={{ type: "comment", id: c.id }} authorId={c.author.id} off={!!post.community.explicit} size="sm" icon={16} />}
           {c.canEdit && editing !== c.id && (
             <button type="button" onClick={() => setEditing(c.id)} className="inline-flex h-7 items-center gap-1 rounded-full px-2 opacity-0 transition group-hover:opacity-100 hover:bg-raised hover:text-ink focus:opacity-100 [@media(pointer:coarse)]:opacity-100">
               <Icon name="edit" size={13} /> Edit

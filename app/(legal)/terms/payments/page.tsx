@@ -57,11 +57,20 @@ export default async function PaymentTermsPage() {
         </ul>
       </Section>
 
-      <Section n={2} title="Hype has ended" id="hype">
+      <Section n={2} title="Hype and gifts" id="gifts">
         <ul>
-          <li>Hype, the in-app currency, has been replaced by the Lite and Pro plans and can no longer be bought or spent.</li>
-          <li>Any Hype left in an account was turned into days of Lite at the price it was sold for: 1,200 Hype (the ₦2,000 pack) became 30 days, or 40 Hype a day, rounded up. If you were already on a plan, the days were added on top of it.</li>
-          <li>Profile designs already unlocked with Hype last until their original end date. Hype has no cash value and isn&apos;t refunded.</li>
+          <li>
+            Hype is used only to send gifts to posts, comments, board posts and board replies. <strong>1 Hype is ₦10.</strong> You can buy it on the website (paid with Paystack) or in the phone app (paid with Apple or Google, where packs cost more because the stores take a share).
+          </li>
+          <li>
+            <strong>Hype can&apos;t be refunded, cashed out, or moved to another account.</strong> It isn&apos;t money for the person who buys it, and a gift can&apos;t be taken back once it&apos;s sent. Check the gift before you send it.
+          </li>
+          <li>You can send a gift anonymously: the person and everyone else see &quot;Someone&quot;. klique still records who sent it, and only klique&apos;s staff can see that, to deal with fraud, abuse or payment problems.</li>
+          <li>
+            The person who gets a gift earns 70% of its naira value; klique keeps 30%. Earnings are held for 7 days, then can be paid to a Nigerian bank account once they reach ₦1,000. Payouts requested by the end of a month are paid on the 3rd of the next month, under the payout rules below. klique may change these figures for gifts sent after a change, with notice here.
+          </li>
+          <li>klique may hold back or reverse earnings from gifts paid for with a refunded, disputed or fraudulent purchase, and may close Hype accounts used for fraud or to move money.</li>
+          <li>Hype from before November 2026 (used for profile designs) was turned into days of Lite at the time and is separate from Hype for gifts.</li>
         </ul>
       </Section>
 

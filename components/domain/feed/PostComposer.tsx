@@ -4,6 +4,8 @@ import { FormatButton } from "@/components/ui/FormatButton";
 import { useRef, useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
 import { FeedService, newClientKey } from "@/app/services/FeedService";
+import { MediaFitPicker } from "./MediaFitPicker";
+import type { MediaFit } from "@/lib/constants";
 import { useApi } from "@/lib/hooks/useApi";
 import { UploadService } from "@/app/services/UploadService";
 import { MOCK_IMAGES, MOCK_VIDEOS, looksLikeVideo } from "@/components/domain/topics/TopicMedia";
@@ -48,6 +50,8 @@ export function PostComposer({ slug, communityName, explicitAllowed, onClose, on
   // reels switched off (or not known yet): nothing here mentions them
   const reelsOn = useApi(() => FeedService.reelsReady(), []).data?.on === true;
   const [plainBackdrop, setPlainBackdrop] = useState(false);
+  // how the picture or video sits in the post's frame (cover by default)
+  const [mediaFit, setMediaFit] = useState<MediaFit>("cover");
   const [link, setLink] = useState("");
   const [progress, setProgress] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
@@ -89,7 +93,7 @@ export function PostComposer({ slug, communityName, explicitAllowed, onClose, on
     sending.current = true;
     setBusy(true);
     try {
-      const res = await FeedService.create(slug, { ...(mode === "media" ? { caption: caption.trim(), media: media.map((m, i) => (i === 0 && frame ? { ...m, frame } : m)), plainBackdrop } : { caption: caption.trim(), title: title.trim(), textBg, media: [] }), ...(explicitAllowed ? { explicit } : {}), clientKey });
+      const res = await FeedService.create(slug, { ...(mode === "media" ? { caption: caption.trim(), media: media.map((m, i) => (i === 0 && frame ? { ...m, frame } : m)), plainBackdrop, mediaFit } : { caption: caption.trim(), title: title.trim(), textBg, media: [] }), ...(explicitAllowed ? { explicit } : {}), clientKey });
       toast("Posted", "success");
       onPosted(res.data);
     } catch (err) {
@@ -195,6 +199,7 @@ export function PostComposer({ slug, communityName, explicitAllowed, onClose, on
             <FormatButton area={captionRef} value={caption} onChange={setCaption} />
             <TextArea ref={captionRef} label="Caption (optional)" value={caption} onChange={(e) => setCaption(e.target.value)} onKeyDown={(e) => suggest.onKeyDown(e)} maxLength={LIMITS.feedCaption} counter={LIMITS.feedCaption} placeholder="Say something about it… @someone #tag" />
             {suggest.panel}
+            <MediaFitPicker media={media} value={mediaFit} onChange={setMediaFit} />
             {reelsOn && <div>
               <p className="mb-1.5 text-sm font-medium">Background in reels</p>
               <div role="radiogroup" aria-label="Background in reels" className="grid grid-cols-2 gap-2">

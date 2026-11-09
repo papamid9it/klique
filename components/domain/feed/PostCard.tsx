@@ -8,12 +8,15 @@ import { errorMessage } from "@/app/ApiCore";
 import { FeedService } from "@/app/services/FeedService";
 import { SpaceService } from "@/app/services/SpaceService";
 import { OverflowMenu } from "@/components/domain/OverflowMenu";
+import { GiftButton, GiftRow } from "@/components/domain/gifts/Gifts";
 import { ShareButton, absoluteUrl } from "@/components/domain/ShareButton";
 import { FeedMedia } from "./FeedMedia";
 import { LongPost, TextCard } from "./TextPost";
 import { ExplicitCover } from "./ExplicitCover";
 import { ReportDialog } from "@/components/domain/ReportDialog";
 import { ConfirmModal } from "@/components/domain/space/parts";
+import { Modal } from "@/components/ui/Modal";
+import { MediaFitPicker } from "./MediaFitPicker";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { ProfileTrigger } from "@/components/providers/ProfileCardProvider";
 import { useToast } from "@/components/providers/ToastProvider";
@@ -86,6 +89,7 @@ export function PostCard({ post: p, onChange, onRemoved, onOpenComments, showCom
   }, [user]);
   const router = useRouter();
   const [deleting, setDeleting] = useState(false);
+  const [fitting, setFitting] = useState(false);
   const [reporting, setReporting] = useState(false);
   const [more, setMore] = useState(false);
   const [joining, setJoining] = useState(false);
@@ -115,6 +119,8 @@ export function PostCard({ post: p, onChange, onRemoved, onOpenComments, showCom
     ...(p.community.explicit && p.canDelete
       ? [{ label: p.explicit ? "Not explicit" : "Mark as explicit", icon: "eye" as const, onSelect: () => void FeedService.setExplicit(p.community.slug, p.id, !p.explicit).then((r) => onChange(r.data), (e) => toast(errorMessage(e), "error")) }]
       : []),
+    // the poster: change how the picture or video shows in the post (cover, black background, backdrop)
+    ...(p.canEdit && p.media.length ? [{ label: "How it shows", icon: "image" as const, onSelect: () => setFitting(true) }] : []),
     ...(p.canDelete ? [{ label: "Delete post", icon: "trash" as const, danger: true, onSelect: () => setDeleting(true) }] : []),
   ];
 
@@ -179,7 +185,7 @@ export function PostCard({ post: p, onChange, onRemoved, onOpenComments, showCom
       {(p.media.length > 0 || style === "card") && (
         <div className="mt-3">
           <ExplicitCover explicit={p.explicit}>
-            {p.media.length > 0 ? <FeedMedia media={p.media} onOpen={p.explicit || !user || !reelsReady() ? onOpenComments : () => router.push(`/reels?start=${p.id}&from=${Date.now()}`)} onDoubleTap={() => p.myVote !== 1 && void vote(1)} /> : <TextCard post={p} onOpen={onOpenComments} onDoubleTap={() => p.myVote !== 1 && void vote(1)} />}
+            {p.media.length > 0 ? <FeedMedia media={p.media} fit={p.mediaFit} onOpen={p.explicit || !user || !reelsReady() ? onOpenComments : () => router.push(`/reels?start=${p.id}&from=${Date.now()}`)} onDoubleTap={() => p.myVote !== 1 && void vote(1)} /> : <TextCard post={p} onOpen={onOpenComments} onDoubleTap={() => p.myVote !== 1 && void vote(1)} />}
           </ExplicitCover>
         </div>
       )}
@@ -198,8 +204,28 @@ export function PostCard({ post: p, onChange, onRemoved, onOpenComments, showCom
           <span className="font-mono tabular-nums">{compactCount(p.commentCount)}</span>
         </button>
         <ShareButton path={postHref(p)} text={p.title || p.caption ? `${(p.title || p.caption).slice(0, 80)} · ${p.community.name}` : `A post in ${p.community.name}`} variant="pill" size="sm" />
+        <GiftButton target={{ type: "post", id: p.id }} authorId={p.author.id} off={!!p.community.explicit} variant="pill" />
       </div>
+      <GiftRow target={{ type: "post", id: p.id }} className="mt-2" />
 
+      {fitting && (
+        <Modal open onClose={() => setFitting(false)} title="How it shows" size="sm">
+          <MediaFitPicker
+            media={p.media}
+            value={p.mediaFit}
+            onChange={(f) =>
+              void FeedService.setMediaFit(p.community.slug, p.id, f).then(
+                (r) => {
+                  onChange(r.data);
+                  setFitting(false);
+                  toast("Saved", "success");
+                },
+                (e) => toast(errorMessage(e), "error"),
+              )
+            }
+          />
+        </Modal>
+      )}
       <ConfirmModal
         open={deleting}
         onClose={() => setDeleting(false)}

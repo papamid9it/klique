@@ -9,7 +9,7 @@ import { FeesSettings, PayoutsList } from "@/components/domain/admin/PayoutsAdmi
 type View = "requested" | "paid" | "rejected" | "fees";
 
 const INTRO: Record<View, string> = {
-  requested: "Community owners asking for their balance. Send the bank transfer, then mark it paid with the transfer's reference. Turning one down puts the money back in their balance.",
+  requested: "Community owners asking for their balance, and people asking for their gift earnings (paid on the 3rd of each month). Send the bank transfer, then mark it paid with the transfer's reference. Turning one down puts the money back in their balance.",
   paid: "Payouts that have been sent.",
   rejected: "Payouts that were turned down, with the reason the owner saw.",
   fees: "What Klique keeps from donations and event contributions, and the smallest payout.",
