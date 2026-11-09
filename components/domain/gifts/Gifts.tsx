@@ -11,7 +11,7 @@ import { Icon } from "@/components/ui/Icon";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cx } from "@/components/ui/cx";
 import { cdn } from "@/lib/cdn";
-import { giftTargetKey, type GiftTargetType } from "@/lib/gifts";
+import { burstTier, giftTargetKey, type GiftTargetType } from "@/lib/gifts";
 import type { GiftDTO, GiftSummaryDTO, GiftTrayDTO } from "@/lib/types";
 
 export type GiftTarget = { type: GiftTargetType; id: string };
@@ -105,6 +105,7 @@ export function GiftButton({ target, authorId, off, size = "md", variant = "plai
   const { user } = useAuth();
   const s = useSummary(target);
   const [open, setOpen] = useState<React.CSSProperties | null>(null);
+  const btn = useRef<HTMLButtonElement>(null);
   const top = topGift(s);
   const canGift = !!user && !off && user.id !== authorId;
   // Reddit's awards: no gifts yet, the plain gift icon; with gifts, the top gift and how many in all (no "×")
@@ -124,7 +125,7 @@ export function GiftButton({ target, authorId, off, size = "md", variant = "plai
   if (!canGift) return <span aria-label={`${s!.total} ${s!.total === 1 ? "gift" : "gifts"}`} className={cx(box, className)}>{face}</span>;
   return (
     <span className={cx("relative inline-flex", className)}>
-      <button type="button" onClick={(e) => {
+      <button ref={btn} type="button" onClick={(e) => {
           // measured now: the event's element is gone by the time a state updater runs
           const at = open ? null : placeTray(e.currentTarget);
           setOpen(at);
@@ -132,7 +133,7 @@ export function GiftButton({ target, authorId, off, size = "md", variant = "plai
         {/* the same line icon, size and colour as the buttons beside it; only the tray shows the colourful gifts */}
         {face}
       </button>
-      {open && <GiftTray target={target} style={open} initial={top?.giftId} onClose={() => setOpen(null)} />}
+      {open && <GiftTray target={target} style={open} initial={top?.giftId} onClose={() => setOpen(null)} onSent={(g) => celebrate(btn.current, g)} />}
     </span>
   );
 }
@@ -153,7 +154,14 @@ function TrayReceived({ target }: { target: GiftTarget }) {
   );
 }
 
-function GiftTray({ target, style, initial, onClose }: { target: GiftTarget; style: React.CSSProperties; /** a gift to start picked (tapped in a gift row) */ initial?: string; onClose: () => void }) {
+/** The celebration for a gift just sent, from its button (loaded the first time someone sends one). */
+function celebrate(el: HTMLElement | null, g: GiftDTO) {
+  if (!el) return;
+  const at = el.getBoundingClientRect();
+  void import("./GiftBurst").then((m) => m.playGiftBurst(at, g, burstTier(g.price)));
+}
+
+function GiftTray({ target, style, initial, onClose, onSent }: { target: GiftTarget; style: React.CSSProperties; /** a gift to start picked (tapped in a gift row) */ initial?: string; onClose: () => void; /** sent: celebrate it */ onSent?: (g: GiftDTO) => void }) {
   const toast = useToast();
   const ref = useRef<HTMLDivElement>(null);
   const [data, setData] = useState<GiftTrayDTO | null>(trayCache);
@@ -193,6 +201,7 @@ function GiftTray({ target, style, initial, onClose }: { target: GiftTarget; sty
       const next = data ? { ...data, balance: res.data.balance } : data;
       trayCache = next;
       setData(next);
+      onSent?.(picked);
       toast(`${picked.name} sent${anonymous ? " anonymously" : ""}`, "success");
       key.current = newClientKey();
       onClose();

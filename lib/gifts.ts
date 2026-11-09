@@ -117,3 +117,17 @@ export function payoutDayFor(at: Date): Date {
 }
 /** "3 December" */
 export const payoutDayLabel = (d: Date | string) => new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "long", timeZone: "UTC" });
+
+/**
+ * How big the celebration is when you send a gift (the burst from the gift button): bigger gifts, a bigger moment.
+ * Naira prices: under `medium` small, under `large` medium, from `large` up large.
+ */
+export const GIFT_BURST = { medium: 500, large: 10_000 } as const;
+export type GiftBurstTier = "small" | "medium" | "large";
+export const burstTier = (priceNaira: number): GiftBurstTier => (priceNaira >= GIFT_BURST.large ? "large" : priceNaira >= GIFT_BURST.medium ? "medium" : "small");
+/** particles and length per tier (kept small: it must never slow anything down) */
+export const BURST_SPEC: Record<GiftBurstTier, { particles: number; ms: number; scale: number }> = {
+  small: { particles: 10, ms: 1200, scale: 2.4 },
+  medium: { particles: 14, ms: 1400, scale: 3 },
+  large: { particles: 18, ms: 1600, scale: 3.6 },
+};
