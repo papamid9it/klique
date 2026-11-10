@@ -1,16 +1,23 @@
 "use client";
 
-import { CommunityHomeFeed } from "./CommunityHomeFeed";
 import Link from "next/link";
 import { CommunityService } from "@/app/services/CommunityService";
+import { CrewService } from "@/app/services/CrewService";
+import { DiscoverService } from "@/app/services/DiscoverService";
+import { usePlace } from "@/components/providers/PlaceProvider";
+import { EventService } from "@/app/services/EventService";
+import { crewHref } from "@/components/domain/crews/parts";
 import { useRealtimeEvent } from "@/components/providers/RealtimeProvider";
 import { Button } from "@/components/ui/Button";
 import { Cover } from "@/components/ui/Cover";
+import { Icon } from "@/components/ui/Icon";
 import { RowSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { communityNews, rankMyCommunities } from "@/lib/constants";
-import { relativeStamp } from "@/lib/format";
+import { eventPhoto } from "@/lib/fake";
+import { formatDateShort, relativeStamp } from "@/lib/format";
 import { useApi } from "@/lib/hooks/useApi";
+import type { InterestId } from "@/lib/constants";
 import type { MyCommunityDTO } from "@/lib/types";
 
 const SHADE = "absolute inset-x-0 bottom-0 bg-black/40 px-3 py-2 text-white";
@@ -31,15 +38,39 @@ function Place({ c, big }: { c: MyCommunityDTO; big?: boolean }) {
   );
 }
 
+/** One line in "Coming up" or "Kliques for you": a small photo and two lines of text. */
+function Row({ href, src, seed, interest, title, line }: { href: string; src: string | null; seed: string; interest: InterestId; title: string; line: string }) {
+  return (
+    <Link href={href} className="flex min-w-0 items-center gap-3 rounded-card border border-line bg-surface p-2 hover:border-ink-muted/50">
+      <Cover src={src} seed={seed} interest={interest} className="size-14 shrink-0 rounded-control" />
+      <span className="min-w-0">
+        <span className="block truncate font-semibold">{title}</span>
+        <span className="block truncate text-sm text-ink-muted">{line}</span>
+      </span>
+    </Link>
+  );
+}
+
 /**
- * Home in the Communities style: the places you joined (the one that needs you most big), more of them, then a scrolling
- * mix that's mostly events, with kliques you could join and a few posts from your places (CommunityHomeFeed).
+ * Home in the Communities style: the places you joined (the one that needs you most big), more of them, what's coming
+ * up (your next event first) and kliques you could join. No feed; at most a little scrolling. The panels either side stay as they are.
  */
 export function CommunitiesHome() {
   const mine = useApi(() => CommunityService.mine(), [], { key: "home-places" });
+  const going = useApi(() => EventService.list({ scope: "going" }), [], { key: "home-places-going" });
+  const kliques = useApi(() => CrewService.forYou({ limit: 3 }), [], { key: "home-places-kliques" });
+  const { where, ready } = usePlace();
+  const discover = useApi(() => DiscoverService.discover(where), [where], { key: `discover:${where}`, wait: !ready });
   useRealtimeEvent(() => void mine.reload(), { filter: (e) => e.type === "channel" || (e.type === "crew" && !!e.chat) || (e.type === "notify" && e.category === "community"), debounceMs: 1500 });
 
   const places = rankMyCommunities(mine.data ?? []);
+  const next = (going.data?.items ?? []).find((e) => !e.isPast);
+  // few picks for you: fill up with other open kliques nearby you're not in, then offer to start one
+  const short = !!kliques.data && kliques.data.items.length < 3;
+  const nearby = useApi(short && ready ? () => CrewService.list({ open: true, where, limit: 12 }) : null, [short, ready, where], { key: `home-places-kliques-near:${where}` });
+  const picked = kliques.data?.items ?? [];
+  const forYou = [...picked, ...(nearby.data?.items ?? []).filter((k) => !k.viewer.standing && !picked.some((p) => p.id === k.id))].slice(0, 3);
+  const events = [...(next ? [next] : []), ...(discover.data?.eventsForYou ?? []).filter((e) => !e.isPast && e.id !== next?.id)].slice(0, 3);
   const more = places.slice(5, 9);
 
   return (
@@ -79,8 +110,47 @@ export function CommunitiesHome() {
         </section>
       )}
 
-      {/* then mostly events, kliques you could join and a few posts from your places, scrolling */}
-      <CommunityHomeFeed />
+      {(events.length > 0 || forYou.length > 0) && (
+        <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
+          {events.length > 0 && (
+            <section aria-labelledby="coming-up" className="min-w-0">
+              <div className="mb-2 flex items-baseline justify-between">
+                <h2 id="coming-up" className="text-sm font-semibold text-ink-muted">Coming up</h2>
+                <Link href="/events" className="text-sm font-semibold text-ink-muted hover:text-ink">All events</Link>
+              </div>
+              <div className="flex flex-col gap-2">
+                {events.map((e) => (
+                  <Row key={e.id} href={`/events/${e.id}`} src={eventPhoto(e.id, e.coverImage)} seed={e.id} interest={e.interest} title={e.title}
+                    line={`${e.id === next?.id ? "You're going · " : ""}${formatDateShort(e.startsAt)}${e.community ? ` · ${e.community.name}` : ""}`} />
+                ))}
+              </div>
+            </section>
+          )}
+          {forYou.length > 0 && (
+            <section aria-labelledby="kliques-for-you" className="min-w-0">
+              <div className="mb-2 flex items-baseline justify-between">
+                <h2 id="kliques-for-you" className="text-sm font-semibold text-ink-muted">Kliques for you</h2>
+                <Link href="/kliques" className="text-sm font-semibold text-ink-muted hover:text-ink">See more</Link>
+              </div>
+              <div className="flex flex-col gap-2">
+                {forYou.map((k) => (
+                  <Row key={k.id} href={crewHref(k)} src={k.coverImage} seed={k.id} interest={k.interest} title={k.title}
+                    line={`${formatDateShort(k.meetupAt)} · ${k.memberCount} of ${k.maxMembers} going`} />
+                ))}
+                {forYou.length < 3 && (
+                  <Link href="/kliques?start=1" className="flex min-w-0 items-center gap-3 rounded-card border border-dashed border-line p-2 hover:border-ink-muted/50">
+                    <span className="flex size-14 shrink-0 items-center justify-center rounded-control bg-raised text-ink-muted"><Icon name="plus" size={20} /></span>
+                    <span className="min-w-0">
+                      <span className="block truncate font-semibold">Start a klique</span>
+                      <span className="block truncate text-sm text-ink-muted">Pick a plan, a time and a place. People join you.</span>
+                    </span>
+                  </Link>
+                )}
+              </div>
+            </section>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -141,13 +141,7 @@ export const POST_FRAMES: { label: string; ratio: number | null }[] = [
 /** The shape a post shows at: the frame its poster picked, or the shape of its first picture or video. */
 export const postFrame = (first?: { aspect?: number | null; frame?: number | null } | null) => postShape(first?.frame ?? first?.aspect);
 
-/**
- * Home in the Communities style, after the places you joined: a scrolling mix built by the server, mostly events.
- * Per block of 10: this many events, kliques and community posts (when one kind runs out, the others fill in).
- */
-export const COMMUNITY_HOME_MIX = { events: 5, kliques: 3, posts: 2 } as const;
-
-/** What Home shows: Casual is the scrolling feed of posts; Communities is your communities, then mostly events and kliques. */
+/** What Home shows: Casual is the scrolling feed; Communities is just the places you joined, with no scrolling. */
 export const HOME_STYLES = ["casual", "communities"] as const;
 export type HomeStyle = (typeof HOME_STYLES)[number];
 

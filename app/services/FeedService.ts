@@ -1,6 +1,6 @@
 import ApiClient from "@/app/ApiCore";
 import type { ReactionKind } from "@/lib/reactions";
-import type { Envelope, FeedCommentDTO, FeedPostDTO, FeedSidebarDTO, HomeFeedItem, CommunityHomeDTO, Paginated, ReactionDTO, TopicMediaDTO } from "@/lib/types";
+import type { Envelope, FeedCommentDTO, FeedPostDTO, FeedSidebarDTO, HomeFeedItem, Paginated, ReactionDTO, TopicMediaDTO } from "@/lib/types";
 
 const api = new ApiClient();
 const base = (slug: string) => `/api/communities/${slug}/feed`;
@@ -33,8 +33,6 @@ export const FeedService = {
   /** full-screen pictures and videos (`start`: the post tapped comes first) */
   reels: (page = 1, at?: number, start?: string) => api.get<Envelope<{ items: FeedPostDTO[]; page: number; hasMore: boolean; at: number }>>("/api/reels", { page, ...(at ? { at } : {}), ...(start ? { start } : {}) }),
   reelsReady: () => api.get<Envelope<{ ready: boolean; on: boolean }>>("/api/reels/ready"),
-  /** Home in the Communities style: mostly events, then kliques, a few posts from your communities (pages of 10) */
-  communityHome: (page = 1, at?: number, where?: string) => api.get<Envelope<CommunityHomeDTO>>("/api/me/community-home", { page, ...(at ? { at } : {}), ...(where ? { where } : {}) }),
   home: (page = 1, at?: number) => api.get<Envelope<{ items: HomeFeedItem[]; page: number; hasMore: boolean; at: number }>>("/api/me/feed", at ? { page, at } : { page }),
 };
 
