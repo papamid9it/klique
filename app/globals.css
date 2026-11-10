@@ -522,3 +522,10 @@ html[data-motion="off"] .donate-btn:hover, html[data-motion="off"] .donate-btn:f
   html:not([data-motion="on"]) .gift-hop { animation: none; }
 }
 html[data-motion="off"] .gift-hop { animation: none; }
+
+/* Chat: a message's hover bar shows while the mouse is on it (or keyboard focus is in it), never because it was
+   clicked. While a menu from one bar is open (gift tray, reaction picker, ⋯), only that bar shows. */
+body:has([data-hover-bar] [aria-expanded="true"]) [data-hover-bar]:not(:has([aria-expanded="true"])) {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}

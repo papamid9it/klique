@@ -161,7 +161,7 @@ export const Message = memo(function Message({
 
   return (
     // on a touch screen, press and hold for the actions sheet (the hover toolbar is for mice)
-    <li id={`msg-${m.id}`} tabIndex={-1} {...(!m.pending && !m.deleted && !editing ? sheet.press : {})} className={cx("group relative flex gap-3 px-4 outline-none hover:bg-raised/40 focus-within:bg-raised/40 sm:px-6", showHead ? "mt-4 pt-0.5" : "", m.mentionsMe && "border-l-2 border-accent bg-accent/10 hover:bg-accent/15", m.pending && "opacity-60")}>
+    <li id={`msg-${m.id}`} tabIndex={-1} {...(!m.pending && !m.deleted && !editing ? sheet.press : {})} className={cx("group relative flex gap-3 px-4 outline-none hover:bg-raised/40 has-[:focus-visible]:bg-raised/40 has-[[data-hover-bar]_[aria-expanded=true]]:bg-raised/40 sm:px-6", showHead ? "mt-4 pt-0.5" : "", m.mentionsMe && "border-l-2 border-accent bg-accent/10 hover:bg-accent/15", m.pending && "opacity-60")}>
       <div className="w-10 shrink-0 pt-0.5">
         {showHead ? (
           m.bot ? (
@@ -256,7 +256,7 @@ export const Message = memo(function Message({
         )}
       </div>
       {(items.length > 0 || (canReact && onReact)) && !m.pending && !m.deleted && !editing && (
-        <div data-hover-bar className="absolute -top-3 right-4 flex items-center rounded-full border border-line bg-surface pointer-events-none opacity-0 shadow-sm transition group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100 sm:right-6 [@media(pointer:coarse)]:hidden">
+        <div data-hover-bar className="absolute -top-3 right-4 flex items-center rounded-full border border-line bg-surface pointer-events-none opacity-0 shadow-sm transition group-hover:pointer-events-auto group-hover:opacity-100 group-has-[:focus-visible]:pointer-events-auto group-has-[:focus-visible]:opacity-100 has-[[aria-expanded=true]]:pointer-events-auto has-[[aria-expanded=true]]:opacity-100 sm:right-6 [@media(pointer:coarse)]:hidden">
           {/* Discord's idea, our look: your three most-used reactions, any reaction, Reply, Gift, then ⋯ for the rest */}
           {canReact && onReact && <QuickReactions onPick={(k) => onReact(m, k)} />}
           {canReact && onReact && <ReactButton onPick={(k) => onReact(m, k)} />}
