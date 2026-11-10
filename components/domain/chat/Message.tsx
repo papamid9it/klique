@@ -256,7 +256,7 @@ export const Message = memo(function Message({
         )}
       </div>
       {(items.length > 0 || (canReact && onReact)) && !m.pending && !m.deleted && !editing && (
-        <div className="absolute -top-3 right-4 flex items-center rounded-full border border-line bg-surface pointer-events-none opacity-0 shadow-sm transition group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100 sm:right-6 [@media(pointer:coarse)]:hidden">
+        <div data-hover-bar className="absolute -top-3 right-4 flex items-center rounded-full border border-line bg-surface pointer-events-none opacity-0 shadow-sm transition group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100 sm:right-6 [@media(pointer:coarse)]:hidden">
           {/* Discord's idea, our look: your three most-used reactions, any reaction, Reply, Gift, then ⋯ for the rest */}
           {canReact && onReact && <QuickReactions onPick={(k) => onReact(m, k)} />}
           {canReact && onReact && <ReactButton onPick={(k) => onReact(m, k)} />}

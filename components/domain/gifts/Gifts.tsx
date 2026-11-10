@@ -104,22 +104,26 @@ function topGift(s: GiftSummaryDTO | null) {
 const hopDelay = (id: string) => `-${[...id].reduce((n, c) => (n * 31 + c.charCodeAt(0)) % 9973, 7) % 16}s`;
 
 /**
- * Fixed to the screen, so a scrolling panel or a card's edge never cuts it off: below the button, or above it when
- * there's more room there, never past the window's edges. It's never taller than the room it has: the gifts scroll
- * inside it, and its top (balance, Top up) and bottom (Send) always show.
+ * Placed like Discord's emoji picker: beside the message's hover bar (to its left, else its right), level with it, slid up or down
+ * just enough to fit the window. Where there's no room beside it (a post's button, a narrow window) it sits below the
+ * button, or above it, and still never past the window's edges. A fixed height, so Send always shows.
  */
 function placeTray(el: HTMLElement): React.CSSProperties {
-  const r = el.getBoundingClientRect();
   const edge = 12;
   const gap = 8;
-  const width = Math.min(336, window.innerWidth - 2 * edge);
-  const left = Math.max(edge, Math.min(r.left, window.innerWidth - width - edge));
-  const below = window.innerHeight - r.bottom - gap - edge;
-  const above = r.top - gap - edge;
-  const tall = 480;
-  // a very short window: the whole height, from the top
-  if (Math.max(below, above) < 260) return { top: edge, left, maxHeight: window.innerHeight - 2 * edge };
-  return below >= tall || below >= above ? { top: r.bottom + gap, left, maxHeight: Math.min(tall, below) } : { bottom: window.innerHeight - r.top + gap, left, maxHeight: Math.min(tall, above) };
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const width = Math.min(336, vw - 2 * edge);
+  const height = Math.min(460, vh - 2 * edge);
+  const fit = (top: number) => Math.max(edge, Math.min(top, vh - edge - height));
+  const bar = (el.closest("[data-hover-bar]") as HTMLElement | null) ?? el;
+  const b = bar.getBoundingClientRect();
+  if (b.left - gap - width >= edge) return { left: b.left - gap - width, top: fit(b.top), height };
+  if (bar !== el && b.right + gap + width <= vw - edge) return { left: b.right + gap, top: fit(b.top), height };
+  const r = el.getBoundingClientRect();
+  const left = Math.max(edge, Math.min(r.right - width, vw - width - edge));
+  const top = vh - r.bottom - gap - edge >= height ? r.bottom + gap : r.top - gap - height >= edge ? r.top - gap - height : fit(r.bottom + gap);
+  return { left, top, height };
 }
 
 /* ------------------------------------------------------------------ */
@@ -201,24 +205,27 @@ function GiftTray({ target, anchor, initial, onClose, onSent }: { target: GiftTa
   const key = useRef(newClientKey());
   const [style, setStyle] = useState(() => placeTray(anchor));
 
-  // it follows its button as the chat or page scrolls (once a frame at most), and closes when the button scrolls away
+  // like Discord: while it's open the chat and page don't scroll (only the gifts inside it do); a resize re-places it
   useEffect(() => {
+    const inside = (e: Event) => !!ref.current?.contains(e.target as Node);
+    const hold = (e: Event) => !inside(e) && e.cancelable && e.preventDefault();
+    const keys = (e: KeyboardEvent) => !inside(e) && ["PageUp", "PageDown", "Home", "End", "ArrowUp", "ArrowDown", " "].includes(e.key) && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || (e.target as HTMLElement)?.isContentEditable) && e.preventDefault();
     let frame = 0;
-    const follow = (e: Event) => {
-      if (frame || (e.type === "scroll" && ref.current?.contains(e.target as Node))) return;
-      frame = requestAnimationFrame(() => {
-        frame = 0;
-        const r = anchor.getBoundingClientRect();
-        if (!anchor.isConnected || r.bottom < 0 || r.top > window.innerHeight) return onClose();
-        setStyle(placeTray(anchor));
-      });
+    const resized = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => (anchor.isConnected ? setStyle(placeTray(anchor)) : onClose()));
     };
-    window.addEventListener("scroll", follow, { capture: true, passive: true });
-    window.addEventListener("resize", follow);
+    const opts = { capture: true, passive: false } as const;
+    document.addEventListener("wheel", hold, opts);
+    document.addEventListener("touchmove", hold, opts);
+    document.addEventListener("keydown", keys, true);
+    window.addEventListener("resize", resized);
     return () => {
       cancelAnimationFrame(frame);
-      window.removeEventListener("scroll", follow, { capture: true });
-      window.removeEventListener("resize", follow);
+      document.removeEventListener("wheel", hold, opts);
+      document.removeEventListener("touchmove", hold, opts);
+      document.removeEventListener("keydown", keys, true);
+      window.removeEventListener("resize", resized);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anchor]);
