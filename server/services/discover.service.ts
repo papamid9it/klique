@@ -35,17 +35,19 @@ export async function discover(viewer: IUser | null, whereParam?: string): Promi
   const place = scopeFilter(scope);
   const mine = new Set<string>(viewer?.interests ?? []);
   const from = new Date(Date.now() - LINGER_MS);
-  const visibility = await eventVisibilityFilter(viewer);
+  // four independent lookups, side by side (one round trip instead of four)
+  const [visibility, joinedRows, goingRows, klique] = await Promise.all([
+    eventVisibilityFilter(viewer),
+    viewer ? Membership.find({ userId: viewer._id, status: "active", subcommunityId: null }).select("communityId").lean<{ communityId: ICommunity["_id"] }[]>() : Promise.resolve([]),
+    viewer ? Rsvp.find({ userId: viewer._id, status: "going" }).select("eventId").lean<{ eventId: IEvent["_id"] }[]>() : Promise.resolve([]),
+    kliqueId(),
+  ]);
 
   const now = new Date();
   const today = startOfLagosDay(now);
   const live = { cancelled: false, startsAt: { $gte: from } };
-  const joinedIds = viewer
-    ? (await Membership.find({ userId: viewer._id, status: "active", subcommunityId: null }).select("communityId").lean<{ communityId: ICommunity["_id"] }[]>()).map(
-        (m) => m.communityId,
-      )
-    : [];
-  const goingIds = viewer ? (await Rsvp.find({ userId: viewer._id, status: "going" }).select("eventId").lean<{ eventId: IEvent["_id"] }[]>()).map((r) => r.eventId) : [];
+  const joinedIds = joinedRows.map((m) => m.communityId);
+  const goingIds = goingRows.map((r) => r.eventId);
 
   const [upcoming, planRows, communityRows, perDay] = await Promise.all([
     Event.find({ $and: [visibility, { ...place, ...live }] })
@@ -55,7 +57,7 @@ export async function discover(viewer: IUser | null, whereParam?: string): Promi
     goingIds.length ? Event.find({ $and: [visibility, { _id: { $in: goingIds }, ...live }] }).sort({ startsAt: 1 }).limit(3).lean<IEvent[]>() : Promise.resolve<IEvent[]>([]),
     joinedIds.length
       ? // "From your communities": the ones you chose (Klique's events are already all over the page)
-        Event.find({ $and: [visibility, { communityId: { $in: joinedIds, $ne: await kliqueId() }, ...live, startsAt: { $gte: now } }] }).sort({ startsAt: 1 }).limit(12).lean<IEvent[]>()
+        Event.find({ $and: [visibility, { communityId: { $in: joinedIds, $ne: klique }, ...live, startsAt: { $gte: now } }] }).sort({ startsAt: 1 }).limit(12).lean<IEvent[]>()
       : Promise.resolve<IEvent[]>([]),
     Event.aggregate<{ _id: string; n: number }>([
       { $match: { $and: [visibility, { ...place, cancelled: false, startsAt: { $gte: today, $lt: new Date(+today + 7 * DAY_MS) } }] } },

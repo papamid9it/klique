@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><style>
+.g,.tw,.blink,.fl,.pop,.st,.cf,.hb,.sw,.sh,.bob,.tilt,.clap1,.clap2{transform-box:fill-box;transform-origin:center}
+@media (prefers-reduced-motion:no-preference){
+.bob{animation:bob 2.6s ease-in-out infinite}
+.hb{animation:hb 1.6s ease-in-out infinite}
+.sh{animation:sh 1.1s ease-in-out infinite;transform-origin:50% 90%}
+.sw{animation:sw 3s ease-in-out infinite;transform-origin:50% 100%}
+.tilt{animation:tilt 2.4s ease-in-out infinite;transform-origin:50% 90%}
+.tw{animation:tw 1.8s ease-in-out infinite}
+.tw:nth-of-type(2n){animation-delay:.6s}.tw:nth-of-type(3n){animation-delay:1.1s}
+.blink{animation:blink 3.6s infinite}
+.fl{animation:fl .9s ease-in-out infinite alternate;transform-origin:50% 100%}
+.pop{animation:pop 1.8s ease-out infinite}
+.pop:nth-of-type(2n){animation-delay:.6s}.pop:nth-of-type(3n){animation-delay:1.2s}
+.st{animation:st 2.4s ease-in infinite}
+.st:nth-of-type(2n){animation-delay:.8s}.st:nth-of-type(3n){animation-delay:1.6s}
+.cf{animation:cf 1.4s ease-in-out infinite alternate}
+.cf:nth-of-type(2n){animation-delay:.5s}
+.clap1{animation:c1 .8s ease-in-out infinite;transform-origin:20% 90%}
+.clap2{animation:c2 .8s ease-in-out infinite;transform-origin:80% 90%}
+}
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+@keyframes hb{0%,100%{transform:scale(1)}15%{transform:scale(1.1)}30%{transform:scale(.97)}45%{transform:scale(1.06)}}
+@keyframes sh{0%,100%{transform:rotate(0) scale(1)}25%{transform:rotate(-4deg) scale(1.03,.97)}75%{transform:rotate(4deg) scale(1.03,.97)}}
+@keyframes sw{0%,100%{transform:rotate(-4deg)}50%{transform:rotate(4deg)}}
+@keyframes tilt{0%,100%{transform:rotate(-3deg)}50%{transform:rotate(3deg) translateY(-2px)}}
+@keyframes tw{0%,100%{transform:scale(.6);opacity:.4}50%{transform:scale(1.15);opacity:1}}
+@keyframes blink{0%,92%,100%{transform:scaleY(1)}95%{transform:scaleY(.1)}}
+@keyframes fl{from{transform:scale(1,1)}to{transform:scale(.94,1.07)}}
+@keyframes pop{0%{transform:translateY(0);opacity:0}15%{opacity:1}60%{transform:translateY(-14px);opacity:1}100%{transform:translateY(-18px);opacity:0}}
+@keyframes st{0%{transform:translateY(4px);opacity:0}30%{opacity:.7}100%{transform:translateY(-16px);opacity:0}}
+@keyframes cf{from{transform:translateY(0) rotate(0)}to{transform:translateY(-5px) rotate(25deg)}}
+@keyframes c1{0%,100%{transform:rotate(0)}50%{transform:rotate(12deg)}}
+@keyframes c2{0%,100%{transform:rotate(0)}50%{transform:rotate(-12deg)}}
+</style><defs><radialGradient id="f1" cx=".5" cy=".75" r=".9"><stop offset="0" stop-color="#fff3b0"/><stop offset=".35" stop-color="#ffb703"/><stop offset=".7" stop-color="#ff5400"/><stop offset="1" stop-color="#c1121f"/></radialGradient><radialGradient id="f2" cx=".5" cy=".8" r=".9"><stop offset="0" stop-color="#ffffff"/><stop offset=".5" stop-color="#ffe066"/><stop offset="1" stop-color="#ff9e00"/></radialGradient></defs><ellipse cx="64" cy="119" rx="30" ry="5" fill="#000" opacity=".18"/><g class="fl"><path d="M64 116c-26 0-42-16-42-38 0-20 14-30 18-50 12 8 16 18 16 28 4-6 6-14 4-22 20 12 42 30 42 48 0 20-16 34-38 34z" fill="url(#f1)"/><path d="M64 116c-12 0-20-8-20-18 0-12 10-18 14-28 6 6 8 12 8 18 4-2 6-6 6-10 8 6 12 12 12 20 0 10-8 18-20 18z" fill="url(#f2)"/></g></svg>

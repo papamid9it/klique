@@ -2104,6 +2104,19 @@ export interface GiftEarningsDTO {
 }
 
 /** Admin → Gifts dashboard. Naira throughout. */
+/** A Hype top-up that may be paid without its Hype yet (Admin → Gifts). */
+export interface AdminStuckTopupDTO {
+  id: string;
+  reference: string;
+  platform: "web" | "apple" | "google";
+  hype: number;
+  amount: number;
+  /** uncredited: paid, but its Hype never landed; unconfirmed: a store purchase, confirmed by the store, not yet credited */
+  kind: "unconfirmed" | "uncredited";
+  createdAt: string;
+  user: { handle: string; displayName: string } | null;
+}
+
 export interface AdminGiftsReportDTO {
   bought: {
     total: { amount: number; count: number; hype: number; storeFees: number };

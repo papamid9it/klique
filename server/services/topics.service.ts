@@ -157,9 +157,8 @@ type ListQuery = z.infer<typeof topicListQuery>;
 export async function listTopics(viewer: IUser | null, space: Space, access: SpaceAccess, q: ListQuery): Promise<Paginated<TopicDTO>> {
   assertCommunity(space);
   assertCanView(access, "topics");
-  const hidden = await hiddenUserIds(viewer?._id ?? null);
+  const [hidden, boards] = await Promise.all([hiddenUserIds(viewer?._id ?? null), ensureBoards(space, space.community.ownerId)]);
   const match: Record<string, unknown> = { communityId: space.community._id };
-  const boards = await ensureBoards(space, space.community.ownerId);
   if (q.board) {
     const b = boards.find((x) => x.slug === q.board);
     if (!b) throw notFound("That board doesn't exist.");
@@ -247,9 +246,9 @@ export async function getTopic(viewer: IUser | null, space: Space, access: Space
   assertCommunity(space);
   assertCanView(access, "this topic");
   const row = await loadTopic(space, topicId);
-  const [topic] = await toTopics([row], viewer);
+  // the post's details and its thread don't need each other: fetched side by side
+  const [[topic], thread] = await Promise.all([toTopics([row], viewer), ensureTopicThread(viewer, access, row)]);
   if (!topic) throw notFound("That topic is gone.");
-  const thread = await ensureTopicThread(viewer, access, row);
   return { topic, thread, messages: await listMessages(viewer, space, access, thread.slug, {}) };
 }
 

@@ -152,5 +152,7 @@ const PayoutSchema = new Schema<IPayout>(
 PayoutSchema.index({ communityId: 1, createdAt: -1 });
 PayoutSchema.index({ status: 1, createdAt: 1 });
 PayoutSchema.index({ kind: 1, requestedById: 1, createdAt: -1 });
+// one open gift-earnings payout per person: two requests at the same moment can't both go through
+PayoutSchema.index({ requestedById: 1 }, { name: "one_open_gift_payout", unique: true, partialFilterExpression: { kind: "gifts", status: "requested" } });
 
 export const Payout: Model<IPayout> = defineModel<IPayout>("Payout", PayoutSchema);

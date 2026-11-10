@@ -103,23 +103,22 @@ export async function getCommunity(viewer: IUser | null, slug: string): Promise<
   // an 18+ community: under-18s never learn it exists; anyone else not cleared yet gets a page that asks (ageGate)
   if (access.adultGate === "under_18") throw notFound("We couldn't find that community.");
 
-  let subcommunityCount: number | null = null;
-  let upcomingEventCount: number | null = null;
-  if (access.canView) {
-    [subcommunityCount, upcomingEventCount] = await Promise.all([
-      countVisibleSubs(viewer, space.community),
-      Event.countDocuments({
-        communityId: space.community._id,
-        subcommunityId: null,
-        cancelled: false,
-        review: null,
-        startsAt: { $gte: new Date() },
-      }),
-    ]);
-  }
+  // the counts and your own "Suppress @everyone and @here" side by side (none depends on another)
+  const [subcommunityCount, upcomingEventCount, membership] = await Promise.all([
+    access.canView ? countVisibleSubs(viewer, space.community) : null,
+    access.canView
+      ? Event.countDocuments({
+          communityId: space.community._id,
+          subcommunityId: null,
+          cancelled: false,
+          review: null,
+          startsAt: { $gte: new Date() },
+        })
+      : null,
+    viewer && access.isMember ? Membership.findOne({ userId: viewer._id, communityId: space.community._id, subcommunityId: null }).select("suppressEveryone").lean<{ suppressEveryone?: boolean }>() : null,
+  ]);
   const dto = await toCommunityDetail(space.community, access, { subcommunityCount, upcomingEventCount });
-  // your own "Suppress @everyone and @here" here
-  if (viewer && access.isMember) dto.suppressEveryone = !!(await Membership.findOne({ userId: viewer._id, communityId: space.community._id, subcommunityId: null }).select("suppressEveryone").lean<{ suppressEveryone?: boolean }>())?.suppressEveryone;
+  if (viewer && access.isMember) dto.suppressEveryone = !!membership?.suppressEveryone;
   return dto;
 }
 

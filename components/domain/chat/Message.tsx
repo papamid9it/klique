@@ -156,6 +156,8 @@ export const Message = memo(function Message({
     ...(m.canDelete ? [{ label: "Delete message", icon: "trash" as const, danger: true, onSelect: () => onDelete(m) }] : []),
     ...(!mine && onReport && !m.deleted ? [{ label: "Report message", icon: "flag" as const, onSelect: () => onReport(m) }] : []),
   ];
+  // Reply has its own button in the hover bar; its ⋯ menu only shows when something else is left
+  const rest = items.filter((it) => it.label !== "Reply");
 
   return (
     // on a touch screen, press and hold for the actions sheet (the hover toolbar is for mice)
@@ -264,7 +266,7 @@ export const Message = memo(function Message({
             </button>
           )}
           {gifts && !m.bot && <GiftButton target={{ type: "reply", id: m.id }} authorId={m.author.id} />}
-          {items.length > 0 && <OverflowMenu items={items.filter((it) => it.label !== "Reply")} label="Message actions" compact />}
+          {rest.length > 0 && <OverflowMenu items={rest} label="Message actions" compact />}
         </div>
       )}
       {sheet.open && <MessageSheet open onClose={sheet.close} onReact={canReact && onReact ? (k) => onReact(m, k) : undefined} items={items} copyText={m.body || undefined} />}

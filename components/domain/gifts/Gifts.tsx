@@ -11,7 +11,7 @@ import { Icon } from "@/components/ui/Icon";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cx } from "@/components/ui/cx";
 import { cdn } from "@/lib/cdn";
-import { burstTier, giftTargetKey, type GiftTargetType } from "@/lib/gifts";
+import { burstTier, giftArtStill, giftTargetKey, type GiftTargetType } from "@/lib/gifts";
 import type { GiftDTO, GiftSummaryDTO, GiftTrayDTO } from "@/lib/types";
 
 export type GiftTarget = { type: GiftTargetType; id: string };
@@ -22,6 +22,8 @@ export type GiftTarget = { type: GiftTargetType; id: string };
 
 const known = new Map<string, GiftSummaryDTO>();
 const waiting = new Set<string>();
+/** items whose request failed once already */
+const retried = new Set<string>();
 // per item: only the buttons showing that item redraw when its gifts change (not every gift on the screen)
 const listeners = new Map<string, Set<() => void>>();
 let timer: ReturnType<typeof setTimeout> | null = null;
@@ -35,9 +37,15 @@ function flush() {
   batch.forEach((k) => waiting.delete(k));
   GiftService.summaries(batch).then((r) => r.data).then(
     (res) => batch.forEach((k) => known.set(k, res[k] ?? { total: 0, items: [] })),
-    () => batch.forEach((k) => known.set(k, { total: 0, items: [] })),
+    () => {
+      // a failed request is tried once more, quietly, a moment later; only a second failure shows no gifts
+      const again = batch.filter((k) => !retried.has(k));
+      again.forEach((k) => retried.add(k));
+      batch.forEach((k) => !again.includes(k) && known.set(k, { total: 0, items: [] }));
+      if (again.length) setTimeout(() => again.forEach(want), 2000);
+    },
   ).finally(() => {
-    batch.forEach(tell);
+    batch.forEach((k) => known.has(k) && tell(k));
     if (waiting.size && !timer) timer = setTimeout(flush, 40);
   });
 }
@@ -70,10 +78,12 @@ function useSummary(target: GiftTarget): GiftSummaryDTO | null {
 }
 
 /** A gift's picture: its uploaded art, or its emoji. */
-export function GiftArt({ gift, size }: { gift: Pick<GiftDTO, "name" | "emoji" | "artUrl">; size: number }) {
+/** A gift's picture. Our drawn gifts move a little only where `animate` is set (the tray); elsewhere they're still. */
+export function GiftArt({ gift, size, animate }: { gift: Pick<GiftDTO, "name" | "emoji" | "artUrl">; size: number; animate?: boolean }) {
   if (gift.artUrl) {
+    const url = animate ? gift.artUrl : (giftArtStill(gift.artUrl) ?? gift.artUrl);
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={/\.gif(\?|$)/i.test(gift.artUrl) ? gift.artUrl : cdn(gift.artUrl, { w: size * 2 })} alt={gift.name} width={size} height={size} loading="lazy" className="inline-block object-contain" style={{ width: size, height: size }} />;
+    return <img src={/\.gif(\?|$)/i.test(url) ? url : cdn(url, { w: size * 2 })} alt={gift.name} width={size} height={size} loading="lazy" className="inline-block object-contain" style={{ width: size, height: size }} />;
   }
   return (
     <span role="img" aria-label={gift.name} className="inline-flex items-center justify-center leading-none" style={{ width: size, height: size, fontSize: size * 0.82 }}>
@@ -191,7 +201,8 @@ function GiftTray({ target, style, initial, onClose, onSent }: { target: GiftTar
       },
       (e) => setError(errorMessage(e)),
     );
-    const away = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && onClose();
+    // outside the tray and its button (the button's own click closes it, so it doesn't close and reopen at once)
+    const away = (e: PointerEvent) => !(ref.current?.parentElement ?? ref.current)?.contains(e.target as Node) && onClose();
     const esc = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     document.addEventListener("pointerdown", away);
     document.addEventListener("keydown", esc);
@@ -250,7 +261,7 @@ function GiftTray({ target, style, initial, onClose, onSent }: { target: GiftTar
                 title={`${g.name}: ${g.hype.toLocaleString("en-NG")} Hype (₦${g.price.toLocaleString("en-NG")})`}
                 className={cx("flex flex-col items-center gap-0.5 rounded-control p-1.5 transition hover:bg-raised", picked?.id === g.id && "bg-raised ring-2 ring-accent-text")}
               >
-                <GiftArt gift={g} size={32} />
+                <GiftArt gift={g} size={32} animate />
                 <span className="w-full truncate text-center text-[11px] font-medium">{g.name}</span>
                 <span className="font-mono text-[10.5px] text-ink-muted">{g.hype.toLocaleString("en-NG")} Hype</span>
               </button>

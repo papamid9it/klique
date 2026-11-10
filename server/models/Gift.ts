@@ -87,6 +87,8 @@ export interface IHypeTopup {
   /** a store sandbox purchase (only accepted with STORE_IAP_ALLOW_TEST=1) */
   test: boolean;
   paidAt: Date | null;
+  /** set once when a paid top-up from before credits were all-or-nothing is found without its Hype and credited then */
+  repairedAt?: Date | null;
   createdAt: Date;
 }
 
@@ -102,6 +104,7 @@ const HypeTopupSchema = new Schema<IHypeTopup>(
     status: { type: String, enum: ["pending", "paid"], default: "pending" },
     test: { type: Boolean, default: false },
     paidAt: { type: Date, default: null },
+    repairedAt: { type: Date, default: null },
   },
   { timestamps: { createdAt: true, updatedAt: false }, collection: "hypetopups" },
 );

@@ -14,7 +14,7 @@ import { ErrorState } from "@/components/ui/States";
 import { cx } from "@/components/ui/cx";
 import { GIFT_MAX_PRICE, GIFT_MIN_PRICE, giftHype, type GiftConfig } from "@/lib/gifts";
 import { useApi } from "@/lib/hooks/useApi";
-import type { GiftDTO } from "@/lib/types";
+import type { AdminStuckTopupDTO, GiftDTO } from "@/lib/types";
 import { Badge, Panel, StatCard } from "./AdminParts";
 
 const naira = (n: number) => `₦${n.toLocaleString("en-NG")}`;
@@ -23,6 +23,53 @@ const PLATFORM = { web: "Website (Paystack)", apple: "iPhone (Apple)", google: "
 const TARGET = { post: "post", comment: "comment", topic: "board post", reply: "board reply" } as const;
 
 /** Admin → Gifts → Dashboard: Hype bought, who bought it, gifts sent (anonymous senders shown), and the money split. */
+/** Top-ups that may be paid without their Hype yet: shown only when there are some, with a button to check them now. */
+function StuckTopups() {
+  const toast = useToast();
+  const { data, setData } = useApi(() => GiftService.adminStuckTopups(), []);
+  const [busy, setBusy] = useState(false);
+  if (!data?.length) return null;
+  async function retry() {
+    setBusy(true);
+    try {
+      const res = await GiftService.adminRetryTopups();
+      setData(res.data.stuck);
+      toast(res.data.credited ? `${res.data.credited} credited` : "Nothing new was paid", "success");
+    } catch (e) {
+      toast(errorMessage(e), "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Panel
+      title={`Top-ups not credited yet (${data.length})`}
+      action={
+        <Button size="sm" loading={busy} onClick={() => void retry()}>
+          Check again
+        </Button>
+      }
+    >
+      <ul className="divide-y divide-line text-sm">
+        {data.map((t: AdminStuckTopupDTO) => (
+          <li key={t.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5">
+            <span className="font-semibold">{t.user ? `${t.user.displayName} @${t.user.handle}` : "Deleted account"}</span>
+            <span>
+              {t.hype.toLocaleString("en-NG")} Hype · {naira(t.amount)}
+            </span>
+            <span className="text-ink-muted">{PLATFORM[t.platform]}</span>
+            <Badge>Paid, Hype missing</Badge>
+            <span className="ml-auto font-mono text-xs text-ink-muted">
+              {t.reference} · {day(t.createdAt)}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <p className="border-t border-line px-4 py-2.5 text-xs text-ink-muted">Checked again every day too, along with website checkouts that never got an answer from Paystack.</p>
+    </Panel>
+  );
+}
+
 export function GiftsDashboard() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -33,6 +80,7 @@ export function GiftsDashboard() {
   const max = Math.max(1, ...(data?.bought.series.map((s) => s.amount) ?? [1]));
   return (
     <div className="space-y-5">
+      <StuckTopups />
       <div className="flex flex-wrap items-end gap-3">
         <label className="text-[13px]">
           <span className="mb-1 block font-medium">From</span>

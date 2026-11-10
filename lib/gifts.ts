@@ -53,7 +53,7 @@ export const DEFAULT_GIFT_CONFIG: GiftConfig = {
   enabled: true,
   receiverPercent: 70,
   holdDays: 7,
-  minPayout: 1000,
+  minPayout: 20_000,
   webPacks: [500, 1000, 5000, 10_000, 50_000],
   storePacks: [
     { productId: "hype_50", hype: 50, price: 650 },
@@ -93,20 +93,41 @@ export const hypeForNaira = (naira: number) => Math.floor(naira / HYPE_NAIRA);
 /** The receiver's share of a gift, naira (whole naira, rounded down). */
 export const receiverShare = (priceNaira: number, percent: number) => Math.floor((priceNaira * percent) / 100);
 
-/** The default catalogue, seeded once (Admin → Gifts edits it). `emoji` is the art until an animated picture is uploaded. */
-export const DEFAULT_GIFTS: { slug: string; name: string; emoji: string; price: number }[] = [
-  { slug: "heart", name: "Heart", emoji: "❤️", price: 10 },
-  { slug: "rose", name: "Rose", emoji: "🌹", price: 50 },
-  { slug: "fire", name: "Fire", emoji: "🔥", price: 100 },
-  { slug: "clap", name: "Clap", emoji: "👏", price: 200 },
-  { slug: "party", name: "Party", emoji: "🎉", price: 500 },
-  { slug: "trophy", name: "Trophy", emoji: "🏆", price: 1000 },
-  { slug: "crown", name: "Crown", emoji: "👑", price: 5000 },
-  { slug: "diamond", name: "Diamond", emoji: "💎", price: 10_000 },
-  { slug: "rocket", name: "Rocket", emoji: "🚀", price: 50_000 },
-  { slug: "lion", name: "Lion", emoji: "🦁", price: 100_000 },
-  { slug: "castle", name: "Castle", emoji: "🏰", price: 500_000 },
+/**
+ * The gifts every new catalogue starts with, cheapest first. `art` is our own drawing in public/gifts: the .svg moves a
+ * little (the tray and the send burst) and a still .png of it sits next to it (everywhere else, and in the phone app).
+ * The emoji is only a text stand-in, for notifications.
+ */
+export const DEFAULT_GIFTS: { slug: string; name: string; emoji: string; price: number; art: string }[] = [
+  { slug: "heart", name: "Heart", emoji: "❤️", price: 10, art: "/gifts/heart.svg" },
+  { slug: "laughing", name: "Laughing", emoji: "😆", price: 20, art: "/gifts/laughing.svg" },
+  { slug: "not-impressed", name: "Not impressed", emoji: "😑", price: 20, art: "/gifts/not-impressed.svg" },
+  { slug: "holding-laughter", name: "Holding laughter", emoji: "🤭", price: 20, art: "/gifts/holding-laughter.svg" },
+  { slug: "laugh-crying", name: "Laugh crying", emoji: "😂", price: 30, art: "/gifts/laugh-crying.svg" },
+  { slug: "shy", name: "Shy", emoji: "☺️", price: 30, art: "/gifts/shy.svg" },
+  { slug: "rose", name: "Rose", emoji: "🌹", price: 50, art: "/gifts/rose.svg" },
+  { slug: "heart-eyes", name: "Heart eyes", emoji: "😍", price: 50, art: "/gifts/heart-eyes.svg" },
+  { slug: "popcorn", name: "Popcorn", emoji: "🍿", price: 50, art: "/gifts/popcorn.svg" },
+  { slug: "fire", name: "Fire", emoji: "🔥", price: 100, art: "/gifts/fire.svg" },
+  { slug: "mind-blown", name: "Mind blown", emoji: "🤯", price: 100, art: "/gifts/mind-blown.svg" },
+  { slug: "clap", name: "Clap", emoji: "👏", price: 200, art: "/gifts/clap.svg" },
+  { slug: "jollof", name: "Jollof pot", emoji: "🍲", price: 200, art: "/gifts/jollof.svg" },
+  { slug: "suya", name: "Suya", emoji: "🍢", price: 300, art: "/gifts/suya.svg" },
+  { slug: "party", name: "Party", emoji: "🎉", price: 500, art: "/gifts/party.svg" },
+  { slug: "trophy", name: "Trophy", emoji: "🏆", price: 1000, art: "/gifts/trophy.svg" },
+  { slug: "golden-poop", name: "Golden poop", emoji: "💩", price: 1000, art: "/gifts/golden-poop.svg" },
+  { slug: "talking-drum", name: "Talking drum", emoji: "🥁", price: 2000, art: "/gifts/talking-drum.svg" },
+  { slug: "crown", name: "Crown", emoji: "👑", price: 5000, art: "/gifts/crown.svg" },
+  { slug: "diamond", name: "Diamond", emoji: "💎", price: 10_000, art: "/gifts/diamond.svg" },
+  { slug: "danfo", name: "Danfo", emoji: "🚐", price: 20_000, art: "/gifts/danfo.svg" },
+  { slug: "diamonds", name: "Diamonds", emoji: "💎", price: 30_000, art: "/gifts/diamonds.svg" },
+  { slug: "rocket", name: "Rocket", emoji: "🚀", price: 50_000, art: "/gifts/rocket.svg" },
+  { slug: "lion", name: "Lion", emoji: "🦁", price: 100_000, art: "/gifts/lion.svg" },
+  { slug: "castle", name: "Castle", emoji: "🏰", price: 500_000, art: "/gifts/castle.svg" },
 ];
+
+/** Our own gift drawings: the still picture for a moving one (public/gifts/x.svg → x.png). Uploads pass through. */
+export const giftArtStill = (url: string | null) => (url && /^\/gifts\/[\w-]+\.svg$/.test(url) ? url.replace(/\.svg$/, ".png") : url);
 
 /**
  * The payout day for a request made at `at`: requests made by the end of a month are paid on the 3rd of the next

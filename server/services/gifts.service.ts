@@ -1,9 +1,9 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
-import { Types } from "mongoose";
+import mongoose, { Types } from "mongoose";
 import type { z } from "zod";
 import { DEFAULT_GIFTS, GIFT_MAX_PRICE, GIFT_MIN_PRICE, HYPE_NAIRA, TOPUP_MAX, TOPUP_MIN, giftConfigOf, giftHype, giftTargetKey, hypeForNaira, payoutDayFor, receiverShare, type GiftConfig, type GiftTargetType } from "@/lib/gifts";
-import type { AdminGiftsReportDTO, GiftDTO, GiftEarningsDTO, GiftReceivedDTO, GiftSentDTO, GiftSummaryDTO, GiftWalletDTO, HypeEntryDTO, PayoutDTO } from "@/lib/types";
+import type { AdminGiftsReportDTO, AdminStuckTopupDTO, GiftDTO, GiftEarningsDTO, GiftReceivedDTO, GiftSentDTO, GiftSummaryDTO, GiftWalletDTO, HypeEntryDTO, PayoutDTO } from "@/lib/types";
 import { adminEmails, appUrl, paystackConfig } from "../env";
 import { ApiError, badRequest, conflict, forbidden, notFound } from "../http/errors";
 import { rateLimit } from "../http/rate-limit";
@@ -57,12 +57,26 @@ export async function setGiftConfig(input: z.infer<typeof giftConfigSchema>): Pr
 /* ------------------------------ catalogue ------------------------------ */
 
 let seeded = false;
-/** The default gifts, once per database (an empty catalogue gets them; an admin's edits are never overwritten). */
+/**
+ * The default gifts, once per database: an empty catalogue gets them all. Then, once (v2), our own drawn art: default
+ * gifts with no picture get theirs, the new ones are added, and if the order was never changed by hand the catalogue is
+ * put in price order. Prices, names and pictures an admin set are never overwritten.
+ */
 async function ensureGifts() {
   if (seeded) return;
-  const flag = "seed:gifts-v1";
+  if (!(await Gift.exists({}))) {
+    try {
+      await AppSetting.create({ _id: "seed:gifts-v1", value: { at: new Date() } });
+      await AppSetting.create({ _id: "seed:gifts-v2", value: { at: new Date() } });
+      await Gift.insertMany(DEFAULT_GIFTS.map(({ art, ...g }, i) => ({ ...g, position: i, active: true, artUrl: art })));
+    } catch (e) {
+      if ((e as { code?: number })?.code !== 11000) throw e;
+    }
+    seeded = true;
+    return;
+  }
   try {
-    await AppSetting.create({ _id: flag, value: { at: new Date() } });
+    await AppSetting.create({ _id: "seed:gifts-v2", value: { at: new Date() } });
   } catch (e) {
     if ((e as { code?: number })?.code === 11000) {
       seeded = true;
@@ -70,7 +84,19 @@ async function ensureGifts() {
     }
     throw e;
   }
-  if (!(await Gift.exists({}))) await Gift.insertMany(DEFAULT_GIFTS.map((g, i) => ({ ...g, position: i, active: true, artUrl: null })));
+  const existing = await Gift.find({}).select("slug position artUrl").lean<Pick<IGift, "_id" | "slug" | "position" | "artUrl">[]>();
+  const bySlug = new Map(existing.map((g) => [g.slug, g]));
+  // the first catalogue's order, untouched: Heart … Castle at 0 … 10, nothing else
+  const V1 = ["heart", "rose", "fire", "clap", "party", "trophy", "crown", "diamond", "rocket", "lion", "castle"];
+  const untouched = existing.length === V1.length && V1.every((slug, i) => bySlug.get(slug)?.position === i);
+  for (const [i, { art, ...g }] of DEFAULT_GIFTS.entries()) {
+    const had = bySlug.get(g.slug);
+    if (!had) await Gift.create({ ...g, artUrl: art, active: true, position: untouched ? i : existing.length + i });
+    else {
+      const set = { ...(had.artUrl ? {} : { artUrl: art }), ...(untouched ? { position: i } : {}) };
+      if (Object.keys(set).length) await Gift.updateOne({ _id: had._id }, { $set: set });
+    }
+  }
   seeded = true;
 }
 
@@ -176,25 +202,56 @@ export async function startTopup(viewer: IUser, input: z.infer<typeof giftTopupS
   return { authorizationUrl: data.authorization_url, reference };
 }
 
-/** Credit a paid top-up once (the webhook, the redirect and the app can all arrive; only the first counts). */
+let failCreditForTests = false;
+/** tests only: the next credit fails after the payment is claimed, as a crash there would */
+export const failNextCreditForTests = () => void (failCreditForTests = true);
+
+/**
+ * Credit a paid top-up once (the webhook, the redirect, the app and the sweep can all arrive; only the first counts).
+ * Marking it paid, adding the Hype and writing the history happen together or not at all: if anything fails, it stays
+ * "pending" and the next arrival (webhook re-delivery, the redirect, the app's recover, the sweep) credits it.
+ */
 async function credit(t: IHypeTopup) {
-  const claimed = await HypeTopup.findOneAndUpdate({ _id: t._id, status: "pending" }, { $set: { status: "paid", paidAt: new Date() } }, { returnDocument: "after" }).lean<IHypeTopup>();
+  const session = await mongoose.startSession();
+  let done: IHypeTopup | null = null;
+  try {
+    await session.withTransaction(async () => {
+      done = null;
+      const claimed = await HypeTopup.findOneAndUpdate({ _id: t._id, status: "pending" }, { $set: { status: "paid", paidAt: new Date() } }, { returnDocument: "after", session }).lean<IHypeTopup>();
+      if (!claimed) return;
+      if (failCreditForTests) {
+        failCreditForTests = false;
+        throw new Error("test: credit failed after the payment was claimed");
+      }
+      await addTopupHype(claimed, session);
+      done = claimed;
+    });
+  } finally {
+    await session.endSession();
+  }
+  const claimed = done as IHypeTopup | null;
   if (!claimed) return false;
-  const where = claimed.platform === "web" ? "" : claimed.platform === "apple" ? " in the app (Apple)" : " in the app (Google)";
-  await move(claimed.userId, claimed.hype, "topup", `Bought ${claimed.hype.toLocaleString("en-NG")} Hype${where}`, claimed.reference);
   notify([claimed.userId], { title: `${claimed.hype.toLocaleString("en-NG")} Hype added`, body: "Send gifts to posts and comments you love.", data: { href: "/settings?tab=hype" } }, { category: "gifts", ref: `hype:${claimed.reference}` });
   return true;
+}
+
+/** The Hype and its history line for a top-up, inside the caller's transaction. */
+async function addTopupHype(t: IHypeTopup, session: mongoose.ClientSession) {
+  const u = await User.findOneAndUpdate({ _id: t.userId }, { $inc: { giftHype: t.hype } }, { returnDocument: "after", session }).select("giftHype").lean<Pick<IUser, "giftHype">>();
+  if (!u) throw new Error("The buyer's account is gone.");
+  const where = t.platform === "web" ? "" : t.platform === "apple" ? " in the app (Apple)" : " in the app (Google)";
+  await HypeEntry.create([{ userId: t.userId, amount: t.hype, balanceAfter: u.giftHype ?? 0, kind: "topup", note: `Bought ${t.hype.toLocaleString("en-NG")} Hype${where}`, ref: t.reference, byId: null }], { session });
 }
 
 /** Paystack's answer for a checkout (redirect or webhook): add the Hype if it's fully paid. */
 export async function fulfilTopup(reference: string, paid: { status: string; amount: number; currency: string }) {
   const t = await HypeTopup.findOne({ reference }).lean<IHypeTopup>();
-  if (!t || t.status === "paid" || paid.status !== "success") return;
+  if (!t || t.status === "paid" || paid.status !== "success") return false;
   if (paid.currency !== "NGN" || paid.amount < t.amount * 100) {
     console.warn("[gift-hype] amount mismatch", reference, paid.amount, t.amount * 100);
-    return;
+    return false;
   }
-  await credit(t);
+  return credit(t);
 }
 
 export async function verifyTopup(viewer: IUser, reference: string): Promise<{ paid: boolean; hype: number; balance: number }> {
@@ -207,6 +264,80 @@ export async function verifyTopup(viewer: IUser, reference: string): Promise<{ p
   const after = await HypeTopup.findById(t._id).select("status").lean<Pick<IHypeTopup, "status">>();
   const me = await User.findById(viewer._id).select("giftHype").lean<Pick<IUser, "giftHype">>();
   return { paid: after?.status === "paid", hype: t.hype, balance: me?.giftHype ?? 0 };
+}
+
+/** Top-ups older than this that still aren't credited are looked at again. */
+const STUCK_AFTER_MS = 10 * 60 * 1000;
+
+/**
+ * Top-ups that may be paid without their Hype: still "pending" after 10 minutes (the webhook and the redirect never
+ * landed, or crediting failed), or marked paid before credits were all-or-nothing but with no Hype in the history.
+ */
+async function stuckTopups(limit = 50): Promise<{ row: IHypeTopup; kind: "unconfirmed" | "uncredited" }[]> {
+  const old = new Date(Date.now() - STUCK_AFTER_MS);
+  const since = new Date(Date.now() - 30 * DAY_MS);
+  const [pending, paid] = await Promise.all([
+    HypeTopup.find({ status: "pending", createdAt: { $lte: old, $gte: since } }).sort({ createdAt: -1 }).limit(limit).lean<IHypeTopup[]>(),
+    HypeTopup.find({ status: "paid", repairedAt: null, paidAt: { $gte: since } }).select("_id reference userId").lean<Pick<IHypeTopup, "_id" | "reference" | "userId">[]>(),
+  ]);
+  const credited = new Set((await HypeEntry.find({ kind: "topup", ref: { $in: paid.map((p) => p.reference) } }).select("ref").lean<{ ref: string }[]>()).map((e) => e.ref));
+  const missingIds = paid.filter((p) => !credited.has(p.reference)).map((p) => p._id);
+  const uncredited = missingIds.length ? await HypeTopup.find({ _id: { $in: missingIds } }).limit(limit).lean<IHypeTopup[]>() : [];
+  return [...uncredited.map((row) => ({ row, kind: "uncredited" as const })), ...pending.map((row) => ({ row, kind: "unconfirmed" as const }))];
+}
+
+/** A paid top-up from before, found without its Hype: credit it once (claimed by repairedAt). */
+async function repairTopup(t: IHypeTopup) {
+  const session = await mongoose.startSession();
+  let ok = false;
+  try {
+    await session.withTransaction(async () => {
+      ok = false;
+      const claimed = await HypeTopup.findOneAndUpdate({ _id: t._id, status: "paid", repairedAt: null }, { $set: { repairedAt: new Date() } }, { returnDocument: "after", session }).lean<IHypeTopup>();
+      if (!claimed) return;
+      if (await HypeEntry.exists({ kind: "topup", ref: claimed.reference }).session(session)) return;
+      await addTopupHype(claimed, session);
+      ok = true;
+    });
+  } finally {
+    await session.endSession();
+  }
+  return ok;
+}
+
+/**
+ * Look again at stuck top-ups and credit the ones that were paid (the daily cron, and Admin → Gifts). Website ones are
+ * checked with Paystack; a store one is only ever saved after Apple or Google confirmed it, so it's credited as it is.
+ */
+export async function retryStuckTopups(): Promise<{ checked: number; credited: number }> {
+  let credited = 0;
+  const rows = await stuckTopups();
+  for (const { row, kind } of rows) {
+    try {
+      if (kind === "uncredited") {
+        if (await repairTopup(row)) credited++;
+      } else if (row.platform === "web") {
+        if (!paystackConfig()) continue;
+        const data = await paystack<{ status: string; amount: number; currency: string }>(`/transaction/verify/${encodeURIComponent(row.reference)}`).catch(() => null);
+        if (data && (await fulfilTopup(row.reference, data))) credited++;
+      } else if (await credit(row)) credited++;
+    } catch (e) {
+      console.warn("[gift-hype] retry failed", row.reference, (e as Error).message);
+    }
+  }
+  return { checked: rows.length, credited };
+}
+
+/**
+ * For Admin → Gifts: top-ups known to be paid but without their Hype yet (an old one with no Hype in the history, or a
+ * store purchase Apple or Google confirmed). Unanswered website checkouts are mostly people who left, so they're only
+ * checked (daily, and with "Check again"), not listed.
+ */
+export async function adminStuckTopups(): Promise<AdminStuckTopupDTO[]> {
+  const rows = (await stuckTopups()).filter((r) => r.kind === "uncredited" || r.row.platform !== "web");
+  const people = await User.find({ _id: { $in: rows.map((r) => r.row.userId) } }).select("displayName handle").lean<Pick<IUser, "_id" | "displayName" | "handle">[]>();
+  const who = new Map(people.map((p) => [sid(p._id), p]));
+  return rows.map(({ row, kind }) => ({ id: sid(row._id), reference: row.reference, platform: row.platform, hype: row.hype, amount: row.amount, kind, createdAt: row.createdAt.toISOString(), user: who.get(sid(row.userId)) ? { handle: who.get(sid(row.userId))!.handle, displayName: who.get(sid(row.userId))!.displayName } : null }));
 }
 
 /** How a store purchase is checked; swapped out in tests so they never call Apple or Google. */
@@ -317,6 +448,15 @@ export async function sendGift(viewer: IUser, input: z.infer<typeof giftSendSche
   // the same send twice (a retry on bad network) is one gift
   const again = await GiftSend.findOne({ fromId: viewer._id, clientKey: input.clientKey }).lean<IGiftSend>();
   if (again?.status === "sent") return { balance: (await User.findById(viewer._id).select("giftHype").lean<Pick<IUser, "giftHype">>())?.giftHype ?? 0, summary: (await summarise([{ type: again.target.type, id: sid(again.target.id) }]))[giftTargetKey({ type: again.target.type, id: sid(again.target.id) })] };
+  // a "pending" row left behind by a crash (a minute or more old): paid for, it's finished; unpaid, it's cleared so this
+  // retry isn't refused for ever. A fresh pending row is a send still going through, and the unique key refuses the twin.
+  if (again?.status === "pending" && Date.now() - +again.createdAt > 60_000) {
+    if (await HypeEntry.exists({ userId: viewer._id, ref: `gift:${sid(again._id)}` })) {
+      await GiftSend.updateOne({ _id: again._id, status: "pending" }, { $set: { status: "sent" } });
+      return { balance: (await User.findById(viewer._id).select("giftHype").lean<Pick<IUser, "giftHype">>())?.giftHype ?? 0, summary: (await summarise([{ type: again.target.type, id: sid(again.target.id) }]))[giftTargetKey({ type: again.target.type, id: sid(again.target.id) })] };
+    }
+    await GiftSend.deleteOne({ _id: again._id, status: "pending" });
+  }
   rateLimit(`gift:${sid(viewer._id)}`, 120, 60 * 60 * 1000);
   const gift = oid(input.giftId) ? await Gift.findOne({ _id: oid(input.giftId), active: true }).lean<IGift>() : null;
   if (!gift) throw notFound("That gift isn't available any more.");
@@ -369,6 +509,13 @@ export async function sendGift(viewer: IUser, input: z.infer<typeof giftSendSche
 /* ------------------------------- showing ------------------------------- */
 
 /** Gifts on each item: one line per kind of gift with a count (🌹×3 👑×1), most valuable first. Never says who. */
+/** A gift sent before it had a picture shows its gift's picture now (so old gifts get the drawn art too). */
+async function artOf(giftIds: Types.ObjectId[]): Promise<Map<string, string>> {
+  if (!giftIds.length) return new Map();
+  const gifts = await Gift.find({ _id: { $in: giftIds }, artUrl: { $ne: null } }).select("artUrl").lean<Pick<IGift, "_id" | "artUrl">[]>();
+  return new Map(gifts.map((g) => [sid(g._id), g.artUrl!]));
+}
+
 async function summarise(targets: { type: GiftTargetType; id: string }[]): Promise<Record<string, GiftSummaryDTO>> {
   const ok = targets.filter((t) => oid(t.id));
   const out: Record<string, GiftSummaryDTO> = Object.fromEntries(targets.map((t) => [giftTargetKey(t), { total: 0, items: [] }]));
@@ -377,11 +524,12 @@ async function summarise(targets: { type: GiftTargetType; id: string }[]): Promi
     { $match: { status: "sent", $or: ok.map((t) => ({ "target.type": t.type, "target.id": oid(t.id) })) } },
     { $group: { _id: { type: "$target.type", id: "$target.id", giftId: "$giftId" }, count: { $sum: 1 }, price: { $max: "$price" }, name: { $last: "$giftName" }, emoji: { $last: "$emoji" }, artUrl: { $last: "$artUrl" } } },
   ]);
+  const art = await artOf(rows.filter((r) => !r.artUrl).map((r) => r._id.giftId));
   for (const r of rows) {
     const s = out[`${r._id.type}:${sid(r._id.id)}`];
     if (!s) continue;
     s.total += r.count;
-    s.items.push({ giftId: sid(r._id.giftId), name: r.name, emoji: r.emoji, artUrl: r.artUrl, count: r.count, price: r.price });
+    s.items.push({ giftId: sid(r._id.giftId), name: r.name, emoji: r.emoji, artUrl: r.artUrl ?? art.get(sid(r._id.giftId)) ?? null, count: r.count, price: r.price });
   }
   for (const s of Object.values(out)) s.items.sort((a, b) => b.price - a.price);
   return out;
@@ -406,12 +554,12 @@ export async function giftTray(viewer: IUser) {
 /* ------------------------------- earnings ------------------------------- */
 
 async function receivedDtos(rows: IGiftSend[], viewerIsSender: boolean, admin = false): Promise<(GiftReceivedDTO & GiftSentDTO)[]> {
-  const people = await loadBriefs(rows.flatMap((r) => [r.fromId, r.toId]));
+  const [people, art] = await Promise.all([loadBriefs(rows.flatMap((r) => [r.fromId, r.toId])), artOf(rows.filter((r) => !r.artUrl).map((r) => r.giftId))]);
   return rows.map((r) => ({
     id: sid(r._id),
     giftName: r.giftName,
     emoji: r.emoji,
-    artUrl: r.artUrl,
+    artUrl: r.artUrl ?? art.get(sid(r.giftId)) ?? null,
     price: r.price,
     hype: r.hype,
     earned: r.receiverAmount,
@@ -510,8 +658,22 @@ export async function requestGiftPayout(viewer: IUser, input: z.infer<typeof pay
   const amount = eligible.reduce((t, g) => t + g.receiverAmount, 0);
   if (amount < config.minPayout) throw badRequest(`The smallest payout is ${naira(config.minPayout)}. You have ${naira(amount)} available.`);
   const dueOn = payoutDayFor(now);
-  const payout = await Payout.create({ kind: "gifts", communityId: null, requestedById: viewer._id, amount, bank, dueOn });
-  await GiftSend.updateMany({ _id: { $in: eligible.map((g) => g._id) } }, { $set: { payoutId: payout._id } });
+  // the payout and its gifts together, or neither: a second request at the same moment hits the one-open-payout index,
+  // and gifts taken by another request in between make this one start again
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      const [payout] = await Payout.create([{ kind: "gifts", communityId: null, requestedById: viewer._id, amount, bank, dueOn }], { session });
+      const ids = eligible.map((g) => g._id);
+      const r = await GiftSend.updateMany({ _id: { $in: ids }, $or: [{ payoutId: null }, { payoutId: { $in: releasable } }] }, { $set: { payoutId: payout._id } }, { session });
+      if (r.modifiedCount !== ids.length) throw conflict("Your earnings changed while you asked. Try again.");
+    });
+  } catch (e) {
+    if ((e as { code?: number })?.code === 11000) throw conflict("There's already a payout waiting. You can ask again once it's paid.");
+    throw e;
+  } finally {
+    await session.endSession();
+  }
   return getEarnings(viewer);
 }
 

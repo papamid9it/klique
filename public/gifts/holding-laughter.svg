@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><style>
+.g,.tw,.blink,.fl,.pop,.st,.cf,.hb,.sw,.sh,.bob,.tilt,.clap1,.clap2{transform-box:fill-box;transform-origin:center}
+@media (prefers-reduced-motion:no-preference){
+.bob{animation:bob 2.6s ease-in-out infinite}
+.hb{animation:hb 1.6s ease-in-out infinite}
+.sh{animation:sh 1.1s ease-in-out infinite;transform-origin:50% 90%}
+.sw{animation:sw 3s ease-in-out infinite;transform-origin:50% 100%}
+.tilt{animation:tilt 2.4s ease-in-out infinite;transform-origin:50% 90%}
+.tw{animation:tw 1.8s ease-in-out infinite}
+.tw:nth-of-type(2n){animation-delay:.6s}.tw:nth-of-type(3n){animation-delay:1.1s}
+.blink{animation:blink 3.6s infinite}
+.fl{animation:fl .9s ease-in-out infinite alternate;transform-origin:50% 100%}
+.pop{animation:pop 1.8s ease-out infinite}
+.pop:nth-of-type(2n){animation-delay:.6s}.pop:nth-of-type(3n){animation-delay:1.2s}
+.st{animation:st 2.4s ease-in infinite}
+.st:nth-of-type(2n){animation-delay:.8s}.st:nth-of-type(3n){animation-delay:1.6s}
+.cf{animation:cf 1.4s ease-in-out infinite alternate}
+.cf:nth-of-type(2n){animation-delay:.5s}
+.clap1{animation:c1 .8s ease-in-out infinite;transform-origin:20% 90%}
+.clap2{animation:c2 .8s ease-in-out infinite;transform-origin:80% 90%}
+}
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+@keyframes hb{0%,100%{transform:scale(1)}15%{transform:scale(1.1)}30%{transform:scale(.97)}45%{transform:scale(1.06)}}
+@keyframes sh{0%,100%{transform:rotate(0) scale(1)}25%{transform:rotate(-4deg) scale(1.03,.97)}75%{transform:rotate(4deg) scale(1.03,.97)}}
+@keyframes sw{0%,100%{transform:rotate(-4deg)}50%{transform:rotate(4deg)}}
+@keyframes tilt{0%,100%{transform:rotate(-3deg)}50%{transform:rotate(3deg) translateY(-2px)}}
+@keyframes tw{0%,100%{transform:scale(.6);opacity:.4}50%{transform:scale(1.15);opacity:1}}
+@keyframes blink{0%,92%,100%{transform:scaleY(1)}95%{transform:scaleY(.1)}}
+@keyframes fl{from{transform:scale(1,1)}to{transform:scale(.94,1.07)}}
+@keyframes pop{0%{transform:translateY(0);opacity:0}15%{opacity:1}60%{transform:translateY(-14px);opacity:1}100%{transform:translateY(-18px);opacity:0}}
+@keyframes st{0%{transform:translateY(4px);opacity:0}30%{opacity:.7}100%{transform:translateY(-16px);opacity:0}}
+@keyframes cf{from{transform:translateY(0) rotate(0)}to{transform:translateY(-5px) rotate(25deg)}}
+@keyframes c1{0%,100%{transform:rotate(0)}50%{transform:rotate(12deg)}}
+@keyframes c2{0%,100%{transform:rotate(0)}50%{transform:rotate(-12deg)}}
+</style><defs><radialGradient id="b" cx=".35" cy=".28" r=".85"><stop offset="0" stop-color="#e6d8ff"/><stop offset=".45" stop-color="#a77bff"/><stop offset="1" stop-color="#5a28c4"/></radialGradient><radialGradient id="kc" cx=".35" cy=".28" r=".9"><stop offset="0" stop-color="#fff6c2"/><stop offset=".5" stop-color="#ffc300"/><stop offset="1" stop-color="#b07a00"/></radialGradient></defs><ellipse cx="64" cy="119" rx="34" ry="5" fill="#000" opacity=".18"/><g class="hb"><path d="M64 10c30 0 52 18 52 50 0 32-20 54-52 54S12 92 12 60c0-32 22-50 52-50z" fill="url(#b)"/><path d="M50 20l-3-14 9 7 8-10 8 10 9-7-3 14z" fill="url(#kc)"/><rect x="49" y="18" width="30" height="5" rx="2" fill="url(#kc)"/><circle cx="64" cy="5" r="2.5" fill="#ffe066"/><path d="M30 40l14 7-14 7" fill="none" stroke="#24104f" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/><path d="M98 40l-14 7 14 7" fill="none" stroke="#24104f" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/><ellipse cx="64" cy="80" rx="9" ry="5" fill="#24104f"/><ellipse cx="26" cy="68" rx="8" ry="5" fill="#ff4f8b" opacity=".5"/><ellipse cx="102" cy="68" rx="8" ry="5" fill="#ff4f8b" opacity=".5"/><ellipse cx="42" cy="26" rx="15" ry="7.5" fill="#fff" opacity=".5" transform="rotate(-20 42 26)"/><circle cx="25" cy="40" r="3" fill="#fff" opacity=".65"/><ellipse cx="22" cy="72" rx="14" ry="12" fill="#ff9cc2" opacity=".85"/><ellipse cx="106" cy="72" rx="14" ry="12" fill="#ff9cc2" opacity=".85"/><ellipse cx="18" cy="68" rx="4" ry="2.5" fill="#fff" opacity=".6"/><ellipse cx="102" cy="68" rx="4" ry="2.5" fill="#fff" opacity=".6"/></g></svg>

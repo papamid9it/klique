@@ -631,8 +631,8 @@ async function toMessages(rows: IChannelMessage[], viewer: IUser | null, access:
  * Always returned oldest → newest so the client can render or prepend directly.
  */
 export async function listMessages(viewer: IUser | null, space: Space, access: SpaceAccess, channelSlug: string, q: ListQuery): Promise<ChatPage> {
-  const { channel } = await loadChannel(viewer, space, access, channelSlug);
-  const hidden = await hiddenUserIds(viewer?._id ?? null); // people you've blocked (or who blocked you)
+  // the channel, and the people you've blocked (or who blocked you), side by side
+  const [{ channel }, hidden] = await Promise.all([loadChannel(viewer, space, access, channelSlug), hiddenUserIds(viewer?._id ?? null)]);
   const base: Record<string, unknown> = { channelId: channel._id };
   if (hidden.length) base.authorId = { $nin: hidden };
 

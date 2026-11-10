@@ -1,6 +1,6 @@
 import ApiClient from "@/app/ApiCore";
 import type { GiftConfig, GiftTargetType } from "@/lib/gifts";
-import type { AdminGiftsReportDTO, Envelope, GiftDTO, GiftEarningsDTO, GiftSentDTO, GiftSummaryDTO, GiftTrayDTO, GiftWalletDTO } from "@/lib/types";
+import type { AdminGiftsReportDTO, AdminStuckTopupDTO, Envelope, GiftDTO, GiftEarningsDTO, GiftSentDTO, GiftSummaryDTO, GiftTrayDTO, GiftWalletDTO } from "@/lib/types";
 
 const api = new ApiClient();
 
@@ -23,5 +23,7 @@ export const GiftService = {
   adminConfig: () => api.get<Envelope<GiftConfig>>("/api/admin/gifts/config"),
   adminSetConfig: (c: Partial<GiftConfig>) => api.patch<Envelope<GiftConfig>>("/api/admin/gifts/config", c),
   adminReport: (q: { from?: string; to?: string; group?: "day" | "month" }) => api.get<Envelope<AdminGiftsReportDTO>>("/api/admin/gifts/report", q),
+  adminStuckTopups: () => api.get<Envelope<AdminStuckTopupDTO[]>>("/api/admin/gifts/topups"),
+  adminRetryTopups: () => api.post<Envelope<{ checked: number; credited: number; stuck: AdminStuckTopupDTO[] }>>("/api/admin/gifts/topups", {}),
   adminGrant: (userId: string, amount: number, note: string) => api.post<Envelope<{ balance: number }>>("/api/admin/gifts/grant", { userId, amount, note }),
 };

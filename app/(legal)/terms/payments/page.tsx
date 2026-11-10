@@ -67,7 +67,7 @@ export default async function PaymentTermsPage() {
           </li>
           <li>You can send a gift anonymously: the person and everyone else see &quot;Someone&quot;. klique still records who sent it, and only klique&apos;s staff can see that, to deal with fraud, abuse or payment problems.</li>
           <li>
-            The person who gets a gift earns 70% of its naira value; klique keeps 30%. Earnings are held for 7 days, then can be paid to a Nigerian bank account once they reach ₦1,000. Payouts requested by the end of a month are paid on the 3rd of the next month, under the payout rules below. klique may change these figures for gifts sent after a change, with notice here.
+            The person who gets a gift earns 70% of its naira value; klique keeps 30%. Earnings are held for 7 days, then can be paid to a Nigerian bank account once they reach ₦20,000. Payouts requested by the end of a month are paid on the 3rd of the next month, under the payout rules below. klique may change these figures for gifts sent after a change, with notice here.
           </li>
           <li>klique may hold back or reverse earnings from gifts paid for with a refunded, disputed or fraudulent purchase, and may close Hype accounts used for fraud or to move money.</li>
           <li>Hype from before November 2026 (used for profile designs) was turned into days of Lite at the time and is separate from Hype for gifts.</li>
