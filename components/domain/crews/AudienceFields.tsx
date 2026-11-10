@@ -37,17 +37,19 @@ export function audienceInput(v: AudienceValue) {
 }
 
 /**
- * How many people, and who can join: Everyone; Women only (offered when your profile says woman); Men only (when it
- * says man); or Mixed, with so many spots for women and for men and the rest open to anyone.
+ * How many people, and who can join: Everyone; Women only (open to pick when your profile says woman); Men only (when
+ * it says man); or Mixed, with so many spots for women and for men and the rest open to anyone.
  */
 export function AudienceFields({ value, onChange, canWomen, canMen, errors, minSpots = 1 }: { value: AudienceValue; onChange: (v: AudienceValue) => void; canWomen: boolean; canMen: boolean; errors: Record<string, string>; minSpots?: number }) {
   const set = (patch: Partial<AudienceValue>) => onChange({ ...value, ...patch });
   const spots = Math.round(Number(value.spots)) || 0;
-  const choices: { id: Audience; label: string; hint: string; show: boolean }[] = [
-    { id: "everyone", label: "Everyone", hint: "Anyone can join.", show: true },
-    { id: "women", label: "Women only", hint: "Only people whose profile says woman.", show: canWomen || value.audience === "women" },
-    { id: "men", label: "Men only", hint: "Only people whose profile says man.", show: canMen || value.audience === "men" },
-    { id: "mixed", label: "Mixed, set numbers", hint: "So many spots for women and for men; any left over are open to anyone.", show: true },
+  // all four are always shown; women-only / men-only are greyed out, with a note, when the host's gender doesn't match
+  const noGender = !canWomen && !canMen;
+  const choices: { id: Audience; label: string; hint: string; off?: string }[] = [
+    { id: "everyone", label: "Everyone", hint: "Anyone can join." },
+    { id: "women", label: "Women only", hint: "Only people whose profile says woman.", off: canWomen || value.audience === "women" ? undefined : noGender ? "gender" : "Only women can start a women-only klique." },
+    { id: "men", label: "Men only", hint: "Only people whose profile says man.", off: canMen || value.audience === "men" ? undefined : noGender ? "gender" : "Only men can start a men-only klique." },
+    { id: "mixed", label: "Mixed, set numbers", hint: "So many spots for women and for men; any left over are open to anyone." },
   ];
   const w = Math.round(Number(value.womenSpots) || 0);
   const m = Math.round(Number(value.menSpots) || 0);
@@ -66,27 +68,26 @@ export function AudienceFields({ value, onChange, canWomen, canMen, errors, minS
       />
       <fieldset className="space-y-2">
         <legend className="mb-1.5 text-[13px] font-medium">Who can join</legend>
-        {choices
-          .filter((c) => c.show)
-          .map((c) => (
-            <label key={c.id} className={cx("flex cursor-pointer items-start gap-3 rounded-control border bg-raised p-3 transition", value.audience === c.id ? "border-accent-text" : "border-line")}>
-              <input type="radio" name="klique-audience" checked={value.audience === c.id} onChange={() => set({ audience: c.id })} className="mt-1 accent-[var(--accent-text)]" />
-              <span>
-                <span className="block text-sm font-semibold">{c.label}</span>
-                <span className="block text-xs text-ink-muted">{c.hint}</span>
-              </span>
-            </label>
-          ))}
-        {/* no gender on their profile yet: say where to set it, so women-only and men-only can show */}
-        {!canWomen && !canMen && (
-          <p className="text-xs text-ink-muted">
-            Want a women-only or men-only klique? Set your gender in{" "}
-            <a href="/settings?tab=profile" className="font-semibold text-accent-text underline">
-              Settings, Profile
-            </a>{" "}
-            first.
-          </p>
-        )}
+        {choices.map((c) => (
+          <label key={c.id} aria-disabled={!!c.off} className={cx("flex items-start gap-3 rounded-control border bg-raised p-3 transition", c.off ? "cursor-not-allowed opacity-50" : "cursor-pointer", value.audience === c.id ? "border-accent-text" : "border-line")}>
+            <input type="radio" name="klique-audience" disabled={!!c.off} checked={value.audience === c.id} onChange={() => set({ audience: c.id })} className="mt-1 accent-[var(--accent-text)]" />
+            <span>
+              <span className="block text-sm font-semibold">{c.label}</span>
+              <span className="block text-xs text-ink-muted">{c.hint}</span>
+              {c.off === "gender" ? (
+                <span className="mt-1 block text-xs text-ink-muted">
+                  Set your gender in{" "}
+                  <a href="/settings?tab=profile" className="font-semibold text-accent-text underline">
+                    Edit profile
+                  </a>
+                  .
+                </span>
+              ) : c.off ? (
+                <span className="mt-1 block text-xs text-ink-muted">{c.off}</span>
+              ) : null}
+            </span>
+          </label>
+        ))}
         {value.audience === "mixed" && (
           <div className="grid grid-cols-2 gap-3 pt-1">
             <TextField label="Spots for women" type="number" inputMode="numeric" min={0} max={99} value={value.womenSpots} onChange={(e) => set({ womenSpots: e.target.value })} />
