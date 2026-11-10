@@ -9,6 +9,7 @@ import { askSignOut } from "@/components/domain/account/SignOutDialog";
 import { StatusIcon } from "@/components/domain/profile/ProfileParts";
 import { PRESENCES } from "@/lib/constants";
 import { useInDesktopApp } from "@/lib/hooks/useInDesktopApp";
+import { useInstalledWebApp } from "@/lib/hooks/useInstalledWebApp";
 import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
 
 /**
@@ -32,6 +33,7 @@ export function useAccountMenu(): MenuEntry[] | null {
   const wide = useMediaQuery("(min-width: 1024px)");
   // in the desktop app, "Desktop app" (go and download it) makes no sense
   const inApp = useInDesktopApp();
+  const installedWeb = useInstalledWebApp();
   if (!user) return null;
   return [
     // your status: one row, the four choices beside it
@@ -48,7 +50,7 @@ export function useAccountMenu(): MenuEntry[] | null {
     { label: "Advertise", icon: "megaphone", onSelect: () => router.push("/ads") },
     { label: "Plan & points", icon: "coin", onSelect: () => router.push("/settings?tab=plan") },
     { label: "Settings", icon: "sliders", onSelect: () => router.push("/settings") },
-    ...(inApp ? [] : ([{ label: "Desktop app", icon: "download", onSelect: () => router.push("/download") }] as MenuEntry[])),
+    ...(inApp || installedWeb ? [] : ([{ label: "Desktop app", icon: "download", onSelect: () => router.push("/download") }] as MenuEntry[])),
     ...(user.isAdmin ? ([{ label: "Admin console", icon: "shield", onSelect: () => router.push("/admin") }] as MenuEntry[]) : []),
     { type: "sep" },
     { label: "Sign out", icon: "logout", danger: true, onSelect: () => askSignOut() },

@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Logo } from "@/components/layout/Logo";
 import { Icon } from "@/components/ui/Icon";
 import { cx } from "@/components/ui/cx";
+import { useInstalledWebApp } from "@/lib/hooks/useInstalledWebApp";
 import { fileSize, type DesktopFile, type DesktopKind, type DesktopOs, type DesktopRelease } from "@/lib/desktop-release";
 
 type Seen = DesktopOs | "phone" | null;
@@ -185,7 +186,7 @@ export function DownloadView({ release }: { release: DesktopRelease & { live: bo
         <h2 className="text-[clamp(2rem,5vw,3.25rem)] leading-none font-black tracking-[-0.04em]">Every download.</h2>
         <p className="mt-3 max-w-2xl text-ink-muted">Version {release.version}, released {date(release.date)}. Check a file with its SHA-256 if you like: it&apos;s the same file we built.</p>
         <div className="mt-10 grid items-start gap-6 lg:grid-cols-3">
-          <OsCard os="windows" here={os === "windows"} files={files("windows")} steps={stepsFor("windows", [[null, "Run Klique-Setup.exe and follow the steps."], [null, "Windows SmartScreen may say it doesn't recognise the app at first: choose More info, then Run anyway."], ["portable", "Portable .zip: unzip anywhere and open Klique.exe. Nothing gets installed."]])} />
+          <OsCard os="windows" here={os === "windows"} files={files("windows")} steps={stepsFor("windows", [[null, "Run Klique-Setup.exe and follow the steps."], [null, "Windows SmartScreen may say it doesn't recognise the app at first: choose More info, then Run anyway."], [null, "Gone after you open it? Your antivirus removed it by mistake: see \u201cAntivirus removed Klique?\u201d below."], ["portable", "Portable .zip: unzip anywhere and open Klique.exe. Nothing gets installed."]])} />
           <OsCard
             os="linux"
             here={os === "linux"}
@@ -214,6 +215,7 @@ export function DownloadView({ release }: { release: DesktopRelease & { live: bo
             </div>
           )}
         </div>
+        <BrowserInstall />
         <InstallCommands release={release} />
         <p className="mt-8 rounded-[18px] bg-raised px-5 py-4 text-sm">
           <strong>On a phone?</strong> No download needed: open <Link href="/" className="font-semibold underline">getklique.app</Link> and add it to your home screen (Share → Add to Home Screen on iPhone, or the ⋮ menu → Install app on Android).
@@ -231,6 +233,7 @@ export function DownloadView({ release }: { release: DesktopRelease & { live: bo
             ...(macReady ? [["Which Mac file should I pick?", "Macs from late 2020 on (M1, M2, M3, M4…) take Apple Silicon; older ones take Intel. The big button picks for you."]] : []),
             ["Which Linux file should I pick?", "Not sure? Take the AppImage: it runs on almost any distro. On Ubuntu, Debian or Mint you can use the .deb instead."],
             ["Windows warned me about the app. Is it safe?", "New apps aren't known to Windows SmartScreen yet. Download only from this page, check the SHA-256 if you want to be sure, then choose More info → Run anyway."],
+            ["Antivirus removed Klique?", "Klique for Windows isn't code-signed yet, so some antivirus programs remove it by mistake: it installs, then disappears when you open it. Download it only from getklique.app. Avast or AVG: open it → Protection → Quarantine, tick Klique.exe, then ⋯ → Restore and add exception. Windows Security: Protection history → the Klique entry → Actions → Restore (or Allow on device). Then open Klique again from the Start menu."],
           ].map(([q, a]) => (
             <details key={q} className="group py-5">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-lg font-bold">
@@ -364,3 +367,72 @@ function InstallCommands({ release }: { release: DesktopRelease }) {
     </div>
   );
 }
+
+/** Chrome and Edge's own install prompt, kept from the moment the page loads until someone taps Install. */
+type InstallPrompt = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: "accepted" | "dismissed" }> };
+
+/**
+ * Install Klique from the browser instead of downloading a program: nothing for an antivirus to remove. The browser's
+ * own Install button where it has one (Chrome, Edge, Android), short steps everywhere else.
+ */
+function BrowserInstall() {
+  const installed = useInstalledWebApp();
+  const [prompt, setPrompt] = useState<InstallPrompt | null>(null);
+  const [done, setDone] = useState(false);
+  const [browser, setBrowser] = useState<"chromium" | "firefox" | "safari-mac" | "iphone" | "android" | null>(null);
+  useEffect(() => {
+    const ua = navigator.userAgent;
+    setBrowser(/iPhone|iPad/i.test(ua) || (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1) ? "iphone" : /Android/i.test(ua) ? "android" : /Firefox\//i.test(ua) ? "firefox" : /Chrome|Chromium|Edg\//i.test(ua) ? "chromium" : /Safari/i.test(ua) && /Macintosh/i.test(ua) ? "safari-mac" : null);
+    const keep = (e: Event) => {
+      e.preventDefault();
+      setPrompt(e as InstallPrompt);
+    };
+    const installedNow = () => setDone(true);
+    window.addEventListener("beforeinstallprompt", keep);
+    window.addEventListener("appinstalled", installedNow);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", keep);
+      window.removeEventListener("appinstalled", installedNow);
+    };
+  }, []);
+  async function install() {
+    if (!prompt) return;
+    await prompt.prompt();
+    const { outcome } = await prompt.userChoice;
+    setPrompt(null);
+    if (outcome === "accepted") setDone(true);
+  }
+  const steps: Record<string, string> = {
+    chromium: "Chrome or Edge: click the install icon at the right of the address bar, or open the ⋮ / … menu → Install Klique (Edge: Apps → Install this site as an app).",
+    android: "Android: open the ⋮ menu → Install app (or Add to Home screen).",
+    iphone: "iPhone or iPad: tap Share → Add to Home Screen.",
+    "safari-mac": "Safari on a Mac: File → Add to Dock.",
+    firefox: "Firefox on a computer can't install sites as apps. Open this page in Chrome or Edge, or use the desktop app above.",
+  };
+  return (
+    <div id="browser" className="mt-6 flex scroll-mt-6 flex-col gap-4 rounded-[22px] border border-line bg-surface p-6 sm:flex-row sm:items-center">
+      <div className="flex-1">
+        <p className="eyebrow">Any computer or phone</p>
+        <h3 className="mt-2 text-2xl font-black tracking-tight">Install from your browser</h3>
+        <p className="mt-2 max-w-2xl text-sm text-ink-muted">No download: Klique gets its own window and icon, straight from getklique.app, so there&apos;s nothing for an antivirus to remove.</p>
+        {installed || done ? null : prompt ? null : (
+          <ul className="mt-3 space-y-1 text-sm text-ink-muted">
+            {(browser ? [steps[browser]] : [steps.chromium, steps.iphone, steps.android, steps["safari-mac"]]).map((t) => (
+              <li key={t}>{t}</li>
+            ))}
+          </ul>
+        )}
+      </div>
+      {installed || done ? (
+        <p className="inline-flex h-11 shrink-0 items-center gap-2 rounded-full bg-raised px-5 text-sm font-semibold">
+          <Icon name="check" size={16} /> Klique is installed
+        </p>
+      ) : prompt ? (
+        <button type="button" onClick={() => void install()} className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-full bg-ink px-6 text-sm font-semibold text-canvas hover:opacity-90">
+          <Icon name="download" size={16} /> Install Klique
+        </button>
+      ) : null}
+    </div>
+  );
+}
+

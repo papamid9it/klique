@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Icon } from "@/components/ui/Icon";
+import { isInstalledWebApp } from "@/lib/hooks/useInstalledWebApp";
 
 const KEY = "klique.desktopPrompt.hiddenUntil";
 const DAYS_30 = 30 * 24 * 60 * 60 * 1000;
@@ -15,7 +16,8 @@ export function DesktopPrompt() {
   const [os, setOs] = useState<"Windows" | "Mac" | "Linux" | null>(null);
   useEffect(() => {
     try {
-      if ((window as unknown as { kliqueDesktop?: unknown }).kliqueDesktop) return;
+      // not in the desktop app, nor in Klique installed from the browser
+      if ((window as unknown as { kliqueDesktop?: unknown }).kliqueDesktop || isInstalledWebApp()) return;
       if (Number(localStorage.getItem(KEY) ?? 0) > Date.now()) return;
     } catch {
       /* storage blocked: just show it */
