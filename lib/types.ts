@@ -2114,3 +2114,13 @@ export interface AdminGiftsReportDTO {
   sends: { id: Id; from: UserBrief; to: UserBrief; anonymous: boolean; gift: { name: string; emoji: string }; price: number; receiverAmount: number; kliqueAmount: number; target: { type: "post" | "comment" | "topic" | "reply"; id: Id }; community: { slug: string; name: string } | null; createdAt: ISODate }[];
   split: { giftValue: number; count: number; klique: number; receivers: number; receiversPaid: number; receiversRequested: number; receiversOwed: number };
 }
+
+/** One card in Home's Communities style (mostly events, then kliques, a few posts from your communities). */
+export type CommunityHomeItem = { kind: "event"; event: EventDTO } | { kind: "klique"; klique: CrewCardDTO } | { kind: "post"; post: FeedPostDTO };
+export interface CommunityHomeDTO {
+  items: CommunityHomeItem[];
+  page: number;
+  hasMore: boolean;
+  /** when page 1 was made: send it back for later pages, so they line up */
+  at: number;
+}

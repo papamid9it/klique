@@ -20,7 +20,7 @@ import { EmptyState } from "@/components/ui/States";
 import { eventPhoto } from "@/lib/fake";
 import { compactCount, dateChip, formatTime } from "@/lib/format";
 import { useEventActions } from "@/lib/hooks/useEventActions";
-import { KliquePhotoCard } from "@/components/domain/crews/parts";
+import { KliquePhotoCard, crewsHref } from "@/components/domain/crews/parts";
 import type { CommunityCardDTO, CrewCardDTO, DiscoverDTO, EventDTO, FeedPostDTO, HomeFeedItem, UserBrief } from "@/lib/types";
 import { VerifiedCheck } from "@/components/ui/VerifiedCheck";
 
@@ -93,7 +93,7 @@ function EventTile({ e, onChange }: { e: EventDTO; onChange: (e: EventDTO) => vo
 }
 
 /** One event, full width, between posts in the feed: picture, date, title, where, how many are going, Going. */
-export function EventFeedCard({ e, onChange }: { e: EventDTO; onChange: (e: EventDTO) => void }) {
+export function EventFeedCard({ e, onChange, findKlique }: { e: EventDTO; onChange: (e: EventDTO) => void; /** a "Find a klique" button too (in-person events) */ findKlique?: boolean }) {
   const d = dateChip(e.startsAt);
   const { busy, rsvp } = useEventActions(e, onChange);
   const going = e.viewer.rsvp === "going";
@@ -117,6 +117,11 @@ export function EventFeedCard({ e, onChange }: { e: EventDTO; onChange: (e: Even
             {formatTime(e.startsAt)} · {e.online ? "Online" : e.venue} · {compactCount(e.goingCount)} going
           </p>
         </div>
+        {findKlique && !e.online && (
+          <Button size="sm" variant="secondary" href={crewsHref(e)}>
+            Find a klique
+          </Button>
+        )}
         {e.viewer.isHost ? (
           <span className="text-[12px] font-semibold text-ink-muted">Hosting</span>
         ) : e.viewer.mustJoin && !e.viewer.rsvp ? (
