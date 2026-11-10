@@ -74,14 +74,14 @@ export function CommunitiesHome() {
   const now = useNow();
   const yours = (joinedKliques.data ?? []).filter((k) => !now || +new Date(k.meetupAt) > +now);
   const others = [...picked, ...(nearby.data?.items ?? []).filter((k) => !k.viewer.standing && !picked.some((p) => p.id === k.id))].filter((k) => !yours.some((y) => y.id === k.id));
-  const forYou = [...yours, ...others].slice(0, 5);
+  const forYou = [...yours, ...others].slice(0, 3);
   // events you can see, coming up: the soonest and busiest first (your next one leads)
   const upcoming = (discover.data?.eventsForYou ?? []).filter((e) => !e.isPast && e.id !== next?.id);
   const soonBusy = [...upcoming].sort((a, b) => +new Date(a.startsAt) - +new Date(b.startsAt) || b.goingCount - a.goingCount);
   const events = [...(next ? [next] : []), ...soonBusy].slice(0, 5);
   // public communities you haven't joined, from Home's suggestions (your interests and place)
   const suggested = (discover.data?.suggestedCommunities ?? []).filter((c) => !c.viewer.isMember).slice(0, 4);
-  const yourList = places.slice(0, 6);
+  const yourList = places.slice(0, 3);
 
   return (
     <div className="px-4 py-6 lg:px-7">
