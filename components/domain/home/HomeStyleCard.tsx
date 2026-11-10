@@ -12,7 +12,7 @@ const OPTIONS: { id: HomeStyle; label: string; hint: string }[] = [
 
 /** Settings: what Home shows on this device. First on the page, with a small picture of each. */
 export function HomeStyleCard() {
-  const style = useHomeStyle() ?? "casual";
+  const style = useHomeStyle() ?? "communities";
   return (
     <section aria-labelledby="home-style" className="mb-8 rounded-card border border-line bg-surface p-5">
       <h2 id="home-style" className="text-base font-semibold">Home style</h2>

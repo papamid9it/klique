@@ -20,7 +20,9 @@ import { useApi, useNow } from "@/lib/hooks/useApi";
 import type { InterestId } from "@/lib/constants";
 import type { EventDTO } from "@/lib/types";
 
-const SHADE = "absolute inset-x-0 bottom-0 bg-black/40 px-3 py-2 text-white";
+const SHADE = "absolute inset-x-0 bottom-0 px-3 py-2 text-white";
+/** a soft fade from the bottom under the title, with no visible edge */
+const FADE = "pointer-events-none absolute inset-0 bg-[linear-gradient(to_top,rgba(0,0,0,.78)_0%,rgba(0,0,0,.35)_35%,transparent_60%)]";
 const PILL = "absolute top-2.5 right-2.5 inline-flex h-7 min-w-7 items-center justify-center rounded-full bg-white px-2 text-sm font-bold text-black";
 
 /** An event in the big grid, in the same look as a place's tile: its picture, title and when. */
@@ -29,6 +31,7 @@ function EventTile({ e, big }: { e: EventDTO; big?: boolean }) {
   return (
     <Link href={`/events/${e.id}`} aria-label={`${e.title}, ${when}`} className={big ? "relative col-span-2 h-56 overflow-hidden rounded-[20px] lg:col-span-1 lg:row-span-2 lg:h-auto" : "relative h-36 overflow-hidden rounded-card lg:h-auto"}>
       <Cover src={eventPhoto(e.id, e.coverImage)} seed={e.id} interest={e.interest} className="absolute inset-0" />
+      <span aria-hidden className={FADE} />
       {e.viewer.rsvp === "going" && <span className={PILL}>Going</span>}
       <span className={SHADE}>
         <span className={big ? "block text-2xl font-bold leading-tight" : "block truncate text-[15px] font-bold leading-5"}>{e.title}</span>

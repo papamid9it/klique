@@ -10,9 +10,10 @@ const listeners = new Set<() => void>();
 
 function read(): HomeStyle {
   try {
-    return localStorage.getItem(KEY) === "communities" ? "communities" : "casual";
+    // Communities until this device picks: an old saved "casual" stays
+    return localStorage.getItem(KEY) === "casual" ? "casual" : "communities";
   } catch {
-    return "casual";
+    return "communities";
   }
 }
 
