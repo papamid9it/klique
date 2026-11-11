@@ -1,5 +1,6 @@
 "use client";
 
+import { HeaderIcons } from "@/components/layout/HeaderIcons";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -52,6 +53,7 @@ export default function MessageRequestsPage() {
             <Link href="/settings#privacy" className="font-medium text-ink hover:underline">Who can message you</Link>
           </p>
         </div>
+        <HeaderIcons className="ml-auto" />
       </header>
 
       {loading && !data ? (

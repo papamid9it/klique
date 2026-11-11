@@ -1,5 +1,6 @@
 "use client";
 
+import { HeaderIcons } from "@/components/layout/HeaderIcons";
 import { placeShort } from "@/lib/places";
 import { ProfileTrigger, useProfileCard } from "@/components/providers/ProfileCardProvider";
 import Link from "next/link";
@@ -150,6 +151,7 @@ export default function FriendsPage() {
               </button>
             ))}
           </div>
+          <HeaderIcons className="ml-auto" />
         </header>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-6">

@@ -1,5 +1,6 @@
 "use client";
 
+import { HeaderIcons } from "@/components/layout/HeaderIcons";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
@@ -8,7 +9,9 @@ import { Icon } from "@/components/ui/Icon";
 export default function MessagesHome() {
   const { status } = useAuth();
   return (
-    <div className="flex flex-1 items-center justify-center p-8">
+    <div className="relative flex flex-1 items-center justify-center p-8">
+      {/* the same top-right icons as every other page */}
+      <HeaderIcons className="absolute top-2 right-5" />
       <div className="max-w-sm text-center">
         <span className="mx-auto mb-5 inline-flex size-16 items-center justify-center rounded-full bg-raised text-accent-text">
           <Icon name="message" size={28} />

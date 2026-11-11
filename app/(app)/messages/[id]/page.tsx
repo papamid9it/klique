@@ -1,5 +1,6 @@
 "use client";
 
+import { HeaderIcons } from "@/components/layout/HeaderIcons";
 import { isDataSaver } from "@/lib/data-saver";
 import { ProfileTrigger } from "@/components/providers/ProfileCardProvider";
 import { useRealtime } from "@/components/providers/RealtimeProvider";
@@ -371,6 +372,7 @@ export default function ConversationPage() {
         <button type="button" onClick={() => setInfoOpen(true)} aria-label={chatGroup ? "About this group" : "About this person"} className="inline-flex size-9 items-center justify-center rounded-full text-ink hover:bg-raised xl:hidden">
           <Icon name="info" size={19} />
         </button>
+        <HeaderIcons className="ml-auto" />
       </header>
 
       <div className="kq-calm min-h-0 flex-1 space-y-1.5 overflow-y-auto px-4 py-5 sm:px-6" aria-live="polite">

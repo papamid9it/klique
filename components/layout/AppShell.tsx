@@ -5,6 +5,7 @@ import { reportHomeStyle } from "@/lib/hooks/useHomeStyle";
 import { useEffect, type ReactNode } from "react";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { MobileNav } from "./MobileNav";
+import { HeaderIcons } from "./HeaderIcons";
 import { MobileTopBar } from "./MobileTopBar";
 import { RightRail } from "./RightRail";
 import { VerifyBanner } from "./VerifyBanner";
@@ -120,8 +121,12 @@ function Shell({ children }: { children: ReactNode }) {
       <HomePanel />
       <div className="min-w-0">
         <MobileTopBar />
+        {/* big screens: Notifications and Messages at the top right */}
+        <div className={`sticky top-0 z-30 hidden h-14 items-center justify-end bg-canvas/92 px-6 backdrop-blur-lg lg:flex ${home ? "xl:hidden" : ""}`}>
+          <HeaderIcons />
+        </div>
         <VerifyBanner />
-        <main id="main" className={`mx-auto w-full ${home ? "max-w-[1120px]" : wide ? "max-w-[1560px]" : "max-w-[1040px]"} px-4 pt-6 pb-32 sm:px-8 lg:px-10 lg:pt-9 lg:pb-20`}>
+        <main id="main" className={`mx-auto w-full ${home ? "max-w-[1120px]" : wide ? "max-w-[1560px]" : "max-w-[1040px]"} px-4 pt-6 pb-32 sm:px-8 lg:px-10 lg:pt-2 lg:pb-20 ${home ? "xl:pt-9" : ""}`}>
           {children}
         </main>
       </div>

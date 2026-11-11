@@ -1,5 +1,6 @@
 "use client";
 
+import { HeaderIcons } from "@/components/layout/HeaderIcons";
 import { AgeGate } from "@/components/domain/space/AgeGate";
 import { placeLabel } from "@/lib/places";
 import Link from "next/link";
@@ -502,6 +503,7 @@ function CommunityWorkspace({ slug }: { slug: string }) {
               <Icon name={sideKind === "comments" || sideKind === "thread" ? "message" : "mic"} size={19} />
             </button>
           )}
+          <HeaderIcons className="ml-auto" />
         </header>
         )}
 

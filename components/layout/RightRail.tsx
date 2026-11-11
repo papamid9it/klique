@@ -1,5 +1,6 @@
 "use client";
 
+import { HeaderIcons } from "./HeaderIcons";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -26,7 +27,9 @@ export function RightRail() {
     <aside data-right-rail="" className="sticky top-0 hidden h-dvh flex-col border-l border-line xl:flex" aria-label="Suggestions">
       {/* each card keeps its full height (never squeezed or clipped); the list scrolls instead, with the thin scrollbar that shows on hover */}
       <div className="flex min-h-0 flex-1 flex-col gap-7 overflow-y-auto px-6 pt-7 pb-4 [&>*]:shrink-0">
+      <div className="flex items-center gap-1">
       <form
+        className="min-w-0 flex-1"
         role="search"
         onSubmit={(e) => {
           e.preventDefault();
@@ -48,6 +51,9 @@ export function RightRail() {
           />
         </div>
       </form>
+      {/* Notifications and Messages: the top right of the page on Home */}
+      <HeaderIcons />
+      </div>
 
       <section aria-labelledby="rail-communities">
         <h2 id="rail-communities" className="mb-3 text-base font-semibold tracking-tight">

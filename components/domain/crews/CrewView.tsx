@@ -1,5 +1,6 @@
 "use client";
 
+import { HeaderIcons } from "@/components/layout/HeaderIcons";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
@@ -452,6 +453,7 @@ function Crew({ crew, tab, embedded, onChange, onGone, onRead, onMenu, reload }:
           <button type="button" onClick={() => setInfoOpen(true)} aria-label="Klique info" title="Klique info" className="inline-flex size-10 shrink-0 items-center justify-center rounded-full text-ink hover:bg-raised xl:hidden">
             <Icon name="info" size={19} />
           </button>
+          <HeaderIcons className="ml-auto" />
         </header>
         <ChatPane
           key={crew.id}
