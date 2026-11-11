@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
+import { Archivo } from "next/font/google";
 import { Suspense, type ReactNode } from "react";
 import { BootSplash } from "@/components/layout/BootSplash";
 import { Providers } from "@/components/providers/Providers";
@@ -8,6 +9,9 @@ import { MOOD_BOOT_SCRIPT } from "@/components/providers/ThemeProvider";
 import "./globals.css";
 import "./motion.css";
 import { DEFAULT_MOOD } from "@/lib/moods";
+
+/** The heavy poster headings (Communities home's "LAGOS THIS WEEK"): Archivo Black, wide. */
+const archivo = Archivo({ subsets: ["latin"], weight: ["900"], variable: "--font-archivo", display: "swap" });
 
 export const metadata: Metadata = {
   metadataBase: new URL((process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/$/, "")),
@@ -23,7 +27,7 @@ export const viewport: Viewport = { width: "device-width", initialScale: 1, them
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" data-theme={DEFAULT_MOOD} suppressHydrationWarning className={`${GeistSans.variable} ${GeistMono.variable} select-none` }>
+    <html lang="en" data-theme={DEFAULT_MOOD} suppressHydrationWarning className={`${GeistSans.variable} ${GeistMono.variable} ${archivo.variable} select-none` }>
       <head>
         <script dangerouslySetInnerHTML={{ __html: MOOD_BOOT_SCRIPT }} />
       </head>

@@ -10,7 +10,7 @@ import { cx } from "@/components/ui/cx";
  * Notifications and Messages as two round icons at the top right of every page on big screens (phones keep their
  * own top bar and tabs). Each shows its unread count, live from the signed-in user.
  */
-export function HeaderIcons({ className, square }: { className?: string; /** bordered rounded squares (the floating-panels header) */ square?: boolean }) {
+export function HeaderIcons({ className }: { className?: string }) {
   const { user, status } = useAuth();
   const pathname = usePathname();
   if (status !== "authed" || !user) return null;
@@ -19,7 +19,7 @@ export function HeaderIcons({ className, square }: { className?: string; /** bor
     { href: "/messages", label: "Messages", icon: "message" as const, unread: user.unreadMessages ?? 0, on: pathname.startsWith("/messages") },
   ];
   return (
-    <span className={cx("hidden shrink-0 items-center lg:flex", square ? "gap-2" : "gap-1", className)}>
+    <span className={cx("hidden shrink-0 items-center gap-1 lg:flex", className)}>
       {items.map((n) => (
         <Link
           key={n.href}
@@ -27,7 +27,7 @@ export function HeaderIcons({ className, square }: { className?: string; /** bor
           aria-label={n.unread ? `${n.label}, ${n.unread} unread` : n.label}
           aria-current={n.on ? "page" : undefined}
           title={n.label}
-          className={cx("relative inline-flex size-11 items-center justify-center transition", square ? "rounded-[12px] border border-line bg-canvas" : "rounded-full", n.on ? "bg-raised text-ink" : "text-ink-muted hover:bg-raised hover:text-ink")}
+          className={cx("relative inline-flex size-11 items-center justify-center rounded-full transition", n.on ? "bg-raised text-ink" : "text-ink-muted hover:bg-raised hover:text-ink")}
         >
           <Icon name={n.icon} size={22} />
           {n.unread > 0 && (

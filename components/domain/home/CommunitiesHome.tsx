@@ -9,12 +9,8 @@ import { EventService } from "@/app/services/EventService";
 import { crewHref } from "@/components/domain/crews/parts";
 import { useRealtimeEvent } from "@/components/providers/RealtimeProvider";
 import { JoinButton } from "@/components/domain/JoinButton";
-import { errorMessage } from "@/app/ApiCore";
-import { useToast } from "@/components/providers/ToastProvider";
 import { useHomeKliques } from "./useHomeKliques";
-import { DesktopPrompt } from "@/components/domain/DesktopPrompt";
-import { PlansCard } from "@/components/layout/RightRail";
-import { DeckKliques, PANEL } from "@/components/layout/DeckPanels";
+import { CityPoster } from "./CityPoster";
 import { Button } from "@/components/ui/Button";
 import { Cover } from "@/components/ui/Cover";
 import { Icon } from "@/components/ui/Icon";
@@ -22,7 +18,7 @@ import { RowSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { communityNews, rankMyCommunities } from "@/lib/constants";
 import { eventPhoto } from "@/lib/fake";
-import { compactCount, formatDateLong, formatDateShort, formatTime, relativeStamp } from "@/lib/format";
+import { compactCount, formatDateShort, relativeStamp } from "@/lib/format";
 import { useApi } from "@/lib/hooks/useApi";
 import type { InterestId } from "@/lib/constants";
 import type { CommunityCardDTO, EventDTO } from "@/lib/types";
@@ -81,8 +77,8 @@ export function CommunitiesHome() {
   const upcoming = (discover.data?.eventsForYou ?? []).filter((e) => !e.isPast && e.id !== next?.id);
   const soonBusy = [...upcoming].sort((a, b) => +new Date(a.startsAt) - +new Date(b.startsAt) || b.goingCount - a.goingCount);
   const events = [...(next ? [next] : []), ...soonBusy].slice(0, 5);
-  // big screens: one featured, then up to 8 more (two rows when there are enough)
-  const deckEvents = [...(next ? [next] : []), ...soonBusy].slice(0, 9);
+  // big screens: one featured, then the next four
+  const deckEvents = [...(next ? [next] : []), ...soonBusy].slice(0, 5);
   // public communities you haven't joined, from Home's suggestions (your interests and place)
   const suggested = (discover.data?.suggestedCommunities ?? []).filter((c) => !c.viewer.isMember).slice(0, 4);
   // joined (or asked) from Home: the card shows it straight away
@@ -91,7 +87,16 @@ export function CommunitiesHome() {
 
   return (
     <>
-    <DeckMiddle events={deckEvents} loading={(discover.loading && !discover.data) || (going.loading && !going.data)} onChange={() => (void going.reload(), void discover.reload())} />
+    <CityPoster
+      events={deckEvents}
+      loading={(discover.loading && !discover.data) || (going.loading && !going.data)}
+      onChange={() => (void going.reload(), void discover.reload())}
+      weekCount={discover.data ? discover.data.week.reduce((n, d) => n + d.count, 0) : null}
+      forming={upcoming.filter((e) => +new Date(e.startsAt) - +new Date(discover.data?.week[0]?.day ?? 0) < 8 * 864e5).reduce((n, e) => n + e.crewCount, 0) + (next?.crewCount ?? 0)}
+      mine={places}
+      mineLoading={mine.loading && !mine.data}
+      suggested={suggested}
+    />
     <div className="px-4 py-6 lg:hidden">
       <div className="min-w-0">
       <div className="mb-3 flex items-baseline gap-3">
@@ -225,109 +230,5 @@ export function HomeKliques({ cards }: { /** the side column's cards: event tag,
       </div>
       )}
     </section>
-  );
-}
-
-/**
- * Communities home on big screens, the middle panel: the featured event (your next one, else the soonest and busiest)
- * with "I'm going", then more events this week. Below 1280px wide the kliques and cards from the right panel follow.
- */
-function DeckMiddle({ events, loading, onChange }: { events: EventDTO[]; loading: boolean; onChange: () => void }) {
-  const toast = useToast();
-  const [busy, setBusy] = useState(false);
-  const top = events[0];
-  const more = events.slice(1, events.length > 5 ? 9 : 5);
-  async function going(e: EventDTO) {
-    setBusy(true);
-    try {
-      await EventService.rsvp(e.id);
-      onChange();
-    } catch (err) {
-      toast(errorMessage(err), "error");
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <div className="hidden min-h-full flex-col gap-3.5 lg:flex">
-      {loading && !top ? (
-        <div className={`${PANEL} h-[340px] animate-pulse`} />
-      ) : !top ? (
-        <div className={`${PANEL} p-6`}>
-          <EmptyState icon="calendar" title="Nothing coming up yet" action={<Button href="/events" variant="primary">Find events</Button>}>
-            Events from your communities and your city show here.
-          </EmptyState>
-        </div>
-      ) : (
-        <div className="relative h-[340px] shrink-0 overflow-hidden rounded-[22px] border border-line">
-          <Link href={`/events/${top.id}`} aria-label={top.title} className="absolute inset-0">
-            <Cover src={eventPhoto(top.id, top.coverImage)} seed={top.id} interest={top.interest} className="absolute inset-0" />
-            <span aria-hidden className="absolute inset-0 bg-[linear-gradient(to_top,rgba(0,0,0,.85)_0%,rgba(0,0,0,.4)_40%,transparent_70%)]" />
-          </Link>
-          <span className="pointer-events-none absolute top-4 left-5 rounded-full border border-white/25 bg-white/15 px-3 py-1 text-xs font-semibold text-white backdrop-blur">Featured event</span>
-          <div className="pointer-events-none absolute inset-x-6 bottom-5 flex flex-wrap items-end gap-4 text-white">
-            <div className="min-w-0 flex-[1_1_320px]">
-              <p className="text-[13px] font-semibold text-[#f5c542]">
-                {formatDateLong(top.startsAt)} · {formatTime(top.startsAt)}
-                {top.venue && !top.online ? ` · ${top.venue}` : ""}
-              </p>
-              <h2 className="mt-1 text-[34px] leading-[1.08] font-bold tracking-[-0.02em]">{top.title}</h2>
-              <p className="mt-1 text-sm text-white/80">
-                {top.goingCount} going{top.community ? ` · ${top.community.name}` : ""}
-              </p>
-            </div>
-            {top.viewer.rsvp === "going" ? (
-              <Link href={`/events/${top.id}`} className="pointer-events-auto inline-flex h-11 items-center rounded-[12px] bg-white px-5 text-sm font-bold text-black">
-                You&apos;re going
-              </Link>
-            ) : (
-              <button type="button" disabled={busy} onClick={() => void going(top)} className="pointer-events-auto inline-flex h-11 items-center rounded-[12px] bg-white px-5 text-sm font-bold text-black disabled:opacity-60">
-                I&apos;m going
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {more.length > 0 && (
-        <section aria-labelledby="deck-more-events" className={`${PANEL} flex-1 p-4`}>
-          <div className="mb-3 flex items-baseline">
-            <h2 id="deck-more-events" className="text-[15px] font-semibold">More events this week</h2>
-            <Link href="/events" className="ml-auto text-xs font-semibold text-ink-muted hover:text-ink">
-              See all
-            </Link>
-          </div>
-          <div className="grid grid-cols-4 gap-3">
-            {more.map((e) => {
-              const d = new Date(e.startsAt);
-              return (
-                <Link key={e.id} href={`/events/${e.id}`} aria-label={`${e.title}, ${formatDateShort(e.startsAt)}`} className="relative h-[170px] overflow-hidden rounded-[14px]">
-                  <Cover src={eventPhoto(e.id, e.coverImage)} seed={e.id} interest={e.interest} className="absolute inset-0" />
-                  <span aria-hidden className="absolute inset-0 bg-[linear-gradient(to_top,rgba(0,0,0,.85)_0%,rgba(0,0,0,.35)_45%,transparent_70%)]" />
-                  <span className="absolute top-2.5 left-2.5 w-11 rounded-[10px] bg-black/65 py-1 text-center text-[11px] leading-tight text-white/75 uppercase">
-                    {d.toLocaleDateString("en-GB", { month: "short" })}
-                    <b className="block text-[17px] text-white">{d.getDate()}</b>
-                  </span>
-                  {e.viewer.rsvp === "going" && <span className="absolute top-2.5 right-2.5 rounded-full bg-white px-2 py-0.5 text-xs font-bold text-black">Going</span>}
-                  <span className="absolute inset-x-3 bottom-2.5 text-white">
-                    <span className="block truncate text-sm font-bold">{e.title}</span>
-                    <span className="block text-xs text-white/75">{e.goingCount} going</span>
-                  </span>
-                </Link>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
-      {/* below 1280px there's no right panel: its kliques and cards come here */}
-      <div className="flex flex-col gap-3.5 xl:hidden">
-        <div className={`${PANEL} p-4`}>
-          <DeckKliques />
-        </div>
-        <DesktopPrompt />
-        <PlansCard />
-      </div>
-    </div>
   );
 }

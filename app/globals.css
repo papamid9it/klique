@@ -51,6 +51,7 @@
 
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+  --font-display: var(--font-archivo), var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
 
   --radius-card: 1rem;
   --radius-control: 0.75rem;
