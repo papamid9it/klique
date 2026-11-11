@@ -27,11 +27,11 @@ export function HeaderIcons({ className }: { className?: string }) {
           aria-label={n.unread ? `${n.label}, ${n.unread} unread` : n.label}
           aria-current={n.on ? "page" : undefined}
           title={n.label}
-          className={cx("relative inline-flex size-10 items-center justify-center rounded-full transition", n.on ? "bg-raised text-ink" : "text-ink-muted hover:bg-raised hover:text-ink")}
+          className={cx("relative inline-flex size-11 items-center justify-center rounded-full transition", n.on ? "bg-raised text-ink" : "text-ink-muted hover:bg-raised hover:text-ink")}
         >
-          <Icon name={n.icon} size={19} />
+          <Icon name={n.icon} size={22} />
           {n.unread > 0 && (
-            <span aria-hidden="true" className="absolute -top-0.5 -right-0.5 inline-flex min-w-[18px] items-center justify-center rounded-full bg-accent px-1 text-[10.5px] leading-[18px] font-bold text-accent-ink ring-2 ring-canvas">
+            <span aria-hidden="true" className="absolute -top-0.5 -right-0.5 inline-flex min-w-5 items-center justify-center rounded-full bg-accent px-1 text-[11px] leading-5 font-bold text-accent-ink ring-2 ring-canvas">
               {n.unread > 9 ? "9+" : n.unread}
             </span>
           )}
