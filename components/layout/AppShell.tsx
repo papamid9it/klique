@@ -6,6 +6,7 @@ import { useEffect, type ReactNode } from "react";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { MobileNav } from "./MobileNav";
 import { DeckHeader } from "./DeckHeader";
+import { DeckLeftPanel, DeckRightPanel } from "./DeckPanels";
 import { HeaderIcons } from "./HeaderIcons";
 import { MobileTopBar } from "./MobileTopBar";
 import { RightRail } from "./RightRail";
@@ -118,28 +119,45 @@ function Shell({ children }: { children: ReactNode }) {
   const deck = home && homeStyle === "communities" && status === "authed";
   const wide = ["/events", "/kliques", "/saved", "/communities", "/search", "/notifications"].includes(pathname.replace(/\/$/, ""));
 
+  // Communities home on big screens: floating panels (header, your communities, the page, kliques), full height
+  if (deck)
+    return (
+      <div className="min-h-dvh lg:flex lg:h-dvh lg:flex-col lg:gap-3.5 lg:p-3.5">
+        <a href="#main" className={SKIP}>
+          Skip to content
+        </a>
+        <MobileTopBar />
+        <DeckHeader />
+        <VerifyBanner />
+        <div className="lg:flex lg:min-h-0 lg:flex-1 lg:gap-3.5">
+          <DeckLeftPanel />
+          <main id="main" className="no-bar min-w-0 px-4 pt-6 pb-32 sm:px-8 lg:flex-1 lg:overflow-y-auto lg:p-0">
+            {children}
+          </main>
+          <DeckRightPanel className="hidden xl:flex" />
+        </div>
+        <MobileNav />
+      </div>
+    );
+
   return (
-    <div className={deck ? "min-h-dvh lg:grid lg:grid-cols-[76px_minmax(0,1fr)]" : home ? "min-h-dvh lg:grid lg:grid-cols-[272px_minmax(0,1fr)] xl:grid-cols-[272px_minmax(0,1fr)_320px]" : "min-h-dvh lg:grid lg:grid-cols-[272px_minmax(0,1fr)]"}>
+    <div className={home ? "min-h-dvh lg:grid lg:grid-cols-[272px_minmax(0,1fr)] xl:grid-cols-[272px_minmax(0,1fr)_320px]" : "min-h-dvh lg:grid lg:grid-cols-[272px_minmax(0,1fr)]"}>
       <a href="#main" className={SKIP}>
         Skip to content
       </a>
-      {deck ? <Sidebar /> : <HomePanel />}
+      <HomePanel />
       <div className="min-w-0">
         <MobileTopBar />
         {/* big screens: Notifications and Messages at the top right (Communities home: its own header bar) */}
-        {deck ? (
-          <DeckHeader />
-        ) : (
-          <div className={`sticky top-0 z-30 hidden h-14 items-center justify-end bg-canvas/92 px-6 backdrop-blur-lg lg:flex ${home ? "xl:hidden" : ""}`}>
-            <HeaderIcons />
-          </div>
-        )}
+        <div className={`sticky top-0 z-30 hidden h-14 items-center justify-end bg-canvas/92 px-6 backdrop-blur-lg lg:flex ${home ? "xl:hidden" : ""}`}>
+          <HeaderIcons />
+        </div>
         <VerifyBanner />
-        <main id="main" className={deck ? "mx-auto w-full max-w-[1440px] px-4 pt-6 pb-32 sm:px-8 lg:px-7 lg:pt-6 lg:pb-16" : `mx-auto w-full ${home ? "max-w-[1120px]" : wide ? "max-w-[1560px]" : "max-w-[1040px]"} px-4 pt-6 pb-32 sm:px-8 lg:px-10 lg:pt-2 lg:pb-20 ${home ? "xl:pt-9" : ""}`}>
+        <main id="main" className={`mx-auto w-full ${home ? "max-w-[1120px]" : wide ? "max-w-[1560px]" : "max-w-[1040px]"} px-4 pt-6 pb-32 sm:px-8 lg:px-10 lg:pt-2 lg:pb-20 ${home ? "xl:pt-9" : ""}`}>
           {children}
         </main>
       </div>
-      {home && !deck && <RightRail />}
+      {home && <RightRail />}
       <MobileNav />
     </div>
   );
