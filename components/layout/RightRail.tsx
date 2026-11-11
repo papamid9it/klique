@@ -1,6 +1,5 @@
 "use client";
 
-import { HomeKliques } from "@/components/domain/home/CommunitiesHome";
 import { HeaderIcons } from "./HeaderIcons";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -14,11 +13,7 @@ import { RowSkeleton } from "@/components/ui/Skeleton";
 import { useApi } from "@/lib/hooks/useApi";
 import { DesktopPrompt } from "@/components/domain/DesktopPrompt";
 
-/**
- * `kliques` (Communities home on big screens): Kliques first in place of the community suggestions (Home's main
- * column already suggests communities there), then the desktop-app card (website only), plans and the footer line.
- */
-export function RightRail({ kliques }: { kliques?: boolean } = {}) {
+export function RightRail() {
   const router = useRouter();
   const { where, ready } = usePlace();
   const [q, setQ] = useState("");
@@ -60,7 +55,6 @@ export function RightRail({ kliques }: { kliques?: boolean } = {}) {
       <HeaderIcons />
       </div>
 
-      {kliques ? <HomeKliques /> : (
       <section aria-labelledby="rail-communities">
         <h2 id="rail-communities" className="mb-3 text-base font-semibold tracking-tight">
           Communities for you
@@ -81,13 +75,21 @@ export function RightRail({ kliques }: { kliques?: boolean } = {}) {
           <p className="text-sm text-ink-muted">You&apos;re in every community here. Start a new one?</p>
         )}
       </section>
-      )}
 
       {railAd && <SponsoredBox ad={railAd} />}
 
       <DesktopPrompt />
 
-      {/* plans: Lite and Pro, opening the pricing page */}
+      <PlansCard />
+      </div>
+      <RailFooter className="shrink-0 px-6 pt-3 pb-7" />
+    </aside>
+  );
+}
+
+/** The Lite and Pro card, opening the pricing page (the right rail, and Communities home's side column). */
+export function PlansCard() {
+  return (
       <Link href="/pricing" className="group block rounded-card border border-line bg-surface p-5 transition hover:border-ink-muted/60" aria-labelledby="rail-pro">
         <p className="eyebrow flex items-center gap-2">
           <span className="rounded-full bg-accent px-1.5 py-px text-[10px] font-bold tracking-wide text-accent-ink">PRO</span>
@@ -101,16 +103,18 @@ export function RightRail({ kliques }: { kliques?: boolean } = {}) {
           See plans <Icon name="arrow-up-right" size={13} />
         </span>
       </Link>
+  );
+}
 
-      </div>
-
-      <p className="eyebrow shrink-0 px-6 pt-3 pb-7 leading-relaxed normal-case">
-        klique. is built for your city{" "}
-        <Link href="/settings#appearance" className="underline underline-offset-2 hover:text-ink">
-          Change the mood
-        </Link>
-        .
-      </p>
-    </aside>
+/** "klique. is built for your city · Change the mood". */
+export function RailFooter({ className = "" }: { className?: string }) {
+  return (
+    <p className={`eyebrow leading-relaxed normal-case ${className}`}>
+      klique. is built for your city{" "}
+      <Link href="/settings#appearance" className="underline underline-offset-2 hover:text-ink">
+        Change the mood
+      </Link>
+      .
+    </p>
   );
 }

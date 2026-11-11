@@ -5,6 +5,7 @@ import { reportHomeStyle, useHomeStyle } from "@/lib/hooks/useHomeStyle";
 import { useEffect, type ReactNode } from "react";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { MobileNav } from "./MobileNav";
+import { DeckHeader } from "./DeckHeader";
 import { HeaderIcons } from "./HeaderIcons";
 import { MobileTopBar } from "./MobileTopBar";
 import { RightRail } from "./RightRail";
@@ -118,23 +119,27 @@ function Shell({ children }: { children: ReactNode }) {
   const wide = ["/events", "/kliques", "/saved", "/communities", "/search", "/notifications"].includes(pathname.replace(/\/$/, ""));
 
   return (
-    <div className={deck ? "min-h-dvh lg:grid lg:grid-cols-[76px_minmax(0,1fr)] xl:grid-cols-[76px_minmax(0,1fr)_320px]" : home ? "min-h-dvh lg:grid lg:grid-cols-[272px_minmax(0,1fr)] xl:grid-cols-[272px_minmax(0,1fr)_320px]" : "min-h-dvh lg:grid lg:grid-cols-[272px_minmax(0,1fr)]"}>
+    <div className={deck ? "min-h-dvh lg:grid lg:grid-cols-[76px_minmax(0,1fr)]" : home ? "min-h-dvh lg:grid lg:grid-cols-[272px_minmax(0,1fr)] xl:grid-cols-[272px_minmax(0,1fr)_320px]" : "min-h-dvh lg:grid lg:grid-cols-[272px_minmax(0,1fr)]"}>
       <a href="#main" className={SKIP}>
         Skip to content
       </a>
-      {deck ? <Sidebar withNav /> : <HomePanel />}
+      {deck ? <Sidebar /> : <HomePanel />}
       <div className="min-w-0">
         <MobileTopBar />
-        {/* big screens: Notifications and Messages at the top right */}
-        <div className={`sticky top-0 z-30 hidden h-14 items-center justify-end bg-canvas/92 px-6 backdrop-blur-lg lg:flex ${home ? "xl:hidden" : ""}`}>
-          <HeaderIcons />
-        </div>
+        {/* big screens: Notifications and Messages at the top right (Communities home: its own header bar) */}
+        {deck ? (
+          <DeckHeader />
+        ) : (
+          <div className={`sticky top-0 z-30 hidden h-14 items-center justify-end bg-canvas/92 px-6 backdrop-blur-lg lg:flex ${home ? "xl:hidden" : ""}`}>
+            <HeaderIcons />
+          </div>
+        )}
         <VerifyBanner />
-        <main id="main" className={`mx-auto w-full ${home ? "max-w-[1120px]" : wide ? "max-w-[1560px]" : "max-w-[1040px]"} px-4 pt-6 pb-32 sm:px-8 lg:px-10 lg:pt-2 lg:pb-20 ${home ? "xl:pt-9" : ""}`}>
+        <main id="main" className={deck ? "mx-auto w-full max-w-[1440px] px-4 pt-6 pb-32 sm:px-8 lg:px-7 lg:pt-6 lg:pb-16" : `mx-auto w-full ${home ? "max-w-[1120px]" : wide ? "max-w-[1560px]" : "max-w-[1040px]"} px-4 pt-6 pb-32 sm:px-8 lg:px-10 lg:pt-2 lg:pb-20 ${home ? "xl:pt-9" : ""}`}>
           {children}
         </main>
       </div>
-      {home && <RightRail kliques={deck} />}
+      {home && !deck && <RightRail />}
       <MobileNav />
     </div>
   );

@@ -6,14 +6,12 @@ import { useAuth } from "@/components/providers/AuthProvider";
 import { Avatar } from "@/components/ui/Avatar";
 import { CommunityRail } from "./CommunityRail";
 import { LogoMark } from "./Logo";
-import { HOME_NAV } from "./nav";
-import { Icon } from "@/components/ui/Icon";
 import { UserMenu } from "./UserMenu";
 import { PresenceDot } from "@/components/domain/profile/ProfileParts";
 
 /** The icon rail inside a community, a crew chat and Messages; other pages have the home panel (HomePanel). */
-export function Sidebar({ withNav }: { /** also the main pages as icons (Communities home, where there's no home panel) */ withNav?: boolean } = {}) {
-  return <SlimNav pathname={usePathname()} withNav={withNav} />;
+export function Sidebar() {
+  return <SlimNav pathname={usePathname()} />;
 }
 
 /**
@@ -21,7 +19,7 @@ export function Sidebar({ withNav }: { /** also the main pages as icons (Communi
  * logo, fixed at the top), your communities, then your account. Events, Messages, Notifications and the rest are
  * in the home panel, one click away through Home.
  */
-function SlimNav({ pathname, withNav }: { pathname: string; withNav?: boolean }) {
+function SlimNav({ pathname }: { pathname: string }) {
   const { user, status } = useAuth();
   const activeSlug = /^\/communities\/([^/]+)/.exec(pathname)?.[1] ?? null;
   return (
@@ -31,23 +29,13 @@ function SlimNav({ pathname, withNav }: { pathname: string; withNav?: boolean })
         <Link href="/" aria-label="Klique — home" className="inline-flex size-11 items-center justify-center rounded-[14px] bg-raised transition hover:bg-surface">
           <LogoMark size={34} />
         </Link>
-        {withNav && (
-          <nav aria-label="Main" className="flex flex-col items-center gap-1">
-            {HOME_NAV.filter((n) => !n.authed || status === "authed").map((n) => {
-              const on = n.match(pathname);
-              return (
-                <Link key={n.href} href={n.href} aria-label={n.label} title={n.label} aria-current={on ? "page" : undefined} className={`inline-flex size-11 items-center justify-center rounded-[14px] transition ${on ? "bg-raised text-ink" : "text-ink-muted hover:bg-raised hover:text-ink"}`}>
-                  <Icon name={n.icon} size={20} />
-                </Link>
-              );
-            })}
-          </nav>
-        )}
         <span aria-hidden="true" className="h-px w-8 bg-line" />
       </div>
-      <div className="no-bar flex min-h-0 w-full flex-1 flex-col items-center gap-3 overflow-y-auto pb-4 [&>*]:shrink-0">
+      {/* only the communities scroll: the home button stays above them and your profile stays pinned below */}
+      <div className="no-bar flex min-h-0 w-full flex-1 flex-col items-center gap-3 overflow-y-auto pt-1 pb-3 [&>*]:shrink-0">
       <CommunityRail activeSlug={activeSlug} />
-      <div className="mt-auto flex flex-col items-center gap-2">
+      </div>
+      <div className="flex w-full shrink-0 flex-col items-center gap-2 border-t border-line py-3">
         {status === "authed" && user ? (
           <>
             <UserMenu
@@ -64,7 +52,6 @@ function SlimNav({ pathname, withNav }: { pathname: string; withNav?: boolean })
             Sign in
           </Link>
         ) : null}
-      </div>
       </div>
     </aside>
   );
