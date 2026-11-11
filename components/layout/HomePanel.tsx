@@ -21,9 +21,7 @@ import { prefetchCommunity } from "./prefetchCommunity";
 import { UserMenu } from "./UserMenu";
 import { PresenceDot } from "@/components/domain/profile/ProfileParts";
 import { VerifiedCheck } from "@/components/ui/VerifiedCheck";
-import { DesktopPrompt } from "@/components/domain/DesktopPrompt";
 import { useHomeStyle } from "@/lib/hooks/useHomeStyle";
-import { PlansCard, RailFooter } from "./RightRail";
 
 const row = "flex h-11 items-center gap-3 rounded-control px-3.5 text-[15px] font-medium transition";
 /** The panel's middle: scrolls on its own, fading out at its top and bottom edges. */
@@ -40,7 +38,7 @@ export function HomePanel() {
   const { user, status } = useAuth();
   const card = useProfileCard();
   const own = hasPagePanel(pathname);
-  // Communities home has no suggestions rail: its search, the desktop app, plans and the footer line come here
+  // Communities home has no suggestions rail, so its search stays here
   const homeStyle = useHomeStyle();
   const cityHome = pathname === "/" && homeStyle === "communities" && status === "authed";
 
@@ -87,18 +85,9 @@ export function HomePanel() {
           </nav>
           </div>
           {/* your communities scroll on their own, so the account footer never moves */}
-          <div className={SCROLL}>
-            {status === "authed" && <MyCommunities />}
-            {cityHome && (
-              <div className="mt-6 space-y-3 pb-2">
-                <DesktopPrompt />
-                <PlansCard />
-              </div>
-            )}
-          </div>
+          <div className={SCROLL}>{status === "authed" && <MyCommunities />}</div>
         </>
       )}
-      {cityHome && <RailFooter className="shrink-0 px-6 pt-2 pb-3" />}
 
       <div className="shrink-0 border-t border-line bg-surface/60 px-3 py-3">
         {status === "authed" && user ? (

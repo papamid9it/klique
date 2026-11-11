@@ -8,6 +8,7 @@ import { MobileNav } from "./MobileNav";
 import { HeaderIcons } from "./HeaderIcons";
 import { MobileTopBar } from "./MobileTopBar";
 import { RightRail } from "./RightRail";
+import { CityPosterRail } from "@/components/domain/home/CityPoster";
 import { VerifyBanner } from "./VerifyBanner";
 import { CommunityPreloader } from "./CommunityPreloader";
 import { Sidebar } from "./Sidebar";
@@ -119,7 +120,7 @@ function Shell({ children }: { children: ReactNode }) {
   const rail = home && !cityHome;
 
   return (
-    <div className={rail ? "min-h-dvh lg:grid lg:grid-cols-[272px_minmax(0,1fr)] xl:grid-cols-[272px_minmax(0,1fr)_320px]" : "min-h-dvh lg:grid lg:grid-cols-[272px_minmax(0,1fr)]"}>
+    <div className={rail ? "min-h-dvh lg:grid lg:grid-cols-[272px_minmax(0,1fr)] xl:grid-cols-[272px_minmax(0,1fr)_320px]" : cityHome ? "min-h-dvh lg:grid lg:grid-cols-[272px_minmax(0,1fr)] xl:grid-cols-[272px_minmax(0,1fr)_300px]" : "min-h-dvh lg:grid lg:grid-cols-[272px_minmax(0,1fr)]"}>
       <a href="#main" className={SKIP}>
         Skip to content
       </a>
@@ -131,11 +132,12 @@ function Shell({ children }: { children: ReactNode }) {
           <HeaderIcons />
         </div>
         <VerifyBanner />
-        <main id="main" className={`mx-auto w-full ${cityHome ? "max-w-[1480px]" : home ? "max-w-[1120px]" : wide ? "max-w-[1560px]" : "max-w-[1040px]"} px-4 pt-6 pb-32 sm:px-8 lg:px-10 lg:pt-2 lg:pb-20 ${rail ? "xl:pt-9" : ""}`}>
+        <main id="main" className={`mx-auto w-full ${cityHome ? "max-w-[1240px]" : home ? "max-w-[1120px]" : wide ? "max-w-[1560px]" : "max-w-[1040px]"} px-4 pt-6 pb-32 sm:px-8 lg:px-10 lg:pt-2 lg:pb-20 ${rail ? "xl:pt-9" : ""}`}>
           {children}
         </main>
       </div>
       {rail && <RightRail />}
+      {cityHome && <CityPosterRail />}
       <MobileNav />
     </div>
   );

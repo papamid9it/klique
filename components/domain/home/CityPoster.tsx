@@ -4,9 +4,10 @@ import Link from "next/link";
 import { useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
 import { EventService } from "@/app/services/EventService";
+import { DesktopPrompt } from "@/components/domain/DesktopPrompt";
 import { JoinButton } from "@/components/domain/JoinButton";
+import { PlansCard, RailFooter } from "@/components/layout/RightRail";
 import { crewHref } from "@/components/domain/crews/parts";
-import { usePlace } from "@/components/providers/PlaceProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import { Cover } from "@/components/ui/Cover";
 import { cx } from "@/components/ui/cx";
@@ -25,7 +26,8 @@ const ROW = "flex min-h-11 items-center gap-3 border-b border-line py-2";
 
 /**
  * Communities home on big screens, "city poster": a huge "LAGOS THIS WEEK" with a few counts, the featured event as
- * a poster beside the next four, then your communities, communities for you and kliques in three columns.
+ * a poster beside the next four, then your communities and communities for you; kliques, the desktop app and plans
+ * sit in the right panel (CityPosterRail), or under the poster below 1280px.
  * Square corners, mono labels and 1px lines, in the mood's colours. Phones keep the plain layout.
  */
 export function CityPoster({
@@ -49,11 +51,9 @@ export function CityPoster({
   mineLoading: boolean;
   suggested: CommunityCardDTO[];
 }) {
-  const { label } = usePlace();
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [joined, setJoined] = useState<Record<string, CommunityCardDTO>>({});
-  const { forYou } = useHomeKliques();
   const top = events[0];
   // the next four after the featured one, by date
   const next = events
@@ -87,9 +87,7 @@ export function CityPoster({
     <div className="hidden lg:block">
       {/* the heading, with the counts on the right */}
       <header className="flex items-end gap-6 border-b border-line pb-5">
-        <h1 className="min-w-0 flex-1 font-display text-[clamp(44px,5.6vw,88px)] leading-[.86] font-black tracking-[-0.025em] text-ink uppercase">
-          {label}
-          <br />
+        <h1 className="min-w-0 flex-1 font-display text-[clamp(48px,6vw,96px)] leading-[.86] font-black tracking-[-0.025em] text-ink uppercase">
           This week
         </h1>
         {stats.length > 0 && (
@@ -102,7 +100,7 @@ export function CityPoster({
       </header>
 
       {/* the featured event as a poster, the next four beside it */}
-      <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+      <div className="mt-6 grid gap-6 min-[1440px]:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         {loading && !top ? (
           <div className="skeleton h-[420px] !rounded-none" aria-hidden="true" />
         ) : !top ? (
@@ -175,7 +173,7 @@ export function CityPoster({
       </div>
 
       {/* your communities · communities for you · kliques */}
-      <div className="mt-10 grid gap-x-8 gap-y-10 border-t border-line pt-6 xl:grid-cols-3 lg:grid-cols-2">
+      <div className="mt-10 grid grid-cols-2 gap-x-8 gap-y-10 border-t border-line pt-6">
         <section aria-labelledby="poster-yours" className="min-w-0">
           <h2 id="poster-yours" className={`${LABEL} mb-2`}>
             Your communities
@@ -227,31 +225,67 @@ export function CityPoster({
           )}
         </section>
 
-        <section aria-labelledby="poster-kliques" className="min-w-0">
-          <h2 id="poster-kliques" className={`${LABEL} mb-2`}>
-            Kliques
-          </h2>
-          {forYou.length ? (
-            <ul>
-              {forYou.slice(0, 3).map((k) => (
-                <li key={k.id}>
-                  <Link href={crewHref(k)} className={ROW}>
-                    <span className="min-w-0 flex-1 truncate text-sm font-semibold hover:underline">{k.title}</span>
-                    <span className="shrink-0 font-mono text-[12px] text-accent-text tabular-nums">
-                      {k.memberCount}/{k.maxMembers}
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="border-b border-line py-3 text-sm text-ink-muted">No kliques yet</p>
-          )}
-          <Link href="/kliques?start=1" className="mt-4 flex h-11 items-center justify-center bg-ink text-sm font-bold text-canvas transition hover:opacity-90">
-            Start a klique
-          </Link>
-        </section>
+        {/* big screens: in the right panel instead */}
+        <PosterKliques className="xl:hidden" />
       </div>
+
+      {/* below 1280px there's no right panel: the desktop app and plans come here */}
+      <div className="mt-10 grid grid-cols-2 items-start gap-4 *:!rounded-none xl:hidden">
+        <DesktopPrompt />
+        <PlansCard />
+      </div>
+      <RailFooter className="mt-6 xl:hidden" />
     </div>
+  );
+}
+
+/** Kliques: yours first, then ones to join, each with n/max in the accent colour; then Start a klique. */
+function PosterKliques({ className }: { className?: string }) {
+  const { forYou } = useHomeKliques();
+  return (
+    <section aria-labelledby="poster-kliques" className={cx("min-w-0", className)}>
+      <h2 id="poster-kliques" className={`${LABEL} mb-2`}>
+        Kliques
+      </h2>
+      {forYou.length ? (
+        <ul>
+          {forYou.slice(0, 3).map((k) => (
+            <li key={k.id}>
+              <Link href={crewHref(k)} className={ROW}>
+                <span className="min-w-0 flex-1 truncate text-sm font-semibold hover:underline">{k.title}</span>
+                <span className="shrink-0 font-mono text-[12px] text-accent-text tabular-nums">
+                  {k.memberCount}/{k.maxMembers}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="border-b border-line py-3 text-sm text-ink-muted">No kliques yet</p>
+      )}
+      <Link href="/kliques?start=1" className="mt-4 flex h-11 items-center justify-center bg-ink text-sm font-bold text-canvas transition hover:opacity-90">
+        Start a klique
+      </Link>
+    </section>
+  );
+}
+
+/**
+ * Communities home's right panel (1280px and wider): kliques, the desktop app (website only) and plans, with the
+ * "built for your city" line pinned at the bottom. Narrower screens show these under the poster instead.
+ */
+export function CityPosterRail() {
+  return (
+    <aside aria-label="Kliques and more" className="sticky top-0 hidden h-dvh flex-col border-l border-line xl:flex">
+      <div className="no-bar flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-6 pt-20 pb-4 [&>*]:shrink-0">
+        <PosterKliques />
+        {/* the shared cards, with the poster's square corners */}
+        <div className="flex flex-col gap-4 *:!rounded-none">
+          <DesktopPrompt />
+          <PlansCard />
+        </div>
+      </div>
+      <RailFooter className="shrink-0 px-6 pt-3 pb-7" />
+    </aside>
   );
 }
