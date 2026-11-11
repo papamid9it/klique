@@ -9,8 +9,8 @@ import { GiftsCatalogue, GiftsDashboard, GiftsSettings } from "@/components/doma
 type View = "dashboard" | "catalogue" | "settings";
 
 const INTRO: Record<View, string> = {
-  dashboard: "Hype bought (website, Apple, Google), who bought it, gifts sent (anonymous senders shown to admins only), and Klique's share against what receivers are owed. Gift payouts are paid in Payouts on the 3rd of each month.",
-  catalogue: "The gifts people can send, their prices (₦10 to ₦500,000; 1 Hype is ₦10) and art. Hidden gifts can't be sent.",
+  dashboard: "Hype bought (website, Apple, Google), who bought it, awards sent (anonymous senders shown to admins only), and Klique's share against what receivers are owed. Award payouts are paid in Payouts on the 3rd of each month.",
+  catalogue: "The awards people can send, their prices (₦10 to ₦500,000; 1 Hype is ₦10) and art. Hidden awards can't be sent.",
   settings: "The receiver's share, how long earnings are held, the smallest payout, and the top-up packs.",
 };
 
@@ -24,17 +24,17 @@ function GiftsAdminPage() {
     <>
       <div className="mb-5">
         <Segmented
-          label="Gifts"
+          label="Awards"
           value={view}
           onChange={(next) => router.replace(`/admin/gifts?view=${next}`, { scroll: false })}
           options={[
             { id: "dashboard", label: "Dashboard" },
-            { id: "catalogue", label: "Gifts" },
+            { id: "catalogue", label: "Awards" },
             { id: "settings", label: "Settings" },
           ]}
         />
       </div>
-      <AdminHeader title={view === "dashboard" ? "Gifts" : view === "catalogue" ? "Gift catalogue" : "Gift settings"}>{INTRO[view]}</AdminHeader>
+      <AdminHeader title={view === "dashboard" ? "Awards" : view === "catalogue" ? "Award catalogue" : "Award settings"}>{INTRO[view]}</AdminHeader>
       {view === "dashboard" ? <GiftsDashboard /> : view === "catalogue" ? <GiftsCatalogue /> : <GiftsSettings />}
     </>
   );

@@ -47,6 +47,12 @@ export interface GiftConfig {
   storePacks: StoreHypePack[];
   /** what Apple and Google keep of an in-app purchase, percent (for the revenue report) */
   storeFeePercent: { apple: number; google: number };
+  /** who earns from awards they receive: at least this many points... */
+  earnMinPoints: number;
+  /** ...on Klique at least this many months... */
+  earnMinMonths: number;
+  /** ...and living in one of these countries (ISO codes). Awards to anyone else go to Klique in full. */
+  earnCountries: string[];
 }
 
 export const DEFAULT_GIFT_CONFIG: GiftConfig = {
@@ -63,6 +69,9 @@ export const DEFAULT_GIFT_CONFIG: GiftConfig = {
     { productId: "hype_5000", hype: 5000, price: 65_000 },
   ],
   storeFeePercent: { apple: 15, google: 15 },
+  earnMinPoints: 1000,
+  earnMinMonths: 3,
+  earnCountries: ["NG"],
 };
 
 const int = (v: unknown, min: number, max: number, fallback: number) => (typeof v === "number" && Number.isFinite(v) ? Math.min(max, Math.max(min, Math.round(v))) : fallback);
@@ -83,6 +92,9 @@ export function giftConfigOf(stored: unknown): GiftConfig {
     webPacks: webPacks.length ? webPacks : d.webPacks,
     storePacks: storePacks.sort((a, b) => a.hype - b.hype),
     storeFeePercent: { apple: int(s.storeFeePercent?.apple, 0, 50, d.storeFeePercent.apple), google: int(s.storeFeePercent?.google, 0, 50, d.storeFeePercent.google) },
+    earnMinPoints: int(s.earnMinPoints, 0, 10_000_000, d.earnMinPoints),
+    earnMinMonths: int(s.earnMinMonths, 0, 120, d.earnMinMonths),
+    earnCountries: Array.isArray(s.earnCountries) ? [...new Set(s.earnCountries.filter((c) => typeof c === "string" && /^[A-Z]{2}$/.test(c)))] : d.earnCountries,
   };
 }
 
@@ -152,3 +164,42 @@ export const BURST_SPEC: Record<GiftBurstTier, { particles: number; ms: number; 
   medium: { particles: 14, ms: 1400, scale: 3 },
   large: { particles: 18, ms: 1600, scale: 3.6 },
 };
+
+/** Whether someone earns from the awards they receive now, and what's missing if not (the server decides with this). */
+export interface EarningStatus {
+  eligible: boolean;
+  points: number;
+  /** whole months on Klique */
+  months: number;
+  country: string;
+  minPoints: number;
+  minMonths: number;
+  countries: string[];
+  missing: { points: boolean; months: boolean; country: boolean };
+}
+
+/** Whole calendar months from `from` to `now`. */
+export function monthsBetween(from: Date, now: Date): number {
+  let m = (now.getUTCFullYear() - from.getUTCFullYear()) * 12 + (now.getUTCMonth() - from.getUTCMonth());
+  if (now.getUTCDate() < from.getUTCDate()) m -= 1;
+  return Math.max(0, m);
+}
+
+export function earningStatus(u: { points?: number | null; createdAt: Date | string; country?: string | null }, c: Pick<GiftConfig, "earnMinPoints" | "earnMinMonths" | "earnCountries">, now = new Date()): EarningStatus {
+  const points = u.points ?? 0;
+  const months = monthsBetween(new Date(u.createdAt), now);
+  const country = (u.country ?? "").toUpperCase();
+  const missing = { points: points < c.earnMinPoints, months: months < c.earnMinMonths, country: !country || !c.earnCountries.includes(country) };
+  return { eligible: !missing.points && !missing.months && !missing.country, points, months, country, minPoints: c.earnMinPoints, minMonths: c.earnMinMonths, countries: c.earnCountries, missing };
+}
+
+/** Plain words for Settings → Earnings when someone doesn't earn yet; null when they do. */
+export function earningText(e: EarningStatus): string | null {
+  if (e.eligible) return null;
+  if (e.missing.country) return e.countries.length === 1 && e.countries[0] === "NG" ? "Earning from awards is only open in Nigeria for now." : "Earning from awards isn't open where you live yet.";
+  const need: string[] = [];
+  if (e.missing.points) need.push(`${e.minPoints.toLocaleString("en-NG")} points`);
+  if (e.missing.months) need.push(`${e.minMonths} ${e.minMonths === 1 ? "month" : "months"} on Klique`);
+  const joined = e.months === 0 ? "joined less than a month ago" : `joined ${e.months} ${e.months === 1 ? "month" : "months"} ago`;
+  return `You start earning from awards at ${need.join(" and ")}. You have ${e.points.toLocaleString("en-NG")} points and ${joined}. Awards you get before then still show, but don't earn.`;
+}

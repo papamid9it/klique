@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { reportHomeStyle } from "@/lib/hooks/useHomeStyle";
+import { reportHomeStyle, useHomeStyle } from "@/lib/hooks/useHomeStyle";
 import { useEffect, type ReactNode } from "react";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { MobileNav } from "./MobileNav";
@@ -62,6 +62,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 function Shell({ children }: { children: ReactNode }) {
   // the page on screen (under an open post's /p/[id] link, the feed it was opened from)
   const pathname = usePagePath();
+  const { status } = useAuth();
+  const homeStyle = useHomeStyle();
 
   // Settings is a full-screen surface of its own (categories · page), like Discord's.
   if (pathname === "/settings" || pathname === "/settings/") return <>{children}</>;
@@ -111,14 +113,16 @@ function Shell({ children }: { children: ReactNode }) {
   // Everything else (Home, Events, Notifications, Communities, Saved, search…): the home panel · page,
   // and the suggestions rail beside the home feed on wide screens.
   const home = pathname === "/";
+  // Communities home on big screens: the slim icon rail instead of the home panel, Kliques in the right panel
+  const deck = home && homeStyle === "communities" && status === "authed";
   const wide = ["/events", "/kliques", "/saved", "/communities", "/search", "/notifications"].includes(pathname.replace(/\/$/, ""));
 
   return (
-    <div className={home ? "min-h-dvh lg:grid lg:grid-cols-[272px_minmax(0,1fr)] xl:grid-cols-[272px_minmax(0,1fr)_320px]" : "min-h-dvh lg:grid lg:grid-cols-[272px_minmax(0,1fr)]"}>
+    <div className={deck ? "min-h-dvh lg:grid lg:grid-cols-[76px_minmax(0,1fr)] xl:grid-cols-[76px_minmax(0,1fr)_320px]" : home ? "min-h-dvh lg:grid lg:grid-cols-[272px_minmax(0,1fr)] xl:grid-cols-[272px_minmax(0,1fr)_320px]" : "min-h-dvh lg:grid lg:grid-cols-[272px_minmax(0,1fr)]"}>
       <a href="#main" className={SKIP}>
         Skip to content
       </a>
-      <HomePanel />
+      {deck ? <Sidebar withNav /> : <HomePanel />}
       <div className="min-w-0">
         <MobileTopBar />
         {/* big screens: Notifications and Messages at the top right */}
@@ -130,7 +134,7 @@ function Shell({ children }: { children: ReactNode }) {
           {children}
         </main>
       </div>
-      {home && <RightRail />}
+      {home && <RightRail kliques={deck} />}
       <MobileNav />
     </div>
   );

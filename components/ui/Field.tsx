@@ -156,3 +156,14 @@ export function Switch({ checked, onChange, label, hint, disabled, status }: { c
     </div>
   );
 }
+
+/**
+ * After a form fails its checks: bring the first problem into view (a long form or a scrolled modal would otherwise
+ * seem to do nothing on submit). Runs after React has painted the errors.
+ */
+export function revealFirstError(form: HTMLElement | null) {
+  requestAnimationFrame(() => {
+    const first = form?.querySelector<HTMLElement>('[aria-invalid="true"], [role="alert"]');
+    first?.scrollIntoView({ block: "center", behavior: "smooth" });
+  });
+}

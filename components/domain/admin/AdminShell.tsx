@@ -45,7 +45,7 @@ const MENU: { title: string | null; items: Item[] }[] = [
       { href: "/admin/points", label: "Points", icon: "coin" },
       // profile designs are off for now (lib/constants PROFILE_DESIGNS_ENABLED)
       ...(PROFILE_DESIGNS_ENABLED ? [{ href: "/admin/effects", label: "Profile effects", icon: "asterisk" as const }] : []),
-      { href: "/admin/gifts", label: "Gifts", icon: "gift" },
+      { href: "/admin/gifts", label: "Awards", icon: "gift" },
       { href: "/admin/payouts", label: "Payouts", icon: "ticket", count: (s) => s.pendingPayouts },
     ],
   },

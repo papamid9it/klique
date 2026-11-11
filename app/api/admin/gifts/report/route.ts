@@ -9,7 +9,7 @@ export const GET = withApi({ auth: "required" }, async ({ req, viewer }) => {
   const q = readQuery(req, giftReportQuery);
   if (q.csv) {
     const body = await adminGiftsCsv(q.csv, q);
-    return new Response(body, { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="klique-gift-${q.csv}-${q.from ?? "all"}-${q.to ?? "now"}.csv"`, "Cache-Control": "no-store" } });
+    return new Response(body, { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="klique-award-${q.csv}-${q.from ?? "all"}-${q.to ?? "now"}.csv"`, "Cache-Control": "no-store" } });
   }
   return adminGiftsReport(q);
 });

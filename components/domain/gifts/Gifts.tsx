@@ -157,10 +157,10 @@ export function GiftButton({ target, authorId, off, size = "md", variant = "plai
     <Icon name="gift" size={iconSize} />
   );
   const box = cx("inline-flex items-center justify-center gap-1 rounded-full text-ink-muted", variant === "pill" ? "h-9 bg-raised/70 px-3.5" : top ? (size === "sm" ? "h-7 px-1.5" : "h-8 px-2") : size === "sm" ? "size-7" : "size-8");
-  if (!canGift) return <span aria-label={`${s!.total} ${s!.total === 1 ? "gift" : "gifts"}`} className={cx(box, className)}>{face}</span>;
+  if (!canGift) return <span aria-label={`${s!.total} ${s!.total === 1 ? "award" : "awards"}`} className={cx(box, className)}>{face}</span>;
   return (
     <span className={cx("relative inline-flex", className)}>
-      <button ref={btn} type="button" onClick={() => setOpen((o) => !o)} aria-label={top ? `${s!.total} ${s!.total === 1 ? "gift" : "gifts"}. Send a gift` : "Send a gift"} aria-expanded={!!open} title="Send a gift" className={cx(box, "transition hover:text-ink", variant === "pill" ? "hover:bg-raised" : "hover:bg-raised", open && "bg-raised text-ink")}>
+      <button ref={btn} type="button" onClick={() => setOpen((o) => !o)} aria-label={top ? `${s!.total} ${s!.total === 1 ? "award" : "awards"}. Send an award` : "Send an award"} aria-expanded={!!open} title="Send an award" className={cx(box, "transition hover:text-ink", variant === "pill" ? "hover:bg-raised" : "hover:bg-raised", open && "bg-raised text-ink")}>
         {/* the same line icon, size and colour as the buttons beside it; only the tray shows the colourful gifts */}
         {face}
       </button>
@@ -175,7 +175,7 @@ function TrayReceived({ target }: { target: GiftTarget }) {
   const s = useSummary(target);
   if (!s?.total) return null;
   return (
-    <ul aria-label="Gifts so far" className="mb-2 flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-line pb-2">
+    <ul aria-label="Awards so far" className="mb-2 flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-line pb-2">
       {s.items.map((g) => (
         <li key={g.giftId} title={g.name} className="inline-flex items-center gap-1 text-[13px] font-semibold text-ink-muted">
           <GiftArt gift={g} size={18} />
@@ -276,10 +276,10 @@ function GiftTray({ target, anchor, initial, onClose, onSent }: { target: GiftTa
 
   const short = picked && data ? picked.hype > data.balance : false;
   return (
-    <div ref={ref} role="dialog" aria-label="Send a gift" style={style} className="fixed z-50 flex w-[21rem] max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden rounded-card border border-line bg-surface p-3 shadow-xl">
+    <div ref={ref} role="dialog" aria-label="Send an award" style={style} className="fixed z-50 flex w-[21rem] max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden rounded-card border border-line bg-surface p-3 shadow-xl">
       <TrayReceived target={target} />
       <div className="mb-2 flex shrink-0 items-center gap-2">
-        <p className="flex-1 text-sm font-semibold">Send a gift</p>
+        <p className="flex-1 text-sm font-semibold">Send an award</p>
         <span className="font-mono text-[12px] text-ink-muted">{data ? `${data.balance.toLocaleString("en-NG")} Hype` : ""}</span>
         <Link href="/settings?tab=hype" className="rounded-full bg-raised px-2.5 py-1 text-[12px] font-semibold hover:bg-line">
           Top up
@@ -288,7 +288,7 @@ function GiftTray({ target, anchor, initial, onClose, onSent }: { target: GiftTa
       {!data ? (
         error ? <p className="p-2 text-sm text-danger">{error}</p> : <Skeleton className="h-40" />
       ) : !data.enabled ? (
-        <p className="p-2 text-sm text-ink-muted">Gifts are switched off for now.</p>
+        <p className="p-2 text-sm text-ink-muted">Awards are switched off for now.</p>
       ) : (
         <>
           <div className="-mx-1 grid min-h-0 flex-1 grid-cols-4 content-start gap-1.5 overflow-y-auto p-1.5 [scrollbar-width:thin]">
@@ -321,7 +321,7 @@ function GiftTray({ target, anchor, initial, onClose, onSent }: { target: GiftTa
             </p>
           )}
           <button type="button" onClick={() => void send()} disabled={!picked || busy || short} className="mt-2 inline-flex h-9 w-full shrink-0 items-center justify-center gap-2 rounded-full bg-accent text-sm font-semibold text-accent-ink transition disabled:opacity-40">
-            {busy ? "Sending…" : picked ? `Send ${picked.name} · ${picked.hype.toLocaleString("en-NG")} Hype` : "Pick a gift"}
+            {busy ? "Sending…" : picked ? `Send ${picked.name} · ${picked.hype.toLocaleString("en-NG")} Hype` : "Pick an award"}
           </button>
         </>
       )}

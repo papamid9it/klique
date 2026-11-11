@@ -2,7 +2,7 @@ import "server-only";
 import { randomBytes } from "node:crypto";
 import mongoose, { Types } from "mongoose";
 import type { z } from "zod";
-import { DEFAULT_GIFTS, GIFT_MAX_PRICE, GIFT_MIN_PRICE, HYPE_NAIRA, TOPUP_MAX, TOPUP_MIN, giftConfigOf, giftHype, giftTargetKey, hypeForNaira, payoutDayFor, receiverShare, type GiftConfig, type GiftTargetType } from "@/lib/gifts";
+import { DEFAULT_GIFTS, GIFT_MAX_PRICE, GIFT_MIN_PRICE, HYPE_NAIRA, TOPUP_MAX, TOPUP_MIN, giftConfigOf, giftHype, giftTargetKey, hypeForNaira, payoutDayFor, receiverShare, earningStatus, type GiftConfig, type GiftTargetType } from "@/lib/gifts";
 import type { AdminGiftsReportDTO, AdminStuckTopupDTO, GiftDTO, GiftEarningsDTO, GiftReceivedDTO, GiftSentDTO, GiftSummaryDTO, GiftWalletDTO, HypeEntryDTO, PayoutDTO } from "@/lib/types";
 import { adminEmails, appUrl, paystackConfig } from "../env";
 import { ApiError, badRequest, conflict, forbidden, notFound } from "../http/errors";
@@ -17,7 +17,6 @@ import { Board, Topic, type IBoard, type ITopic } from "../models/Topic";
 import { User, type IUser } from "../models/User";
 import { Subcommunity } from "../models/Subcommunity";
 import { spaceAccess } from "../policies/access";
-import { isSiteAdmin } from "../policies/hosting";
 import { GHOST, loadBriefs } from "../serializers";
 import type { giftConfigSchema, giftSaveSchema, giftSendSchema, giftStoreTopupSchema, giftTopupSchema, payoutRequestSchema } from "../validators/schemas";
 import { sid } from "./helpers";
@@ -120,7 +119,7 @@ export async function adminSaveGift(input: z.infer<typeof giftSaveSchema>, id?: 
   const set = { name: input.name, emoji: input.emoji || "🎁", artUrl: input.artUrl || null, price: clampPrice(input.price), active: input.active, ...(input.position !== undefined ? { position: input.position } : {}) };
   if (id) {
     const g = await Gift.findByIdAndUpdate(oid(id), { $set: set }, { returnDocument: "after" }).lean<IGift>();
-    if (!g) throw notFound("That gift doesn't exist.");
+    if (!g) throw notFound("That award doesn't exist.");
     return giftDto(g, true);
   }
   const base = input.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 30) || "gift";
@@ -133,7 +132,7 @@ export async function adminSaveGift(input: z.infer<typeof giftSaveSchema>, id?: 
 /** Gifts already sent keep their copy of the name and picture, so a gift can be removed at any time. */
 export async function adminDeleteGift(id: string) {
   const r = await Gift.deleteOne({ _id: oid(id) });
-  if (!r.deletedCount) throw notFound("That gift doesn't exist.");
+  if (!r.deletedCount) throw notFound("That award doesn't exist.");
   return { deleted: true };
 }
 
@@ -231,7 +230,7 @@ async function credit(t: IHypeTopup) {
   }
   const claimed = done as IHypeTopup | null;
   if (!claimed) return false;
-  notify([claimed.userId], { title: `${claimed.hype.toLocaleString("en-NG")} Hype added`, body: "Send gifts to posts and comments you love.", data: { href: "/settings?tab=hype" } }, { category: "gifts", ref: `hype:${claimed.reference}` });
+  notify([claimed.userId], { title: `${claimed.hype.toLocaleString("en-NG")} Hype added`, body: "Send awards to posts and comments you love.", data: { href: "/settings?tab=hype" } }, { category: "gifts", ref: `hype:${claimed.reference}` });
   return true;
 }
 
@@ -248,7 +247,7 @@ export async function fulfilTopup(reference: string, paid: { status: string; amo
   const t = await HypeTopup.findOne({ reference }).lean<IHypeTopup>();
   if (!t || t.status === "paid" || paid.status !== "success") return false;
   if (paid.currency !== "NGN" || paid.amount < t.amount * 100) {
-    console.warn("[gift-hype] amount mismatch", reference, paid.amount, t.amount * 100);
+    console.warn("[award-hype] amount mismatch", reference, paid.amount, t.amount * 100);
     return false;
   }
   return credit(t);
@@ -322,7 +321,7 @@ export async function retryStuckTopups(): Promise<{ checked: number; credited: n
         if (data && (await fulfilTopup(row.reference, data))) credited++;
       } else if (await credit(row)) credited++;
     } catch (e) {
-      console.warn("[gift-hype] retry failed", row.reference, (e as Error).message);
+      console.warn("[award-hype] retry failed", row.reference, (e as Error).message);
     }
   }
   return { checked: rows.length, credited };
@@ -432,11 +431,11 @@ async function resolveTarget(type: GiftTargetType, id: string): Promise<Target> 
     const [c, b] = await Promise.all([Community.findById(topic.communityId).select("slug").lean<Pick<ICommunity, "slug">>(), topic.boardId ? Board.findById(topic.boardId).select("slug").lean<Pick<IBoard, "slug">>() : null]);
     href = `/communities/${c?.slug}?view=topics&b=${b?.slug ?? ""}&t=${sid(topic._id)}`;
     label = "your board post";
-  } else throw badRequest("Gifts can't go there.");
-  if (!authorId) throw badRequest("That can't take gifts.");
+  } else throw badRequest("Awards can't go there.");
+  if (!authorId) throw badRequest("That can't take awards.");
   const community = communityId ? await Community.findById(communityId).lean<ICommunity>() : null;
   if (!community) throw notFound("That community is gone.");
-  if (community.explicit || community.adult) throw badRequest("Gifts aren't available in this community.");
+  if (community.explicit || community.adult) throw badRequest("Awards aren't available in this community.");
   return { authorId, community, href, label };
 }
 
@@ -444,7 +443,7 @@ async function resolveTarget(type: GiftTargetType, id: string): Promise<Target> 
 
 export async function sendGift(viewer: IUser, input: z.infer<typeof giftSendSchema>): Promise<{ balance: number; summary: GiftSummaryDTO }> {
   const config = await getGiftConfig();
-  if (!config.enabled) throw badRequest("Gifts are switched off for now.");
+  if (!config.enabled) throw badRequest("Awards are switched off for now.");
   // the same send twice (a retry on bad network) is one gift
   const again = await GiftSend.findOne({ fromId: viewer._id, clientKey: input.clientKey }).lean<IGiftSend>();
   if (again?.status === "sent") return { balance: (await User.findById(viewer._id).select("giftHype").lean<Pick<IUser, "giftHype">>())?.giftHype ?? 0, summary: (await summarise([{ type: again.target.type, id: sid(again.target.id) }]))[giftTargetKey({ type: again.target.type, id: sid(again.target.id) })] };
@@ -459,16 +458,20 @@ export async function sendGift(viewer: IUser, input: z.infer<typeof giftSendSche
   }
   rateLimit(`gift:${sid(viewer._id)}`, 120, 60 * 60 * 1000);
   const gift = oid(input.giftId) ? await Gift.findOne({ _id: oid(input.giftId), active: true }).lean<IGift>() : null;
-  if (!gift) throw notFound("That gift isn't available any more.");
+  if (!gift) throw notFound("That award isn't available any more.");
   const t = await resolveTarget(input.target.type, input.target.id);
-  if (sid(t.authorId) === sid(viewer._id)) throw badRequest("You can't send a gift to yourself.");
+  if (sid(t.authorId) === sid(viewer._id)) throw badRequest("You can't send an award to yourself.");
   const access = await spaceAccess({ community: t.community, sub: null }, viewer);
   if (!access.canView) throw forbidden("You can't see that.");
-  const receiver = await User.findById(t.authorId).select("_id suspendedAt").lean<Pick<IUser, "_id" | "suspendedAt">>();
-  if (!receiver || receiver.suspendedAt) throw badRequest("They can't get gifts right now.");
+  const receiver = await User.findById(t.authorId).select("_id suspendedAt points createdAt country").lean<Pick<IUser, "_id" | "suspendedAt" | "points" | "createdAt" | "country">>();
+  if (!receiver || receiver.suspendedAt) throw badRequest("They can't get awards right now.");
 
   const hype = giftHype(gift.price);
-  const toReceiver = receiverShare(gift.price, config.receiverPercent);
+  // only people who qualify (points, months on Klique, country) earn from an award; for anyone else it still shows,
+  // but its whole value is Klique's, and it isn't credited later when they do qualify
+  const earning = earningStatus(receiver, config);
+  const notEarnedReason = earning.eligible ? null : `receiver not eligible: ${[earning.missing.points && "points", earning.missing.months && "account age", earning.missing.country && "country"].filter(Boolean).join(", ")}`;
+  const toReceiver = earning.eligible ? receiverShare(gift.price, config.receiverPercent) : 0;
   let row: IGiftSend;
   try {
     row = (
@@ -487,11 +490,12 @@ export async function sendGift(viewer: IUser, input: z.infer<typeof giftSendSche
         clientKey: input.clientKey,
         receiverAmount: toReceiver,
         kliqueAmount: gift.price - toReceiver,
+        notEarnedReason,
         holdUntil: new Date(Date.now() + config.holdDays * DAY_MS),
       })
     ).toObject() as IGiftSend;
   } catch (e) {
-    if ((e as { code?: number })?.code === 11000) throw conflict("That gift is already on its way.");
+    if ((e as { code?: number })?.code === 11000) throw conflict("That award is already on its way.");
     throw e;
   }
   const balance = await move(viewer._id, -hype, "gift", `${gift.name} gift`, `gift:${sid(row._id)}`);
@@ -502,7 +506,7 @@ export async function sendGift(viewer: IUser, input: z.infer<typeof giftSendSche
   await GiftSend.updateOne({ _id: row._id }, { $set: { status: "sent" } });
 
   const who = input.anonymous ? "Someone" : viewer.displayName;
-  notify([t.authorId], { title: `${who} sent you a ${gift.name} ${gift.emoji}`, body: `On ${t.label}. You earn ${naira(toReceiver)}.`, data: { href: t.href } }, { category: "gifts", ref: `gift:${input.target.type}:${input.target.id}`, ...(input.anonymous ? {} : { actorId: viewer._id }) });
+  notify([t.authorId], { title: `${who} sent you an award: ${gift.name}`, body: toReceiver > 0 ? `On ${t.label}. You earn ${naira(toReceiver)}.` : `On ${t.label}.`, data: { href: t.href } }, { category: "gifts", ref: `gift:${input.target.type}:${input.target.id}`, ...(input.anonymous ? {} : { actorId: viewer._id }) });
   return { balance, summary: (await summarise([input.target]))[giftTargetKey(input.target)] };
 }
 
@@ -598,10 +602,11 @@ export async function getEarnings(viewer: IUser, before?: string): Promise<GiftE
   const payouts = await payoutsOf(viewer._id);
   const requested = payouts.filter((p) => p.status === "requested").reduce((t, p) => t + p.amount, 0);
   const paid = payouts.filter((p) => p.status === "paid").reduce((t, p) => t + p.amount, 0);
-  const q: Record<string, unknown> = { toId: viewer._id, status: "sent" };
+  // only awards that earned them something (awards received before they qualified are Klique's and aren't listed here)
+  const q: Record<string, unknown> = { toId: viewer._id, status: "sent", receiverAmount: { $gt: 0 } };
   if (before) q.createdAt = { $lt: new Date(before) };
   const rows = await GiftSend.find(q).sort({ createdAt: -1 }).limit(PAGE + 1).lean<IGiftSend[]>();
-  const me = await User.findById(viewer._id).select("payoutBank").lean<Pick<IUser, "payoutBank">>();
+  const me = await User.findById(viewer._id).select("payoutBank points createdAt country").lean<Pick<IUser, "payoutBank" | "points" | "createdAt" | "country">>();
   const bank = me?.payoutBank ?? null;
   const waiting = payouts.find((p) => p.status === "requested") ?? null;
   const available = agg?.available ?? 0;
@@ -617,6 +622,7 @@ export async function getEarnings(viewer: IUser, before?: string): Promise<GiftE
     hasMore: rows.length > PAGE,
     bank: bank ? { bankName: bank.bankName, accountName: bank.accountName, bankCode: bank.bankCode, accountNumber: mask(bank.accountNumber) } : null,
     canRequest: !waiting && available >= config.minPayout,
+    earning: me ? earningStatus(me, config, now) : earningStatus({ points: 0, createdAt: now, country: "" }, config, now),
   };
 }
 
@@ -683,8 +689,8 @@ export async function afterPayoutDecision(p: IPayout, admin: IUser) {
   notify(
     [p.requestedById],
     p.status === "paid"
-      ? { title: `${naira(p.amount)} gift earnings paid to ${p.bank.bankName}`, body: `Transfer reference ${p.reference}.`, data: { href: "/settings?tab=earnings" } }
-      : { title: "Your gift earnings payout was turned down", body: p.note, data: { href: "/settings?tab=earnings" } },
+      ? { title: `${naira(p.amount)} award earnings paid to ${p.bank.bankName}`, body: `Transfer reference ${p.reference}.`, data: { href: "/settings?tab=earnings" } }
+      : { title: "Your award earnings payout was turned down", body: p.note, data: { href: "/settings?tab=earnings" } },
     { actorId: admin._id, category: "gifts", ref: `payout:${sid(p._id)}` },
   );
 }
@@ -699,9 +705,9 @@ export async function monthlyGiftPayouts(now = new Date()): Promise<{ listed: nu
   if (!due.length) return { listed: 0, amount: 0 };
   await Payout.updateMany({ _id: { $in: due.map((p) => p._id) } }, { $set: { listedAt: now } });
   const amount = due.reduce((t, p) => t + p.amount, 0);
-  for (const p of due) notify([p.requestedById], { title: `Your ${naira(p.amount)} gift earnings are being paid today`, body: `To ${p.bank.bankName} ${mask(p.bank.accountNumber)}.`, data: { href: "/settings?tab=earnings" } }, { category: "gifts", ref: `payout:${sid(p._id)}` });
+  for (const p of due) notify([p.requestedById], { title: `Your ${naira(p.amount)} award earnings are being paid today`, body: `To ${p.bank.bankName} ${mask(p.bank.accountNumber)}.`, data: { href: "/settings?tab=earnings" } }, { category: "gifts", ref: `payout:${sid(p._id)}` });
   const admins = await User.find({ email: { $in: [...adminEmails()] } }).select("_id").lean<{ _id: Types.ObjectId }[]>();
-  notify(admins.map((a) => a._id), { title: `${due.length} gift ${due.length === 1 ? "payout" : "payouts"} due today`, body: `${naira(amount)} in all. Admin, Payouts.`, data: { href: "/admin/payouts" } }, { category: "admin", ref: "gift-payouts" });
+  notify(admins.map((a) => a._id), { title: `${due.length} award ${due.length === 1 ? "payout" : "payouts"} due today`, body: `${naira(amount)} in all. Admin, Payouts.`, data: { href: "/admin/payouts" } }, { category: "admin", ref: "gift-payouts" });
   return { listed: due.length, amount };
 }
 
@@ -768,6 +774,6 @@ export async function adminGiftsCsv(kind: "purchases" | "sends", r: Range): Prom
   const rep = await adminGiftsReport({ ...r });
   const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
   if (kind === "purchases") return ["date,user,handle,platform,pack,hype,amount_naira,store_fee_naira,reference,test", ...rep.purchases.map((p) => [p.paidAt, p.user.displayName, p.user.handle, p.platform, p.pack, p.hype, p.amount, p.storeFee, p.reference, p.test].map(esc).join(","))].join("\n");
-  return ["date,from,from_handle,anonymous,to,to_handle,gift,price_naira,receiver_naira,klique_naira,target,community", ...rep.sends.map((g) => [g.createdAt, g.from.displayName, g.from.handle, g.anonymous, g.to.displayName, g.to.handle, g.gift.name, g.price, g.receiverAmount, g.kliqueAmount, `${g.target.type}:${g.target.id}`, g.community?.name ?? ""].map(esc).join(","))].join("\n");
+  return ["date,from,from_handle,anonymous,to,to_handle,award,price_naira,receiver_naira,klique_naira,target,community", ...rep.sends.map((g) => [g.createdAt, g.from.displayName, g.from.handle, g.anonymous, g.to.displayName, g.to.handle, g.gift.name, g.price, g.receiverAmount, g.kliqueAmount, `${g.target.type}:${g.target.id}`, g.community?.name ?? ""].map(esc).join(","))].join("\n");
 }
 

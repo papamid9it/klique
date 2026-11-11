@@ -995,6 +995,9 @@ export const giftConfigSchema = z.object({
   webPacks: z.array(z.number().int().min(100).max(500_000)).max(12).optional(),
   storePacks: z.array(z.object({ productId: z.string().regex(/^hype_\d{1,7}$/), hype: z.number().int().min(1).max(1_000_000), price: z.number().int().min(1).max(100_000_000) })).max(12).optional(),
   storeFeePercent: z.object({ apple: z.number().int().min(0).max(50).optional(), google: z.number().int().min(0).max(50).optional() }).optional(),
+  earnMinPoints: z.number().int().min(0).max(10_000_000).optional(),
+  earnMinMonths: z.number().int().min(0).max(120).optional(),
+  earnCountries: z.array(z.string().regex(/^[A-Z]{2}$/)).max(250).optional(),
 });
 export const giftReportQuery = z.object({
   from: z.preprocess(blankToUndef, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()),

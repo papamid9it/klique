@@ -38,11 +38,11 @@ export function VerificationBlock({ slug }: { slug: string }) {
         </p>
       ) : data.state === "pending" ? (
         <p className="flex items-center gap-2 rounded-control border border-line bg-raised px-3 py-2.5 text-sm font-semibold text-ink">
-          <Icon name="clock" size={15} className="text-accent-text" /> Pending. We're checking your community, and we'll notify you when it's done.
+          <Icon name="clock" size={15} className="text-accent-text" /> Pending. We&apos;re checking your community, and we&apos;ll notify you when it&apos;s done.
         </p>
       ) : (
         <div className="space-y-4">
-          {data.state === "rejected" && <p className="rounded-control border border-danger/40 px-3 py-2.5 text-sm text-ink">It wasn't approved last time.{data.note ? ` ${data.note}` : ""} You can apply again.</p>}
+          {data.state === "rejected" && <p className="rounded-control border border-danger/40 px-3 py-2.5 text-sm text-ink">It wasn&apos;t approved last time.{data.note ? ` ${data.note}` : ""} You can apply again.</p>}
           <ul className="space-y-1.5">
             {data.checks.map((x) => (
               <li key={x.id} className={`flex items-center gap-2 text-sm ${x.met ? "text-ink" : "text-ink-muted"}`}>

@@ -12,6 +12,7 @@ import { Icon } from "@/components/ui/Icon";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { ErrorState } from "@/components/ui/States";
 import { cx } from "@/components/ui/cx";
+import { COUNTRIES } from "@/lib/places";
 import { GIFT_MAX_PRICE, GIFT_MIN_PRICE, giftHype, type GiftConfig } from "@/lib/gifts";
 import { useApi } from "@/lib/hooks/useApi";
 import type { AdminStuckTopupDTO, GiftDTO } from "@/lib/types";
@@ -102,7 +103,7 @@ export function GiftsDashboard() {
             <Icon name="download" size={14} /> Purchases CSV
           </Button>
           <Button size="sm" href={csv("sends")}>
-            <Icon name="download" size={14} /> Gifts CSV
+            <Icon name="download" size={14} /> Awards CSV
           </Button>
         </div>
       </div>
@@ -114,8 +115,8 @@ export function GiftsDashboard() {
         <>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <StatCard icon="coin" label="Hype bought" value={naira(data.bought.total.amount)} hint={`${data.bought.total.count} purchases · ${data.bought.total.hype.toLocaleString("en-NG")} Hype`} />
-            <StatCard icon="gift" label="Gifts sent" value={naira(data.split.giftValue)} hint={`${data.split.count} gifts`} />
-            <StatCard icon="coin" label="Klique's share" value={naira(data.split.klique)} hint="Of gifts sent" />
+            <StatCard icon="gift" label="Awards sent" value={naira(data.split.giftValue)} hint={`${data.split.count} awards`} />
+            <StatCard icon="coin" label="Klique's share" value={naira(data.split.klique)} hint="Of awards sent" />
             <StatCard icon="users" label="Owed to receivers" value={naira(data.split.receiversOwed)} hint={`${naira(data.split.receivers)} earned · ${naira(data.split.receiversPaid)} paid · ${naira(data.split.receiversRequested)} requested`} />
           </div>
           <Panel title="By platform">
@@ -178,9 +179,9 @@ export function GiftsDashboard() {
               </div>
             )}
           </Panel>
-          <Panel title="Gifts sent">
+          <Panel title="Awards sent">
             {data.sends.length === 0 ? (
-              <p className="px-4 py-3 text-sm text-ink-muted">No gifts in this range.</p>
+              <p className="px-4 py-3 text-sm text-ink-muted">No awards in this range.</p>
             ) : (
               <ul className="divide-y divide-line">
                 {data.sends.map((g) => (
@@ -228,7 +229,7 @@ function GiftEditor({ g, onSaved, onRemoved, onMove }: { g: GiftDTO | null; onSa
         setName("");
         setArtUrl(null);
       }
-      toast(g ? "Saved" : "Gift added", "success");
+      toast(g ? "Saved" : "Award added", "success");
     } catch (e) {
       toast(errorMessage(e), "error");
     } finally {
@@ -273,7 +274,7 @@ function GiftEditor({ g, onSaved, onRemoved, onMove }: { g: GiftDTO | null; onSa
         <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="size-4" /> Shown
       </label>
       <Button size="sm" variant="primary" disabled={!ok || !dirty || uploading} loading={busy} onClick={() => void save()}>
-        {g ? "Save" : "Add gift"}
+        {g ? "Save" : "Add award"}
       </Button>
       {g && onMove && (
         <span className="inline-flex">
@@ -314,7 +315,7 @@ export function GiftsCatalogue() {
   };
   return (
     <div className="space-y-4">
-      <Panel title="Gifts">
+      <Panel title="Awards">
         <ul className="divide-y divide-line">
           {data.map((g, i) => (
             <GiftEditor
@@ -332,7 +333,7 @@ export function GiftsCatalogue() {
           ))}
         </ul>
       </Panel>
-      <Panel title="Add a gift">
+      <Panel title="Add an award">
         <ul>
           <GiftEditor g={null} onSaved={(n) => setData((d) => [...(d ?? []), n])} />
         </ul>
@@ -369,13 +370,43 @@ export function GiftsSettings() {
   return (
     <div className="max-w-2xl space-y-5">
       <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" checked={draft.enabled} onChange={(e) => setDraft({ ...draft, enabled: e.target.checked })} className="size-4" /> Gifts are on
+        <input type="checkbox" checked={draft.enabled} onChange={(e) => setDraft({ ...draft, enabled: e.target.checked })} className="size-4" /> Awards are on
       </label>
       <div className="grid gap-3 sm:grid-cols-3">
         <TextField label="Receiver's share (%)" inputMode="numeric" value={String(draft.receiverPercent)} onChange={(e) => setDraft({ ...draft, receiverPercent: Math.min(100, num(e.target.value)) })} hint={`Klique keeps ${100 - draft.receiverPercent}%`} />
         <TextField label="Hold (days)" inputMode="numeric" value={String(draft.holdDays)} onChange={(e) => setDraft({ ...draft, holdDays: Math.min(90, num(e.target.value)) })} />
         <TextField label="Smallest payout (₦)" inputMode="numeric" value={String(draft.minPayout)} onChange={(e) => setDraft({ ...draft, minPayout: num(e.target.value) })} />
       </div>
+      <fieldset className="space-y-3 rounded-card border border-line p-4">
+        <legend className="px-1 text-sm font-semibold">Earning rules</legend>
+        <p className="text-xs text-ink-muted">Who earns from the awards they receive. Awards to anyone else still show, but their whole value goes to Klique, and they aren&apos;t credited later. Changes apply to awards sent after saving.</p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <TextField label="Minimum points" inputMode="numeric" value={String(draft.earnMinPoints)} onChange={(e) => setDraft({ ...draft, earnMinPoints: num(e.target.value) })} />
+          <TextField label="Minimum months on Klique" inputMode="numeric" value={String(draft.earnMinMonths)} onChange={(e) => setDraft({ ...draft, earnMinMonths: Math.min(120, num(e.target.value)) })} />
+        </div>
+        <div>
+          <p className="mb-1.5 text-[13px] font-medium">Countries that can earn</p>
+          <div className="flex flex-wrap gap-1.5">
+            {draft.earnCountries.map((c) => (
+              <span key={c} className="inline-flex items-center gap-1 rounded-full border border-line bg-raised px-2.5 py-1 text-xs font-semibold">
+                {COUNTRIES.find((x) => x.code === c)?.name ?? c}
+                <button type="button" aria-label={`Remove ${c}`} onClick={() => setDraft({ ...draft, earnCountries: draft.earnCountries.filter((x) => x !== c) })} className="text-ink-muted hover:text-ink">
+                  ×
+                </button>
+              </span>
+            ))}
+            <select aria-label="Add a country" value="" onChange={(e) => e.target.value && setDraft({ ...draft, earnCountries: [...draft.earnCountries, e.target.value] })} className="h-8 rounded-full border border-line bg-surface px-2 text-xs">
+              <option value="">+ Add a country</option>
+              {COUNTRIES.filter((c) => !draft.earnCountries.includes(c.code)).map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          {!draft.earnCountries.length && <p className="mt-1.5 text-xs text-danger">No countries: nobody earns from awards.</p>}
+        </div>
+      </fieldset>
       <TextField label="Website packs (₦, comma separated)" value={draft.webPacks.join(", ")} onChange={(e) => setDraft({ ...draft, webPacks: e.target.value.split(",").map((x) => num(x)).filter((x) => x > 0) })} hint="Any amount up to ₦500,000 can also be typed in." />
       <fieldset className="space-y-2">
         <legend className="mb-1 text-sm font-medium">Phone app packs (must match App Store Connect and Play Console)</legend>

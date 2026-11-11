@@ -6,6 +6,7 @@ import { ProfileService } from "@/app/services/ProfileService";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { Button } from "@/components/ui/Button";
 import { TextField } from "@/components/ui/Field";
+import { DeleteAccount } from "./DeleteAccount";
 
 /**
  * "When's your birthday?": for an account with no date of birth (a Google sign-up, or one from before it was asked),
@@ -13,7 +14,8 @@ import { TextField } from "@/components/ui/Field";
  * it's given. It's set once; after that only Klique support can change it.
  */
 export function BirthdayGate() {
-  const { setUser, signOut } = useAuth();
+  const { user, setUser, signOut } = useAuth();
+  const [deleting, setDeleting] = useState(false);
   const [dob, setDob] = useState("");
   const [sure, setSure] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -38,7 +40,7 @@ export function BirthdayGate() {
   }
 
   return (
-    <main className="flex min-h-dvh items-center justify-center bg-canvas px-4">
+    <main className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-canvas px-4 py-8">
       <form onSubmit={save} className="w-full max-w-sm space-y-5 rounded-card border border-line bg-surface p-6">
         <div>
           <h1 className="text-2xl font-semibold tracking-[-0.02em]">When&apos;s your birthday?</h1>
@@ -53,7 +55,18 @@ export function BirthdayGate() {
         <button type="button" onClick={() => void signOut()} className="w-full text-center text-sm text-ink-muted underline">
           Sign out
         </button>
+        {user && !deleting && (
+          <button type="button" onClick={() => setDeleting(true)} className="w-full text-center text-sm text-ink-muted underline">
+            Delete my account instead
+          </button>
+        )}
       </form>
+      {/* deleting the account never needs a birthday first */}
+      {user && deleting && (
+        <div className="w-full max-w-sm rounded-card border border-line bg-surface p-6">
+          <DeleteAccount me={user} />
+        </div>
+      )}
     </main>
   );
 }

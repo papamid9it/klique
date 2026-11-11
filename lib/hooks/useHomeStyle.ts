@@ -10,8 +10,18 @@ const listeners = new Set<() => void>();
 
 function read(): HomeStyle {
   try {
-    // Communities until this device picks: an old saved "casual" stays
-    return localStorage.getItem(KEY) === "casual" ? "casual" : "communities";
+    const saved = localStorage.getItem(KEY);
+    if (saved === "casual" || saved === "communities") return saved;
+  } catch {
+    /* storage blocked: the default below */
+  }
+  return defaultStyle();
+}
+
+/** Until this device picks: Casual where the site shows its phone layout (below 1024px, like the phone app), Communities on a computer. */
+function defaultStyle(): HomeStyle {
+  try {
+    return window.matchMedia("(max-width: 1023px)").matches ? "casual" : "communities";
   } catch {
     return "communities";
   }

@@ -1,5 +1,6 @@
 "use client";
 
+import { HomeKliques } from "@/components/domain/home/CommunitiesHome";
 import { HeaderIcons } from "./HeaderIcons";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -13,7 +14,11 @@ import { RowSkeleton } from "@/components/ui/Skeleton";
 import { useApi } from "@/lib/hooks/useApi";
 import { DesktopPrompt } from "@/components/domain/DesktopPrompt";
 
-export function RightRail() {
+/**
+ * `kliques` (Communities home on big screens): Kliques first in place of the community suggestions (Home's main
+ * column already suggests communities there), then the desktop-app card (website only), plans and the footer line.
+ */
+export function RightRail({ kliques }: { kliques?: boolean } = {}) {
   const router = useRouter();
   const { where, ready } = usePlace();
   const [q, setQ] = useState("");
@@ -55,6 +60,7 @@ export function RightRail() {
       <HeaderIcons />
       </div>
 
+      {kliques ? <HomeKliques /> : (
       <section aria-labelledby="rail-communities">
         <h2 id="rail-communities" className="mb-3 text-base font-semibold tracking-tight">
           Communities for you
@@ -75,6 +81,7 @@ export function RightRail() {
           <p className="text-sm text-ink-muted">You&apos;re in every community here. Start a new one?</p>
         )}
       </section>
+      )}
 
       {railAd && <SponsoredBox ad={railAd} />}
 

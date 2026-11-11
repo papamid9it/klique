@@ -2101,6 +2101,8 @@ export interface GiftEarningsDTO {
   hasMore: boolean;
   bank: { bankName: string; accountName: string; accountNumber: string; bankCode: string } | null;
   canRequest: boolean;
+  /** whether awards received now earn them anything, and what's missing if not */
+  earning: import("./gifts").EarningStatus;
 }
 
 /** Admin → Gifts dashboard. Naira throughout. */

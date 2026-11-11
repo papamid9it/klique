@@ -134,6 +134,8 @@ export interface IGiftSend {
   /** naira the receiver earns, and what Klique keeps */
   receiverAmount: number;
   kliqueAmount: number;
+  /** set when the receiver didn't qualify to earn (points, months on Klique, country): the whole value went to Klique */
+  notEarnedReason?: string | null;
   /** earnings can be paid out after this */
   holdUntil: Date;
   /** the payout request that claimed these earnings */
@@ -158,6 +160,7 @@ const GiftSendSchema = new Schema<IGiftSend>(
     status: { type: String, enum: ["pending", "sent"], default: "pending" },
     receiverAmount: { type: Number, required: true },
     kliqueAmount: { type: Number, required: true },
+    notEarnedReason: { type: String, default: null, maxlength: 120 },
     holdUntil: { type: Date, required: true },
     payoutId: { type: Schema.Types.ObjectId, ref: "Payout", default: null },
   },

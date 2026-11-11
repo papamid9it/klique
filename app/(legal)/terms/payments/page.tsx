@@ -57,20 +57,26 @@ export default async function PaymentTermsPage() {
         </ul>
       </Section>
 
-      <Section n={2} title="Hype and gifts" id="gifts">
+      <Section n={2} title="Hype and awards" id="gifts">
         <ul>
           <li>
-            Hype is used only to send gifts to posts, comments, board posts and messages in community chats (not private messages, group messages or klique chats). <strong>1 Hype is ₦10.</strong> You can buy it on the website (paid with Paystack) or in the phone app (paid with Apple or Google, where packs cost more because the stores take a share).
+            Hype is used only to send awards to posts, comments, board posts and messages in community chats (not private messages, group messages or klique chats). <strong>1 Hype is ₦10.</strong> You can buy it on the website (paid with Paystack) or in the phone app (paid with Apple or Google, where packs cost more because the stores take a share).
           </li>
           <li>
-            <strong>Hype can&apos;t be refunded, cashed out, or moved to another account.</strong> It isn&apos;t money for the person who buys it, and a gift can&apos;t be taken back once it&apos;s sent. Check the gift before you send it.
+            <strong>Hype can&apos;t be refunded, cashed out, or moved to another account.</strong> It isn&apos;t money for the person who buys it, and an award can&apos;t be taken back once it&apos;s sent. Check the award before you send it.
           </li>
-          <li>You can send a gift anonymously: the person and everyone else see &quot;Someone&quot;. klique still records who sent it, and only klique&apos;s staff can see that, to deal with fraud, abuse or payment problems.</li>
+          <li>You can send an award anonymously: the person and everyone else see &quot;Someone&quot;. klique still records who sent it, and only klique&apos;s staff can see that, to deal with fraud, abuse or payment problems.</li>
           <li>
-            The person who gets a gift earns 70% of its naira value; klique keeps 30%. Earnings are held for 7 days, then can be paid to a Nigerian bank account once they reach ₦20,000. Payouts requested by the end of a month are paid on the 3rd of the next month, under the payout rules below. klique may change these figures for gifts sent after a change, with notice here.
+            <strong>Who earns from awards.</strong> You earn from the awards you receive only once you qualify: at least 1,000 points, at least 3 months on klique, and an account in Nigeria (earning is only open in Nigeria for now). klique may change these rules, with notice here; changes apply to awards sent after them.
           </li>
-          <li>klique may hold back or reverse earnings from gifts paid for with a refunded, disputed or fraudulent purchase, and may close Hype accounts used for fraud or to move money.</li>
-          <li>Hype from before November 2026 (used for profile designs) was turned into days of Lite at the time and is separate from Hype for gifts.</li>
+          <li>
+            An award sent to someone who doesn&apos;t qualify yet still shows on their post, comment or message, but its whole value goes to klique. It isn&apos;t credited to them later, when they do qualify: only awards received after qualifying earn.
+          </li>
+          <li>
+            Once you qualify, you earn 70% of each award&apos;s naira value; klique keeps 30%. Earnings are held for 7 days, then can be paid to a Nigerian bank account once they reach ₦20,000. Payouts requested by the end of a month are paid on the 3rd of the next month, under the payout rules below. klique may change these figures for awards sent after a change, with notice here.
+          </li>
+          <li>klique may hold back or reverse earnings from awards paid for with a refunded, disputed or fraudulent purchase, and may close Hype accounts used for fraud or to move money.</li>
+          <li>Hype from before November 2026 (used for profile designs) was turned into days of Lite at the time and is separate from Hype for awards.</li>
         </ul>
       </Section>
 

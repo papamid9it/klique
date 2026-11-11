@@ -88,7 +88,8 @@ export function ChatPane({
   gate: ReactNode;
   onRead: () => void;
   /** replaces the "Welcome to #channel" start of the conversation */
-  intro?: (empty: boolean) => ReactNode;
+  /** `count`: the replies loaded so far, for a live count right after someone replies */
+  intro?: (empty: boolean, count: number) => ReactNode;
   /** composer hint (default "Message #channel") */
   placeholder?: string;
   /** what a member who can't post here is told (default: the announcement / no-posting line) */
@@ -264,7 +265,7 @@ export function ChatPane({
                   )}
                 </div>
               ) : (
-                intro ? intro(!items.length) : <ChannelIntro channel={channel} empty={!items.length} />
+                intro ? intro(!items.length, items.length) : <ChannelIntro channel={channel} empty={!items.length} />
               )}
               <ul ref={content}>
                 {items.map((m, i) => {

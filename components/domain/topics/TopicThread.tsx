@@ -200,7 +200,7 @@ export function TopicSide({ onClose, bare, full }: { onClose: () => void; bare?:
           onRead={() => undefined}
           placeholder="Reply…"
           closedNote={t.locked ? "This post is locked. Only owners and admins can reply." : undefined}
-          intro={(empty) => <PostIntro t={t} empty={empty} full={full} />}
+          intro={(empty, count) => <PostIntro t={t} empty={empty} count={count} full={full} />}
         />
       )}
     </div>
@@ -231,7 +231,8 @@ function PostSkeleton() {
 }
 
 /** The post at the start of its chat: who and when, the title, tags, the picture, then the text. */
-function PostIntro({ t, empty, full }: { t: TopicDTO; empty: boolean; full?: boolean }) {
+function PostIntro({ t, empty, count, full }: { t: TopicDTO; empty: boolean; /** replies in the chat below (the post's own count lags a moment after you reply) */ count: number; full?: boolean }) {
+  const replies = Math.max(t.commentCount, count);
   const { user } = useAuth();
   const now = useNow();
   return (
@@ -280,7 +281,7 @@ function PostIntro({ t, empty, full }: { t: TopicDTO; empty: boolean; full?: boo
       </div>
       <div className="mt-5 flex items-center gap-3 text-[11px] font-semibold tracking-wide text-ink-muted uppercase">
         <span className="h-px flex-1 bg-line" />
-        {empty ? "No replies yet" : `${t.commentCount} ${t.commentCount === 1 ? "reply" : "replies"}`}
+        {empty ? "No replies yet" : `${replies} ${replies === 1 ? "reply" : "replies"}`}
         <span className="h-px flex-1 bg-line" />
       </div>
       {empty && t.canComment && <p className="mt-3 text-center text-sm text-ink-muted">Start the conversation.</p>}

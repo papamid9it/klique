@@ -45,7 +45,7 @@ function PayoutRow({ p, onDone }: { p: PayoutDTO; onDone: (p: PayoutDTO) => void
           <p className="font-mono text-lg font-semibold">{naira(p.amount)}</p>
           <p className="text-[13px] text-ink-muted">
             {p.kind === "gifts" ? (
-              <span className="font-semibold text-ink">Gift earnings{p.dueOn ? ` · due ${day(p.dueOn)}` : ""}</span>
+              <span className="font-semibold text-ink">Award earnings{p.dueOn ? ` · due ${day(p.dueOn)}` : ""}</span>
             ) : (
               <Link href={`/communities/${p.community?.slug}`} className="font-semibold text-ink hover:underline">
                 {p.community?.name}

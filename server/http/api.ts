@@ -97,10 +97,10 @@ function assertTrustedOrigin(req: NextRequest, usedBearer: boolean) {
   throw new ApiError(403, "Blocked: this origin isn't allowed to call the API.", { code: "bad_origin" });
 }
 
-/** What someone with no date of birth may still do: see and change their own account (to add it), and sign in or out. */
+/** What someone with no date of birth may still do: see and change their own account (to add it), sign in or out, and delete it (the stores require deletion to always be reachable). */
 function DOB_FREE(req: NextRequest) {
   const path = req.nextUrl.pathname;
-  return path === "/api/me" || path.startsWith("/api/auth/") || path === "/api/realtime/token" || path === "/api/app/version" || path === "/api/app/mobile-version";
+  return path === "/api/me" || path === "/api/me/delete" || path.startsWith("/api/auth/") || path === "/api/realtime/token" || path === "/api/app/version" || path === "/api/app/mobile-version";
 }
 
 /* ------------------------------------------------------------------ */

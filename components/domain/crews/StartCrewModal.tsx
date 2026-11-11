@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { errorMessage, isApiError } from "@/app/ApiCore";
 import { CrewService } from "@/app/services/CrewService";
 import { Button } from "@/components/ui/Button";
-import { SelectField, TextArea, TextField } from "@/components/ui/Field";
+import { SelectField, TextArea, TextField, revealFirstError } from "@/components/ui/Field";
 import { Icon } from "@/components/ui/Icon";
 import { ImageField } from "@/components/ui/ImageField";
 import { Modal } from "@/components/ui/Modal";
@@ -51,6 +51,7 @@ export function StartCrewModal({ event, community, open, onClose, onCreated }: {
   const [who, setWho] = useState<AudienceValue>({ spots: "9", audience: "everyone", womenSpots: "0", menSpots: "0" });
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const form = useRef<HTMLFormElement>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
   const choices = info.data?.communities ?? [];
@@ -75,6 +76,7 @@ export function StartCrewModal({ event, community, open, onClose, onCreated }: {
     Object.assign(next, checkAudience(who));
     if (Object.keys(next).length) {
       setErrors(next);
+      revealFirstError(form.current);
       return;
     }
     setBusy(true);
@@ -88,6 +90,7 @@ export function StartCrewModal({ event, community, open, onClose, onCreated }: {
       if (isApiError(err) && err.errors) setErrors(err.errors);
       setFormError(errorMessage(err));
       setBusy(false);
+      revealFirstError(form.current);
     }
   }
 
@@ -109,7 +112,7 @@ export function StartCrewModal({ event, community, open, onClose, onCreated }: {
           </div>
         </div>
       ) : (
-        <form onSubmit={submit} className="space-y-4" noValidate>
+        <form ref={form} onSubmit={submit} className="space-y-4" noValidate>
           {!event && !community && (
             <SelectField label="Community" value={communitySlug} onChange={(e) => pickCommunity(e.target.value)} error={errors.community} hint={communitySlug === ALL ? "Anyone can see and join it. It's recommended to people into what it's about." : "Only its members can see and join it. Going to an event? Start one from the event's page instead."}>
               <option value="">Pick one…</option>

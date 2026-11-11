@@ -6,12 +6,14 @@ import { useAuth } from "@/components/providers/AuthProvider";
 import { Avatar } from "@/components/ui/Avatar";
 import { CommunityRail } from "./CommunityRail";
 import { LogoMark } from "./Logo";
+import { HOME_NAV } from "./nav";
+import { Icon } from "@/components/ui/Icon";
 import { UserMenu } from "./UserMenu";
 import { PresenceDot } from "@/components/domain/profile/ProfileParts";
 
 /** The icon rail inside a community, a crew chat and Messages; other pages have the home panel (HomePanel). */
-export function Sidebar() {
-  return <SlimNav pathname={usePathname()} />;
+export function Sidebar({ withNav }: { /** also the main pages as icons (Communities home, where there's no home panel) */ withNav?: boolean } = {}) {
+  return <SlimNav pathname={usePathname()} withNav={withNav} />;
 }
 
 /**
@@ -19,7 +21,7 @@ export function Sidebar() {
  * logo, fixed at the top), your communities, then your account. Events, Messages, Notifications and the rest are
  * in the home panel, one click away through Home.
  */
-function SlimNav({ pathname }: { pathname: string }) {
+function SlimNav({ pathname, withNav }: { pathname: string; withNav?: boolean }) {
   const { user, status } = useAuth();
   const activeSlug = /^\/communities\/([^/]+)/.exec(pathname)?.[1] ?? null;
   return (
@@ -29,6 +31,18 @@ function SlimNav({ pathname }: { pathname: string }) {
         <Link href="/" aria-label="Klique — home" className="inline-flex size-11 items-center justify-center rounded-[14px] bg-raised transition hover:bg-surface">
           <LogoMark size={34} />
         </Link>
+        {withNav && (
+          <nav aria-label="Main" className="flex flex-col items-center gap-1">
+            {HOME_NAV.filter((n) => !n.authed || status === "authed").map((n) => {
+              const on = n.match(pathname);
+              return (
+                <Link key={n.href} href={n.href} aria-label={n.label} title={n.label} aria-current={on ? "page" : undefined} className={`inline-flex size-11 items-center justify-center rounded-[14px] transition ${on ? "bg-raised text-ink" : "text-ink-muted hover:bg-raised hover:text-ink"}`}>
+                  <Icon name={n.icon} size={20} />
+                </Link>
+              );
+            })}
+          </nav>
+        )}
         <span aria-hidden="true" className="h-px w-8 bg-line" />
       </div>
       <div className="no-bar flex min-h-0 w-full flex-1 flex-col items-center gap-3 overflow-y-auto pb-4 [&>*]:shrink-0">

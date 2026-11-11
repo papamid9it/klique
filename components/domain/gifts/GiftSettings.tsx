@@ -11,7 +11,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { ErrorState } from "@/components/ui/States";
 import { cx } from "@/components/ui/cx";
 import { formatDateShort } from "@/lib/format";
-import { HYPE_NAIRA, hypeForNaira, payoutDayLabel } from "@/lib/gifts";
+import { HYPE_NAIRA, earningText, hypeForNaira, payoutDayLabel } from "@/lib/gifts";
 import { useApi } from "@/lib/hooks/useApi";
 import type { GiftEarningsDTO, GiftReceivedDTO, GiftWalletDTO } from "@/lib/types";
 import { GiftArt } from "./Gifts";
@@ -79,8 +79,8 @@ export function HypeTab() {
   return (
     <div className="space-y-6">
       <div className="grid gap-3 sm:grid-cols-2">
-        <Stat label="Your Hype" value={hype(data.balance)} hint={`1 Hype is ₦${HYPE_NAIRA}. Hype is only for sending gifts.`} />
-        <Stat label="Worth in gifts" value={naira(data.balance * data.hypeNaira)} hint="Send gifts to posts, comments and board posts you love." />
+        <Stat label="Your Hype" value={hype(data.balance)} hint={`1 Hype is ₦${HYPE_NAIRA}. Hype is only for sending awards.`} />
+        <Stat label="Worth in awards" value={naira(data.balance * data.hypeNaira)} hint="Send awards to posts, comments and board posts you love." />
       </div>
 
       <section className="space-y-3">
@@ -209,8 +209,13 @@ export function EarningsTab() {
   const t = data.totals;
   return (
     <div className="space-y-6">
+      {earningText(data.earning) && (
+        <p role="status" className="rounded-control border border-line bg-raised/60 px-4 py-3 text-sm">
+          {earningText(data.earning)}
+        </p>
+      )}
       <p className="text-sm text-ink-muted">
-        When someone sends you a gift, you earn {data.receiverPercent}% of its value. It&apos;s on hold for {data.holdDays} days, then you can ask for it to be paid to your bank. Requests made by the end of a month are paid on the 3rd of the next month.
+        Once you qualify, when someone sends you an award, you earn {data.receiverPercent}% of its value. It&apos;s on hold for {data.holdDays} days, then you can ask for it to be paid to your bank. Requests made by the end of a month are paid on the 3rd of the next month.
       </p>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="Earned" value={naira(t.earned)} hint="All time" />
@@ -299,9 +304,9 @@ export function EarningsTab() {
       )}
 
       <section>
-        <h2 className="mb-2 text-sm font-semibold">Gifts you got</h2>
+        <h2 className="mb-2 text-sm font-semibold">Awards you got</h2>
         {data.history.length === 0 ? (
-          <p className="text-sm text-ink-muted">No gifts yet. When someone sends one to your post, comment or board post, it shows here.</p>
+          <p className="text-sm text-ink-muted">No awards yet. When someone sends one to your post, comment or board post, it shows here.</p>
         ) : (
           <ul className="divide-y divide-line rounded-card border border-line bg-surface">
             {data.history.map((g) => (
