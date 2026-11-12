@@ -106,13 +106,13 @@ export function PostView({ post, onChange, onClose, focusComment }: { post: Feed
                   <LongPost post={post} />
                 </ExplicitCover>
               ) : style === null && post.caption && <p className="text-[15px] leading-snug font-semibold break-words whitespace-pre-wrap">{post.caption}</p>}
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="-ml-1.5 flex flex-wrap items-center gap-0.5">
                 <VoteControl post={post} onChange={onChange} />
-                <span className="inline-flex h-9 items-center gap-1.5 rounded-full bg-raised/70 px-3.5 text-[13px] font-semibold text-ink-muted" aria-label={`${post.commentCount} comments`}>
-                  <Icon name="message" size={17} />
-                  <span className="font-mono tabular-nums">{compactCount(post.commentCount)}</span>
+                <span className="inline-flex h-11 min-w-11 items-center justify-center gap-1.5 px-1.5 text-[14px] font-semibold text-ink" aria-label={`${post.commentCount} comments`}>
+                  <Icon name="message" size={21} />
+                  {post.commentCount > 0 && <span className="tabular-nums">{compactCount(post.commentCount)}</span>}
                 </span>
-                <ShareButton path={postHref(post)} text={post.title || post.caption ? `${(post.title || post.caption).slice(0, 80)} · ${post.community.name}` : `A post in ${post.community.name}`} variant="pill" size="sm" />
+                <ShareButton path={postHref(post)} text={post.title || post.caption ? `${(post.title || post.caption).slice(0, 80)} · ${post.community.name}` : `A post in ${post.community.name}`} variant="pill" size="sm" iconOnly />
                 <GiftButton target={{ type: "post", id: post.id }} authorId={post.author.id} off={!!post.community.explicit} variant="pill" />
               </div>
             </div>

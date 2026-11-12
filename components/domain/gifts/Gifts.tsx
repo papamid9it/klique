@@ -11,6 +11,7 @@ import { useToast } from "@/components/providers/ToastProvider";
 import { Icon } from "@/components/ui/Icon";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cx } from "@/components/ui/cx";
+import { compactCount } from "@/lib/format";
 import { cdn } from "@/lib/cdn";
 import { burstTier, giftArtStill, giftTargetKey, type GiftTargetType } from "@/lib/gifts";
 import type { GiftDTO, GiftSummaryDTO, GiftTrayDTO } from "@/lib/types";
@@ -145,18 +146,18 @@ export function GiftButton({ target, authorId, off, size = "md", variant = "plai
   const canGift = !!user && !off && user.id !== authorId;
   // Reddit's awards: no gifts yet, the plain gift icon; with gifts, the top gift and how many in all (no "×")
   if ((!canGift || onlyGiven) && !top) return null;
-  const iconSize = icon ?? (variant === "pill" ? 17 : size === "sm" ? 14 : 16);
+  const iconSize = icon ?? (variant === "pill" ? 21 : size === "sm" ? 14 : 16);
   const face = top ? (
     <>
       <span className="gift-hop" style={{ "--gift-delay": hopDelay(target.id) } as React.CSSProperties}>
         <GiftArt gift={top} size={iconSize + 3} />
       </span>
-      <span className="font-mono text-[12.5px] font-semibold tabular-nums">{s!.total}</span>
+      <span className={cx("font-semibold tabular-nums", variant === "pill" ? "text-[14px] text-ink" : "font-mono text-[12.5px]")}>{compactCount(s!.total)}</span>
     </>
   ) : (
     <Icon name="gift" size={iconSize} />
   );
-  const box = cx("inline-flex items-center justify-center gap-1 rounded-full text-ink-muted", variant === "pill" ? "h-9 bg-raised/70 px-3.5" : top ? (size === "sm" ? "h-7 px-1.5" : "h-8 px-2") : size === "sm" ? "size-7" : "size-8");
+  const box = cx("inline-flex items-center justify-center gap-1 rounded-full", variant === "pill" ? "h-11 min-w-11 px-1.5 text-ink hover:text-ink-muted" : "text-ink-muted", variant === "pill" ? "" : top ? (size === "sm" ? "h-7 px-1.5" : "h-8 px-2") : size === "sm" ? "size-7" : "size-8");
   if (!canGift) return <span aria-label={`${s!.total} ${s!.total === 1 ? "award" : "awards"}`} className={cx(box, className)}>{face}</span>;
   return (
     <span className={cx("relative inline-flex", className)}>

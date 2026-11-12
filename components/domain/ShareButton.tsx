@@ -66,8 +66,8 @@ export function ShareButton({
   return (
     <div ref={wrap} className="relative inline-block">
       {variant === "pill" ? (
-        <button type="button" onClick={() => setOpen((o) => !o)} aria-haspopup="menu" aria-expanded={open} aria-label={iconOnly ? label : undefined} className="inline-flex h-9 items-center gap-1.5 rounded-full bg-raised/70 px-3.5 text-[13px] font-semibold text-ink-muted transition hover:bg-raised hover:text-ink">
-          <Icon name="share" size={16} />
+        <button type="button" onClick={() => setOpen((o) => !o)} aria-haspopup="menu" aria-expanded={open} aria-label={iconOnly ? label : undefined} className="inline-flex h-11 min-w-11 items-center justify-center gap-1.5 px-1.5 text-[14px] font-semibold text-ink transition hover:text-ink-muted">
+          <Icon name="share" size={20} />
           {!iconOnly && label}
         </button>
       ) : (

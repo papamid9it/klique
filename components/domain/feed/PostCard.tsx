@@ -69,9 +69,9 @@ export function VoteControl({ post: p, onChange }: { post: FeedPostDTO; onChange
   const vote = useVote(p, onChange);
   const loved = p.myVote === 1;
   return (
-    <button type="button" onClick={() => void vote(1)} aria-pressed={loved} aria-label={loved ? `Take your love back, ${p.upCount} loves` : `Love, ${p.upCount} loves`} title={loved ? "Take your love back" : "Love"} data-vote={p.myVote} className={cx("inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-[13.5px] font-semibold transition-colors", loved ? "bg-[#ff3040]/15 text-[#ff3040]" : "bg-raised/70 text-ink hover:text-[#ff3040]")}>
-      <Icon name="heart" size={18} className={cx(loved && "fill-current")} />
-      <span className="tabular-nums">{compactCount(p.upCount)}</span>
+    <button type="button" onClick={() => void vote(1)} aria-pressed={loved} aria-label={loved ? `Take your love back, ${p.upCount} loves` : `Love, ${p.upCount} loves`} title={loved ? "Take your love back" : "Love"} data-vote={p.myVote} className={cx("inline-flex h-11 min-w-11 items-center justify-center gap-1.5 px-1.5 text-[14px] font-semibold transition-colors", loved ? "text-[#ff3040]" : "text-ink hover:text-[#ff3040]")}>
+      <Icon name="heart" size={21} className={cx(loved && "fill-current")} />
+      {p.upCount > 0 && <span className="tabular-nums">{compactCount(p.upCount)}</span>}
     </button>
   );
 }
@@ -197,13 +197,13 @@ export function PostCard({ post: p, onChange, onRemoved, onOpenComments, showCom
         </div>
       )}
 
-      <div className="mt-3 flex flex-wrap items-center gap-2">
+      <div className="mt-1.5 -ml-1.5 flex flex-wrap items-center gap-0.5">
         <VoteControl post={p} onChange={onChange} />
-        <button type="button" onClick={onOpenComments} aria-label={`${p.commentCount} comments`} className="inline-flex h-9 items-center gap-1.5 rounded-full bg-raised/70 px-3.5 text-[13px] font-semibold text-ink-muted transition hover:bg-raised hover:text-ink">
-          <Icon name="message" size={17} />
-          <span className="font-mono tabular-nums">{compactCount(p.commentCount)}</span>
+        <button type="button" onClick={onOpenComments} aria-label={`${p.commentCount} comments`} className="inline-flex h-11 min-w-11 items-center justify-center gap-1.5 px-1.5 text-[14px] font-semibold text-ink transition hover:text-ink-muted">
+          <Icon name="message" size={21} />
+          {p.commentCount > 0 && <span className="tabular-nums">{compactCount(p.commentCount)}</span>}
         </button>
-        <ShareButton path={postHref(p)} text={p.title || p.caption ? `${(p.title || p.caption).slice(0, 80)} · ${p.community.name}` : `A post in ${p.community.name}`} variant="pill" size="sm" />
+        <ShareButton path={postHref(p)} text={p.title || p.caption ? `${(p.title || p.caption).slice(0, 80)} · ${p.community.name}` : `A post in ${p.community.name}`} variant="pill" size="sm" iconOnly />
         <GiftButton target={{ type: "post", id: p.id }} authorId={p.author.id} off={!!p.community.explicit} variant="pill" />
       </div>
 
