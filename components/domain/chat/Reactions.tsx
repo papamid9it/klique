@@ -9,6 +9,7 @@ import { useMediaViewer } from "@/components/providers/MediaViewerProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import { Icon } from "@/components/ui/Icon";
 import { cx } from "@/components/ui/cx";
+import { compactCount } from "@/lib/format";
 import { REACTIONS, STICKERS, reactionEmoji, stickerOf, type ReactionKind } from "@/lib/reactions";
 import { stickerThumb, useStickers } from "@/lib/hooks/useStickers";
 import { useUploadStatus } from "@/lib/hooks/useUploads";
@@ -77,10 +78,10 @@ export function ReactionPicker({ onPick, onClose, className, style: place }: { o
  * Reaction chips under a message or comment (tap one to add yours or take it back). `canReact` false makes them
  * read-only. Adding a new reaction is the one add button next to it (hover toolbar, beside Reply, beside the bubble).
  */
-export function ReactionBar({ reactions, onToggle, canReact, mine, className }: { reactions: ReactionDTO[]; onToggle: (k: ReactionKind) => void; canReact: boolean; mine?: boolean; className?: string }) {
-  if (!reactions.length) return null;
+export function ReactionBar({ reactions, onToggle, canReact, mine, className, children }: { reactions: ReactionDTO[]; onToggle: (k: ReactionKind) => void; canReact: boolean; mine?: boolean; className?: string; /** more chips at the end of the row (a message's awards) */ children?: React.ReactNode }) {
+  if (!reactions.length && !children) return null;
   return (
-    <div className={cx("relative mt-1 flex flex-wrap items-center gap-1", mine && "justify-end", className)}>
+    <div className={cx("relative mt-1 flex flex-wrap items-center gap-1 empty:hidden", mine && "justify-end", className)}>
       {reactions.map((r) => (
         <button
           key={r.kind}
@@ -89,20 +90,23 @@ export function ReactionBar({ reactions, onToggle, canReact, mine, className }: 
           onClick={() => onToggle(r.kind)}
           aria-pressed={r.mine}
           aria-label={`${r.kind}, ${r.count}${r.mine ? ", you reacted" : ""}`}
-          className={cx("inline-flex h-7 items-center gap-1 rounded-full border px-2 text-[13px] transition", r.mine ? "border-accent-text bg-accent/15 text-ink" : "border-line bg-surface text-ink-muted hover:border-ink-muted", !canReact && "cursor-default")}
+          style={{ borderRadius: 9999 }}
+          className={cx("inline-flex h-7 items-center gap-1 px-2.5 text-[13px] transition", r.mine ? "bg-[color-mix(in_oklab,var(--accent)_16%,var(--raised))] text-ink ring-1 ring-accent-text ring-inset" : "bg-raised text-ink hover:bg-[color-mix(in_oklab,var(--ink)_10%,var(--raised))]", !canReact && "cursor-default")}
         >
           <span key={`${r.count}-${r.mine}`} className="emoji-pop text-[15px] leading-none">
             {reactionEmoji(r.kind)}
           </span>
-          <span className="font-mono text-[12px]">{r.count}</span>
+          <span className="font-mono text-[12px]">{compactCount(r.count)}</span>
         </button>
       ))}
+      {canReact && reactions.length > 0 && <ReactButton pill onPick={onToggle} align="left" />}
+      {children}
     </div>
   );
 }
 
 /** A small button that opens the reaction picker (used in a message's hover toolbar). */
-export function ReactButton({ onPick, className, align = "right" }: { onPick: (k: ReactionKind) => void; className?: string; align?: "left" | "right" }) {
+export function ReactButton({ onPick, className, align = "right", pill }: { onPick: (k: ReactionKind) => void; className?: string; align?: "left" | "right"; /** the small "+" pill at the end of a message's reactions */ pill?: boolean }) {
   const [open, setOpen] = useState(false);
   const btn = useRef<HTMLButtonElement>(null);
   // the picker floats over everything (in the page's top layer, or the open pop-up it's in), placed by the button
@@ -117,8 +121,9 @@ export function ReactButton({ onPick, className, align = "right" }: { onPick: (k
   return (
     <span className={cx("relative inline-flex", className)}>
       {/* its own press doesn't count as "outside" (that would close the picker and the click reopen it) */}
-      <button ref={btn} type="button" onPointerDown={(e) => open && e.stopPropagation()} onClick={() => (open ? setOpen(false) : (setPos(place()), setOpen(true)))} aria-label="Add reaction" aria-expanded={open} className="inline-flex size-8 items-center justify-center rounded-full text-ink-muted transition hover:bg-raised hover:text-ink">
-        <Icon name="smile" size={16} />
+      <button ref={btn} type="button" onPointerDown={(e) => open && e.stopPropagation()} onClick={() => (open ? setOpen(false) : (setPos(place()), setOpen(true)))} aria-label="Add reaction" aria-expanded={open} style={pill ? { borderRadius: 9999 } : undefined} className={pill ? "inline-flex h-7 items-center gap-0.5 px-2 text-ink-muted ring-1 ring-line transition ring-inset hover:text-ink" : "inline-flex size-8 items-center justify-center rounded-full text-ink-muted transition hover:bg-raised hover:text-ink"}>
+        <Icon name="smile" size={pill ? 15 : 16} />
+        {pill && <span className="text-[13px] leading-none font-semibold">+</span>}
       </button>
       {open && pos && createPortal(<ReactionPicker onPick={onPick} onClose={() => setOpen(false)} style={pos} />, btn.current?.closest("dialog") ?? document.body)}
     </span>

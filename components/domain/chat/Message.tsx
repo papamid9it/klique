@@ -240,8 +240,11 @@ export const Message = memo(function Message({
                 {!m.pending && <Embeds body={m.body} />}
               </>
             )}
-            {!m.pending && <ReactionBar reactions={m.reactions} canReact={!!canReact && !!onReact} onToggle={(k) => onReact?.(m, k)} />}
-            {gifts && !m.pending && !m.deleted && !m.bot && <GiftButton onlyGiven size="sm" target={{ type: "reply", id: m.id }} authorId={m.author.id} className="mt-1" />}
+            {!m.pending && (
+              <ReactionBar reactions={m.reactions} canReact={!!canReact && !!onReact} onToggle={(k) => onReact?.(m, k)}>
+                {gifts && !m.deleted && !m.bot && <GiftButton onlyGiven variant="summary" target={{ type: "reply", id: m.id }} authorId={m.author.id} />}
+              </ReactionBar>
+            )}
             {m.thread && !m.deleted && (
               <button type="button" onClick={() => onOpenThread?.(m.thread!.slug)} className="mt-1 inline-flex max-w-full items-center gap-1.5 rounded-control border border-line bg-raised/60 px-2.5 py-1 text-[13px] text-ink-muted hover:border-ink-muted/50 hover:text-ink">
                 <Icon name="message" size={13} />

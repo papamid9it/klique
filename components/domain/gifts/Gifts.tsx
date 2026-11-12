@@ -137,7 +137,7 @@ let trayCache: GiftTrayDTO | null = null;
  * Send a gift, like an emoji picker: the gifts with their Hype price, your balance (and a link to top up), and "Send
  * anonymously". Pick one, then Send. Not shown on your own things, in explicit communities, or signed out.
  */
-export function GiftButton({ target, authorId, off, size = "md", variant = "plain", icon, className, onlyGiven }: { /** shown only once it has gifts (a chat message's reaction area) */ onlyGiven?: boolean; /** the icon's size, to match the buttons beside it exactly */ icon?: number; target: GiftTarget; authorId: string; /** an explicit community, or anywhere gifts don't belong */ off?: boolean; size?: "sm" | "md"; /** "pill": beside the post's Comments and Share pills; "plain": beside the react (smile) button */ variant?: "pill" | "plain"; className?: string }) {
+export function GiftButton({ target, authorId, off, size = "md", variant = "plain", icon, className, onlyGiven }: { /** shown only once it has gifts (a chat message's reaction area) */ onlyGiven?: boolean; /** the icon's size, to match the buttons beside it exactly */ icon?: number; target: GiftTarget; authorId: string; /** an explicit community, or anywhere gifts don't belong */ off?: boolean; size?: "sm" | "md"; /** "pill": beside the post's Comments and Share pills; "plain": beside the react (smile) button */ variant?: "pill" | "plain" | "summary"; className?: string }) {
   const { user } = useAuth();
   const s = useSummary(target);
   const [open, setOpen] = useState(false);
@@ -146,8 +146,20 @@ export function GiftButton({ target, authorId, off, size = "md", variant = "plai
   const canGift = !!user && !off && user.id !== authorId;
   // Reddit's awards: no gifts yet, the plain gift icon; with gifts, the top gift and how many in all (no "×")
   if ((!canGift || onlyGiven) && !top) return null;
-  const iconSize = icon ?? (variant === "pill" ? 21 : size === "sm" ? 14 : 16);
-  const face = top ? (
+  const iconSize = icon ?? (variant === "pill" ? 21 : variant === "summary" ? 13 : size === "sm" ? 14 : 16);
+  // the summary under a chat message: up to three awards overlapping, then "N awards" in gold
+  const face = top && variant === "summary" ? (
+    <>
+      <span className="flex -space-x-1.5">
+        {[...s!.items].sort((x, y) => y.count - x.count || y.price - x.price).slice(0, 3).map((g) => (
+          <span key={g.giftId} className="inline-flex size-[18px] items-center justify-center rounded-full bg-surface ring-2 ring-[color-mix(in_oklab,#d4a72c_20%,var(--raised))]">
+            <GiftArt gift={g} size={16} />
+          </span>
+        ))}
+      </span>
+      <span className="text-[12.5px] font-semibold text-[color-mix(in_oklab,#d4a72c_72%,var(--ink))]">{compactCount(s!.total)} {s!.total === 1 ? "award" : "awards"}</span>
+    </>
+  ) : top ? (
     <>
       <span className="gift-hop" style={{ "--gift-delay": hopDelay(target.id) } as React.CSSProperties}>
         <GiftArt gift={top} size={iconSize + 3} />
@@ -157,11 +169,12 @@ export function GiftButton({ target, authorId, off, size = "md", variant = "plai
   ) : (
     <Icon name="gift" size={iconSize} />
   );
-  const box = cx("inline-flex items-center justify-center gap-1 rounded-full", variant === "pill" ? "h-11 min-w-11 px-1.5 text-ink hover:text-ink-muted" : "text-ink-muted", variant === "pill" ? "" : top ? (size === "sm" ? "h-7 px-1.5" : "h-8 px-2") : size === "sm" ? "size-7" : "size-8");
-  if (!canGift) return <span aria-label={`${s!.total} ${s!.total === 1 ? "award" : "awards"}`} className={cx(box, className)}>{face}</span>;
+  const box = cx("inline-flex items-center justify-center gap-1 rounded-full", variant === "pill" ? "h-11 min-w-11 px-1.5 text-ink hover:text-ink-muted" : variant === "summary" ? "h-7 gap-1.5 bg-[color-mix(in_oklab,#d4a72c_20%,var(--raised))] pr-2.5 pl-1.5" : "text-ink-muted", variant === "pill" || variant === "summary" ? "" : top ? (size === "sm" ? "h-7 px-1.5" : "h-8 px-2") : size === "sm" ? "size-7" : "size-8");
+  const round = variant === "summary" ? { borderRadius: 9999 } : undefined;
+  if (!canGift) return <span aria-label={`${s!.total} ${s!.total === 1 ? "award" : "awards"}`} className={cx(box, className)} style={round}>{face}</span>;
   return (
     <span className={cx("relative inline-flex", className)}>
-      <button ref={btn} type="button" onClick={() => setOpen((o) => !o)} aria-label={top ? `${s!.total} ${s!.total === 1 ? "award" : "awards"}. Send an award` : "Send an award"} aria-expanded={!!open} title="Send an award" className={cx(box, "transition hover:text-ink", variant === "pill" ? "hover:bg-raised" : "hover:bg-raised", open && "bg-raised text-ink")}>
+      <button ref={btn} type="button" onClick={() => setOpen((o) => !o)} aria-label={top ? `${s!.total} ${s!.total === 1 ? "award" : "awards"}. Send an award` : "Send an award"} aria-expanded={!!open} title="Send an award" style={round} className={cx(box, "transition hover:text-ink", variant === "pill" ? "hover:bg-raised" : "hover:bg-raised", open && "bg-raised text-ink")}>
         {/* the same line icon, size and colour as the buttons beside it; only the tray shows the colourful gifts */}
         {face}
       </button>
