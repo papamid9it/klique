@@ -45,7 +45,7 @@ export function Avatar({
   const pic = frame && PROFILE_DESIGNS_ENABLED ? <AvatarFrame frame={frame} size={size} render={(inner) => <AvatarPic name={name} src={src} size={inner} className={className} />} /> : <AvatarPic name={name} src={src} size={size} className={className} />;
   if (!badge?.icon) return pic;
   return (
-    <span className="relative inline-block shrink-0 align-top leading-none">
+    <span data-avatar="" className="relative inline-block shrink-0 align-top leading-none">
       {pic}
       <RoleDot icon={badge.icon} label={badge.label} avatar={size} />
     </span>
@@ -94,6 +94,7 @@ function AvatarPic({ name, src, size, className }: { name: string; src?: string 
     ) : (
       // eslint-disable-next-line @next/next/no-img-element
       <img
+        data-avatar=""
         src={cdn(file, { w: size * 2, h: size * 2, fit: "face" })}
         alt=""
         width={size}
@@ -106,7 +107,7 @@ function AvatarPic({ name, src, size, className }: { name: string; src?: string 
     );
     // zoomed in: clip to the circle so the enlarged picture doesn't spill out
     return focal.z > 1 ? (
-      <span style={style} className={cx("inline-block shrink-0 overflow-hidden rounded-full", className)}>
+      <span data-avatar="" style={style} className={cx("inline-block shrink-0 overflow-hidden rounded-full", className)}>
         {img}
       </span>
     ) : (
@@ -115,6 +116,7 @@ function AvatarPic({ name, src, size, className }: { name: string; src?: string 
   }
   return (
     <span
+      data-avatar=""
       aria-hidden="true"
       style={style}
       className={cx("inline-flex shrink-0 items-center justify-center rounded-full font-semibold", TINTS[hash(name) % TINTS.length], className)}

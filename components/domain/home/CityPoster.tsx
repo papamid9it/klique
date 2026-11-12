@@ -103,33 +103,33 @@ export function CityPoster({
       {/* the featured event as a poster, the next four beside it */}
       <div className="mt-6 grid gap-6 min-[1440px]:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         {loading && !top ? (
-          <div className="skeleton h-[420px] !rounded-none" aria-hidden="true" />
+          <div className="skeleton h-[420px] !rounded-hero" aria-hidden="true" />
         ) : !top ? (
-          <div className="flex h-[420px] flex-col items-start justify-end gap-3 border border-line p-8">
+          <div data-hero="" className="flex h-[420px] flex-col items-start justify-end gap-3 border border-line p-8">
             <p className={LABEL}>Nothing coming up yet</p>
             <p className="max-w-sm text-sm text-ink-muted">Events from your communities and your city show here.</p>
-            <Link href="/events" className="inline-flex h-11 items-center bg-accent px-5 text-sm font-bold text-accent-ink">
+            <Link href="/events" className="inline-flex h-11 items-center rounded-control bg-accent px-5 text-sm font-bold text-accent-ink">
               Find events
             </Link>
           </div>
         ) : (
-          <article className="relative h-[420px] overflow-hidden bg-black">
+          <article data-hero="" className="relative h-[420px] overflow-hidden bg-black">
             <Link href={`/events/${top.id}`} aria-label={top.title} className="absolute inset-0">
               <Cover src={eventPhoto(top.id, top.coverImage)} seed={top.id} interest={top.interest} className="absolute inset-0 !rounded-none" />
               <span aria-hidden className="absolute inset-0 bg-[linear-gradient(to_top,rgba(0,0,0,.88)_0%,rgba(0,0,0,.45)_38%,transparent_68%)]" />
             </Link>
-            <span className="pointer-events-none absolute top-4 left-4 bg-white px-2 py-1 font-mono text-[11px] tracking-[.08em] text-black uppercase">{formatDateShort(top.startsAt)}</span>
+            <span className="pointer-events-none absolute top-4 left-4 rounded-control bg-white px-2 py-1 font-mono text-[11px] tracking-[.08em] text-black uppercase">{formatDateShort(top.startsAt)}</span>
             <div className="pointer-events-none absolute inset-x-6 bottom-6 flex flex-wrap items-end gap-x-6 gap-y-4 text-white">
               <div className="min-w-0 flex-[1_1_320px]">
                 <h2 className="line-clamp-2 font-display text-[clamp(30px,3.2vw,48px)] leading-[.92] font-black tracking-[-0.02em] uppercase">{top.title}</h2>
                 <p className="mt-2 truncate text-sm text-white/80">{[!top.online && top.venue, top.community?.name, `${top.goingCount} going`].filter(Boolean).join(" · ")}</p>
               </div>
               {top.viewer.rsvp === "going" ? (
-                <Link href={`/events/${top.id}`} className="pointer-events-auto inline-flex h-11 shrink-0 items-center border border-white/70 px-5 text-sm font-bold text-white">
+                <Link href={`/events/${top.id}`} className="pointer-events-auto inline-flex h-11 shrink-0 items-center rounded-control border border-white/70 px-5 text-sm font-bold text-white">
                   You&apos;re going
                 </Link>
               ) : (
-                <button type="button" disabled={busy} onClick={() => void going(top)} className="pointer-events-auto inline-flex h-11 shrink-0 items-center bg-accent px-5 text-sm font-bold text-accent-ink transition hover:opacity-90 disabled:opacity-60">
+                <button type="button" disabled={busy} onClick={() => void going(top)} className="pointer-events-auto inline-flex h-11 shrink-0 items-center rounded-control bg-accent px-5 text-sm font-bold text-accent-ink transition hover:opacity-90 disabled:opacity-60">
                   I&apos;m going
                 </button>
               )}
@@ -141,7 +141,7 @@ export function CityPoster({
           {loading && !top ? (
             <div className="space-y-px">
               {[0, 1, 2, 3].map((i) => (
-                <div key={i} className="skeleton h-[88px] !rounded-none" />
+                <div key={i} className="skeleton h-[88px] !rounded-card" />
               ))}
             </div>
           ) : next.length ? (
@@ -158,7 +158,7 @@ export function CityPoster({
                           {d.weekday} {formatTime(e.startsAt)} · {e.goingCount} going
                         </span>
                       </span>
-                      <Cover src={eventPhoto(e.id, e.coverImage)} seed={e.id} interest={e.interest} className="size-14 shrink-0 !rounded-none" />
+                      <Cover src={eventPhoto(e.id, e.coverImage)} seed={e.id} interest={e.interest} className="size-14 shrink-0 !rounded-control" />
                     </Link>
                   </li>
                 );
@@ -180,7 +180,7 @@ export function CityPoster({
             Your communities
           </h2>
           {mineLoading && !mine.length ? (
-            <div className="skeleton h-32 !rounded-none" aria-hidden="true" />
+            <div className="skeleton h-32 !rounded-card" aria-hidden="true" />
           ) : mine.length ? (
             <ul>
               {mine.slice(0, 3).map((c) => (
@@ -215,7 +215,7 @@ export function CityPoster({
                   </Link>
                   {c.memberCount != null && <span className="shrink-0 text-[13px] text-ink-muted tabular-nums">{compactCount(c.memberCount)}</span>}
                   {/* the usual join rules (public, request, points), drawn as a square outlined button */}
-                  <span className="shrink-0 [&_button]:!h-8 [&_button]:!rounded-none [&_button]:!border [&_button]:!border-ink [&_button]:!bg-transparent [&_button]:!px-3 [&_button]:!text-[13px] [&_button]:!font-semibold [&_button]:!text-ink [&_button]:!shadow-none [&_span[role=img]]:!rounded-none">
+                  <span className="shrink-0 [&_button]:!h-8 [&_button]:!rounded-control [&_button]:!border [&_button]:!border-ink [&_button]:!bg-transparent [&_button]:!px-3 [&_button]:!text-[13px] [&_button]:!font-semibold [&_button]:!text-ink [&_button]:!shadow-none [&_span[role=img]]:!rounded-none">
                     <JoinButton community={joined[c.id] ?? c} onChange={(n) => setJoined((j) => ({ ...j, [c.id]: n }))} />
                   </span>
                 </li>
@@ -231,7 +231,7 @@ export function CityPoster({
       </div>
 
       {/* below 1280px there's no right panel: the desktop app and plans come here */}
-      <div className="mt-10 grid grid-cols-2 items-start gap-4 *:!rounded-none xl:hidden">
+      <div className="mt-10 grid grid-cols-2 items-start gap-4 *:!rounded-card xl:hidden">
         <DesktopPrompt />
         <PlansCard />
       </div>
@@ -264,7 +264,7 @@ function PosterKliques({ className }: { className?: string }) {
       ) : (
         <p className="border-b border-line py-3 text-sm text-ink-muted">No kliques yet</p>
       )}
-      <Link href="/kliques?start=1" className="mt-4 flex h-11 items-center justify-center bg-ink text-sm font-bold text-canvas transition hover:opacity-90">
+      <Link href="/kliques?start=1" className="mt-4 flex h-11 items-center justify-center rounded-control bg-ink text-sm font-bold text-canvas transition hover:opacity-90">
         Start a klique
       </Link>
     </section>
@@ -286,7 +286,7 @@ export function CityPosterRail() {
         </div>
         <PosterKliques />
         {/* the shared cards, with the poster's square corners */}
-        <div className="flex flex-col gap-4 *:!rounded-none">
+        <div className="flex flex-col gap-4 *:!rounded-card">
           <DesktopPrompt />
           <PlansCard />
         </div>

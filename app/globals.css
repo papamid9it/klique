@@ -92,24 +92,45 @@
 @theme {
   --radius-card: 1rem;
   --radius-control: 0.75rem;
+  --radius-hero: 1.25rem;
 }
 
 /*
- * Square style, the look of Communities home ("city poster"): square corners on cards, buttons, fields, chips, tabs
- * and menus, 1px lines. Set on <html> (app/layout.tsx), so every page and pop-up uses it.
+ * Sharp style, the look of Communities home ("city poster"), softened (12 Nov 2026): small corners from one scale,
+ * mono labels and 1px lines. Set on <html> (app/layout.tsx), so every page and pop-up uses it.
+ *   --radius-control  6px   buttons, fields, chips, tabs, menu items, label badges
+ *   --radius-card    10px   cards, panels, menus, modals, sheets, chat bubbles, event tiles
+ *   --radius-hero    12px   big hero posters (rounded-3xl, or data-hero)
  * People's avatars, presence dots, switches, radio buttons and count badges stay round.
  */
 [data-square] {
-  --radius-card: 0px;
-  --radius-control: 2px;
+  --radius-control: 6px;
+  --radius-card: 10px;
+  --radius-hero: 12px;
 }
 [data-square] :is(a, button, input, select, textarea, label).rounded-full:not([role="switch"]),
 /* pill-shaped bars, tags and labels (they have padding; avatars, dots and count badges don't, or have a min width) */
 [data-square] .rounded-full:is([class*="px-"], [class*="py-"], [class*=" p-"], [class^="p-"], [class*="pl-"], [class*="pr-"]):not([class*="min-w-"]):not([role="switch"]),
 [data-square] .chip,
 [data-square] [data-pill],
-[data-square] :is(.rounded, .rounded-md, .rounded-lg, .rounded-xl, .rounded-2xl, [class*="rounded-["]):not(img) {
-  border-radius: 2px;
+[data-square] :is(.rounded, .rounded-md, .rounded-lg, .rounded-xl):not(img) {
+  border-radius: var(--radius-control);
+}
+/* bigger hand-set corners (10px and up) come down to the card size; small ones (4–9px) stay as written */
+[data-square] :is(.rounded-2xl, [class*="rounded-[1"], [class*="rounded-[2"]):not(img) {
+  border-radius: var(--radius-card);
+}
+[data-square] :is(.rounded-3xl, [data-hero]):not(img) {
+  border-radius: var(--radius-hero);
+}
+/*
+ * People's pictures stay round, everywhere: the avatar itself (components/ui/Avatar marks it data-avatar), any picture
+ * given role="img" with data-avatar, and the plain ring or button that only frames one (round, with even padding like
+ * p-1.5, as on profile headers). Person chips with side padding (px-, pl-, pr-) still turn square like other pills.
+ */
+[data-square] [data-avatar],
+[data-square] .rounded-full:has([data-avatar], .kq-frame):not([class*="px-"], [class*="pl-"], [class*="pr-"]) {
+  border-radius: 9999px !important;
 }
 
 html {
