@@ -39,7 +39,7 @@ export function HomePanel() {
   const own = hasPagePanel(pathname);
 
   return (
-    <aside data-square="" className="sticky top-0 hidden h-dvh flex-col border-r border-line lg:flex" aria-label="Primary">
+    <aside className="sticky top-0 hidden h-dvh flex-col border-r border-line lg:flex" aria-label="Primary">
       <div className="shrink-0 px-6 pt-8 pb-6">
         <Logo height={54} />
       </div>

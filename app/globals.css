@@ -96,14 +96,16 @@
 
 /*
  * Square style, the look of Communities home ("city poster"): square corners on cards, buttons, fields, chips, tabs
- * and menus, 1px lines. On <html> for Home, Events, Kliques and Communities (AppShell), and always on the left panel.
- * People's avatars, dots, switches and count badges stay round.
+ * and menus, 1px lines. Set on <html> (app/layout.tsx), so every page and pop-up uses it.
+ * People's avatars, presence dots, switches, radio buttons and count badges stay round.
  */
 [data-square] {
   --radius-card: 0px;
   --radius-control: 2px;
 }
 [data-square] :is(a, button, input, select, textarea, label).rounded-full:not([role="switch"]),
+/* pill-shaped bars, tags and labels (they have padding; avatars, dots and count badges don't, or have a min width) */
+[data-square] .rounded-full:is([class*="px-"], [class*="py-"], [class*=" p-"], [class^="p-"], [class*="pl-"], [class*="pr-"]):not([class*="min-w-"]):not([role="switch"]),
 [data-square] .chip,
 [data-square] [data-pill],
 [data-square] :is(.rounded, .rounded-md, .rounded-lg, .rounded-xl, .rounded-2xl, [class*="rounded-["]):not(img) {

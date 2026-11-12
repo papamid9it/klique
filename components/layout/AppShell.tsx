@@ -65,13 +65,6 @@ function Shell({ children }: { children: ReactNode }) {
   const pathname = usePagePath();
   const { status } = useAuth();
   const homeStyle = useHomeStyle();
-  // Home, Events, Kliques and Communities in the square style (menus and pop-ups opened there too)
-  const square = /^\/($|events(\/|$)|kliques\/?$|communities\/?$)/.test(pathname);
-  useEffect(() => {
-    const html = document.documentElement;
-    if (square) html.dataset.square = "";
-    else delete html.dataset.square;
-  }, [square]);
 
   // Settings is a full-screen surface of its own (categories · page), like Discord's.
   if (pathname === "/settings" || pathname === "/settings/") return <>{children}</>;

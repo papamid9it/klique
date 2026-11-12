@@ -27,7 +27,7 @@ export const viewport: Viewport = { width: "device-width", initialScale: 1, them
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" data-theme={DEFAULT_MOOD} suppressHydrationWarning className={`${GeistSans.variable} ${GeistMono.variable} ${archivo.variable} select-none` }>
+    <html lang="en" data-theme={DEFAULT_MOOD} data-square="" suppressHydrationWarning className={`${GeistSans.variable} ${GeistMono.variable} ${archivo.variable} select-none` }>
       <head>
         <script dangerouslySetInnerHTML={{ __html: MOOD_BOOT_SCRIPT }} />
       </head>

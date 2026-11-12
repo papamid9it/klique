@@ -52,7 +52,7 @@ export function ReactionPicker({ onPick, onClose, className, style: place }: { o
   const ref = useDismiss(onClose);
   const keep = useKeepOnScreen(ref);
   return (
-    <div ref={ref} role="menu" aria-label="Pick a reaction" style={{ ...place, ...keep }} className={cx("z-30 flex gap-0.5 rounded-full border border-line bg-surface p-1 shadow-2xl animate-pop", className)}>
+    <div ref={ref} data-pill="" role="menu" aria-label="Pick a reaction" style={{ ...place, ...keep }} className={cx("z-30 flex gap-0.5 rounded-full border border-line bg-surface p-1 shadow-2xl animate-pop", className)}>
       {REACTIONS.map((r) => (
         <button
           key={r.id}
