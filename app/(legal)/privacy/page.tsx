@@ -26,7 +26,8 @@ export default function PrivacyPage() {
           <li><strong>Profile:</strong> bio, interests, country, state, city and neighbourhood, profile pictures and style choices.</li>
           <li><strong>What you do and post:</strong> communities and groups you join, messages, posts, reactions, events you host, RSVP to or save, friends, blocks and reports.</li>
           <li><strong>Devices:</strong> if you turn on notifications, a notification address for your phone or browser.</li>
-          <li><strong>Technical data:</strong> IP address (used for security and rate limits) and a single sign-in cookie. We don&apos;t use advertising or tracking cookies.</li>
+          <li><strong>Technical data:</strong> IP address (used for security and rate limits) and a sign-in cookie. We don&apos;t use advertising cookies.</li>
+          <li><strong>Usage analytics:</strong> we use PostHog to understand how Klique is used: how many people visit, which pages they open, where they leave and whether they come back. It stores an anonymous ID in your browser or app; once you sign in it knows your account ID, username and plan, never your email or date of birth. Session recordings hide everything you type and all text, and are never made on messages, community chats or admin pages.</li>
         </ul>
       </Section>
 
@@ -38,7 +39,7 @@ export default function PrivacyPage() {
           <li><strong>To send emails you need</strong>: verification, password resets and important account notices. We don&apos;t send marketing without your consent.</li>
           <li><strong>To show ads</strong> (legitimate interests): some cards are ads, always labelled &ldquo;Sponsored&rdquo; or &ldquo;Promoted&rdquo;. They&apos;re chosen only by the place and scene you&apos;re looking at, the words you search and the interests on your profile. Advertisers never receive your personal data. We only count how many times an ad was shown and clicked, without recording who.</li>
         </ul>
-        <p>We don&apos;t sell your personal data, we don&apos;t use advertising or tracking cookies, and ads never appear in chats or direct messages. You can report any ad you think breaks our rules.</p>
+        <p>We don&apos;t sell your personal data, we don&apos;t use advertising cookies, and ads never appear in chats or direct messages. You can report any ad you think breaks our rules.</p>
       </Section>
 
       <Section n={3} title="Who sees what">

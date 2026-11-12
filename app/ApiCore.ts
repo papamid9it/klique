@@ -20,6 +20,8 @@ export interface ApiConfig {
   getToken?: () => string | null | Promise<string | null>;
   /** Native/desktop clients: ask the API to return the login token and skip cookies. */
   native?: boolean;
+  /** Told about every call that worked (usage analytics reads a few of them; it must never throw). */
+  onSuccess?: (method: string, path: string, body: unknown, json: unknown) => void;
 }
 
 /** An error the UI can show as-is. `errors` carries per-field messages for forms. */
@@ -143,6 +145,11 @@ export default class ApiClient {
         json?.code ?? "error",
         json?.errors,
       );
+    }
+    try {
+      config.onSuccess?.(method, path, body, json);
+    } catch {
+      /* analytics never breaks a request */
     }
     return json as T;
   }

@@ -6,6 +6,7 @@ import { CategoryService } from "@/app/services/CategoryService";
 import { setCategories } from "@/lib/constants";
 import { isReducedMotion } from "@/lib/motion";
 import { AuthProvider } from "./AuthProvider";
+import { AnalyticsProvider } from "./AnalyticsProvider";
 import { DesktopAlerts } from "@/components/domain/DesktopAlerts";
 import { SignOutHost } from "@/components/domain/account/SignOutDialog";
 import { LeaveProvider } from "./LeaveProvider";
@@ -118,6 +119,7 @@ export function Providers({ children }: { children: ReactNode }) {
                 <ProfileCardProvider>
                   <LeaveProvider>
                     <DesktopAlerts />
+                    <AnalyticsProvider />
                     <SignOutHost />
                     <PanelSlotProvider>{children}</PanelSlotProvider>
                   </LeaveProvider>

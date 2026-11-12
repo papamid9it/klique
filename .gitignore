@@ -44,3 +44,6 @@ next-env.d.ts
 
 # personal Claude Code settings
 /.claude/settings.local.json
+
+# local-only scripts (e.g. the data wipe), never pushed
+scripts/local/
