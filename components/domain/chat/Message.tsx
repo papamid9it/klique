@@ -268,7 +268,7 @@ export const Message = memo(function Message({
               <Icon name="reply" size={16} />
             </button>
           )}
-          {gifts && !m.bot && <GiftButton target={{ type: "reply", id: m.id }} authorId={m.author.id} />}
+          {gifts && !m.bot && <GiftButton plainIcon target={{ type: "reply", id: m.id }} authorId={m.author.id} />}
           {rest.length > 0 && <OverflowMenu items={rest} label="Message actions" compact />}
         </div>
       )}
