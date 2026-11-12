@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { softNavigate } from "@/lib/nav";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { CommunityService } from "@/app/services/CommunityService";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { SpaceService } from "@/app/services/SpaceService";
@@ -26,7 +26,8 @@ import { prefetchCommunity } from "./prefetchCommunity";
 
 /**
  * Your communities, one tile each, so you can hop between them without going back to a list.
- * Shows an unread dot and an @mention count; the active one turns from a circle into a rounded square.
+ * Shows an unread dot and an @mention count. The one you're in has an accent bar on its left edge (like Discord's)
+ * and an accent line around it, and is scrolled into view; the others are a little dimmed until pointed at.
  * `horizontal` is the compact strip used inside the mobile drawer.
  */
 export function CommunityRail({ activeSlug, horizontal, onNavigate }: { activeSlug: string | null; horizontal?: boolean; onNavigate?: () => void }) {
@@ -53,6 +54,13 @@ export function CommunityRail({ activeSlug, horizontal, onNavigate }: { activeSl
   // you were let into a community (or added to a group): its icon appears
   useRealtimeEvent(() => void reload(), { filter: (e) => e.type === "notify" && e.category === "community", debounceMs: 500 });
 
+
+  // the one you're in: scrolled into view when the strip is long
+  const navRef = useRef<HTMLElement>(null);
+  const ready = !!data;
+  useEffect(() => {
+    if (ready && activeSlug) navRef.current?.querySelector('[aria-current="page"]')?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [ready, activeSlug]);
 
   if (status === "loading" || (authed && loading && !data)) {
     // Same tile + label shape as the real thing, so nothing jumps when it loads.
@@ -142,7 +150,11 @@ export function CommunityRail({ activeSlug, horizontal, onNavigate }: { activeSl
           aria-current={active ? "page" : undefined}
           className={cx("group flex flex-col items-center gap-1", horizontal ? "w-14" : "w-full")}
         >
-          <span className={cx("relative block overflow-hidden transition-[border-radius,box-shadow]", horizontal ? "size-11" : "size-14", active ? "rounded-[14px]" : "rounded-full group-hover:rounded-[14px]")}>
+          {/* the one you're in: a bar on the rail's left edge (a short one on hover) */}
+          {!horizontal && (
+            <span aria-hidden="true" className={cx("absolute top-0 left-0 w-1 bg-accent-text transition-all", active ? "h-14" : "h-0")} />
+          )}
+          <span className={cx("relative block overflow-hidden transition-[border-radius,box-shadow]", horizontal ? "size-11" : "size-14", active ? "rounded-[14px] ring-2 ring-accent-text ring-offset-2 ring-offset-canvas" : "rounded-full opacity-70 transition-opacity group-hover:rounded-[14px] group-hover:opacity-100")}>
             <Cover src={c.coverImage} seed={c.id} interest={c.interest} className={cx("size-full", c.muted && "opacity-50")} />
           </span>
           {/* how many unseen messages (channels and your crews' chats); red when some mention you */}
@@ -167,7 +179,7 @@ export function CommunityRail({ activeSlug, horizontal, onNavigate }: { activeSl
   );
 
   return (
-    <nav aria-label="Your communities" className={horizontal ? "border-b border-line px-3 py-3" : "w-full"}>
+    <nav ref={navRef} aria-label="Your communities" className={horizontal ? "border-b border-line px-3 py-3" : "w-full"}>
       <ul className={horizontal ? "flex gap-2 overflow-x-auto no-bar" : "flex w-full flex-col items-center gap-2.5"}>
         {tiles}
         {add}
