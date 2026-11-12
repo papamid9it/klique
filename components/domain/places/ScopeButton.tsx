@@ -4,7 +4,7 @@ import { useState } from "react";
 import { usePlace } from "@/components/providers/PlaceProvider";
 import { Icon } from "@/components/ui/Icon";
 import { cx } from "@/components/ui/cx";
-import { scopeFlag, scopeLabel, scopeTrail, type Scope } from "@/lib/places";
+import { scopeLabel, scopeTrail, type Scope } from "@/lib/places";
 import { PlacePicker } from "./PlacePicker";
 
 /** The "where am I looking" control. Shows the current place and opens the picker. Uses (and sets) the shared scope unless `value` is given. */
@@ -54,21 +54,21 @@ export function ScopeButton({
           aria-haspopup="dialog"
           className={cx("group inline-flex max-w-full items-center gap-2 rounded-2xl border border-line bg-surface px-3.5 py-1 align-middle transition hover:border-ink-muted/60 hover:bg-raised", className)}
         >
-          <span className="text-[0.7em] leading-none" aria-hidden="true">{scopeFlag(scope)}</span>
+          <Icon name="pin" size={20} className="shrink-0 text-ink-muted" />
           <span className="truncate">{scopeLabel(scope)}</span>
           <Icon name="chevron-down" size={22} className="shrink-0 text-ink-muted transition group-hover:text-ink" />
         </button>
       ) : variant === "pill" ? (
         <button type="button" onClick={() => setOpen(true)} aria-haspopup="dialog" title={scopeLabel(scope)} className={cx("inline-flex h-9 min-w-0 items-center gap-1.5 rounded-full border border-line bg-surface pr-2.5 pl-3 text-[13px] font-semibold text-ink", className)}>
-          <span aria-hidden="true" className="shrink-0">{scopeFlag(scope)}</span>
+          <Icon name="pin" size={14} className="shrink-0 text-ink-muted" />
           <span className="min-w-0 truncate">{scopeLabel(scope)}</span>
           <Icon name="chevron-down" size={13} className="shrink-0 text-ink-muted" />
         </button>
       ) : (
         <button type="button" onClick={() => setOpen(true)} aria-haspopup="dialog" className={cx("flex h-11 w-full items-center gap-2.5 rounded-control border border-line bg-surface px-3.5 text-left hover:bg-raised", className)}>
-          <span className="text-base leading-none" aria-hidden="true">{scopeFlag(scope)}</span>
+          <Icon name="pin" size={16} className="shrink-0 text-ink-muted" />
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm leading-tight font-semibold">{scopeLabel(scope)}</span>
+            <span className="block truncate font-mono text-[12px] leading-tight font-semibold tracking-[.1em] uppercase">{scopeLabel(scope)}</span>
             <span className="block truncate text-[10px] leading-tight text-ink-muted">{scopeTrail(scope)}</span>
           </span>
           <Icon name="chevron-down" size={15} className="shrink-0 text-ink-muted" />

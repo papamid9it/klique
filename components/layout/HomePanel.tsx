@@ -21,7 +21,6 @@ import { prefetchCommunity } from "./prefetchCommunity";
 import { UserMenu } from "./UserMenu";
 import { PresenceDot } from "@/components/domain/profile/ProfileParts";
 import { VerifiedCheck } from "@/components/ui/VerifiedCheck";
-import { useHomeStyle } from "@/lib/hooks/useHomeStyle";
 
 const row = "flex h-11 items-center gap-3 rounded-control px-3.5 text-[15px] font-medium transition";
 /** The panel's middle: scrolls on its own, fading out at its top and bottom edges. */
@@ -38,12 +37,9 @@ export function HomePanel() {
   const { user, status } = useAuth();
   const card = useProfileCard();
   const own = hasPagePanel(pathname);
-  // Communities home has no suggestions rail, so its search stays here
-  const homeStyle = useHomeStyle();
-  const cityHome = pathname === "/" && homeStyle === "communities" && status === "authed";
 
   return (
-    <aside className="sticky top-0 hidden h-dvh flex-col border-r border-line lg:flex" aria-label="Primary">
+    <aside data-square="" className="sticky top-0 hidden h-dvh flex-col border-r border-line lg:flex" aria-label="Primary">
       <div className="shrink-0 px-6 pt-8 pb-6">
         <Logo height={54} />
       </div>
@@ -57,7 +53,7 @@ export function HomePanel() {
           <div className="shrink-0 space-y-6 px-5 pb-5">
           <div className="space-y-2">
             {/* on Home the right-hand column has the search box (wide screens), so this one steps aside there */}
-            <Link href="/search" className={cx("flex h-10 items-center gap-2 rounded-control border border-line bg-surface px-3 text-[13px] text-ink-muted transition hover:text-ink", pathname === "/" && !cityHome && "xl:hidden")}>
+            <Link href="/search" className={cx("flex h-10 items-center gap-2 rounded-control border border-line bg-surface px-3 text-[13px] text-ink-muted transition hover:text-ink", pathname === "/" && "xl:hidden")}>
               <Icon name="search" size={14} /> Search scenes, people, events
             </Link>
             <ScopeButton />
@@ -69,7 +65,7 @@ export function HomePanel() {
                 const unread = n.href === "/messages" ? user?.unreadMessages : n.href === "/notifications" ? user?.unreadNotifications : undefined;
                 return (
                   <li key={n.href}>
-                    <Link href={n.href} aria-current={on ? "page" : undefined} className={cx(row, on ? "bg-raised text-ink" : "text-ink-muted hover:bg-raised/60 hover:text-ink")}>
+                    <Link href={n.href} aria-current={on ? "page" : undefined} className={cx(row, on ? "bg-raised text-ink shadow-[inset_2px_0_0_var(--ink)]" : "text-ink-muted hover:bg-raised/60 hover:text-ink")}>
                       <Icon name={n.icon} size={18} />
                       {n.label}
                       {!!unread && (

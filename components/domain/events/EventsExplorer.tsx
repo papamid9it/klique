@@ -329,7 +329,7 @@ export function EventsExplorer() {
               <Icon name="search" size={15} className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-ink-muted" />
               <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search events…" aria-label="Search events" className="h-10 w-full rounded-full border border-line bg-raised pr-3 pl-10 text-sm placeholder:text-ink-muted/70 focus:border-accent-text" />
             </div>
-            <div className="flex rounded-full border border-line bg-raised p-0.5" role="group" aria-label="Format">
+            <div data-pill="" className="flex rounded-full border border-line bg-raised p-0.5" role="group" aria-label="Format">
               {([["any", "All"], ["in-person", "In person"], ["online", "Online"]] as const).map(([id, label]) => (
                 <button key={id} type="button" aria-pressed={format === id} onClick={() => setFormat(id)} className={cx("h-8 rounded-full px-3 text-[13px] font-semibold transition", format === id ? "bg-surface text-ink shadow-sm" : "text-ink-muted hover:text-ink")}>
                   {label}

@@ -65,6 +65,13 @@ function Shell({ children }: { children: ReactNode }) {
   const pathname = usePagePath();
   const { status } = useAuth();
   const homeStyle = useHomeStyle();
+  // Home, Events, Kliques and Communities in the square style (menus and pop-ups opened there too)
+  const square = /^\/($|events(\/|$)|kliques\/?$|communities\/?$)/.test(pathname);
+  useEffect(() => {
+    const html = document.documentElement;
+    if (square) html.dataset.square = "";
+    else delete html.dataset.square;
+  }, [square]);
 
   // Settings is a full-screen surface of its own (categories · page), like Discord's.
   if (pathname === "/settings" || pathname === "/settings/") return <>{children}</>;
@@ -127,12 +134,12 @@ function Shell({ children }: { children: ReactNode }) {
       <HomePanel />
       <div className="min-w-0">
         <MobileTopBar />
-        {/* big screens: Notifications and Messages at the top right (the feed home has them in its suggestions rail) */}
-        <div className={`sticky top-0 z-30 hidden h-14 items-center justify-end bg-canvas/92 px-6 backdrop-blur-lg lg:flex ${rail ? "xl:hidden" : ""}`}>
+        {/* big screens: Notifications and Messages at the top right (on Home, 1280px and up: in its right panel) */}
+        <div className={`sticky top-0 z-30 hidden h-14 items-center justify-end bg-canvas/92 px-6 backdrop-blur-lg lg:flex ${rail || cityHome ? "xl:hidden" : ""}`}>
           <HeaderIcons />
         </div>
         <VerifyBanner />
-        <main id="main" className={`mx-auto w-full ${cityHome ? "max-w-[1240px]" : home ? "max-w-[1120px]" : wide ? "max-w-[1560px]" : "max-w-[1040px]"} px-4 pt-6 pb-32 sm:px-8 lg:px-10 lg:pt-2 lg:pb-20 ${rail ? "xl:pt-9" : ""}`}>
+        <main id="main" className={`mx-auto w-full ${cityHome ? "max-w-[1240px]" : home ? "max-w-[1120px]" : wide ? "max-w-[1560px]" : "max-w-[1040px]"} px-4 pt-6 pb-32 sm:px-8 lg:px-10 lg:pt-2 lg:pb-20 ${rail || cityHome ? "xl:pt-9" : ""}`}>
           {children}
         </main>
       </div>

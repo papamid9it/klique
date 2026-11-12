@@ -25,7 +25,7 @@ export function DateChip({ iso }: { iso: string }) {
 
 export function PriceTag({ amount, currency, className }: { amount: number; currency?: string; className?: string }) {
   return (
-    <span className={cx("inline-flex items-center rounded-full px-2.5 py-1 font-mono text-[11px] font-medium shadow-sm", isFree(amount) ? "bg-accent text-accent-ink" : "bg-accent2 text-accent2-ink", className)}>
+    <span data-pill="" className={cx("inline-flex items-center rounded-full px-2.5 py-1 font-mono text-[11px] font-medium shadow-sm", isFree(amount) ? "bg-accent text-accent-ink" : "bg-accent2 text-accent2-ink", className)}>
       {isFree(amount) ? "FREE" : formatPrice(amount, currency)}
     </span>
   );

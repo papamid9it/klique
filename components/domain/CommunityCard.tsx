@@ -35,7 +35,7 @@ export function CommunityCard({ community, onChange, tag }: { community: Communi
           </div>
         ) : (
           <Cover src={c.coverImage} seed={c.id} interest={c.interest} className="aspect-[16/9]">
-            <span className="absolute bottom-3 left-3 inline-flex items-center gap-1.5 rounded-full bg-black/65 px-2.5 py-1 font-mono text-[10px] tracking-wide text-white uppercase backdrop-blur">
+            <span data-pill="" className="absolute bottom-3 left-3 inline-flex items-center gap-1.5 rounded-full bg-black/65 px-2.5 py-1 font-mono text-[10px] tracking-wide text-white uppercase backdrop-blur">
               {getInterest(c.interest).glyph} {getInterest(c.interest).short}
             </span>
           </Cover>
@@ -53,7 +53,7 @@ export function CommunityCard({ community, onChange, tag }: { community: Communi
           </Link>
           <VerifiedCheck on={c.verified} size={15} />
           {c.privacy === "private" && <Icon name="lock" size={14} className="shrink-0 text-ink-muted" />}
-          {audienceLabel(c.audience) && <span className="shrink-0 rounded-full border border-line px-2 py-0.5 text-[11px] font-medium text-ink-muted">{audienceLabel(c.audience)}</span>}
+          {audienceLabel(c.audience) && <span data-pill="" className="shrink-0 rounded-full border border-line px-2 py-0.5 text-[11px] font-medium text-ink-muted">{audienceLabel(c.audience)}</span>}
           {c.official && (
             <span className="inline-flex size-4 shrink-0 items-center justify-center rounded-full bg-accent text-accent-ink" title="Official Klique community">
               <Icon name="check" size={10} />

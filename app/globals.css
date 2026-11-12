@@ -53,8 +53,6 @@
   --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
   --font-display: var(--font-archivo), var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
 
-  --radius-card: 1rem;
-  --radius-control: 0.75rem;
 
   --animate-rise: rise 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
   --animate-pop: pop 0.28s cubic-bezier(0.3, 1.5, 0.5, 1) both;
@@ -88,6 +86,28 @@
       background-position: -200% 0;
     }
   }
+}
+
+/* corners as variables (not inlined), so a part of the site can switch to square ones: [data-square] below */
+@theme {
+  --radius-card: 1rem;
+  --radius-control: 0.75rem;
+}
+
+/*
+ * Square style, the look of Communities home ("city poster"): square corners on cards, buttons, fields, chips, tabs
+ * and menus, 1px lines. On <html> for Home, Events, Kliques and Communities (AppShell), and always on the left panel.
+ * People's avatars, dots, switches and count badges stay round.
+ */
+[data-square] {
+  --radius-card: 0px;
+  --radius-control: 2px;
+}
+[data-square] :is(a, button, input, select, textarea, label).rounded-full:not([role="switch"]),
+[data-square] .chip,
+[data-square] [data-pill],
+[data-square] :is(.rounded, .rounded-md, .rounded-lg, .rounded-xl, .rounded-2xl, [class*="rounded-["]):not(img) {
+  border-radius: 2px;
 }
 
 html {

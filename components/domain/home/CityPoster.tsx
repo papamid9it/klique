@@ -6,7 +6,8 @@ import { errorMessage } from "@/app/ApiCore";
 import { EventService } from "@/app/services/EventService";
 import { DesktopPrompt } from "@/components/domain/DesktopPrompt";
 import { JoinButton } from "@/components/domain/JoinButton";
-import { PlansCard, RailFooter } from "@/components/layout/RightRail";
+import { HeaderIcons } from "@/components/layout/HeaderIcons";
+import { PlansCard, RailFooter, RailSearch } from "@/components/layout/RightRail";
 import { crewHref } from "@/components/domain/crews/parts";
 import { useToast } from "@/components/providers/ToastProvider";
 import { Cover } from "@/components/ui/Cover";
@@ -277,7 +278,12 @@ function PosterKliques({ className }: { className?: string }) {
 export function CityPosterRail() {
   return (
     <aside aria-label="Kliques and more" className="sticky top-0 hidden h-dvh flex-col border-l border-line xl:flex">
-      <div className="no-bar flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-6 pt-20 pb-4 [&>*]:shrink-0">
+      <div className="no-bar flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-6 pt-7 pb-4 [&>*]:shrink-0">
+        {/* search, then Notifications and Messages, at the top (the left panel's search steps aside here) */}
+        <div className="flex items-center gap-1">
+          <RailSearch placeholder="Search Klique" />
+          <HeaderIcons />
+        </div>
         <PosterKliques />
         {/* the shared cards, with the poster's square corners */}
         <div className="flex flex-col gap-4 *:!rounded-none">

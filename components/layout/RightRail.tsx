@@ -14,9 +14,7 @@ import { useApi } from "@/lib/hooks/useApi";
 import { DesktopPrompt } from "@/components/domain/DesktopPrompt";
 
 export function RightRail() {
-  const router = useRouter();
   const { where, ready } = usePlace();
-  const [q, setQ] = useState("");
   const { data, loading, error } = useApi(() => DiscoverService.discover(where), [where], { key: `discover:${where}`, wait: !ready });
 
   const [railAd] = useAds("home-rail");
@@ -28,29 +26,7 @@ export function RightRail() {
       {/* each card keeps its full height (never squeezed or clipped); the list scrolls instead, with the thin scrollbar that shows on hover */}
       <div className="flex min-h-0 flex-1 flex-col gap-7 overflow-y-auto px-6 pt-7 pb-4 [&>*]:shrink-0">
       <div className="flex items-center gap-1">
-      <form
-        className="min-w-0 flex-1"
-        role="search"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (q.trim()) router.push(`/search?q=${encodeURIComponent(q.trim())}`);
-        }}
-      >
-        <label htmlFor="rail-search" className="sr-only">
-          Search scenes, people, events
-        </label>
-        <div className="relative">
-          <Icon name="search" size={16} className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-ink-muted" />
-          <input
-            id="rail-search"
-            type="search"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search scenes, people, events"
-            className="h-11 w-full rounded-control border border-line bg-surface pr-3 pl-10 text-sm text-ink placeholder:text-ink-muted/80 focus:border-accent-text"
-          />
-        </div>
-      </form>
+      <RailSearch />
       {/* Notifications and Messages: the top right of the page on Home */}
       <HeaderIcons />
       </div>
@@ -116,5 +92,36 @@ export function RailFooter({ className = "" }: { className?: string }) {
       </Link>
       .
     </p>
+  );
+}
+
+/** "Search scenes, people, events" at the top of Home's right panel: Enter opens the search page. */
+export function RailSearch({ placeholder = "Search scenes, people, events" }: { /** a shorter one where the box is narrow */ placeholder?: string }) {
+  const router = useRouter();
+  const [q, setQ] = useState("");
+  return (
+    <form
+      className="min-w-0 flex-1"
+      role="search"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (q.trim()) router.push(`/search?q=${encodeURIComponent(q.trim())}`);
+      }}
+    >
+      <label htmlFor="rail-search" className="sr-only">
+        Search scenes, people, events
+      </label>
+      <div className="relative">
+        <Icon name="search" size={16} className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-ink-muted" />
+        <input
+          id="rail-search"
+          type="search"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder={placeholder}
+          className="h-11 w-full rounded-control border border-line bg-surface pr-3 pl-10 text-sm text-ink placeholder:text-ink-muted/80 focus:border-accent-text"
+        />
+      </div>
+    </form>
   );
 }
