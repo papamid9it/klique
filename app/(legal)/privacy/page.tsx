@@ -27,6 +27,7 @@ export default function PrivacyPage() {
           <li><strong>What you do and post:</strong> communities and groups you join, messages, posts, reactions, events you host, RSVP to or save, friends, blocks and reports.</li>
           <li><strong>Devices:</strong> if you turn on notifications, a notification address for your phone or browser.</li>
           <li><strong>Technical data:</strong> IP address (used for security and rate limits) and a sign-in cookie. We don&apos;t use advertising cookies.</li>
+          <li><strong>Bank details for payouts:</strong> if you request a payout, we keep the bank account you give us so we can pay you, check its name with Paystack, and show it only to our team. We delete it when you delete your account; past payout records keep a copy.</li>
           <li><strong>Usage analytics:</strong> we use PostHog to understand how Klique is used: how many people visit, which pages they open, where they leave and whether they come back. It stores an anonymous ID in your browser or app; once you sign in it knows your account ID, username and plan, never your email or date of birth. Session recordings hide everything you type and all text, and are never made on messages, community chats or admin pages.</li>
         </ul>
       </Section>

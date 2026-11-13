@@ -22,7 +22,7 @@ export const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL?.trim() || ""
  * enforcement requests): on /terms, /privacy and the Report dialog. Set NEXT_PUBLIC_REPORT_EMAIL (e.g.
  * report@getklique.app); without it, the support address.
  */
-export const REPORT_EMAIL = process.env.NEXT_PUBLIC_REPORT_EMAIL?.trim() || SUPPORT_EMAIL;
+export const REPORT_EMAIL = process.env.NEXT_PUBLIC_REPORT_EMAIL?.trim() || "report@getklique.app";
 
 /** City slugs are open now (see lib/places.ts); kept as an alias so signatures read well. */
 export type CityId = string;
