@@ -8,6 +8,7 @@ import { isSiteAdmin } from "../policies/hosting";
 import type { UploadSignatureDTO, UploadStatusDTO } from "@/lib/types";
 import { UPLOAD_SPECS, VARIANT_SUFFIX, type UploadVariant } from "@/lib/uploads";
 import { presignPut, publicUrlFor } from "./r2";
+import { UploadLog } from "../models/UploadLog";
 
 const sid = (v: unknown) => String(v);
 const EXT: Record<string, string> = { "image/webp": "webp", "image/jpeg": "jpg", "image/gif": "gif", "image/png": "png", "application/json": "json", "video/mp4": "mp4", "video/webm": "webm" };
@@ -46,6 +47,9 @@ export async function signUpload(viewer: IUser, kind: UploadKind, files: { varia
 
   const month = new Date().toISOString().slice(0, 7);
   const base = `klique/${spec.folder}/${month}/${randomBytes(12).toString("base64url")}`;
+  const keys = files.map((f) => `${base}${VARIANT_SUFFIX[f.variant]}.${EXT[f.type]}`);
+  // noted, so the nightly sweep can clear it if it's never used (a form cancelled after picking a picture)
+  await UploadLog.create({ _id: base, keys }).catch((err: unknown) => console.warn("[uploads] couldn't note upload:", (err as Error)?.message));
   const items = await Promise.all(
     files.map(async (f) => {
       const key = `${base}${VARIANT_SUFFIX[f.variant]}.${EXT[f.type]}`;

@@ -11,16 +11,22 @@ import { FeedComment, FeedPost } from "../models/FeedPost";
 import { Topic } from "../models/Topic";
 import { User } from "../models/User";
 import { parseUpload, uploadBase } from "./media.service";
-import { deleteObject, listObjects } from "./r2";
+import { deleteObject } from "./r2";
+import { UploadLog } from "../models/UploadLog";
+import { Gift, GiftSend } from "../models/Gift";
+import { ProfileEffect } from "../models/ProfileEffect";
+import { AdCampaign } from "../models/AdCampaign";
+import { BotApp } from "../models/BotApp";
 import { r2Config } from "../env";
 import { CommunityEmoji } from "../models/CommunityEmoji";
 import { Webhook } from "../models/Webhook";
 
 /**
  * The nightly sweep for orphaned uploads. A file reaches R2 the moment someone picks it, so
- * a cancelled form or a picture swapped before saving leaves a file nothing points at. This lists every
- * file in our `klique/` folders, compares it with every URL the database still uses, and deletes the
- * ones nobody uses that are old enough not to belong to a form someone is still filling in.
+ * a cancelled form or a picture swapped before saving leaves a file nothing points at. This looks only at the
+ * uploads THIS site handed out links for (UploadLog), never at a listing of the bucket: the bucket is shared with
+ * other copies of the site (dev, previews), and their files are none of this one's business. An upload a day old
+ * that the database still uses is just struck off the log; one nobody uses is deleted (its exact keys only).
  *
  * Built to fail safe: if any part of the inventory can't be read, nothing is deleted.
  */
@@ -90,27 +96,39 @@ async function referencedKeys(): Promise<Set<string>> {
   // communities' custom emoji, and webhooks' pictures
   for await (const e of CommunityEmoji.find().select("url").lean().cursor()) add(e.url);
   for await (const w of Webhook.find({ avatarUrl: has }).select("avatarUrl").lean().cursor()) add(w.avatarUrl);
+  // the award catalogue (and the art kept on awards already sent), profile effects, ads waiting for review, bots
+  for await (const g of Gift.find({ artUrl: has }).select("artUrl").lean().cursor()) add(g.artUrl);
+  for await (const g of GiftSend.find({ artUrl: has }).select("artUrl").lean().cursor()) add(g.artUrl);
+  for await (const e of ProfileEffect.find().select("fileUrl previewUrl").lean().cursor()) {
+    add(e.fileUrl);
+    add(e.previewUrl);
+  }
+  for await (const a of AdCampaign.find({ imageUrl: has }).select("imageUrl").lean().cursor()) add(a.imageUrl);
+  for await (const b of BotApp.find({ avatarUrl: has }).select("avatarUrl").lean().cursor()) add(b.avatarUrl);
   return out;
 }
 
 export async function sweepOrphanedUploads({ dryRun, minAgeMs = MIN_AGE_MS }: { dryRun: boolean; minAgeMs?: number }): Promise<SweepResult> {
   const result: SweepResult = { dryRun, scanned: 0, referenced: 0, orphaned: 0, deleted: 0, sample: [], errors: [] };
-  const used = await referencedKeys(); // throws (and so deletes nothing) if the database can't be read
-  result.referenced = used.size;
-  const cutoff = Date.now() - minAgeMs;
-
-  // Inventory everything first: a listing that fails part-way must not lead to deleting from a partial picture.
   if (!r2Config()) return result;
-  const files = await listObjects("klique/");
-  result.scanned = files.length;
-  const orphans = files.filter((f) => f.lastModified <= cutoff && !used.has(uploadBase(f.key)));
+  // only this site's own uploads, a day old or more (a form someone is still filling in keeps its picture)
+  const logged = await UploadLog.find({ createdAt: { $lte: new Date(Date.now() - minAgeMs) } }).sort({ createdAt: 1 }).limit(MAX_DELETES_PER_RUN).lean();
+  result.scanned = logged.length;
+  if (!logged.length) return result;
+  const used = await referencedKeys(); // throws (and so deletes nothing) if the database can't be read
+  const inUse = logged.filter((u) => used.has(u._id));
+  const orphans = logged.filter((u) => !used.has(u._id));
+  result.referenced = inUse.length;
   result.orphaned = orphans.length;
-  result.sample = orphans.slice(0, 10).map((o) => o.key);
+  result.sample = orphans.slice(0, 10).map((o) => o._id);
   if (dryRun) return result;
 
-  for (const o of orphans.slice(0, MAX_DELETES_PER_RUN)) {
+  // in use: nothing more to do (replacing or deleting it later clears it right away)
+  if (inUse.length) await UploadLog.deleteMany({ _id: { $in: inUse.map((u) => u._id) } });
+  for (const o of orphans) {
     try {
-      await deleteObject(o.key);
+      for (const key of o.keys.length ? o.keys : [o._id]) if (key.startsWith("klique/") && uploadBase(key) === o._id) await deleteObject(key);
+      await UploadLog.deleteOne({ _id: o._id });
       result.deleted++;
     } catch (e) {
       result.errors.push((e as Error).message);

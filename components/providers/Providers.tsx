@@ -1,5 +1,6 @@
 "use client";
 
+import { BrokenImages } from "./BrokenImages";
 import { useDataSaver } from "@/lib/hooks/useDataSaver";
 import { Suspense, useEffect, type ReactNode } from "react";
 import { CategoryService } from "@/app/services/CategoryService";
@@ -123,6 +124,7 @@ export function Providers({ children }: { children: ReactNode }) {
                     <Suspense fallback={null}>
                       <AnalyticsProvider />
                     </Suspense>
+                    <BrokenImages />
                     <SignOutHost />
                     <PanelSlotProvider>{children}</PanelSlotProvider>
                   </LeaveProvider>
