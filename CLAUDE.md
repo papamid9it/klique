@@ -7,7 +7,7 @@ A social app for finding your people and going out in Lagos and Abuja: communiti
 
 ## Stack
 - Next.js 16 (App Router), React 19, Tailwind v4, TypeScript. Server code is in `server/` (Mongoose 9 models, services, validators, serializers). Client API wrappers are in `app/services/`.
-- MongoDB Atlas. Production database name: `data` (renamed from `test`, Nov 2026; the guards in scripts/seed-guard.ts treat both as production). Dev database: `klique-dev`, which `.env.local` points at.
+- MongoDB Atlas. **The live site uses `klique-dev`** (Vercel's MONGODB_URI, confirmed 14 Nov 2026), and `.env.local` points at the same one: there is no separate dev database. The guards in scripts/seed-guard.ts treat `klique-dev` (and the old names `test`, `data`) as production.
 - Cloudflare R2 for all media (bucket `database`), compressed before upload. No Cloudinary.
 - Ably for live updates, with polling fallback. Upstash Redis.
 - Paystack for payments: Lite ₦2,000/mo and Pro ₦5,000/mo subscriptions, donations, ads. Use a TEST key locally.
@@ -16,7 +16,7 @@ A social app for finding your people and going out in Lagos and Abuja: communiti
 
 ## Rules (important)
 - **Never commit or push.** Jonah commits himself.
-- **Never touch production data.** Test only on klique-dev. Never run `npm run seed*` against production; there's a guard in `scripts/seed-guard.ts`.
+- **Never touch production data.** klique-dev IS production: read-only checks only, no test writes, no seeding. Never run `npm run seed*` against it; there's a guard in `scripts/seed-guard.ts`.
 - Don't edit `.env*` files and don't print secret values (variable names are fine).
 - Don't run code formatters across the repo.
 - Test clean-up removes only what the test created.

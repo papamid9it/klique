@@ -14,7 +14,8 @@
  * The live site's database names: "test" (the original one) and "data" (after the move, Nov 2026). Both count as
  * production everywhere (seed guard, wipe and test-content scripts) so the guards hold during and after the move.
  */
-export const PRODUCTION_DB_NAMES = ["test", "data"] as const;
+/** the live site's database: `klique-dev` (getklique.app uses it, Nov 2026), and the old names, should it move */
+export const PRODUCTION_DB_NAMES = ["klique-dev", "test", "data"] as const;
 export const isProductionDb = (name: string | undefined | null) => !!name && (PRODUCTION_DB_NAMES as readonly string[]).includes(name.trim().toLowerCase());
 
 export function assertSafeSeedTarget(uri: string, opts: { reset?: boolean } = {}) {
