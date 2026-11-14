@@ -307,7 +307,7 @@ function GiftTray({ target, anchor, initial, onClose, onSent }: { target: GiftTa
         <p className="p-2 text-sm text-ink-muted">Awards are switched off for now.</p>
       ) : (
         <>
-          <div className="-mx-1 grid min-h-0 flex-1 grid-cols-4 content-start gap-1.5 overflow-y-auto p-1.5 [scrollbar-width:thin]">
+          <div className="-mx-1 grid min-h-0 flex-1 grid-cols-4 content-start gap-1.5 overflow-y-auto p-1.5 no-bar">
             {data.gifts.map((g) => (
               <button
                 key={g.id}
