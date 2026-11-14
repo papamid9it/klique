@@ -30,9 +30,10 @@ import {
   spaceAccess,
   type Space,
 } from "../policies/access";
-import { toEvents } from "../serializers";
+import { loadBriefs, toEvents } from "../serializers";
 import type { eventCreateSchema, eventListQuery, eventOverviewQuery, eventUpdateSchema } from "../validators/schemas";
 import { hiddenUserIds } from "./blocks";
+import { friendIdSet } from "./friends.service";
 import { Friendship, type IFriendship } from "../models/Friendship";
 import { assertPlace, PAGE_SIZE, recountRsvps, sid } from "./helpers";
 import { notify } from "./push.service";
@@ -573,6 +574,14 @@ export async function setSaved(viewer: IUser, id: string, saved: boolean): Promi
 const ATTENDEE_PAGE = 24;
 const ATTENDEE_SCAN = 60;
 
+/** The event's host, its community's owners and admins, and site admins: they see everyone going. */
+async function runsEvent(viewer: IUser, event: IEvent): Promise<boolean> {
+  if (sid(event.hostId) === sid(viewer._id) || isSiteAdmin(viewer)) return true;
+  if (!event.communityId) return false;
+  const [community, sub] = await Promise.all([Community.findById(event.communityId).lean<ICommunity>(), event.subcommunityId ? Subcommunity.findById(event.subcommunityId).lean<ISubcommunity>() : null]);
+  return !!community && (await spaceAccess({ community, sub }, viewer)).canManage;
+}
+
 /**
  * Counts are public; names only for signed-in viewers and only for people who made attendance public.
  * A page at a time, oldest first: pass the last page's `nextCursor` as `after` to carry on.
@@ -583,6 +592,15 @@ export async function getAttendees(viewer: IUser | null, id: string, after?: str
   if (!viewer) return { ...base, people: [], namesHidden: event.goingCount > 0, nextCursor: null };
 
   const hidden = await hiddenUserIds(viewer._id);
+  // only the host, the community's owners and admins and site admins see everyone going; anyone else sees the
+  // people they know (friends) who are going and show it, and the count
+  if (!(await runsEvent(viewer, event))) {
+    if (after) return { ...base, people: [], namesHidden: true, limited: true, nextCursor: null };
+    const known = [...(await friendIdSet(viewer._id))].filter((id) => !hidden.some((h) => sid(h) === id));
+    const goingIds = known.length ? (await Rsvp.find({ eventId: event._id, status: "going", userId: { $in: known.map((id) => new Types.ObjectId(id)) } }).select("userId").lean<{ userId: Types.ObjectId }[]>()).map((r) => r.userId) : [];
+    const people = goingIds.length ? [...(await loadBriefs((await User.find({ _id: { $in: goingIds }, attendancePublic: true }).select("_id").limit(200).lean<{ _id: Types.ObjectId }[]>()).map((u) => u._id))).values()] : [];
+    return { ...base, people, namesHidden: event.goingCount > people.length, limited: true, nextCursor: null, friends: people.slice(0, 3), friendCount: people.length };
+  }
   const rsvps = await Rsvp.find({
     eventId: event._id,
     status: "going",

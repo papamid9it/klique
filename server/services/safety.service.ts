@@ -39,8 +39,12 @@ export async function unblockUser(viewer: IUser, handle: string) {
   return { blocked: false };
 }
 
-export async function listBlocked(viewer: IUser): Promise<BlockedUserDTO[]> {
-  const rows = await Block.find({ blockerId: viewer._id }).sort({ createdAt: -1 }).limit(200).lean<{ blockedId: Types.ObjectId; createdAt: Date }[]>();
+/** Newest first, `limit` at a time; `before` is the last one's blockedAt for the next page. */
+export async function listBlocked(viewer: IUser, limit = 200, before?: string): Promise<BlockedUserDTO[]> {
+  const rows = await Block.find({ blockerId: viewer._id, ...(before ? { createdAt: { $lt: new Date(before) } } : {}) })
+    .sort({ createdAt: -1 })
+    .limit(limit)
+    .lean<{ blockedId: Types.ObjectId; createdAt: Date }[]>();
   const users = await User.find({ _id: { $in: rows.map((r) => r.blockedId) } })
     .select("handle displayName avatarUrl avatarFrame nameEffect plan planUntil email country city")
     .lean<IUser[]>();

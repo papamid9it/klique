@@ -1,7 +1,7 @@
 "use client";
 
 import { useDataSaver } from "@/lib/hooks/useDataSaver";
-import { useEffect, type ReactNode } from "react";
+import { Suspense, useEffect, type ReactNode } from "react";
 import { CategoryService } from "@/app/services/CategoryService";
 import { setCategories } from "@/lib/constants";
 import { isReducedMotion } from "@/lib/motion";
@@ -119,7 +119,10 @@ export function Providers({ children }: { children: ReactNode }) {
                 <ProfileCardProvider>
                   <LeaveProvider>
                     <DesktopAlerts />
-                    <AnalyticsProvider />
+                    {/* reads the URL (usePathname), so it sits in its own Suspense under Cache Components */}
+                    <Suspense fallback={null}>
+                      <AnalyticsProvider />
+                    </Suspense>
                     <SignOutHost />
                     <PanelSlotProvider>{children}</PanelSlotProvider>
                   </LeaveProvider>

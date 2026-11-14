@@ -7,7 +7,7 @@ A social app for finding your people and going out in Lagos and Abuja: communiti
 
 ## Stack
 - Next.js 16 (App Router), React 19, Tailwind v4, TypeScript. Server code is in `server/` (Mongoose 9 models, services, validators, serializers). Client API wrappers are in `app/services/`.
-- MongoDB Atlas. Production database name: `test`. Dev database: `klique-dev`, which `.env.local` points at.
+- MongoDB Atlas. Production database name: `data` (renamed from `test`, Nov 2026; the guards in scripts/seed-guard.ts treat both as production). Dev database: `klique-dev`, which `.env.local` points at.
 - Cloudflare R2 for all media (bucket `database`), compressed before upload. No Cloudinary.
 - Ably for live updates, with polling fallback. Upstash Redis.
 - Paystack for payments: Lite ₦2,000/mo and Pro ₦5,000/mo subscriptions, donations, ads. Use a TEST key locally.

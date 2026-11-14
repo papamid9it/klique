@@ -46,7 +46,8 @@ function MiniEvent({ e }: { e: EventDTO }) {
  * An event's own left panel: back to Home or all events, the community it's in (with Join), who's going (a list
  * that opens profiles) and its crews, what else that community has coming up, and similar events nearby.
  */
-export function EventPanel({ event, people: firstPeople, nextCursor, friends = [], friendCount = 0 }: { event: EventDTO; people: UserBrief[]; nextCursor: string | null; friends?: UserBrief[]; friendCount?: number }) {
+/** `limited`: the list is only the viewer's friends who are going (only the host and admins see everyone) */
+export function EventPanel({ event, people: firstPeople, nextCursor, friends = [], friendCount = 0, limited = false }: { event: EventDTO; people: UserBrief[]; nextCursor: string | null; friends?: UserBrief[]; friendCount?: number; limited?: boolean }) {
   const { where, ready } = usePlace();
   const card = useProfileCard();
   const toast = useToast();
@@ -172,10 +173,10 @@ export function EventPanel({ event, people: firstPeople, nextCursor, friends = [
             ))}
           </ul>
         ) : (
-          <p className="text-sm text-ink-muted">{event.goingCount > 0 ? "The people going keep that private." : "Nobody yet. Be the first."}</p>
+          <p className="text-sm text-ink-muted">{event.goingCount === 0 ? "Nobody yet. Be the first." : limited ? "None of your friends are going yet." : "The people going keep that private."}</p>
         )}
         {cursor && <div ref={endOfList} className="flex justify-center py-3 text-ink-muted"><Spinner /></div>}
-        {namesHidden && people.length > 0 && <p className="mt-3 text-[12.5px] text-ink-muted">Some people keep their attendance private.</p>}
+        {limited ? event.goingCount > 0 && <p className="mt-3 text-[12.5px] text-ink-muted">Only your friends show here.</p> : namesHidden && people.length > 0 && <p className="mt-3 text-[12.5px] text-ink-muted">Some people keep their attendance private.</p>}
       </Modal>
     </PagePanel>
   );

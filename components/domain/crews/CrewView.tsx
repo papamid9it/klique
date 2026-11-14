@@ -108,6 +108,9 @@ const crewTabHref = (crew: CrewDTO, tab: string | null) => {
   return tab ? `${base}${base.includes("?") ? "&" : "?"}tab=${tab}` : base;
 };
 
+/** how many of "Who's in" show on the page; See all opens everyone */
+const MEMBERS_SHOWN = 10;
+
 /** A scrolling page column, for everything that isn't the chat (loading, the way in, the requests list). */
 function Page({ children }: { children: ReactNode }) {
   return (
@@ -129,6 +132,7 @@ function Crew({ crew, tab, embedded, onChange, onGone, onRead, onMenu, reload }:
   const [infoOpen, setInfoOpen] = useState(false);
   const [reporting, setReporting] = useState(false);
   const [limit, setLimit] = useState<string | null>(null);
+  const [allMembers, setAllMembers] = useState(false);
   const closeInfo = useCallback(() => setInfoOpen(false), []);
   // the crew chat runs on the same chat screen as a community channel; it only needs a channel-shaped label
   const [source] = useState(() => crewSource(crew.id));
@@ -186,6 +190,29 @@ function Crew({ crew, tab, embedded, onChange, onGone, onRead, onMenu, reload }:
       </Page>
     );
   }
+
+  // one person in "Who's in" (the host is first): the short list and the See all pop-up share it
+  const memberRow = (m: CrewDTO["members"][number], i: number) => (
+    <li key={m.id} className="flex items-center gap-2.5 rounded-control px-1 py-1.5">
+      <ProfileTrigger handle={m.handle} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
+        <Avatar name={m.displayName} src={m.avatarUrl} size={30} />
+        <span className="truncate text-sm font-medium">{m.displayName}</span>
+        <PlanBadge plan={m.badge} size={14} />
+        {i === 0 && <span className="rounded bg-accent/15 px-1.5 text-[10px] font-bold tracking-wide text-accent-text uppercase">Host</span>}
+      </ProfileTrigger>
+      {isHost && i > 0 && (
+        <button
+          type="button"
+          aria-label={`Remove ${m.displayName}`}
+          title="Remove from klique"
+          onClick={async () => (await confirm({ title: `Remove ${m.displayName}?`, body: "They leave the klique and its chat.", confirmLabel: "Remove" })) && void act(`rm:${m.id}`, () => CrewService.removeMember(crew.id, m.id), `${m.displayName} was removed`)}
+          className="inline-flex size-7 items-center justify-center rounded-full text-ink-muted hover:bg-raised hover:text-ink"
+        >
+          <Icon name="x" size={14} />
+        </button>
+      )}
+    </li>
+  );
 
   const details = (compact: boolean) => (
     <>
@@ -348,30 +375,18 @@ function Crew({ crew, tab, embedded, onChange, onGone, onRead, onMenu, reload }:
       )}
 
         <section aria-label="Who's in" className="mt-5">
-          <h2 className="mb-2 text-base font-semibold">Who&apos;s in · {crew.memberCount}</h2>
-          <ul className="space-y-1">
-            {crew.members.map((m, i) => (
-              <li key={m.id} className="flex items-center gap-2.5 rounded-control px-1 py-1.5">
-                <ProfileTrigger handle={m.handle} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
-                  <Avatar name={m.displayName} src={m.avatarUrl} size={30} />
-                  <span className="truncate text-sm font-medium">{m.displayName}</span>
-                  <PlanBadge plan={m.badge} size={14} />
-                  {i === 0 && <span className="rounded bg-accent/15 px-1.5 text-[10px] font-bold tracking-wide text-accent-text uppercase">Host</span>}
-                </ProfileTrigger>
-                {isHost && i > 0 && (
-                  <button
-                    type="button"
-                    aria-label={`Remove ${m.displayName}`}
-                    title="Remove from klique"
-                    onClick={async () => (await confirm({ title: `Remove ${m.displayName}?`, body: "They leave the klique and its chat.", confirmLabel: "Remove" })) && void act(`rm:${m.id}`, () => CrewService.removeMember(crew.id, m.id), `${m.displayName} was removed`)}
-                    className="inline-flex size-7 items-center justify-center rounded-full text-ink-muted hover:bg-raised hover:text-ink"
-                  >
-                    <Icon name="x" size={14} />
-                  </button>
-                )}
-              </li>
-            ))}
-          </ul>
+          <h2 className="mb-2 text-base font-semibold">Who&apos;s in · {crew.membersLimited ? `${crew.memberCount} of ${crew.maxMembers}` : crew.memberCount}</h2>
+          <ul className="space-y-1">{crew.members.slice(0, MEMBERS_SHOWN).map(memberRow)}</ul>
+          {crew.membersLimited && crew.memberCount > crew.members.length && (
+            <p className="mt-1.5 px-1 text-xs text-ink-muted">
+              Only the host and your friends show here. {v.standing ? "Everyone shows once you're in." : "Join to see everyone."}
+            </p>
+          )}
+          {crew.members.length > MEMBERS_SHOWN && (
+            <Button size="sm" variant="secondary" className="mt-2 w-full" onClick={() => setAllMembers(true)}>
+              See all {crew.members.length}
+            </Button>
+          )}
         </section>
       <p className="mt-6 flex items-start gap-2 text-xs text-ink-muted">
         <Icon name="clock" size={13} className="mt-px shrink-0" /> This klique and its chat disappear on {formatDateShort(crew.expiresAt)}. Meet in public, and tell someone where you&apos;re going.
@@ -381,6 +396,9 @@ function Crew({ crew, tab, embedded, onChange, onGone, onRead, onMenu, reload }:
   const modals = (
     <>
       <UpgradePrompt message={limit} onClose={() => setLimit(null)} />
+      <Modal open={allMembers} onClose={() => setAllMembers(false)} title={`Who's in · ${crew.memberCount}`}>
+        <ul className="space-y-1">{crew.members.map(memberRow)}</ul>
+      </Modal>
       {reporting && <ReportDialog open onClose={() => setReporting(false)} targetType="klique" targetId={crew.id} subject="this klique" />}
       {asking && <AskModal crew={crew} onClose={() => setAsking(false)} onDone={(c) => (setAsking(false), onChange(c))} />}
       {editing && <EditCrewModal crew={crew} onClose={() => setEditing(false)} onSaved={(c) => (setEditing(false), onChange(c))} />}

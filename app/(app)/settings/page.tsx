@@ -15,9 +15,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
+import { useLoadOnScroll } from "@/lib/hooks/useLoadOnScroll";
 import { askSignOut } from "@/components/domain/account/SignOutDialog";
 import { ProfileService, type ProfileUpdate } from "@/app/services/ProfileService";
-import { SafetyService } from "@/app/services/SafetyService";
+import { BLOCKED_PAGE, SafetyService } from "@/app/services/SafetyService";
 import { PersonRow } from "@/components/domain/PersonRow";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useProfileCard } from "@/components/providers/ProfileCardProvider";
@@ -26,7 +27,7 @@ import { useConfirm } from "@/components/providers/ConfirmProvider";
 import { HomeStyleCard } from "@/components/domain/home/HomeStyleCard";
 import { useToast } from "@/components/providers/ToastProvider";
 import { ImageField } from "@/components/ui/ImageField";
-import { Button } from "@/components/ui/Button";
+import { Button, Spinner } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { SelectField, Switch, TextArea, TextField } from "@/components/ui/Field";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -353,6 +354,30 @@ function BlockedList() {
   const toast = useToast();
   const { data, loading, error, reload, setData } = useApi(() => SafetyService.blocked(), []);
   const [busy, setBusy] = useState<string | null>(null);
+  // more as you scroll down, a page at a time; a short page means that's everyone
+  // null until the first page is in; unblocking someone never stops the rest loading
+  const [end, setEnd] = useState<boolean | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  useEffect(() => {
+    if (data && end === null) setEnd(data.length < BLOCKED_PAGE);
+  }, [data, end]);
+  const full = !!data && end === false;
+  async function more() {
+    const last = data?.[data.length - 1];
+    if (!last || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const page = (await SafetyService.blocked(last.blockedAt)).data;
+      if (page.length < BLOCKED_PAGE) setEnd(true);
+      setData((d) => (d ? [...d, ...page.filter((b) => !d.some((x) => x.user.id === b.user.id))] : d));
+    } catch (e) {
+      toast(errorMessage(e), "error");
+      setEnd(true);
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+  const endOfList = useLoadOnScroll<HTMLDivElement>(() => void more(), full && !loadingMore);
 
   async function unblock(handle: string) {
     setBusy(handle);
@@ -384,6 +409,13 @@ function BlockedList() {
           />
         </li>
       ))}
+      {full && (
+        <li aria-hidden="true">
+          <div ref={endOfList} className="flex justify-center py-3 text-ink-muted">
+            <Spinner />
+          </div>
+        </li>
+      )}
     </ul>
   );
 }

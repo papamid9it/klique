@@ -318,7 +318,7 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
 
   return (
     <article>
-      <EventPanel event={event} people={people} nextCursor={attendees.data?.nextCursor ?? null} friends={attendees.data?.friends} friendCount={attendees.data?.friendCount} />
+      <EventPanel event={event} people={people} nextCursor={attendees.data?.nextCursor ?? null} friends={attendees.data?.friends} friendCount={attendees.data?.friendCount} limited={!!attendees.data?.limited} />
       <Link href="/events" className="mb-4 inline-flex items-center gap-1.5 text-sm text-ink-muted hover:text-ink lg:hidden">
         <Icon name="arrow-left" size={15} /> All events
       </Link>

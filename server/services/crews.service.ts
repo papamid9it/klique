@@ -24,6 +24,7 @@ import { GHOST, loadBriefs } from "../serializers";
 import type { crewCreateSchema, crewUpdateSchema, kliqueCreateSchema, kliqueListQuery } from "../validators/schemas";
 import { assertVerified } from "./account.service";
 import { hiddenUserIds } from "./blocks";
+import { friendIdSet } from "./friends.service";
 import { escapeRegex, sid } from "./helpers";
 import { isCountryCode, parseScope, scopeFilter, slugify } from "@/lib/places";
 import { purgeCrewChat } from "./crew-chat-purge";
@@ -333,15 +334,20 @@ async function toCards(crews: ICrew[], viewer: IUser | null, known: { events?: I
   ]);
   const communityById = new Map(communities.map((c) => [sid(c._id), c]));
   const subById = new Map(subs.map((s) => [sid(s._id), s.slug]));
+  // faces: people in a klique (and site admins) see anyone; everyone else only its host and people they know
+  const inside = new Set(mine.filter((m) => m.status === "active").map((m) => sid(m.crewId)));
+  const seesAll = isSiteAdmin(viewer);
+  const friends = viewer && !seesAll && crews.some((c) => !inside.has(sid(c._id))) ? await friendIdSet(viewer._id) : new Set<string>();
   const byCrew = new Map<string, Types.ObjectId[]>();
   for (const m of members) {
     const list = byCrew.get(sid(m.crewId)) ?? [];
+    const shown = seesAll || inside.has(sid(m.crewId)) || m.role === "host" || friends.has(sid(m.userId));
     // host first ("host" sorts before "member")
-    if (list.length < FACES) list.push(m.userId);
+    if (shown && list.length < FACES) list.push(m.userId);
     byCrew.set(sid(m.crewId), list);
   }
   const mineBy = new Map(mine.map((m) => [sid(m.crewId), m]));
-  const [briefs, counts] = await Promise.all([loadBriefs([...crews.map((c) => c.hostId), ...members.map((m) => m.userId)]), slotCounts(crews.filter((c) => audienceOf(c) === "mixed").map((c) => c._id))]);
+  const [briefs, counts] = await Promise.all([loadBriefs([...crews.map((c) => c.hostId), ...[...byCrew.values()].flat()]), slotCounts(crews.filter((c) => audienceOf(c) === "mixed").map((c) => c._id))]);
   return crews.map((c) => {
     const event = c.eventId ? (have.get(sid(c.eventId)) ?? null) : null;
     const community = c.communityId ? (communityById.get(sid(c.communityId)) ?? null) : null;
@@ -462,8 +468,12 @@ export async function getCrew(viewer: IUser | null, crewId: string): Promise<Cre
     CrewMember.find({ crewId: crew._id, status: "active" }).sort({ role: 1, createdAt: 1 }).lean<ICrewMember[]>(),
     isHost ? CrewMember.find({ crewId: crew._id, status: "pending" }).sort({ createdAt: 1 }).lean<ICrewMember[]>() : Promise.resolve<ICrewMember[]>([]),
   ]);
-  const briefs = await loadBriefs([...members, ...pending].map((m) => m.userId));
   const mod = !isHost && (await isKliqueMod(viewer, crew));
+  // Who's in: everyone for its people and moderators; anyone else sees the host and the people they know
+  const membersLimited = !inCrew && !mod;
+  const known = membersLimited && viewer ? await friendIdSet(viewer._id) : new Set<string>();
+  const shown = membersLimited ? members.filter((m) => m.role === "host" || known.has(sid(m.userId))) : members;
+  const briefs = await loadBriefs([...shown, ...pending].map((m) => m.userId));
 
   // can this viewer join (or ask)?
   let joinBlockedReason: string | null = null;
@@ -475,7 +485,8 @@ export async function getCrew(viewer: IUser | null, crewId: string): Promise<Cre
     ...card,
     meetupPoint: inCrew ? crew.meetupPoint : null,
     event: event ? { id: sid(event._id), title: event.title, startsAt: event.startsAt.toISOString(), endsAt: event.endsAt ? event.endsAt.toISOString() : null, venue: event.venue, online: !!event.online, coverImage: event.coverImage, city: event.city, country: event.country ?? "NG" } : null,
-    members: members.map((m) => briefs.get(sid(m.userId)) ?? GHOST),
+    members: shown.map((m) => briefs.get(sid(m.userId)) ?? GHOST),
+    membersLimited,
     requests: pending.map((m) => ({ user: briefs.get(sid(m.userId)) ?? GHOST, message: m.message, createdAt: m.createdAt.toISOString() })),
     expiresAt: crew.expiresAt.toISOString(),
     viewer: {

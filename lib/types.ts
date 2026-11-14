@@ -596,7 +596,7 @@ export interface CrewCardDTO {
   maxMembers: number;
   memberCount: number;
   host: UserBrief;
-  /** a few faces of who's in, host first */
+  /** a few faces of who's in, host first (not in it: only the host and people the viewer knows) */
   faces: UserBrief[];
   isFull: boolean;
   /** the event has started: no more joining */
@@ -626,7 +626,12 @@ export interface CrewDTO extends CrewCardDTO {
   /** null unless you're in the crew */
   meetupPoint: string | null;
   event: { id: Id; title: string; startsAt: ISODate; endsAt: ISODate | null; venue: string; online: boolean; coverImage: string | null; city: CityId; country: string } | null;
+  /**
+   * Who's in. Everyone for the people in it, the host, the community's owner and admins and site admins; for
+   * anyone else only the host and the people they know (friends), and `membersLimited` is true.
+   */
   members: UserBrief[];
+  membersLimited: boolean;
   /** join requests waiting (host only) */
   requests: { user: UserBrief; message: string; createdAt: ISODate }[];
   /** when it all disappears */
@@ -765,9 +770,11 @@ export interface HostingOptionsDTO {
 export interface AttendeesDTO {
   goingCount: number;
   interestedCount: number;
-  /** empty when the viewer may not see names */
+  /** empty when the viewer may not see names; only people they know unless they run the event (`limited`) */
   people: UserBrief[];
   namesHidden: boolean;
+  /** true: only people the viewer knows are in `people` (the full list is for the host, the community's admins and site admins) */
+  limited?: boolean;
   /** pass as `after` for the next people; null when there are no more */
   nextCursor: string | null;
   /** up to 3 of the viewer's friends who are going and show it, on the first page only */

@@ -17,6 +17,18 @@ export async function areFriends(a: Id, b: Id): Promise<boolean> {
   return !!(await Friendship.exists({ pairKey: pairKeyOf(a as Types.ObjectId, b as Types.ObjectId), status: "accepted" }));
 }
 
+/**
+ * Everyone `me` is friends with (accepted both ways), as id strings: who "you know" when a klique or an event
+ * shows only the people you know in it.
+ */
+export async function friendIdSet(me: Id): Promise<Set<string>> {
+  const rows = await Friendship.find({ status: "accepted", $or: [{ requesterId: me }, { recipientId: me }] })
+    .select("requesterId recipientId")
+    .limit(2000)
+    .lean<Pick<IFriendship, "requesterId" | "recipientId">[]>();
+  return new Set(rows.map((r) => sid(sid(r.requesterId) === sid(me) ? r.recipientId : r.requesterId)));
+}
+
 /** Where this viewer stands with `other`: for the Add friend / Pending / Accept / Friends button. */
 export async function friendStatus(viewerId: Id, otherId: Id): Promise<FriendStatusDTO> {
   const f = await Friendship.findOne({ pairKey: pairKeyOf(viewerId as Types.ObjectId, otherId as Types.ObjectId) }).lean<IFriendship>();

@@ -161,11 +161,14 @@ export function hypeStoreToken(userId: string): string {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-a${h.slice(17, 20)}-${h.slice(20, 32)}`;
 }
 
+/** Hype history, a page at a time ("Show more" for older) */
+const HYPE_PAGE = 10;
+
 export async function getGiftWallet(viewer: IUser, before?: string): Promise<GiftWalletDTO> {
   const config = await getGiftConfig();
   const q: Record<string, unknown> = { userId: viewer._id };
   if (before) q.createdAt = { $lt: new Date(before) };
-  const [me, rows] = await Promise.all([User.findById(viewer._id).select("giftHype").lean<Pick<IUser, "giftHype">>(), HypeEntry.find(q).sort({ createdAt: -1, _id: -1 }).limit(PAGE + 1).lean<IHypeEntry[]>()]);
+  const [me, rows] = await Promise.all([User.findById(viewer._id).select("giftHype").lean<Pick<IUser, "giftHype">>(), HypeEntry.find(q).sort({ createdAt: -1, _id: -1 }).limit(HYPE_PAGE + 1).lean<IHypeEntry[]>()]);
   const store = storeBillingStatus();
   return {
     balance: me?.giftHype ?? 0,
@@ -175,8 +178,8 @@ export async function getGiftWallet(viewer: IUser, before?: string): Promise<Gif
     customMax: TOPUP_MAX,
     canBuyWeb: !!paystackConfig(),
     store: { apple: store.apple, google: store.google, accountToken: hypeStoreToken(sid(viewer._id)), packs: config.storePacks },
-    history: rows.slice(0, PAGE).map(entryDto),
-    hasMore: rows.length > PAGE,
+    history: rows.slice(0, HYPE_PAGE).map(entryDto),
+    hasMore: rows.length > HYPE_PAGE,
   };
 }
 
