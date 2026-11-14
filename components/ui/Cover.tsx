@@ -116,7 +116,10 @@ export function Cover({
   className,
   children,
   fit = "cover",
+  initialsOf,
 }: {
+  /** a small icon (the community rail): no picture, or one that won't load, shows the name's initials on the art */
+  initialsOf?: string;
   src?: string | null;
   seed: string;
   interest: InterestId;
@@ -131,7 +134,10 @@ export function Cover({
     // collapses a full-bleed background (the Discover banner) to zero height
     <div className={cx(!/\b(absolute|fixed|sticky)\b/.test(className ?? "") && "relative", "overflow-hidden bg-raised", className)}>
       {showArt ? (
-        <ArtCover seed={seed} interest={interest} className="absolute inset-0" />
+        <>
+          <ArtCover seed={seed} interest={interest} className="absolute inset-0" />
+          {initialsOf && <span aria-hidden="true" className="absolute inset-0 flex items-center justify-center text-[15px] font-semibold text-ink select-none">{initialsOf.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => [...w][0]?.toUpperCase() ?? "").join("")}</span>}
+        </>
       ) : (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={cdn(src, { w: 1200 })} alt="" loading="lazy" onError={() => setFailed(true)} style={fit === "cover" ? focalStyle(splitFocal(src).focal) : undefined} className={cx("absolute inset-0 size-full", fit === "cover" ? "object-cover" : "object-contain")} />

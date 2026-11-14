@@ -155,7 +155,7 @@ export function CommunityRail({ activeSlug, horizontal, onNavigate }: { activeSl
             <span aria-hidden="true" className={cx("absolute top-0 left-0 w-1 bg-accent-text transition-all", active ? "h-14" : "h-0")} />
           )}
           <span className={cx("relative block overflow-hidden transition-[border-radius,box-shadow]", horizontal ? "size-11" : "size-14", active ? "rounded-[14px] ring-2 ring-accent-text ring-offset-2 ring-offset-canvas" : "rounded-full opacity-70 transition-opacity group-hover:rounded-[14px] group-hover:opacity-100")}>
-            <Cover src={c.coverImage} seed={c.id} interest={c.interest} className={cx("size-full", c.muted && "opacity-50")} />
+            <Cover src={c.coverImage} seed={c.id} interest={c.interest} initialsOf={c.name} className={cx("size-full", c.muted && "opacity-50")} />
           </span>
           {/* how many unseen messages (channels and your crews' chats); red when some mention you */}
           {(c.unreadCount ?? 0) > 0 || c.mentions > 0 ? (

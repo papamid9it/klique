@@ -176,8 +176,9 @@ export function DmSidebar({ onNavigate }: { onNavigate?: () => void }) {
         ) : (
           <ul className="space-y-0.5">
             {rows.map((c) => {
-              const unread = c.unreadCount > 0;
               const active = c.id === activeId;
+              // the one you have open is read (opening it, and every message that arrives while it's open, marks it read)
+              const unread = c.unreadCount > 0 && !active;
               const sticker = c.lastMessage?.sticker ? stickerOf(c.lastMessage.sticker) : null;
               const preview = c.request?.fromMe ? "Request sent · waiting for them to accept" : c.lastMessage ? `${c.lastMessage.mine ? "You: " : ""}${sticker ? `${sticker.emoji} Sticker` : c.lastMessage.body}` : "No messages yet";
               return (

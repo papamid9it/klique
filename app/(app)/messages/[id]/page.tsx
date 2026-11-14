@@ -29,7 +29,7 @@ import { AttachmentStrip } from "@/components/domain/chat/AttachmentStrip";
 import { ChatImages } from "@/components/domain/chat/ChatImages";
 import { ReplyingTo, ReplyQuote } from "@/components/domain/chat/ReplyQuote";
 import { useAttachments } from "@/lib/hooks/useAttachments";
-import { recallApi, rememberApi } from "@/lib/hooks/useApi";
+import { mutateApi, recallApi, rememberApi } from "@/lib/hooks/useApi";
 import { EditedTag, MessageEditor } from "@/components/domain/chat/MessageEditor";
 import { ChatGroupInfo } from "@/components/domain/messages/ChatGroup";
 import { FormatButton } from "@/components/ui/FormatButton";
@@ -39,7 +39,7 @@ import { AttachedSticker, StickerPicker, StickerView, ReactButton, ReactionBar, 
 import { MessageSheet, PressRow } from "@/components/domain/chat/MessageSheet";
 import { useStickers } from "@/lib/hooks/useStickers";
 import { applyReaction, type ReactionKind } from "@/lib/reactions";
-import type { ConversationDetailDTO, MessageDTO, ReactionDTO } from "@/lib/types";
+import type { ConversationDetailDTO, ConversationDTO, MessageDTO, ReactionDTO } from "@/lib/types";
 import { sendReaction } from "@/lib/reactQueue";
 import { UserName } from "@/components/ui/UserName";
 import { TypingLine } from "@/components/domain/chat/TypingLine";
@@ -140,9 +140,17 @@ export default function ConversationPage() {
   const touched = useRef(new Map<string, number>());
   const clock = useRef(0); // ticks on every local reaction change; a poll that began before a tick must not overwrite it
 
+  /** this chat is read now: clear its count in the conversation list (true when there was one) */
+  const seenHere = useCallback(() => {
+    let had = false;
+    mutateApi<ConversationDTO[] | null>("dm-inbox", (list) => (list ? list.map((c) => (c.id === id && c.unreadCount > 0 ? ((had = true), { ...c, unreadCount: 0 }) : c)) : list));
+    return had;
+  }, [id]);
+
   const load = useCallback(async () => {
     try {
       const res = await MessageService.open(id);
+      seenHere();
       setDetail(res.data);
       setMessages((prev) => merge(prev.filter((m) => m.pending || m.failed), res.data.messages));
       setHasMore((h) => h || res.data.hasMore);
@@ -153,7 +161,7 @@ export default function ConversationPage() {
       else setLoadError(errorMessage(e));
       return false;
     }
-  }, [id]);
+  }, [id, seenHere]);
 
   // Initial load.
   useEffect(() => {
@@ -195,6 +203,8 @@ export default function ConversationPage() {
       const startedAt = clock.current;
       try {
         const res = await MessageService.open(id);
+        // opening it marks it read on the server: the list and the unread badge say so too
+        if (seenHere()) void refresh();
         setDetail((d) => (d ? { ...d, conversation: res.data.conversation, canSend: res.data.canSend, cannotSendReason: res.data.cannotSendReason } : res.data));
         // keep reactions you changed after this poll began (it would show the old counts for a moment)
         setMessages((prev) => {
