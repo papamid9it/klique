@@ -1,5 +1,6 @@
 "use client";
 
+import { Icon } from "@/components/ui/Icon";
 import { useEffect, useState } from "react";
 import { errorMessage, isApiError } from "@/app/ApiCore";
 import { GiftService } from "@/app/services/GiftService";
@@ -37,6 +38,7 @@ export function HypeTab() {
   const toast = useToast();
   const { data, loading, error, reload, setData } = useApi(() => GiftService.wallet(), [], { key: "gift-wallet" });
   const [amount, setAmount] = useState("");
+  const [pick, setPick] = useState<number | null>(null);
   const [busy, setBusy] = useState<number | null>(null);
 
   // back from Paystack: check the payment and show the new balance
@@ -76,6 +78,9 @@ export function HypeTab() {
   if (error || !data) return <ErrorState message={error} onRetry={reload} />;
   const typed = Math.round(Number(amount) || 0);
   const typedOk = typed >= data.customMin && typed <= data.customMax && typed % HYPE_NAIRA === 0;
+  // the pack picked (the second, usually 100 Hype, to start with); a typed amount takes over while it's valid
+  const chosenNaira = pick ?? data.webPacks[1]?.naira ?? data.webPacks[0]?.naira ?? null;
+  const buyNaira = typedOk ? typed : amount ? null : chosenNaira;
   return (
     <div className="space-y-6">
       <div className="grid gap-3 sm:grid-cols-2">
@@ -86,35 +91,47 @@ export function HypeTab() {
       <section className="space-y-3">
         <h2 className="text-sm font-semibold">Top up</h2>
         {!data.canBuyWeb && <p className="text-sm text-ink-muted">Buying Hype isn&apos;t set up yet.</p>}
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-          {data.webPacks.map((p) => (
-            <button key={p.naira} type="button" disabled={!data.canBuyWeb || busy !== null} onClick={() => void buy(p.naira)} className={cx("rounded-card border border-line bg-surface p-3 text-left transition hover:border-ink-muted/50 disabled:opacity-50", busy === p.naira && "opacity-60")}>
-              <p className="font-mono text-[15px] font-semibold tabular-nums">{hype(p.hype)}</p>
-              <p className="text-xs text-ink-muted">{naira(p.naira)}</p>
-            </button>
-          ))}
+        {/* pick a pack (or type an amount); nothing is charged until the button below, as on Plans */}
+        <div role="radiogroup" aria-label="Choose a Hype pack" className="grid grid-cols-2 gap-2.5 sm:grid-cols-5">
+          {data.webPacks.map((p) => {
+            const on = !typedOk && chosenNaira === p.naira;
+            return (
+              <button
+                key={p.naira}
+                type="button"
+                role="radio"
+                aria-checked={on}
+                disabled={busy !== null}
+                onClick={() => (setAmount(""), setPick(p.naira))}
+                className={cx("relative flex min-h-24 flex-col justify-between rounded-card border-2 p-3 text-left transition disabled:opacity-50", on ? "border-accent-text bg-raised" : "border-line bg-surface hover:border-ink-muted/50")}
+              >
+                <span className="flex items-start justify-between">
+                  <span className="eyebrow">Hype</span>
+                  <span className={cx("inline-flex size-5 items-center justify-center rounded-full", on ? "bg-accent-text text-canvas" : "border-2 border-line")} aria-hidden="true">
+                    {on && <Icon name="check" size={12} />}
+                  </span>
+                </span>
+                <span>
+                  <span className="block font-mono text-xl font-semibold tabular-nums">{p.hype.toLocaleString("en-NG")}</span>
+                  <span className="block text-xs text-ink-muted">{naira(p.naira)}</span>
+                </span>
+              </button>
+            );
+          })}
         </div>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (typedOk) void buy(typed);
-          }}
-          className="flex flex-wrap items-end gap-2"
-        >
-          <div className="w-48">
-            <TextField label="Or any amount (₦)" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/\D/g, ""))} placeholder="2500" />
-          </div>
-          <Button type="submit" variant="primary" disabled={!data.canBuyWeb || !typedOk || busy !== null} loading={busy === typed && typedOk}>
-            {typedOk ? `Buy ${hype(hypeForNaira(typed))}` : "Buy"}
-          </Button>
-          <p className="w-full text-xs text-ink-muted">
-            {naira(data.customMin)} to {naira(data.customMax)}, in steps of ₦{HYPE_NAIRA}. Paid securely with Paystack. Hype can&apos;t be refunded or cashed out. See the{" "}
-            <a href="/terms/payments#gifts" className="underline">
-              payment terms
-            </a>
-            .
-          </p>
-        </form>
+        <div className="w-48">
+          <TextField label="Or any amount (₦)" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/\D/g, ""))} placeholder="2500" />
+        </div>
+        <Button type="button" variant="primary" className="w-full" disabled={!data.canBuyWeb || !buyNaira || busy !== null} loading={busy !== null} onClick={() => buyNaira && void buy(buyNaira)}>
+          {buyNaira ? `Get ${hype(hypeForNaira(buyNaira))} · ${naira(buyNaira)}` : "Pick a pack"}
+        </Button>
+        <p className="text-xs text-ink-muted">
+          Any amount from {naira(data.customMin)} to {naira(data.customMax)}, in steps of ₦{HYPE_NAIRA}. Paid securely with Paystack. Hype can&apos;t be refunded or cashed out. See the{" "}
+          <a href="/terms/payments#gifts" className="underline">
+            payment terms
+          </a>
+          .
+        </p>
       </section>
 
       <section>
