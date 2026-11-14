@@ -115,7 +115,8 @@ function CommunityWorkspace({ slug }: { slug: string }) {
   const channels = useApi(canUse ? () => ChannelService.list({ slug }) : null, [slug, user?.id, c?.id, c?.viewer.isMember, c?.locked], { key: `channels:${slug}` });
 
   const gSlug = sp.get("g");
-  const boardsApi = useApi(canUse ? () => TopicService.boards(slug) : null, [slug, user?.id, c?.id, c?.viewer.isMember, c?.locked], { key: `boards:${slug}` });
+  // a community with its board switched off has none to load
+  const boardsApi = useApi(canUse && c?.boardsOn !== false ? () => TopicService.boards(slug) : null, [slug, user?.id, c?.id, c?.viewer.isMember, c?.locked], { key: `boards:${slug}` });
   const boards = useMemo(() => boardsApi.data ?? [], [boardsApi.data]);
   // your posts under each board: a reply moves them up and adds to "new"
   useRealtimeEvent(() => void boardsApi.reload(), { filter: (e) => e.type === "topic" && e.communityId === c?.id, debounceMs: 1500 });

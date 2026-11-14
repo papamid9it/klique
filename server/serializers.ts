@@ -1,4 +1,5 @@
 import { activePlan } from "@/lib/plans";
+import { boardsOn, kliquesOn } from "./policies/features";
 import { DEFAULT_ZONE } from "@/lib/timezones";
 import type { SocialLink } from "@/lib/socials";
 import { eventEndMs } from "@/lib/event-time";
@@ -224,6 +225,8 @@ export async function toCommunityDetail(
     groupPolicy: c.groupPolicy ?? "admins",
     canCreateGroup: canCreateGroup(access),
     feedPolicy: c.feedPolicy ?? "off",
+    boardsOn: boardsOn(c),
+    kliquesOn: kliquesOn(c),
     // the Posts section: owners/admins when it's on, everyone who's a member when members may post
     canPostToFeed: (c.feedPolicy ?? "off") !== "off" && !access.banned && !access.postBan && (access.canManage || (c.feedPolicy === "members" && access.canPost && !access.pointsToPost)),
     // Klique: only site admins post its events (its owner here; the others from Admin → Events)
@@ -301,8 +304,8 @@ export async function toEvents(events: IEvent[], viewer: IUser | null): Promise<
     loadBriefs(hostIds),
     communityIds.length
       ? Community.find({ _id: { $in: communityIds } })
-          .select("slug name privacy official adult verified ownerId")
-          .lean<Pick<ICommunity, "_id" | "slug" | "name" | "privacy" | "official" | "adult" | "verified" | "ownerId">[]>()
+          .select("slug name privacy official adult verified ownerId kliquesOff")
+          .lean<Pick<ICommunity, "_id" | "slug" | "name" | "privacy" | "official" | "adult" | "verified" | "ownerId" | "kliquesOff">[]>()
       : [],
     subIds.length
       ? Subcommunity.find({ _id: { $in: subIds } })
@@ -374,6 +377,8 @@ export async function toEvents(events: IEvent[], viewer: IUser | null): Promise<
       organizer: e.organizerName || e.sourceUrl ? { name: e.organizerName ?? "", url: e.sourceUrl ?? null } : null,
       community: c ? { slug: c.slug, name: c.name, privacy: c.privacy, official: isKlique(c), adult: !!c.adult, verified: !!c.verified || isKlique(c) } : null,
       subcommunity: s ? { slug: s.slug, name: s.name } : null,
+      // its community has kliques off (policies/features): no "go together" kliques for it
+      kliquesOn: c ? kliquesOn(c) : true,
       audience: e.audience,
       goingCount: e.goingCount,
       interestedCount: e.interestedCount,

@@ -30,6 +30,9 @@ export interface CommunityInput {
   groupPolicy?: GroupPolicy;
   /** the Posts section (pictures and videos): off, or who may post */
   feedPolicy?: GroupPolicy;
+  /** the board and the community's own kliques, on or off */
+  boardsOn?: boolean;
+  kliquesOn?: boolean;
   /** points needed to join and to post (0: anyone) */
   minPointsJoin?: number;
   minPointsPost?: number;

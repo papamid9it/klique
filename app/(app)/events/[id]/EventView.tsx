@@ -516,7 +516,7 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
               <p className="truncate text-center font-mono text-[11px] text-ink-muted">{[...new Set([event.ticketUrl, event.onlineUrl].map((u) => (u ? domainOf(u) : null)).filter(Boolean))].join(" · ")}</p>
             </div>
           )}
-          {!event.online && !event.isPast && !cancelled && (
+          {!event.online && event.kliquesOn && !event.isPast && !cancelled && (
             <div className="space-y-2 rounded-card border border-line bg-surface p-4">
               <p className="flex items-center gap-2 text-sm font-semibold">
                 <Icon name="pin" size={16} className="text-accent-text" />

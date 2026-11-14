@@ -132,7 +132,7 @@ export function EventPanel({ event, people: firstPeople, nextCursor, friends = [
             <span className="font-mono text-[11px]">{compactCount(event.goingCount)}</span>
           </button>
         </li>
-        {!event.online && (
+        {!event.online && event.kliquesOn && (
           <li>
             <PanelItem href={crewsHref(event)} icon="pin" count={event.crewCount}>
               Crews

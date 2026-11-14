@@ -146,6 +146,9 @@ export const communityUpdateSchema = z.object({
   privacy: z.enum(["public", "private"]).optional(),
   groupPolicy: z.enum(["admins", "members", "off"]).optional(),
   feedPolicy: z.enum(["admins", "members", "off"]).optional(),
+  /** the community's board and its kliques (policies/features): on or off */
+  boardsOn: z.boolean().optional(),
+  kliquesOn: z.boolean().optional(),
   minPointsJoin: minPoints,
   minPointsPost: minPoints,
   memberEvents: z.boolean().optional(),

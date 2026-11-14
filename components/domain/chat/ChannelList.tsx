@@ -175,7 +175,8 @@ export function ChannelList({
     // the Posts section (pictures and videos), when the community has it turned on
     { id: "posts", label: "Posts", icon: "image", show: c.feedPolicy !== "off" },
     { id: "events", label: "Events", icon: "calendar", count: c.upcomingEventCount, show: true },
-    { id: "kliques", label: "Kliques", icon: "pin", show: true },
+    // a community's own kliques (switched off: its events' kliques still show on each event)
+    { id: "kliques", label: "Kliques", icon: "pin", show: c.kliquesOn },
     // the member list is for owners, admins and moderators
     { id: "members", label: "Members", icon: "users", count: c.memberCount, show: !!c.viewer.canSeeMembers },
   ];
@@ -486,7 +487,8 @@ export function ChannelList({
     ];
     const gNav: { id: GroupView; label: string; icon: IconName; show: boolean }[] = [
       { id: "events", label: "Events", icon: "calendar", show: true },
-      { id: "kliques", label: "Kliques", icon: "pin", show: true },
+      // a community's own kliques (switched off: its events' kliques still show on each event)
+    { id: "kliques", label: "Kliques", icon: "pin", show: c.kliquesOn },
       { id: "members", label: "Members", icon: "users", show: g.role !== null },
     ];
     return (
@@ -553,7 +555,7 @@ export function ChannelList({
         {groupSection}
         {crewSection(crews)}
 
-        {(boards.length > 0 || manage) && (
+        {c.boardsOn && (boards.length > 0 || manage) && (
           <section className="mt-3" aria-label="Boards">
             <div className="flex items-center pr-1">
               <p className="flex-1 px-2 py-1 text-[11px] font-bold tracking-[0.08em] text-ink-muted uppercase">Boards</p>

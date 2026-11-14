@@ -30,8 +30,8 @@ import { VerificationBlock } from "./VerificationBlock";
 import { WelcomePanel } from "./Welcome";
 import { EmojiPanel } from "./EmojiPanel";
 
-export type CommunityTab = "overview" | "groups" | "posts" | "donations" | "payouts" | "members" | "requests" | "invites" | "screening" | "roles" | "automod" | "welcome" | "emoji" | "modlog" | "webhooks" | "notifications" | "privacy" | "delete";
-const TITLES: Record<CommunityTab, string> = { overview: "Overview", groups: "Events and mentions", posts: "Posts", donations: "Donations", payouts: "Payouts", members: "Members", requests: "Join requests", invites: "Invite links", screening: "Entry questions", roles: "Roles", automod: "AutoMod", welcome: "Welcome screen", emoji: "Emoji", modlog: "Moderation log", webhooks: "Webhooks & bots", notifications: "Your notifications", privacy: "Privacy", delete: "Delete community" };
+export type CommunityTab = "overview" | "groups" | "posts" | "donations" | "payouts" | "members" | "requests" | "invites" | "screening" | "roles" | "automod" | "welcome" | "emoji" | "modlog" | "webhooks" | "notifications" | "privacy" | "delete" | "sections";
+const TITLES: Record<CommunityTab, string> = { overview: "Overview", groups: "Events and mentions", posts: "Posts", donations: "Donations", payouts: "Payouts", members: "Members", requests: "Join requests", invites: "Invite links", screening: "Entry questions", roles: "Roles", automod: "AutoMod", welcome: "Welcome screen", emoji: "Emoji", modlog: "Moderation log", webhooks: "Webhooks & bots", notifications: "Your notifications", privacy: "Privacy", delete: "Delete community", sections: "Board and kliques" };
 
 /** Discord-style full-screen community settings. Owners and admins only; the server re-checks every change. */
 export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: CommunityDTO; tab: string; onTab: (t: CommunityTab) => void; onClose: () => void; onChanged: () => Promise<void> | void }) {
@@ -61,6 +61,8 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
   const feedSave = useAutoSave<GroupPolicy>();
   const eventsSave = useAutoSave<boolean>();
   const massSave = useAutoSave<boolean>();
+  const boardsSave = useAutoSave<boolean>();
+  const kliquesSave = useAutoSave<boolean>();
   const privacySave = useAutoSave<boolean>();
   const saveTo = async (patch: Parameters<typeof CommunityService.update>[1], done: string) => {
     try {
@@ -74,6 +76,8 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
   };
   const setFeed = (next: GroupPolicy) => feedSave.run(() => saveTo({ feedPolicy: next }, next === "off" ? "Posts turned off" : "Posts settings saved"), next);
   const setMemberEvents = (next: boolean) => eventsSave.run(() => saveTo({ memberEvents: next }, next ? "Members can suggest events" : "Only owners and admins post events now"), next);
+  const setBoards = (next: boolean) => boardsSave.run(() => saveTo({ boardsOn: next }, next ? "Board turned on" : "Board turned off"), next);
+  const setKliques = (next: boolean) => kliquesSave.run(() => saveTo({ kliquesOn: next }, next ? "Kliques turned on" : "Kliques turned off"), next);
   const setMass = (next: boolean) => massSave.run(() => saveTo({ membersMassMention: next }, next ? "Members can mention everyone" : "Only owners and admins can mention everyone"), next);
   const setPrivacy = (next: boolean) => privacySave.run(() => saveTo({ privacy: next ? "private" : "public" }, next ? "Community is now private" : "Community is now public"), next);
 
@@ -84,6 +88,7 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
         { id: "overview", label: "Overview", icon: "sliders", hidden: !admin },
         { id: "groups", label: "Events and mentions", icon: "calendar", hidden: !admin },
         { id: "posts", label: "Posts", icon: "image", hidden: !admin },
+        { id: "sections", label: "Board and kliques", icon: "pin", hidden: !admin },
         { id: "privacy", label: "Privacy", icon: "lock", hidden: !isOwner },
         // your own (every member has one; members reach it from the community's menu)
         { id: "notifications", label: "Your notifications", icon: "bell" },
@@ -197,6 +202,25 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
               }}
             />
           )}
+        </SettingsBlock>
+      )}
+
+      {active === "sections" && (
+        <SettingsBlock title="Board and kliques" intro="Switch off what this community doesn't use. Nothing is deleted: switching it back on brings it all back.">
+          <Switch
+            checked={boardsSave.pending ?? c.boardsOn}
+            status={boardsSave.status}
+            onChange={(v) => void setBoards(v)}
+            label="Board"
+            hint="Topics members start and reply to. Off: the board is hidden and nobody can post there."
+          />
+          <Switch
+            checked={kliquesSave.pending ?? c.kliquesOn}
+            status={kliquesSave.status}
+            onChange={(v) => void setKliques(v)}
+            label="Kliques"
+            hint="Small groups members start to do something together. Off: nobody can start one in this community, and its kliques are hidden from everyone but the people in them. Kliques for this community's events still work."
+          />
         </SettingsBlock>
       )}
 

@@ -25,6 +25,7 @@ import type { crewCreateSchema, crewUpdateSchema, kliqueCreateSchema, kliqueList
 import { assertVerified } from "./account.service";
 import { hiddenUserIds } from "./blocks";
 import { DEFAULT_ZONE, sentZone } from "@/lib/timezones";
+import { KLIQUES_OFF, kliquesOn } from "../policies/features";
 import { zoneSuffix } from "@/lib/format";
 import { friendIdSet } from "./friends.service";
 import { escapeRegex, sid } from "./helpers";
@@ -115,8 +116,8 @@ async function visibleEvent(viewer: IUser | null, eventId: Types.ObjectId | stri
   return event;
 }
 
-type CommunityBits = Pick<ICommunity, "_id" | "slug" | "name" | "privacy" | "adult" | "interest" | "country" | "city">;
-const COMMUNITY_FIELDS = "slug name privacy adult interest country city";
+type CommunityBits = Pick<ICommunity, "_id" | "slug" | "name" | "privacy" | "adult" | "interest" | "country" | "city" | "kliquesOff" | "official">;
+const COMMUNITY_FIELDS = "slug name privacy adult interest country city kliquesOff official";
 
 const isMemberOf = async (viewer: IUser | null, communityId: Types.ObjectId) => !!viewer && !!(await Membership.exists({ userId: viewer._id, communityId, subcommunityId: null, status: "active" }));
 
@@ -144,6 +145,8 @@ async function visibleCrew(viewer: IUser | null, crewId: string): Promise<{ crew
     });
     await assertOpenToViewer(viewer, crew, event);
     const community = event.communityId ? await Community.findById(event.communityId).select(COMMUNITY_FIELDS).lean<CommunityBits>() : null;
+    // its community switched kliques off: hidden, except from the people in it (and moderators)
+    if (community && !kliquesOn(community) && !(viewer && (await CrewMember.exists({ crewId: crew._id, userId: viewer._id, status: "active" }))) && !(await isKliqueMod(viewer, crew))) throw notFound(GONE);
     return { crew, event, community };
   }
   // all communities: no event and no community, so anyone can open it
@@ -153,6 +156,8 @@ async function visibleCrew(viewer: IUser | null, crewId: string): Promise<{ crew
   }
   const community = await Community.findById(crew.communityId).select(COMMUNITY_FIELDS).lean<CommunityBits>();
   if (!community || !(await canSeeCommunityKliques(viewer, community))) throw notFound(GONE);
+  // the community switched its kliques off: hidden, except from the people in it (and moderators)
+  if (!kliquesOn(community) && !(viewer && (await CrewMember.exists({ crewId: crew._id, userId: viewer._id, status: "active" }))) && !(await isKliqueMod(viewer, crew))) throw notFound(GONE);
   await assertOpenToViewer(viewer, crew, null);
   return { crew, event: null, community };
 }
@@ -404,7 +409,9 @@ export async function listEventCrews(viewer: IUser | null, eventId: string, opts
   const filter: Record<string, unknown> = { eventId: event._id, hostId: { $nin: hidden } };
   const mineRow = viewer ? await CrewMember.findOne({ eventId: event._id, userId: viewer._id }).select("crewId").lean<{ crewId: Types.ObjectId }>() : null;
   // the event has started (or is off): its kliques are closed and out of sight, except the one you're in
-  if (+event.startsAt <= Date.now() || event.cancelled) filter._id = mineRow?.crewId ?? null;
+  // (and when its community has kliques off: only the one you're in)
+  const kliquesOff = await eventKliquesOff(event);
+  if (+event.startsAt <= Date.now() || event.cancelled || kliquesOff) filter._id = mineRow?.crewId ?? null;
   if (q) {
     const rx = new RegExp(escapeRegex(q), "i");
     filter.$or = [{ title: rx }, { area: rx }, { note: rx }];
@@ -429,11 +436,12 @@ export async function listEventCrews(viewer: IUser | null, eventId: string, opts
     /* age or email */
   } else if (event.cancelled) reason = "This event was cancelled.";
   else if (event.online) reason = "Kliques are for meeting up in person.";
+  else if (kliquesOff) reason = "This event's community doesn't have kliques.";
   else if (+event.startsAt <= Date.now()) reason = "This event has started.";
   else if (mineCard || mineRow) reason = "You're already in a klique for this event. Leave it to start your own.";
   else reason = (await spaceBlock(viewer, event)) ?? (await kliqueCreateBlock(viewer));
   // could they join someone else's klique (the list shows "View" instead of "Join" when not)
-  const canJoin = !!viewer && !personBlock(viewer, "join") && !event.cancelled && !event.online && +event.startsAt > Date.now() && (await spaceBlock(viewer, event)) === null;
+  const canJoin = !!viewer && !kliquesOff && !personBlock(viewer, "join") && !event.cancelled && !event.online && +event.startsAt > Date.now() && (await spaceBlock(viewer, event)) === null;
 
   return {
     crews: mineCard ? [mineCard, ...cards.filter((c) => c !== mineCard)] : cards,
@@ -560,7 +568,8 @@ export async function listKliques(viewer: IUser | null, q: z.infer<typeof klique
   // only what this viewer may see: events they can see, communities that are public or theirs
   const events = await Event.find({ _id: { $in: pool.flatMap((c) => (c.eventId ? [c.eventId] : [])) } }).lean<IEvent[]>();
   const eventOk = new Map<string, boolean>();
-  await Promise.all(events.map(async (e) => eventOk.set(sid(e._id), !e.review && !e.cancelled && !e.online && +e.startsAt > Date.now() && (await canViewEvent(e, viewer)))));
+  const offCommunities = new Set((await Community.find({ _id: { $in: events.flatMap((e) => (e.communityId ? [e.communityId] : [])) }, ...KLIQUES_OFF }).distinct("_id")).map(sid));
+  await Promise.all(events.map(async (e) => eventOk.set(sid(e._id), !e.review && !e.cancelled && !e.online && +e.startsAt > Date.now() && !(e.communityId && offCommunities.has(sid(e.communityId))) && (await canViewEvent(e, viewer)))));
   const communityIds = [...new Set(pool.flatMap((c) => (!c.eventId && c.communityId ? [sid(c.communityId)] : [])))];
   const [communities, myMemberships, mine] = await Promise.all([
     Community.find({ _id: { $in: communityIds } }).select(COMMUNITY_FIELDS).lean<CommunityBits[]>(),
@@ -569,7 +578,7 @@ export async function listKliques(viewer: IUser | null, q: z.infer<typeof klique
   ]);
   const inCommunity = new Set(myMemberships.map((m) => sid(m.communityId)));
   // a community's kliques are for its members; looking at one community's own list also shows a public one's
-  const communityOk = new Map(communities.map((c) => [sid(c._id), (viewer && isSiteAdmin(viewer)) || inCommunity.has(sid(c._id)) || (!!q.community && c.privacy === "public" && !c.adult)]));
+  const communityOk = new Map(communities.map((c) => [sid(c._id), kliquesOn(c) && ((viewer && isSiteAdmin(viewer)) || inCommunity.has(sid(c._id)) || (!!q.community && c.privacy === "public" && !c.adult))]));
   const already = new Set(mine.map((m) => sid(m.crewId)));
   const interests = new Set(viewer?.interests ?? []);
   const visible = pool.filter((c) => {
@@ -608,7 +617,8 @@ export async function listKliques(viewer: IUser | null, q: z.infer<typeof klique
 /** Before the "Start a klique" form: can they, may they offer Women only, and which communities can they use. */
 export async function kliqueStartInfo(viewer: IUser): Promise<KliqueStartDTO> {
   const rows = await Membership.find({ userId: viewer._id, subcommunityId: null, status: "active" }).select("communityId").lean<{ communityId: Types.ObjectId }[]>();
-  const communities = await Community.find({ _id: { $in: rows.map((r) => r.communityId) } }).select("slug name interest").sort({ name: 1 }).lean<Pick<ICommunity, "slug" | "name" | "interest">[]>();
+  // only communities that have kliques on
+  const communities = await Community.find({ _id: { $in: rows.map((r) => r.communityId) }, $nor: [KLIQUES_OFF] }).select("slug name interest").sort({ name: 1 }).lean<Pick<ICommunity, "slug" | "name" | "interest">[]>();
   return {
     canWomenOnly: viewer.gender === "woman",
     canMenOnly: viewer.gender === "man",
@@ -805,10 +815,21 @@ async function startKlique(viewer: IUser, input: KliqueInput, where: { event: IE
   return getCrew(viewer, sid(crew._id));
 }
 
+/** Is this event's community one with kliques off (its events get none either)? */
+async function eventKliquesOff(event: Pick<IEvent, "communityId">): Promise<boolean> {
+  if (!event.communityId) return false;
+  const c = await Community.findById(event.communityId).select("kliquesOff official").lean<Pick<ICommunity, "kliquesOff" | "official">>();
+  return !!c && !kliquesOn(c);
+}
+async function assertEventKliques(event: Pick<IEvent, "communityId">) {
+  if (await eventKliquesOff(event)) throw forbidden("This event's community doesn't have kliques.");
+}
+
 /** A klique for going to an event together. */
 export async function createCrew(viewer: IUser, eventId: string, input: EventKliqueInput): Promise<CrewDTO> {
   if (isMinor(viewer)) throw notFound("We couldn't find that event.");
   const event = await visibleEvent(viewer, oid(eventId, "event"));
+  await assertEventKliques(event);
   assertEventOpen(event);
   const blocked = await spaceBlock(viewer, event);
   if (blocked) throw forbidden(blocked);
@@ -827,6 +848,7 @@ export async function createCommunityKlique(viewer: IUser, input: z.infer<typeof
   }
   const community = await Community.findOne({ slug: input.community.toLowerCase() }).select(COMMUNITY_FIELDS).lean<CommunityBits>();
   if (!community || isMinor(viewer)) throw notFound("We couldn't find that community.");
+  if (!kliquesOn(community)) throw forbidden(`${community.name} doesn't have kliques. Start one for All communities instead.`);
   if (!(await isMemberOf(viewer, community._id))) throw forbidden(`Join ${community.name} to start a klique there.`);
   await assertNoCommunityTimeout(viewer._id, community._id);
   const { community: _slug, ...rest } = input;

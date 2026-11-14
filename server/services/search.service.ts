@@ -1,4 +1,5 @@
 import "server-only";
+import { boardsOn, kliquesOn } from "../policies/features";
 import { Types } from "mongoose";
 import type { SearchHitDTO, SearchKind, CommunitySearchDTO } from "@/lib/types";
 import { Channel, ChannelMessage, type IChannel, type IChannelMessage } from "../models/Channel";
@@ -183,7 +184,9 @@ export async function searchCommunity(viewer: IUser, slug: string, raw: string, 
   const kliqueDates = dates("meetupAt") as { meetupAt?: Record<string, Date> };
   // and an event's kliques close when the event starts, even when they meet up later
   const startedEvents = await Event.find({ communityId, startsAt: { $lte: new Date(), $gte: new Date(Date.now() - 14 * 24 * 3600_000) } }).distinct("_id");
-  const kliqueFilter = { communityId, ...authorFilter("hostId"), meetupAt: { ...(kliqueDates.meetupAt ?? {}), $gt: new Date() }, ...(startedEvents.length ? { eventId: { $nin: startedEvents } } : {}), ...textFilter };
+  // (a community with kliques off: none are found at all, its events' included)
+  const kliqueEvents = startedEvents.length ? { eventId: { $nin: startedEvents } } : {};
+  const kliqueFilter = { communityId, ...authorFilter("hostId"), meetupAt: { ...(kliqueDates.meetupAt ?? {}), $gt: new Date() }, ...kliqueEvents, ...textFilter };
 
   const counts: Record<SearchKind, number> = { message: 0, topic: 0, post: 0, event: 0, klique: 0, member: 0 };
   const take = (k: SearchKind) => (only === k ? { skip: (page - 1) * PAGE, limit: PAGE + 1 } : { skip: 0, limit: PREVIEW });
@@ -197,10 +200,10 @@ export async function searchCommunity(viewer: IUser, slug: string, raw: string, 
   const otherKindsOk = !messageOnly;
   const [messages, topics, posts, events, kliques] = await Promise.all([
     run<IChannelMessage>("message", ChannelMessage as never, messageFilter, "createdAt"),
-    otherKindsOk ? run<ITopic>("topic", Topic as never, topicFilter, "createdAt") : [],
+    otherKindsOk && boardsOn(space.community) ? run<ITopic>("topic", Topic as never, topicFilter, "createdAt") : [],
     otherKindsOk && (space.community.feedPolicy ?? "off") !== "off" ? run<IFeedPost>("post", FeedPost as never, postFilter, "createdAt") : [],
     otherKindsOk ? run<IEvent>("event", Event as never, eventFilter, "startsAt") : [],
-    otherKindsOk ? run<ICrew>("klique", Crew as never, kliqueFilter, "meetupAt") : [],
+    otherKindsOk && kliquesOn(space.community) ? run<ICrew>("klique", Crew as never, kliqueFilter, "meetupAt") : [],
   ]);
 
   // members: by name or handle (only with free text, and no message-only filters)

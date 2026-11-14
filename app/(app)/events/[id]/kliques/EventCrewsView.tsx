@@ -58,7 +58,11 @@ export function EventCrewsView() {
           {event.venue ? ` · ${event.venue}` : ""}
         </p>
       </header>
-      {closed ? (
+      {!event.kliquesOn && !closed ? (
+        <EmptyState icon="users" title="No kliques for this event" action={<Button href={`/events/${event.id}`}>Back to the event</Button>}>
+          {event.community ? `${event.community.name} doesn't have kliques.` : "This event doesn't have kliques."}
+        </EmptyState>
+      ) : closed ? (
         <EmptyState icon="users" title={event.online ? "It's online" : cancelled ? "This event was cancelled" : "This event has ended"} action={<Button href={`/events/${event.id}`}>Back to the event</Button>}>
           {event.online ? "There's nowhere to meet up for an online event." : "Kliques are for heading to an event together."}
         </EmptyState>

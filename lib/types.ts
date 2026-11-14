@@ -286,6 +286,9 @@ export interface CommunityDTO extends CommunityCardDTO {
   canSubmitEvents: boolean;
   /** the Posts section: "off", or who may post ("admins" or "members") */
   feedPolicy: GroupPolicy;
+  /** the community has a board / kliques of its own (owners switch them in settings) */
+  boardsOn: boolean;
+  kliquesOn: boolean;
   /** the viewer may post there */
   canPostToFeed: boolean;
   owner: UserBrief | null;
@@ -535,6 +538,8 @@ export interface EventDTO {
   endsAt: ISODate | null;
   /** the event's time zone (IANA): show its times in it (Africa/Lagos for older events) */
   timeZone: string;
+  /** its community has kliques on: false hides "Find a klique" / its kliques (policies/features) */
+  kliquesOn: boolean;
   /** price in major units of `currency` (field name is historical) */
   priceNaira: number;
   currency: string;

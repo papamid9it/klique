@@ -1,4 +1,5 @@
 import { Types } from "mongoose";
+import { boardsOn } from "../policies/features";
 import { deleteUploads } from "./media.service";
 import type { z } from "zod";
 import type { BoardDTO, BoardPostDTO, BoardSidebarDTO } from "@/lib/types";
@@ -17,6 +18,7 @@ import { emitTopic } from "./realtime";
 
 function assertCommunity(space: Space) {
   if (space.sub) throw notFound("Boards live in the community, not in a group.");
+  if (!boardsOn(space.community)) throw notFound("This community doesn't have a board.");
 }
 
 /**

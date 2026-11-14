@@ -1,4 +1,5 @@
 import { Types } from "mongoose";
+import { boardsOn } from "../policies/features";
 import { withoutAdult } from "../policies/adult";
 import { deleteUploads } from "./media.service";
 import type { z } from "zod";
@@ -34,6 +35,7 @@ const outranksAuthor = (actor: Role | null, target?: Role) => isManager(actor ??
 /** Topics belong to a community (not to its groups). */
 function assertCommunity(space: Space) {
   if (space.sub) throw notFound("Topics live in the community, not in a group.");
+  if (!boardsOn(space.community)) throw notFound("This community doesn't have a board.");
 }
 
 /* ------------------------------------------------------------------ */
@@ -205,7 +207,9 @@ export async function topicFeed(viewer: IUser, limit = 8): Promise<TopicDTO[]> {
   if (!mine.length) return [];
   const hidden = await hiddenUserIds(viewer._id);
   // 18+ communities' topics stay inside them
-  const rows = await Topic.find({ communityId: { $in: await withoutAdult(mine.map((m) => m.communityId)) }, ...(hidden.length ? { authorId: { $nin: hidden } } : {}) })
+  // 18+ ones, and ones with their board switched off
+  const boardless = await Community.find({ _id: { $in: mine.map((m) => m.communityId) }, boardsOff: true }).distinct("_id");
+  const rows = await Topic.find({ communityId: { $in: await withoutAdult(mine.map((m) => m.communityId)), $nin: boardless }, ...(hidden.length ? { authorId: { $nin: hidden } } : {}) })
     .sort({ createdAt: -1 })
     .limit(limit)
     .lean<ITopic[]>();
@@ -226,7 +230,7 @@ export async function trendingTopics(viewer: IUser | null, limit = 5): Promise<T
   if (!pool.length) return [];
   const ids = await withoutAdult([...new Set(pool.map((t) => sid(t.communityId)))]);
   const [communities, mine] = await Promise.all([
-    Community.find({ _id: { $in: ids } }).select("privacy").lean<Pick<ICommunity, "_id" | "privacy">[]>(),
+    Community.find({ _id: { $in: ids }, boardsOff: { $ne: true } }).select("privacy").lean<Pick<ICommunity, "_id" | "privacy">[]>(),
     viewer ? Membership.find({ userId: viewer._id, communityId: { $in: ids }, subcommunityId: null, status: "active" }).select("communityId").lean<Pick<IMembership, "communityId">[]>() : [],
   ]);
   const member = new Set(mine.map((m) => sid(m.communityId)));

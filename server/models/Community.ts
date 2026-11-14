@@ -23,6 +23,10 @@ export interface ICommunity {
   groupPolicy: "admins" | "members" | "off";
   /** the Posts section (pictures and videos with a caption): off, or who may post there */
   feedPolicy?: "admins" | "members" | "off";
+  /** no board (policies/features); unset = on */
+  boardsOff?: boolean;
+  /** no kliques in the community itself (policies/features); unset = on, except Klique HQ (official) */
+  kliquesOff?: boolean;
   /** made by Klique, can't be deleted. The default "Klique" community (slug "klique") is the official one */
   official?: boolean;
   /** points (lib/points) someone needs to join, and to post in the Posts section (nothing else). 0: anyone. Never on Klique. */
@@ -95,6 +99,8 @@ const CommunitySchema = new Schema<ICommunity>(
     channelsReady: { type: Boolean, default: false },
     groupPolicy: { type: String, enum: ["admins", "members", "off"], default: "admins" },
     feedPolicy: { type: String, enum: ["admins", "members", "off"], default: "off" },
+    boardsOff: { type: Boolean, default: undefined },
+    kliquesOff: { type: Boolean, default: undefined },
     minPointsJoin: { type: Number, default: 0, min: 0, max: 1_000_000 },
     minPointsPost: { type: Number, default: 0, min: 0, max: 1_000_000 },
     memberEvents: { type: Boolean, default: true },

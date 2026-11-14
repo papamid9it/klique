@@ -23,7 +23,7 @@ export function EventCrewsRow({ event }: { event: EventDTO }) {
   const { status } = useAuth();
   // just whether one is yours: the list itself is on the crews page
   const { data } = useApi(status === "authed" ? () => CrewService.forEvent(event.id, { limit: 1 }) : null, [event.id, status], { key: `crews-mine:${event.id}` });
-  if (event.online) return null;
+  if (event.online || !event.kliquesOn) return null;
   const n = event.crewCount;
   return (
     <section aria-label="Going together" className="flex flex-wrap items-center gap-3 rounded-card border border-line bg-surface p-4">

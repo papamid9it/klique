@@ -243,6 +243,8 @@ export async function updateCommunity(viewer: IUser, slug: string, patch: z.infe
   if (patch.privacy !== undefined) set.privacy = patch.privacy;
   if (patch.groupPolicy !== undefined) set.groupPolicy = patch.groupPolicy;
   if (patch.feedPolicy !== undefined) set.feedPolicy = patch.feedPolicy;
+  if (patch.boardsOn !== undefined) set.boardsOff = !patch.boardsOn;
+  if (patch.kliquesOn !== undefined) set.kliquesOff = !patch.kliquesOn;
   if (patch.memberEvents !== undefined) set.memberEvents = patch.memberEvents;
   if (patch.membersMassMention !== undefined) set.membersMassMention = patch.membersMassMention;
   // 18+ and explicit: checked against what the community will be after this change
