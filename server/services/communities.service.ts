@@ -1,6 +1,6 @@
 import { searchFilter } from "./search-terms";
 import { audienceRefusal } from "@/lib/constants";
-import { parseScope, scopeFilter } from "@/lib/places";
+import { countriesOf, getCityEntry, getCountry, parseScope, scopeFilter, type Scope } from "@/lib/places";
 import { forgetAdultCommunities, isAdult } from "../policies/adult";
 import { deleteUploads } from "./media.service";
 import { sameFile } from "@/lib/focal";
@@ -37,12 +37,36 @@ const paidOwnerIds = async () =>
   (await remember("paid-owners", "all", 300, async () => (await User.find({ plan: { $in: ["lite", "pro"] }, planUntil: { $gt: new Date() } }).select("_id").limit(50_000).lean<{ _id: Types.ObjectId }[]>()).map((u) => String(u._id)))).map((id: string) => new Types.ObjectId(id));
 
 /** Adds `rank`, for browsing and search: members, plus a lift for verified communities and for Lite and Pro owners'. */
-export async function communityRankStage() {
+/** how much a community's own place lifts it for someone looking from there (its city > state > country > continent) */
+const PLACE_BOOST = { city: 8000, region: 6000, country: 4000, continent: 1000 };
+
+/**
+ * A community's place never hides it from anyone: it ranks higher for people in or looking at that place. The
+ * closest match counts (same city, else same state, else same country, else same continent).
+ */
+function placeBoost(near: Scope | null | undefined): Record<string, unknown> | 0 {
+  if (!near || near.level === "world") return 0;
+  const branches: { case: Record<string, unknown>; then: number }[] = [];
+  if (near.level === "continent") {
+    branches.push({ case: { $in: ["$country", countriesOf(near.continent).map((c) => c.code)] }, then: PLACE_BOOST.continent });
+  } else {
+    const region = near.level === "region" ? near.region : near.level === "city" ? (getCityEntry(near.country, near.city)?.region ?? "") : "";
+    if (near.level === "city") branches.push({ case: { $and: [{ $eq: ["$country", near.country] }, { $eq: ["$city", near.city] }] }, then: PLACE_BOOST.city });
+    if (region) branches.push({ case: { $and: [{ $eq: ["$country", near.country] }, { $eq: ["$region", region] }] }, then: PLACE_BOOST.region });
+    branches.push({ case: { $eq: ["$country", near.country] }, then: PLACE_BOOST.country });
+    const continent = getCountry(near.country)?.continent;
+    if (continent) branches.push({ case: { $in: ["$country", countriesOf(continent).map((c) => c.code)] }, then: PLACE_BOOST.continent });
+  }
+  return { $switch: { branches, default: 0 } };
+}
+
+/** Popular first: members, a paid owner, verified; `near` lifts the communities based there (it never filters). */
+export async function communityRankStage(near?: Scope | null) {
   const paid = await paidOwnerIds();
   return {
     $addFields: {
       rank: {
-        $add: ["$memberCount", { $cond: [{ $in: ["$ownerId", paid] }, COMMUNITY_BOOST, 0] }, { $cond: [{ $or: [{ $eq: ["$verified", true] }, { $eq: ["$official", true] }] }, VERIFIED_BOOST, 0] }],
+        $add: ["$memberCount", { $cond: [{ $in: ["$ownerId", paid] }, COMMUNITY_BOOST, 0] }, { $cond: [{ $or: [{ $eq: ["$verified", true] }, { $eq: ["$official", true] }] }, VERIFIED_BOOST, 0] }, placeBoost(near)],
       },
     },
   };
@@ -69,7 +93,10 @@ export async function listCommunities(viewer: IUser | null, q: ListQuery): Promi
   }
 
   const where = parseScope(q.where);
-  if (where) Object.assign(filter, scopeFilter(where));
+  // a place only lifts the communities based there in the popular list (anyone anywhere can still find the rest);
+  // newest first and your own still keep to it
+  const popular = !(q.sort === "new" || q.scope === "joined");
+  if (where && !popular) Object.assign(filter, scopeFilter(where));
   if (q.interest) filter.interest = q.interest;
   if (q.q) {
     Object.assign(filter, searchFilter(q.q, ["name", "description", "neighborhood", "city", "interest"]));
@@ -84,7 +111,7 @@ export async function listCommunities(viewer: IUser | null, q: ListQuery): Promi
         .lean<ICommunity[]>()
     : await Community.aggregate<ICommunity>([
         { $match: { $and: [allowed, filter] } },
-        await communityRankStage(),
+        await communityRankStage(where),
         { $sort: { rank: -1, createdAt: -1 } },
         { $skip: (q.page - 1) * PAGE_SIZE },
         { $limit: PAGE_SIZE + 1 },

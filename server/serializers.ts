@@ -1,4 +1,5 @@
 import { activePlan } from "@/lib/plans";
+import { DEFAULT_ZONE } from "@/lib/timezones";
 import type { SocialLink } from "@/lib/socials";
 import { eventEndMs } from "@/lib/event-time";
 import type { Types } from "mongoose";
@@ -362,6 +363,7 @@ export async function toEvents(events: IEvent[], viewer: IUser | null): Promise<
       onlineUrl: e.online ? (e.onlineUrl ?? null) : null,
       venue: e.venue,
       startsAt: e.startsAt.toISOString(),
+      timeZone: e.timeZone || DEFAULT_ZONE,
       endsAt: e.endsAt ? e.endsAt.toISOString() : null,
       priceNaira: e.priceNaira,
       currency: e.currency ?? "NGN",

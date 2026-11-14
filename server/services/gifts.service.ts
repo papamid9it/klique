@@ -624,7 +624,7 @@ export async function getEarnings(viewer: IUser, before?: string): Promise<GiftE
     history: await receivedDtos(rows.slice(0, PAGE), false),
     hasMore: rows.length > PAGE,
     bank: bank ? { bankName: bank.bankName, accountName: bank.accountName, bankCode: bank.bankCode, accountNumber: mask(bank.accountNumber) } : null,
-    canRequest: !waiting && available >= config.minPayout,
+    canRequest: !waiting && available >= config.minPayout && config.earnCountries.includes((me?.country ?? "").toUpperCase()),
     earning: me ? earningStatus(me, config, now) : earningStatus({ points: 0, createdAt: now, country: "" }, config, now),
   };
 }
@@ -645,7 +645,9 @@ export async function requestGiftPayout(viewer: IUser, input: z.infer<typeof pay
   rateLimit(`gift-payout:${sid(viewer._id)}`, 5, DAY_MS);
   if (await Payout.exists({ kind: "gifts", requestedById: viewer._id, status: "requested" })) throw conflict("There's already a payout waiting. You can ask again once it's paid.");
   const config = await getGiftConfig();
-  const me = await User.findById(viewer._id).select("payoutBank").lean<Pick<IUser, "payoutBank">>();
+  const me = await User.findById(viewer._id).select("payoutBank country").lean<Pick<IUser, "payoutBank" | "country">>();
+  // payouts are for the countries earning is open in (Admin), like earning itself
+  if (!config.earnCountries.includes((me?.country ?? "").toUpperCase())) throw forbidden(config.earnCountries.length === 1 && config.earnCountries[0] === "NG" ? "Payouts are only available in Nigeria for now." : "Payouts aren't open where you live yet.");
   let bank: PayoutBank;
   if (input.useSaved && me?.payoutBank) bank = me.payoutBank;
   else {

@@ -32,7 +32,9 @@ import { cx } from "@/components/ui/cx";
 import { formatDateLong, formatDateShort, formatTime, relativeStamp } from "@/lib/format";
 import { useApi, useNow } from "@/lib/hooks/useApi";
 import type { ChannelDTO, CrewDTO, CrewJoinMode } from "@/lib/types";
-import { Faces, StandingTag, crewHref, fromLagos, lagosInputs } from "./parts";
+import { Faces, StandingTag, crewHref, fromWall, wallInputs } from "./parts";
+import { YourTime, zoneCity } from "@/components/domain/places/ZoneField";
+import { zoneLabel } from "@/lib/timezones";
 import { AudienceFields, audienceInput, audienceTag, checkAudience, type AudienceValue } from "./AudienceFields";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 
@@ -220,7 +222,7 @@ function Crew({ crew, tab, embedded, onChange, onGone, onRead, onMenu, reload }:
         <Cover src={crew.coverImage} seed={crew.id} interest={crew.interest} className={compact ? "aspect-[16/9]" : "aspect-[21/9]"} />
         <div className={compact ? "p-4" : "p-5 sm:p-6"}>
         <div className="flex flex-wrap items-center gap-2">
-          <p className="eyebrow">Klique · {formatDateShort(crew.meetupAt)}</p>
+          <p className="eyebrow">Klique · {formatDateShort(crew.meetupAt, crew.timeZone)}</p>
           {audienceTag(crew) && <span className="rounded-full border border-line px-2 py-0.5 text-[11px] font-semibold">{audienceTag(crew)}</span>}
           <StandingTag standing={v.standing} />
         </div>
@@ -256,8 +258,9 @@ function Crew({ crew, tab, embedded, onChange, onGone, onRead, onMenu, reload }:
               <span className="sr-only">Meetup time</span>
             </dt>
             <dd>
-              <span className="block text-sm font-semibold">{formatTime(crew.meetupAt)}</span>
-              <span className="block text-xs text-ink-muted">{formatDateLong(crew.meetupAt)}</span>
+              <span className="block text-sm font-semibold">{formatTime(crew.meetupAt, crew.timeZone)}</span>
+              <span className="block text-xs text-ink-muted">{formatDateLong(crew.meetupAt, crew.timeZone)}</span>
+              <YourTime iso={crew.meetupAt} zone={crew.timeZone} />
             </dd>
           </div>
           <div className="flex gap-3 rounded-control border border-line bg-raised p-3">
@@ -389,7 +392,7 @@ function Crew({ crew, tab, embedded, onChange, onGone, onRead, onMenu, reload }:
           )}
         </section>
       <p className="mt-6 flex items-start gap-2 text-xs text-ink-muted">
-        <Icon name="clock" size={13} className="mt-px shrink-0" /> This klique and its chat disappear on {formatDateShort(crew.expiresAt)}. Meet in public, and tell someone where you&apos;re going.
+        <Icon name="clock" size={13} className="mt-px shrink-0" /> This klique and its chat disappear on {formatDateShort(crew.expiresAt, crew.timeZone)}. Meet in public, and tell someone where you&apos;re going.
       </p>
     </>
   );
@@ -457,7 +460,7 @@ function Crew({ crew, tab, embedded, onChange, onGone, onRead, onMenu, reload }:
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-[15px] font-semibold tracking-[-0.01em]">{crew.title}</h1>
             <p className="truncate text-xs text-ink-muted">
-              {crew.event?.title ?? crew.community?.name ?? "All communities"} · {formatDateShort(crew.meetupAt)}
+              {crew.event?.title ?? crew.community?.name ?? "All communities"} · {formatDateShort(crew.meetupAt, crew.timeZone)}
             </p>
           </div>
           <span className="hidden sm:block">
@@ -651,7 +654,8 @@ function AskModal({ crew, onClose, onDone }: { crew: CrewDTO; onClose: () => voi
 
 function EditCrewModal({ crew, onClose, onSaved }: { crew: CrewDTO; onClose: () => void; onSaved: (c: CrewDTO) => void }) {
   const toast = useToast();
-  const start = lagosInputs(crew.meetupAt);
+  // the meetup's time as it reads in its own zone
+  const start = wallInputs(crew.meetupAt, crew.timeZone);
   const [title, setTitle] = useState(crew.title);
   const [coverImage, setCoverImage] = useState(crew.coverImage ?? "");
   const [area, setArea] = useState(crew.area);
@@ -676,13 +680,13 @@ function EditCrewModal({ crew, onClose, onSaved }: { crew: CrewDTO; onClose: () 
     setBusy(true);
     setErrors({});
     try {
-      const meetupAt = fromLagos(date, time);
+      const meetupAt = fromWall(date, time, crew.timeZone);
       const res = await CrewService.update(crew.id, {
         title: title.trim(),
         ...(coverImage && coverImage !== crew.coverImage ? { coverImage } : {}),
         area: area.trim(),
         meetupPoint: meetupPoint.trim(),
-        ...(meetupAt !== new Date(crew.meetupAt).toISOString() ? { meetupAt } : {}),
+        ...(meetupAt !== new Date(crew.meetupAt).toISOString() ? { meetupAt, timeZone: crew.timeZone } : {}),
         note: note.trim(),
         joinMode,
         ...audienceInput(who),
@@ -705,7 +709,7 @@ function EditCrewModal({ crew, onClose, onSaved }: { crew: CrewDTO; onClose: () 
         <TextField label="Meetup point" value={meetupPoint} onChange={(e) => setMeetupPoint(e.target.value)} maxLength={120} error={errors.meetupPoint} />
         <div className="grid gap-4 sm:grid-cols-2">
           <TextField label="Meetup date" type="date" value={date} onChange={(e) => setDate(e.target.value)} error={errors.meetupAt} />
-          <TextField label="Meetup time" type="time" value={time} onChange={(e) => setTime(e.target.value)} hint="Lagos time (WAT)" />
+          <TextField label="Meetup time" type="time" value={time} onChange={(e) => setTime(e.target.value)} hint={`${zoneCity(crew.timeZone)} time (${zoneLabel(crew.timeZone)})`} />
         </div>
         <TextArea label="Note" value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} counter={300} />
         <label className="block">

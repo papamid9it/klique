@@ -1,10 +1,27 @@
 /**
  * Formatting helpers. Everything is rendered in Africa/Lagos (WAT, UTC+1, no
- * DST — also correct for Abuja) and composed manually from stable Intl parts,
- * so the server and the browser always produce identical text.
+ * DST — also correct for Abuja) unless an event's or klique's own zone is given,
+ * and composed manually from stable Intl parts, so the server and the browser
+ * always produce identical text.
  */
+import { DEFAULT_ZONE, zoneLabel } from "./timezones";
 
-const TZ = "Africa/Lagos";
+const TZ = DEFAULT_ZONE;
+
+/** one formatter per zone (an event's or klique's own zone; Lagos when it has none) */
+const formatters = new Map<string, Intl.DateTimeFormat>();
+const partsFor = (zone: string): Intl.DateTimeFormat => {
+  const had = formatters.get(zone);
+  if (had) return had;
+  let f: Intl.DateTimeFormat;
+  try {
+    f = new Intl.DateTimeFormat("en-GB", { timeZone: zone, weekday: "long", day: "numeric", month: "long", year: "numeric", hour: "numeric", minute: "2-digit", hour12: true });
+  } catch {
+    f = parts; // a zone this runtime doesn't know: Lagos
+  }
+  formatters.set(zone, f);
+  return f;
+};
 
 const parts = new Intl.DateTimeFormat("en-GB", {
   timeZone: TZ,
@@ -27,10 +44,10 @@ interface LagosParts {
   period: "AM" | "PM";
 }
 
-function lagosParts(input: string | Date): LagosParts {
+function lagosParts(input: string | Date, zone?: string | null): LagosParts {
   const d = typeof input === "string" ? new Date(input) : input;
   const map: Record<string, string> = {};
-  for (const p of parts.formatToParts(d)) map[p.type] = p.value;
+  for (const p of (zone && zone !== TZ ? partsFor(zone) : parts).formatToParts(d)) map[p.type] = p.value;
   return {
     weekday: map.weekday,
     day: map.day,
@@ -64,15 +81,28 @@ export function isFree(amount: number | null | undefined) {
   return !amount || amount <= 0;
 }
 
-/** "4:00 PM" */
-export function formatTime(input: string | Date): string {
-  const p = lagosParts(input);
-  return `${p.hour}:${p.minute} ${p.period}`;
+/** " EST": the zone's short name, for a time in a zone other than Lagos (empty for Lagos and no zone) */
+export const zoneSuffix = (input: string | Date, zone?: string | null) => (zone && zone !== TZ ? ` ${zoneLabel(zone, input)}`.trimEnd() : "");
+
+/** "4:00 PM" on the viewer's own clock (chat times; only render it in the browser) */
+export function formatClock(input: string | Date): string {
+  return new Date(input).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+}
+
+/** "Sunday 18 October" on the viewer's own calendar (chat day headings; only render it in the browser) */
+export function formatDayLocal(input: string | Date): string {
+  return new Date(input).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
+}
+
+/** "4:00 PM"; in an event's or klique's own zone: "4:00 PM EST" (Lagos times carry no label) */
+export function formatTime(input: string | Date, zone?: string | null): string {
+  const p = lagosParts(input, zone);
+  return `${p.hour}:${p.minute} ${p.period}${zoneSuffix(input, zone)}`;
 }
 
 /** { month: "OCT", day: "18", weekday: "Sun" } for date chips */
-export function dateChip(input: string | Date) {
-  const p = lagosParts(input);
+export function dateChip(input: string | Date, zone?: string | null) {
+  const p = lagosParts(input, zone);
   return {
     month: p.month.slice(0, 3).toUpperCase(),
     day: p.day,
@@ -81,20 +111,20 @@ export function dateChip(input: string | Date) {
 }
 
 /** "Sunday 18 October" */
-export function formatDateLong(input: string | Date): string {
-  const p = lagosParts(input);
+export function formatDateLong(input: string | Date, zone?: string | null): string {
+  const p = lagosParts(input, zone);
   return `${p.weekday} ${p.day} ${p.month}`;
 }
 
 /** "Sun 18 Oct · 4:00 PM" */
-export function formatDateShort(input: string | Date): string {
-  const p = lagosParts(input);
-  return `${p.weekday.slice(0, 3)} ${p.day} ${p.month.slice(0, 3)} · ${p.hour}:${p.minute} ${p.period}`;
+export function formatDateShort(input: string | Date, zone?: string | null): string {
+  const p = lagosParts(input, zone);
+  return `${p.weekday.slice(0, 3)} ${p.day} ${p.month.slice(0, 3)} · ${p.hour}:${p.minute} ${p.period}${zoneSuffix(input, zone)}`;
 }
 
 /** "SUNDAY, OCTOBER 11" — eyebrow text */
-export function formatEyebrowDate(input: string | Date): string {
-  const p = lagosParts(input);
+export function formatEyebrowDate(input: string | Date, zone?: string | null): string {
+  const p = lagosParts(input, zone);
   return `${p.weekday}, ${p.month} ${p.day}`.toUpperCase();
 }
 

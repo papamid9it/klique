@@ -34,6 +34,8 @@ import { loadBriefs, toEvents } from "../serializers";
 import type { eventCreateSchema, eventListQuery, eventOverviewQuery, eventUpdateSchema } from "../validators/schemas";
 import { hiddenUserIds } from "./blocks";
 import { friendIdSet } from "./friends.service";
+import { DEFAULT_ZONE, sentZone } from "@/lib/timezones";
+import { zoneSuffix } from "@/lib/format";
 import { Friendship, type IFriendship } from "../models/Friendship";
 import { assertPlace, PAGE_SIZE, recountRsvps, sid } from "./helpers";
 import { notify } from "./push.service";
@@ -292,6 +294,7 @@ export async function createEvent(viewer: IUser, input: z.infer<typeof eventCrea
     region: input.region,
     city: input.city,
     online: input.online,
+    timeZone: sentZone(input.timeZone),
     ticketUrl: input.ticketUrl || null,
     ticketLabel: input.ticketLabel ?? "",
     onlineUrl: input.online ? input.onlineUrl || null : null,
@@ -331,7 +334,7 @@ async function announceEvent(doc: IEvent, space: Space, hostId: Types.ObjectId) 
     .lean<{ userId: Types.ObjectId }[]>();
   notify(
     members.map((m) => m.userId),
-    { title: `New event in ${space.sub?.name ?? space.community.name}`, body: `${doc.title} · ${when(doc.startsAt)}`, data: { type: "event", id: sid(doc._id) } },
+    { title: `New event in ${space.sub?.name ?? space.community.name}`, body: `${doc.title} · ${when(doc.startsAt, doc.timeZone)}`, data: { type: "event", id: sid(doc._id) } },
     // several new events from one place bundle into one line
     { image: doc.coverImage ?? null, action: { kind: "event", eventId: sid(doc._id) }, category: "events", groupKey: `new-events:${sid(space.sub?._id ?? space.community._id)}`, many: (n) => `${n} new events in ${space.sub?.name ?? space.community.name}`, ref: `event:${sid(doc._id)}` },
   );
@@ -353,7 +356,7 @@ async function askReviewers(doc: IEvent, space: Space, host: IUser) {
   const place = space.sub?.name ?? space.community.name;
   notify(
     (await reviewersOf(space)).filter((id) => sid(id) !== sid(host._id)),
-    { title: `${host.displayName} sent an event for ${place}`, body: `${doc.title} · ${when(doc.startsAt)}. Approve it to post it.`, data: { type: "event", id: sid(doc._id) } },
+    { title: `${host.displayName} sent an event for ${place}`, body: `${doc.title} · ${when(doc.startsAt, doc.timeZone)}. Approve it to post it.`, data: { type: "event", id: sid(doc._id) } },
     { actorId: host._id, image: doc.coverImage ?? null, action: { kind: "eventReview", eventId: sid(doc._id) }, category: "admin", groupKey: `event-review:${sid(space.sub?._id ?? space.community._id)}`, many: (n) => `${n} events waiting for approval in ${place}`, ref: `event-review:${sid(doc._id)}` },
   );
 }
@@ -391,8 +394,8 @@ export async function pendingEvents(viewer: IUser, communityId: Types.ObjectId):
   return toEvents(mine, viewer);
 }
 
-/** "Sat 18 Oct, 4:00 PM" in Lagos time. */
-export const when = (d: Date) => d.toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true, timeZone: "Africa/Lagos" });
+/** "Sat 18 Oct, 4:00 PM" in the event's zone, with its name when it isn't Lagos ("… 4:00 PM EST") */
+export const when = (d: Date, zone?: string | null) => d.toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true, timeZone: zone || DEFAULT_ZONE }) + zoneSuffix(d, zone);
 
 /** What an edit changed that someone going would want to know (a new picture, say, isn't worth a notification). */
 function whatChanged(event: IEvent, set: Partial<IEvent>): string[] {
@@ -441,6 +444,8 @@ export async function updateEvent(viewer: IUser, id: string, patch: z.infer<type
   if (patch.neighborhood !== undefined) set.neighborhood = patch.neighborhood;
   if (patch.venue !== undefined) set.venue = patch.venue;
   if (patch.startsAt !== undefined) set.startsAt = patch.startsAt;
+  // new times come with the zone they were typed in (none: an older app, Lagos)
+  if (patch.startsAt !== undefined || patch.endsAt !== undefined || patch.timeZone !== undefined) set.timeZone = sentZone(patch.timeZone);
   if (patch.endsAt !== undefined) set.endsAt = patch.endsAt;
   if (patch.priceNaira !== undefined) set.priceNaira = patch.priceNaira;
   if (patch.capacity !== undefined) set.capacity = patch.capacity;
@@ -479,7 +484,7 @@ export async function updateEvent(viewer: IUser, id: string, patch: z.infer<type
       going.map((g) => g.userId),
       cancelledNow
         ? { title: "Event cancelled", body: `${set.title ?? event.title} has been cancelled.`, data: { type: "event", id } }
-        : { title: "New time", body: `${set.title ?? event.title} is now ${when(patch.startsAt as Date)}${placeMoved ? ` at ${patch.venue}` : ""}.`, data: { type: "event", id } },
+        : { title: "New time", body: `${set.title ?? event.title} is now ${when(patch.startsAt as Date, (set.timeZone as string | undefined) ?? event.timeZone)}${placeMoved ? ` at ${patch.venue}` : ""}.`, data: { type: "event", id } },
       { category: "events", ref: `event:${id}` },
     );
   }

@@ -24,7 +24,7 @@ import { ChatSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { cx } from "@/components/ui/cx";
 import { LIMITS } from "@/lib/constants";
-import { formatDateLong, formatTime } from "@/lib/format";
+import { formatClock, formatDayLocal } from "@/lib/format";
 import { AttachmentStrip } from "@/components/domain/chat/AttachmentStrip";
 import { ChatImages } from "@/components/domain/chat/ChatImages";
 import { ReplyingTo, ReplyQuote } from "@/components/domain/chat/ReplyQuote";
@@ -385,7 +385,7 @@ export default function ConversationPage() {
         )}
         {messages.length === 0 && <p className="py-10 text-center text-sm text-ink-muted">No messages yet. Say hi to {other.displayName}.</p>}
         {messages.map((m) => {
-          const day = formatDateLong(m.createdAt);
+          const day = formatDayLocal(m.createdAt);
           const showDay = day !== lastDay;
           lastDay = day;
           return (
@@ -401,7 +401,7 @@ export default function ConversationPage() {
                   ) : (m.sticker || m.stickerUrl) && !m.body && !m.images?.length ? (
                     <div id={`msg-${m.id}`} className={cx("flex flex-col px-1", m.mine ? "items-end" : "items-start", m.pending && "opacity-60")}>
                       <StickerView id={m.sticker} url={m.stickerUrl} size={84} />
-                      <span className="block text-right font-mono text-[10px] text-ink-muted">{m.failed ? "Not sent" : m.pending ? "Sending…" : formatTime(m.createdAt)}</span>
+                      <span className="block text-right font-mono text-[10px] text-ink-muted">{m.failed ? "Not sent" : m.pending ? "Sending…" : formatClock(m.createdAt)}</span>
                     </div>
                   ) : (
                     <>
@@ -417,7 +417,7 @@ export default function ConversationPage() {
                       <ChatImages images={m.images ?? []} mine={m.mine} className={m.body ? "mt-1.5" : ""} />
                       <span className={cx("mt-0.5 flex items-baseline justify-end gap-1.5 font-mono text-[10px]", m.mine ? "text-accent-ink/70" : "text-ink-muted")}>
                         {m.editedAt && <EditedTag at={m.editedAt} />}
-                        {m.failed ? "Not sent" : m.pending ? "Sending…" : formatTime(m.createdAt)}
+                        {m.failed ? "Not sent" : m.pending ? "Sending…" : formatClock(m.createdAt)}
                       </span>
                     </div>
                     </>

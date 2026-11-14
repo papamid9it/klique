@@ -232,7 +232,7 @@ export function EarningsTab() {
         ) : (
           <p className="text-sm">
             Next payout: <span className="font-semibold">{payoutDayLabel(data.nextPayoutOn)}</span>.{" "}
-            {data.canRequest ? `Ask now and ${naira(t.available)} is paid then.` : t.available > 0 ? `You need ${naira(data.minPayout - t.available)} more. Payouts start from ${naira(data.minPayout)}.` : "Nothing available yet."}
+            {data.canRequest ? `Ask now and ${naira(t.available)} is paid then.` : data.earning.missing.country ? "Payouts aren't open where you live yet." : t.available > 0 ? `You need ${naira(data.minPayout - t.available)} more. Payouts start from ${naira(data.minPayout)}.` : "Nothing available yet."}
           </p>
         )}
         {!asking ? (

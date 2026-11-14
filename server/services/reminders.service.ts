@@ -29,7 +29,7 @@ export async function runReminders(): Promise<{ events: number; notified: number
     const going = await Rsvp.find({ eventId: e._id, status: "going" }).select("userId").lean<{ userId: IEvent["_id"] }[]>();
     await notifyNow(
       going.map((g) => g.userId),
-      { title: "Starting soon", body: `${e.title} · ${when(e.startsAt)}`, data: { type: "event", id: String(e._id) } },
+      { title: "Starting soon", body: `${e.title} · ${when(e.startsAt, e.timeZone)}`, data: { type: "event", id: String(e._id) } },
       { category: "events", ref: `event:${String(e._id)}`, image: e.coverImage ?? null, action: { kind: "event", eventId: String(e._id) } },
     );
     notified += going.length;

@@ -134,13 +134,13 @@ export function BoardSidebar({ slug, communityId, board, onBoardChanged }: { slu
               <li key={e.id}>
                 <Link href={`/events/${e.id}`} className="flex items-center gap-3 rounded-control px-2 py-1.5 transition hover:bg-raised">
                   <span className="flex w-11 shrink-0 flex-col items-center rounded-control bg-raised py-1 leading-none">
-                    <span className="text-[10px] font-semibold text-accent-text uppercase">{formatDateShort(e.startsAt).split(" ")[2]}</span>
-                    <span className="text-base font-semibold">{formatDateShort(e.startsAt).split(" ")[1]}</span>
+                    <span className="text-[10px] font-semibold text-accent-text uppercase">{formatDateShort(e.startsAt, e.timeZone).split(" ")[2]}</span>
+                    <span className="text-base font-semibold">{formatDateShort(e.startsAt, e.timeZone).split(" ")[1]}</span>
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[13.5px] font-medium">{e.title}</span>
                     <span className="block truncate text-[11.5px] text-ink-muted">
-                      {formatTime(e.startsAt)} · {e.online ? "Online" : e.venue}
+                      {formatTime(e.startsAt, e.timeZone)} · {e.online ? "Online" : e.venue}
                     </span>
                   </span>
                 </Link>

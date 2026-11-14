@@ -18,6 +18,8 @@ export interface CrewInput {
   meetupPoint: string;
   /** ISO date-time */
   meetupAt: string;
+  /** the zone meetupAt was typed in (IANA) */
+  timeZone?: string;
   note?: string;
   joinMode: CrewJoinMode;
   maxMembers: number;

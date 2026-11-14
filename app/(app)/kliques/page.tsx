@@ -240,7 +240,7 @@ function NextUp({ k }: { k: JoinedKliqueDTO }) {
         <h2 className="text-xs font-semibold text-ink-muted">Next up</h2>
         <p className="font-semibold">{k.title}</p>
         <p className="text-[13px] text-ink-muted">
-          {formatDateShort(k.meetupAt)} · {k.area}
+          {formatDateShort(k.meetupAt, k.timeZone)} · {k.area}
         </p>
         <p className="flex items-center gap-2 text-[13px] text-ink-muted">
           <Faces people={k.faces} total={k.memberCount} size={24} />
@@ -275,7 +275,7 @@ function JoinedSuggestions({ where, wait, onDiscover }: { where: string; wait: b
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-medium">{k.title}</span>
                 <span className="block truncate text-xs text-ink-muted">
-                  {formatDateShort(k.meetupAt)} · {k.area}
+                  {formatDateShort(k.meetupAt, k.timeZone)} · {k.area}
                 </span>
               </span>
             </SoftLink>

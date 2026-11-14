@@ -19,7 +19,7 @@ import { SoftLink } from "@/components/ui/SoftLink";
 export function EventRow({ event, onChange }: { event: EventDTO; onChange: (e: EventDTO) => void }) {
   const { busy, rsvp } = useEventActions(event, onChange);
   const going = event.viewer.rsvp === "going";
-  const d = dateChip(event.startsAt);
+  const d = dateChip(event.startsAt, event.timeZone);
 
   return (
     <article className="group flex items-center gap-3.5 rounded-card border border-line bg-surface p-3 transition hover:border-ink-muted/50 sm:gap-4 sm:p-3.5">
@@ -38,7 +38,7 @@ export function EventRow({ event, onChange }: { event: EventDTO; onChange: (e: E
           {event.review && <ReviewBadge status={event.review.status} />}
         </h3>
         <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[12.5px] text-ink-muted">
-          <span className="inline-flex items-center gap-1"><Icon name="clock" size={12} /> {formatTime(event.startsAt)}</span>
+          <span className="inline-flex items-center gap-1"><Icon name="clock" size={12} /> {formatTime(event.startsAt, event.timeZone)}</span>
           <span className="inline-flex min-w-0 items-center gap-1">
             {event.online ? <Icon name="globe" size={12} /> : <span aria-hidden="true">{flag(event.country)}</span>}
             <span className="truncate">{event.online ? "Online" : `${event.venue} · ${placeShort(event)}`}</span>

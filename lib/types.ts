@@ -533,6 +533,8 @@ export interface EventDTO {
   venue: string;
   startsAt: ISODate;
   endsAt: ISODate | null;
+  /** the event's time zone (IANA): show its times in it (Africa/Lagos for older events) */
+  timeZone: string;
   /** price in major units of `currency` (field name is historical) */
   priceNaira: number;
   currency: string;
@@ -592,6 +594,8 @@ export interface CrewCardDTO {
   area: string;
   note: string;
   meetupAt: ISODate;
+  /** the meetup's time zone (IANA): show its times in it (Africa/Lagos for older kliques) */
+  timeZone: string;
   joinMode: CrewJoinMode;
   maxMembers: number;
   memberCount: number;
@@ -625,7 +629,7 @@ export interface MyCrewDTO {
 export interface CrewDTO extends CrewCardDTO {
   /** null unless you're in the crew */
   meetupPoint: string | null;
-  event: { id: Id; title: string; startsAt: ISODate; endsAt: ISODate | null; venue: string; online: boolean; coverImage: string | null; city: CityId; country: string } | null;
+  event: { id: Id; title: string; startsAt: ISODate; endsAt: ISODate | null; timeZone: string; venue: string; online: boolean; coverImage: string | null; city: CityId; country: string } | null;
   /**
    * Who's in. Everyone for the people in it, the host, the community's owner and admins and site admins; for
    * anyone else only the host and the people they know (friends), and `membersLimited` is true.

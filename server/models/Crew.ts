@@ -41,6 +41,8 @@ export interface ICrew {
   /** exact place to meet: only members see it */
   meetupPoint: string;
   meetupAt: Date;
+  /** the meetup's time zone (IANA); none (older kliques) = Africa/Lagos */
+  timeZone?: string;
   note: string;
   joinMode: CrewJoinMode;
   /** host included, 2–100 */
@@ -72,6 +74,7 @@ const CrewSchema = new Schema<ICrew>(
     area: { type: String, required: true, trim: true, maxlength: 40 },
     meetupPoint: { type: String, required: true, trim: true, maxlength: 120 },
     meetupAt: { type: Date, required: true },
+    timeZone: { type: String, default: undefined },
     note: { type: String, default: "", maxlength: 300 },
     joinMode: { type: String, enum: ["open", "approval"], default: "approval" },
     maxMembers: { type: Number, default: 10, min: 2, max: CREW_MAX_MEMBERS },

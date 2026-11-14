@@ -196,7 +196,7 @@ export function earningStatus(u: { points?: number | null; createdAt: Date | str
 /** Plain words for Settings → Earnings when someone doesn't earn yet; null when they do. */
 export function earningText(e: EarningStatus): string | null {
   if (e.eligible) return null;
-  if (e.missing.country) return e.countries.length === 1 && e.countries[0] === "NG" ? "Earning from awards is only open in Nigeria for now." : "Earning from awards isn't open where you live yet.";
+  if (e.missing.country) return `${e.countries.length === 1 && e.countries[0] === "NG" ? "Earning from awards is only available in Nigeria for now." : "Earning from awards isn't open where you live yet."} You can still send and receive awards. (Your country is in Settings, Profile.)`;
   const need: string[] = [];
   if (e.missing.points) need.push(`${e.minPoints.toLocaleString("en-NG")} points`);
   if (e.missing.months) need.push(`${e.minMonths} ${e.minMonths === 1 ? "month" : "months"} on Klique`);

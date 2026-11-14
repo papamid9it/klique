@@ -1,5 +1,6 @@
 "use client";
 
+import { DEFAULT_ZONE, isoToWall, wallToIso } from "@/lib/timezones";
 import { SoftLink } from "@/components/ui/SoftLink";
 import { Avatar } from "@/components/ui/Avatar";
 import { cdn } from "@/lib/cdn";
@@ -34,12 +35,9 @@ export function crewHref(c: Pick<CrewCardDTO, "id" | "space">): string {
   return `/communities/${c.space.slug}?${c.space.sub ? `g=${c.space.sub}&` : ""}klique=${c.id}`;
 }
 
-/** Lagos (UTC+1) wall-clock parts for date/time inputs, and back. */
-export function lagosInputs(iso: string) {
-  const d = new Date(new Date(iso).getTime() + 3600_000).toISOString();
-  return { date: d.slice(0, 10), time: d.slice(11, 16) };
-}
-export const fromLagos = (date: string, time: string) => new Date(`${date}T${time}:00+01:00`).toISOString();
+/** Wall-clock parts in a zone (Lagos when none) for date/time inputs, and back. */
+export const wallInputs = (iso: string, zone?: string | null) => isoToWall(iso, zone || DEFAULT_ZONE);
+export const fromWall = (date: string, time: string, zone?: string | null) => wallToIso(date, time, zone || DEFAULT_ZONE) ?? new Date(`${date}T${time}:00+01:00`).toISOString();
 
 /**
  * Overlapping faces, like "who's in" on a group chat: at most 3 equal circles (the photo, or one capital initial
@@ -114,7 +112,7 @@ export function KliqueCard({ crew, wide, joinable = true, onDismiss }: { crew: C
       <SoftLink href={href} className="block" aria-label={crew.title}>
         <Cover src={crew.coverImage} seed={crew.id} interest={crew.interest} className={wide ? "aspect-[16/8.5]" : "aspect-[4/3]"}>
           <span className="absolute top-2 left-2 rounded-control bg-black/70 px-2 py-1 font-mono text-[10px] leading-tight text-white uppercase backdrop-blur">
-            {formatDateShort(crew.meetupAt)}
+            {formatDateShort(crew.meetupAt, crew.timeZone)}
           </span>
           <span className="absolute top-2 right-2 flex gap-1">
             {audienceTag(crew) && <span className="rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur">{audienceTag(crew)}</span>}
@@ -177,7 +175,7 @@ export function KliquePhotoCard({ crew, joinable = true, className = "aspect-[4/
       {/* the whole picture opens it; the button below stays its own */}
       <SoftLink href={href} aria-label={crew.title} className="absolute inset-0" />
       <span className="pointer-events-none absolute top-2.5 left-2.5 flex gap-1.5">
-        <span className={chip}>{formatDateShort(crew.meetupAt)}</span>
+        <span className={chip}>{formatDateShort(crew.meetupAt, crew.timeZone)}</span>
       </span>
       <span className="pointer-events-none absolute top-2.5 right-2.5 flex gap-1.5">
         {audienceTag(crew) && <span className={chip}>{audienceTag(crew)}</span>}
@@ -222,7 +220,7 @@ export function KliquePhotoCard({ crew, joinable = true, className = "aspect-[4/
  */
 export function CrewRow({ crew, joinable = true }: { crew: CrewCardDTO; joinable?: boolean }) {
   const href = crewHref(crew);
-  const [clock, meridiem] = formatTime(crew.meetupAt).split(" ");
+  const [clock, meridiem] = formatTime(crew.meetupAt, crew.timeZone).split(" ");
   const spotsLeft = crew.maxMembers - crew.memberCount;
   const s = crew.viewer.standing;
   return (

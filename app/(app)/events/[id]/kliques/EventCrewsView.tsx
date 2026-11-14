@@ -54,7 +54,7 @@ export function EventCrewsView() {
         </Link>
         <h1 className="mt-2 text-2xl font-semibold tracking-[-0.02em]">{event.title}</h1>
         <p className="mt-1 text-sm text-ink-muted">
-          {formatDateShort(event.startsAt)}
+          {formatDateShort(event.startsAt, event.timeZone)}
           {event.venue ? ` · ${event.venue}` : ""}
         </p>
       </header>

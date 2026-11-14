@@ -6,7 +6,7 @@ import { OverflowMenu, type OverflowItem } from "@/components/domain/OverflowMen
 import { Icon } from "@/components/ui/Icon";
 import { Avatar } from "@/components/ui/Avatar";
 import { cx } from "@/components/ui/cx";
-import { formatTime } from "@/lib/format";
+import { formatClock } from "@/lib/format";
 import type { ChannelMessageDTO, MentionDTO } from "@/lib/types";
 import { REACTIONS, type ReactionKind } from "@/lib/reactions";
 import { useQuickReactions } from "@/lib/hooks/useQuickReactions";
@@ -173,7 +173,7 @@ export const Message = memo(function Message({
           )
         ) : (
           <span className="invisible block pt-1 text-center font-mono text-[10px] text-ink-muted group-hover:visible" aria-hidden="true">
-            {formatTime(m.createdAt).replace(/ (AM|PM)/, "")}
+            {formatClock(m.createdAt).replace(/ (AM|PM)/, "")}
           </span>
         )}
       </div>
@@ -194,7 +194,7 @@ export const Message = memo(function Message({
             {!m.bot && m.author.bot && <BotTag />}
             {!m.bot && <PlanBadge plan={m.author.badge} size={13} className="self-center" />}
             <time dateTime={m.createdAt} className="font-mono text-[11px] text-ink-muted">
-              {formatTime(m.createdAt)}
+              {formatClock(m.createdAt)}
             </time>
             {m.pinned && (
               <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-accent-text" title="Pinned">

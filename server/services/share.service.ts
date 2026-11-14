@@ -32,7 +32,7 @@ export async function eventShare(id: string): Promise<ShareInfo | null> {
   try {
     const e = await getEvent(null, id);
     const where = e.online ? "Online" : [e.venue, placeLabel(e)].filter(Boolean).join(", ");
-    const when = formatDateShort(e.startsAt);
+    const when = formatDateShort(e.startsAt, e.timeZone);
     return {
       title: e.title,
       description: `${when} · ${where}${e.description ? ` · ${e.description.slice(0, 140)}` : ""}`,
@@ -129,7 +129,7 @@ export async function crewShare(id: string): Promise<ShareInfo | null> {
   await connectDb();
   try {
     const c = await getCrew(null, id);
-    const meet = `Meet ${formatDateShort(c.meetupAt)}`;
+    const meet = `Meet ${formatDateShort(c.meetupAt, c.timeZone)}`;
     const going = `${c.memberCount}/${c.maxMembers} in`;
     const where = c.event ? `To ${c.event.title}` : c.community ? `In ${c.community.name}` : `From ${c.area}`;
     return {

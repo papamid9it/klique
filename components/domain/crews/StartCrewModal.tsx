@@ -1,5 +1,6 @@
 "use client";
 
+import { DEFAULT_ZONE, zoneLabel } from "@/lib/timezones";
 import { useRef, useState } from "react";
 import { errorMessage, isApiError } from "@/app/ApiCore";
 import { CrewService } from "@/app/services/CrewService";
@@ -12,13 +13,14 @@ import { cx } from "@/components/ui/cx";
 import { useApi } from "@/lib/hooks/useApi";
 import { useCategories } from "@/lib/hooks/useCategories";
 import type { CrewDTO, CrewJoinMode, EventDTO } from "@/lib/types";
-import { fromLagos, lagosInputs } from "./parts";
+import { fromWall, wallInputs } from "./parts";
+import { usePlaceZone, zoneCity } from "@/components/domain/places/ZoneField";
 import { AudienceFields, audienceInput, checkAudience, type AudienceValue } from "./AudienceFields";
 import { PlaceFields } from "@/components/domain/places/PlaceFields";
 import { DEFAULT_COUNTRY, type Place } from "@/lib/places";
 import { useAuth } from "@/components/providers/AuthProvider";
 
-type EventBits = Pick<EventDTO, "id" | "title" | "startsAt" | "neighborhood" | "interest" | "coverImage">;
+type EventBits = Pick<EventDTO, "id" | "title" | "startsAt" | "neighborhood" | "interest" | "coverImage"> & { timeZone?: string };
 type CommunityBits = { slug: string; name: string; interest: string };
 /** the "All communities" choice: no community, open to anyone in a place */
 const ALL = "__all";
@@ -31,8 +33,12 @@ const ALL = "__all";
 export function StartCrewModal({ event, community, open, onClose, onCreated }: { event?: EventBits; community?: CommunityBits; open: boolean; onClose: () => void; onCreated: (c: CrewDTO) => void }) {
   const categories = useCategories();
   const info = useApi(open ? () => CrewService.startInfo() : null, [open], { key: "klique-start" });
+  const { user: me } = useAuth();
+  // an event's klique meets in the event's zone; any other, in the host's place's (their device's, in a country with several)
+  const placeZone = usePlaceZone({ country: me?.country, city: me?.city }).zone;
+  const zone = event ? event.timeZone || DEFAULT_ZONE : placeZone;
   const [start] = useState(() =>
-    lagosInputs(new Date(event ? Math.max(Date.now() + 30 * 60_000, new Date(event.startsAt).getTime() - 3600_000) : Date.now() + 2 * 86_400_000).toISOString()),
+    wallInputs(new Date(event ? Math.max(Date.now() + 30 * 60_000, new Date(event.startsAt).getTime() - 3600_000) : Date.now() + 2 * 86_400_000).toISOString(), event?.timeZone),
   );
   const [communitySlug, setCommunitySlug] = useState(community?.slug ?? "");
   const [title, setTitle] = useState("");
@@ -82,7 +88,7 @@ export function StartCrewModal({ event, community, open, onClose, onCreated }: {
     setBusy(true);
     setErrors({});
     setFormError(null);
-    const input = { title: title.trim(), interest, coverImage, area: area.trim(), meetupPoint: meetupPoint.trim(), meetupAt: fromLagos(date, time), note: note.trim(), joinMode, ...audienceInput(who) };
+    const input = { title: title.trim(), interest, coverImage, area: area.trim(), meetupPoint: meetupPoint.trim(), meetupAt: fromWall(date, time, zone), timeZone: zone, note: note.trim(), joinMode, ...audienceInput(who) };
     try {
       const res = event ? await CrewService.create(event.id, input) : communitySlug === ALL ? await CrewService.createInCommunity(null, { ...input, country: place.country, city: place.city }) : await CrewService.createInCommunity(communitySlug, input);
       onCreated(res.data);
@@ -139,7 +145,7 @@ export function StartCrewModal({ event, community, open, onClose, onCreated }: {
           )}
           <div className="grid gap-4 sm:grid-cols-2">
             <TextField label="Date" type="date" value={date} onChange={(e) => setDate(e.target.value)} error={errors.meetupAt} />
-            <TextField label="Time" type="time" value={time} onChange={(e) => setTime(e.target.value)} hint="Lagos time (WAT)" />
+            <TextField label="Time" type="time" value={time} onChange={(e) => setTime(e.target.value)} hint={`${zoneCity(zone)} time (${zoneLabel(zone)})`} />
           </div>
           <TextField label="Area" value={area} onChange={(e) => setArea(e.target.value)} maxLength={40} placeholder="e.g. Lekki Phase 1" error={errors.area} hint="Everyone sees this." />
           <TextField label="Meetup point" value={meetupPoint} onChange={(e) => setMeetupPoint(e.target.value)} maxLength={120} placeholder="e.g. Filmhouse Lekki, by the ticket desk" error={errors.meetupPoint} hint="Only people in the klique see the exact spot." />

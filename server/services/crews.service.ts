@@ -24,6 +24,8 @@ import { GHOST, loadBriefs } from "../serializers";
 import type { crewCreateSchema, crewUpdateSchema, kliqueCreateSchema, kliqueListQuery } from "../validators/schemas";
 import { assertVerified } from "./account.service";
 import { hiddenUserIds } from "./blocks";
+import { DEFAULT_ZONE, sentZone } from "@/lib/timezones";
+import { zoneSuffix } from "@/lib/format";
 import { friendIdSet } from "./friends.service";
 import { escapeRegex, sid } from "./helpers";
 import { isCountryCode, parseScope, scopeFilter, slugify } from "@/lib/places";
@@ -79,8 +81,8 @@ export const crewExpiry = (e: Pick<IEvent, "startsAt" | "endsAt">) => new Date(+
 /** a community klique: a day after it's over */
 const meetupExpiry = (meetupAt: Date) => new Date(+meetupAt + FALLBACK_DURATION_MS + DAY_MS);
 
-/** "Sat 18 Oct, 4:00 PM" in Lagos time (kept here so this file doesn't depend on events.service) */
-const at = (d: Date) => d.toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true, timeZone: "Africa/Lagos" });
+/** "Sat 18 Oct, 4:00 PM" in the klique's zone, with its name when it isn't Lagos ("… 4:00 PM EST") */
+const at = (d: Date, zone?: string | null) => d.toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true, timeZone: zone || DEFAULT_ZONE }) + zoneSuffix(d, zone);
 
 const oid = (id: string, what = "klique") => {
   if (!Types.ObjectId.isValid(id)) throw notFound(`We couldn't find that ${what}.`);
@@ -369,6 +371,7 @@ async function toCards(crews: ICrew[], viewer: IUser | null, known: { events?: I
       area: c.area,
       note: c.note,
       meetupAt: c.meetupAt.toISOString(),
+      timeZone: c.timeZone || event?.timeZone || DEFAULT_ZONE,
       joinMode: c.joinMode,
       maxMembers: c.maxMembers,
       memberCount: c.memberCount,
@@ -484,7 +487,7 @@ export async function getCrew(viewer: IUser | null, crewId: string): Promise<Cre
   return {
     ...card,
     meetupPoint: inCrew ? crew.meetupPoint : null,
-    event: event ? { id: sid(event._id), title: event.title, startsAt: event.startsAt.toISOString(), endsAt: event.endsAt ? event.endsAt.toISOString() : null, venue: event.venue, online: !!event.online, coverImage: event.coverImage, city: event.city, country: event.country ?? "NG" } : null,
+    event: event ? { id: sid(event._id), title: event.title, startsAt: event.startsAt.toISOString(), endsAt: event.endsAt ? event.endsAt.toISOString() : null, timeZone: event.timeZone || DEFAULT_ZONE, venue: event.venue, online: !!event.online, coverImage: event.coverImage, city: event.city, country: event.country ?? "NG" } : null,
     members: shown.map((m) => briefs.get(sid(m.userId)) ?? GHOST),
     membersLimited,
     requests: pending.map((m) => ({ user: briefs.get(sid(m.userId)) ?? GHOST, message: m.message, createdAt: m.createdAt.toISOString() })),
@@ -776,6 +779,8 @@ async function startKlique(viewer: IUser, input: KliqueInput, where: { event: IE
         area: input.area,
         meetupPoint: input.meetupPoint,
         meetupAt: input.meetupAt,
+        // the zone the time was typed in (an event's klique: the event's); none from an older app = Lagos
+        timeZone: input.timeZone ? sentZone(input.timeZone) : (event?.timeZone ?? DEFAULT_ZONE),
         note: input.note,
         joinMode: input.joinMode,
         maxMembers: input.maxMembers,
@@ -855,6 +860,8 @@ export async function updateCrew(viewer: IUser, crewId: string, patch: z.infer<t
   if (patch.meetupAt) validateMeetup(patch.meetupAt, event);
   if (patch.maxMembers !== undefined && patch.maxMembers < crew.memberCount) throw badRequest(`${crew.memberCount - 1} ${crew.memberCount - 1 === 1 ? "person is" : "people are"} already in. Remove someone first, or keep at least ${crew.memberCount - 1} ${crew.memberCount - 1 === 1 ? "spot" : "spots"}.`);
   const set: Record<string, unknown> = { ...patch };
+  // a new time comes with the zone it was typed in (none: an older app, so Lagos, or the event's)
+  if (patch.meetupAt || patch.timeZone !== undefined) set.timeZone = patch.timeZone ? sentZone(patch.timeZone) : (event?.timeZone ?? DEFAULT_ZONE);
   // who can join: a women-only (men-only) klique needs a host whose profile says so, and can't leave out anyone already in
   const nextAudience: Audience = patch.audience ?? (patch.womenOnly === true ? "women" : patch.womenOnly === false && audienceOf(crew) === "women" ? "everyone" : audienceOf(crew));
   const rulesChanged = nextAudience !== audienceOf(crew) || patch.womenSpots !== undefined || patch.menSpots !== undefined || (nextAudience === "mixed" && patch.maxMembers !== undefined);
@@ -908,7 +915,7 @@ export async function updateCrew(viewer: IUser, crewId: string, patch: z.infer<t
   // anything people in the klique would want to know about gets a ping: place, time, where from, the note
   const moved = (patch.meetupPoint && patch.meetupPoint !== crew.meetupPoint) || (patch.meetupAt && +patch.meetupAt !== +crew.meetupAt);
   const changes: string[] = [];
-  if (moved) changes.push(`now meeting at ${patch.meetupPoint ?? crew.meetupPoint}, ${at(patch.meetupAt ?? crew.meetupAt)}`);
+  if (moved) changes.push(`now meeting at ${patch.meetupPoint ?? crew.meetupPoint}, ${at(patch.meetupAt ?? crew.meetupAt, (set.timeZone as string | undefined) ?? crew.timeZone)}`);
   if (patch.area && patch.area !== crew.area) changes.push(`coming from ${patch.area}`);
   if (patch.note !== undefined && patch.note.trim() !== crew.note.trim()) changes.push(patch.note.trim() ? `new note: "${snippet(patch.note.trim(), 80)}"` : "the note was removed");
   if (changes.length) {
@@ -996,7 +1003,7 @@ export async function leaveCrew(viewer: IUser, crewId: string): Promise<CrewDTO>
   return getCrew(viewer, crewId);
 }
 
-const welcome = (crew: Pick<ICrew, "_id" | "title" | "meetupAt">) => ({ title: "You're in the klique", body: `${quote(crew.title, 50)} · meeting ${at(crew.meetupAt)}. Tap for the meetup point.`, data: { type: "crew", id: sid(crew._id) } });
+const welcome = (crew: Pick<ICrew, "_id" | "title" | "meetupAt" | "timeZone">) => ({ title: "You're in the klique", body: `${quote(crew.title, 50)} · meeting ${at(crew.meetupAt, crew.timeZone)}. Tap for the meetup point.`, data: { type: "crew", id: sid(crew._id) } });
 
 export async function decideRequest(viewer: IUser, crewId: string, userId: string, accept: boolean): Promise<CrewDTO> {
   const { crew, event } = await hostCrew(viewer, crewId);
@@ -1382,7 +1389,7 @@ export async function runCrewReminders(now = new Date()): Promise<number> {
     const claimed = await Crew.updateOne({ _id: c._id, reminderSentAt: null }, { $set: { reminderSentAt: now } });
     if (!claimed.modifiedCount) continue;
     const members = await CrewMember.find({ crewId: c._id, status: "active" }).select("userId").lean<{ userId: Types.ObjectId }[]>();
-    await notifyNow(members.map((m) => m.userId), { title: `${quote(c.title, 50)} meets soon`, body: `${c.meetupPoint} · ${at(c.meetupAt)}`, data: { type: "crew", id: sid(c._id) } }, { category: "crews", ref: `crew:${sid(c._id)}` });
+    await notifyNow(members.map((m) => m.userId), { title: `${quote(c.title, 50)} meets soon`, body: `${c.meetupPoint} · ${at(c.meetupAt, c.timeZone)}`, data: { type: "crew", id: sid(c._id) } }, { category: "crews", ref: `crew:${sid(c._id)}` });
     notified += members.length;
   }
   return notified;

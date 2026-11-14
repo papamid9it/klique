@@ -16,6 +16,7 @@ import { EmptyState, ErrorState } from "@/components/ui/States";
 import { isInterestId, type InterestId } from "@/lib/constants";
 import { isDateFilter, type DateFilter } from "@/lib/dates";
 import { formatDateLong } from "@/lib/format";
+import { dayKeyIn } from "@/lib/timezones";
 import { useApi, useDebounced, useNow, usePaged } from "@/lib/hooks/useApi";
 import { CONTINENTS, getCountry, parseScope, scopeFlag, scopeLabel, scopeParent, scopeToString, type Scope } from "@/lib/places";
 import type { EventDTO } from "@/lib/types";
@@ -78,7 +79,8 @@ function MyEvents({ scope, onBack }: { scope: Mine; onBack: () => void }) {
   );
 }
 
-const lagosKey = (d: Date | string) => new Date(d).toLocaleDateString("en-CA", { timeZone: "Africa/Lagos" });
+/** a day: the viewer's own ("today"), or an event's in its own zone */
+const lagosKey = (d: Date | string, zone?: string) => dayKeyIn(d, zone);
 
 function Pill({ on, onClick, children, className }: { on: boolean; onClick: () => void; children: React.ReactNode; className?: string }) {
   return (
@@ -156,11 +158,11 @@ export function EventsExplorer() {
 
   const todayKey = now ? lagosKey(now) : null;
   const tomorrowKey = now ? lagosKey(new Date(now.getTime() + 86_400_000)) : null;
-  const dayHeading = (key: string, iso: string) => (key === todayKey ? "Today" : key === tomorrowKey ? "Tomorrow" : formatDateLong(iso));
+  const dayHeading = (key: string, iso: string, zone?: string) => (key === todayKey ? "Today" : key === tomorrowKey ? "Tomorrow" : formatDateLong(iso, zone));
 
   const groups: { key: string; iso: string; events: EventDTO[] }[] = [];
   for (const e of items) {
-    const key = lagosKey(e.startsAt);
+    const key = lagosKey(e.startsAt, e.timeZone);
     const g = groups[groups.length - 1];
     if (g && g.key === key) g.events.push(e);
     else groups.push({ key, iso: e.startsAt, events: [e] });
@@ -388,9 +390,9 @@ export function EventsExplorer() {
             <div className={`space-y-8 transition-opacity duration-200 ${loading ? "opacity-60" : ""}`} aria-busy={loading || undefined}>
               {ads[0] && <SponsoredRow ad={ads[0]} />}
               {groups.map((g) => (
-                <section key={g.key} aria-label={dayHeading(g.key, g.iso)}>
+                <section key={g.key} aria-label={dayHeading(g.key, g.iso, g.events[0]?.timeZone)}>
                   <h2 className="mb-3 flex items-baseline gap-2.5 text-lg font-semibold tracking-[-0.02em]">
-                    {dayHeading(g.key, g.iso)}
+                    {dayHeading(g.key, g.iso, g.events[0]?.timeZone)}
                     <span className="font-mono text-[11px] font-normal text-ink-muted">{g.events.length} {g.events.length === 1 ? "event" : "events"}</span>
                   </h2>
                   <div className="space-y-2.5">

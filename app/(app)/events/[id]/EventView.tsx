@@ -29,6 +29,8 @@ import { Modal } from "@/components/ui/Modal";
 import { EventPageSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { PlaceFields } from "@/components/domain/places/PlaceFields";
+import { usePlaceZone, YourTime, ZoneField } from "@/components/domain/places/ZoneField";
+import { isoToWall, wallToIso, zoneFitsCountry, zoneForPlace } from "@/lib/timezones";
 import { LIMITS, isInterestId, type InterestId } from "@/lib/constants";
 import { currencyOf, placeLabel, type Place } from "@/lib/places";
 import { CURRENCIES, formatDateLong, formatDateShort, formatPrice, formatTime } from "@/lib/format";
@@ -42,22 +44,21 @@ import { crewsHref } from "@/components/domain/crews/parts";
 import { canPromoteEvent } from "@/lib/ads";
 import { useAuth } from "@/components/providers/AuthProvider";
 
-/** Lagos (UTC+1) wall-clock parts for form inputs. */
-function lagosInputs(iso: string) {
-  const d = new Date(new Date(iso).getTime() + 3600_000).toISOString();
-  return { date: d.slice(0, 10), time: d.slice(11, 16) };
-}
-const toIso = (date: string, time: string) => new Date(`${date}T${time}:00+01:00`).toISOString();
+/** a date and time typed in the event's zone, as an instant */
+const toIso = (date: string, time: string, zone: string) => wallToIso(date, time, zone) ?? new Date(`${date}T${time}:00+01:00`).toISOString();
 
 function EditModal({ event, open, onClose, onSaved }: { event: EventDTO; open: boolean; onClose: () => void; onSaved: (e: EventDTO) => void }) {
   const categories = useCategories();
   const toast = useToast();
-  const s = lagosInputs(event.startsAt);
-  const en = event.endsAt ? lagosInputs(event.endsAt) : null;
+  // its times as they read in its own zone (an older event outside Nigeria: its place's, which is what it's saved in from now on)
+  const startZone = zoneFitsCountry(event.timeZone, event.country) ? event.timeZone : zoneForPlace(event);
+  const s = isoToWall(event.startsAt, startZone);
+  const en = event.endsAt ? isoToWall(event.endsAt, startZone) : null;
   const [title, setTitle] = useState(event.title);
   const [description, setDescription] = useState(event.description);
   const [interest, setInterest] = useState<InterestId>(event.interest);
   const [place, setPlace] = useState<Place>({ country: event.country, region: event.region, city: event.city });
+  const { zone, choices: zoneChoices, setZone } = usePlaceZone(place, startZone);
   const [online, setOnline] = useState(event.online);
   const [currency, setCurrency] = useState(event.currency);
   const [neighborhood, setNeighborhood] = useState(event.neighborhood);
@@ -122,8 +123,9 @@ function EditModal({ event, open, onClose, onSaved }: { event: EventDTO; open: b
         onlineUrl: joinLink,
         currency,
         venue: venue.trim(),
-        startsAt: toIso(date, start),
-        endsAt: end ? toIso(date, end) : null,
+        startsAt: toIso(date, start, zone),
+        endsAt: end ? toIso(date, end, zone) : null,
+        timeZone: zone,
         priceNaira: Math.max(0, Math.round(Number(price) || 0)),
         capacity: cap,
         coverImage: cover.trim() || null,
@@ -164,6 +166,7 @@ function EditModal({ event, open, onClose, onSaved }: { event: EventDTO; open: b
           <TextField label="Starts" type="time" value={start} onChange={(e) => setStart(e.target.value)} error={errors.startsAt} />
           <TextField label="Ends" type="time" value={end} onChange={(e) => setEnd(e.target.value)} error={errors.endsAt} />
         </div>
+        <ZoneField zone={zone} choices={zoneChoices} onChange={setZone} />
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="grid grid-cols-[6.5rem_1fr] gap-3">
             <SelectField label="Currency" value={currency} onChange={(e) => setCurrency(e.target.value)}>
@@ -324,7 +327,7 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
       </Link>
       <Cover src={eventPhoto(event.id, event.coverImage)} seed={event.id} interest={event.interest} className="aspect-[16/8] w-full rounded-card border border-line">
         <div className="absolute top-4 left-4">
-          <DateChip iso={event.startsAt} />
+          <DateChip iso={event.startsAt} zone={event.timeZone} />
         </div>
         <div className="absolute top-4 right-4">
           <PriceTag amount={event.priceNaira} currency={event.currency} />
@@ -359,11 +362,12 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
             <div className="flex gap-3">
               <dt className="mt-0.5 text-ink-muted"><Icon name="clock" /><span className="sr-only">When</span></dt>
               <dd>
-                <span className="font-medium">{formatDateLong(event.startsAt)}</span>
+                <span className="font-medium">{formatDateLong(event.startsAt, event.timeZone)}</span>
                 <span className="block text-ink-muted">
-                  {formatTime(event.startsAt)}
-                  {event.endsAt ? ` – ${formatTime(event.endsAt)}` : ""}
+                  {formatTime(event.startsAt, event.timeZone)}
+                  {event.endsAt ? ` – ${formatTime(event.endsAt, event.timeZone)}` : ""}
                 </span>
+                <YourTime iso={event.startsAt} zone={event.timeZone} />
               </dd>
             </div>
             <div className="flex gap-3">
@@ -536,7 +540,7 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
             </div>
           )}
           <div className="flex flex-wrap gap-2">
-            <ShareButton path={`/events/${event.id}`} text={`${event.title} — ${formatDateShort(event.startsAt)}`} />
+            <ShareButton path={`/events/${event.id}`} text={`${event.title} — ${formatDateShort(event.startsAt, event.timeZone)}`} />
             {event.viewer.canEdit || isHost ? (
               <HostMenu event={event} onEdit={() => setEditing(true)} onCancel={() => setCancelling(true)} onDelete={() => setDeleting(true)} />
             ) : (

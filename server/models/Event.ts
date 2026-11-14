@@ -26,6 +26,8 @@ export interface IEvent {
   venue: string;
   startsAt: Date;
   endsAt: Date | null;
+  /** the place's time zone (IANA): times are typed and shown in it; none (older events) = Africa/Lagos */
+  timeZone?: string;
   /** price in major units of `currency` (the field name is historical) */
   priceNaira: number;
   currency: string;
@@ -78,6 +80,7 @@ const EventSchema = new Schema<IEvent>(
     venue: { type: String, required: true, trim: true, maxlength: 120 },
     startsAt: { type: Date, required: true },
     endsAt: { type: Date, default: null },
+    timeZone: { type: String, default: undefined },
     priceNaira: { type: Number, default: 0, min: 0 },
     currency: { type: String, default: "NGN" },
     online: { type: Boolean, default: false },

@@ -71,7 +71,7 @@ export function DashboardView({ c }: { c: CommunityDTO }) {
                     {e.title}
                   </Link>
                   <p className="truncate text-[12.5px] text-ink-muted">
-                    {e.host.displayName} · {formatDateShort(e.startsAt)} · {e.online ? "Online" : e.venue}
+                    {e.host.displayName} · {formatDateShort(e.startsAt, e.timeZone)} · {e.online ? "Online" : e.venue}
                   </p>
                 </div>
                 <div className="flex gap-2">

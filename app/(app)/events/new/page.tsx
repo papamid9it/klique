@@ -25,11 +25,13 @@ import { LIMITS, isInterestId, type InterestId } from "@/lib/constants";
 import { CURRENCIES, formatDateShort, formatPrice } from "@/lib/format";
 import { useApi, useDebounced } from "@/lib/hooks/useApi";
 import { isHttpLink, normalizeLink } from "@/lib/links";
+import { wallToIso } from "@/lib/timezones";
+import { usePlaceZone, ZoneField } from "@/components/domain/places/ZoneField";
 
-function toIso(date: string, time: string): string | null {
+/** a date and time typed in the event's zone, as an instant */
+function toIso(date: string, time: string, zone: string): string | null {
   if (!date || !time) return null;
-  const d = new Date(`${date}T${time}:00+01:00`);
-  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  return wallToIso(date, time, zone);
 }
 
 /** What's asked on the first page, so an error about one of these goes back there. */
@@ -98,6 +100,8 @@ function NewEventForm() {
 
   const priceNum = Math.max(0, Math.round(Number(price) || 0));
   const cur = currency ?? currencyOf(place.country);
+  // the times are typed in the place's zone (Lagos for Nigeria)
+  const { zone, choices: zoneChoices, setZone } = usePlaceZone(place);
 
   /** What the first page needs before moving on. */
   function firstPageProblems() {
@@ -107,8 +111,8 @@ function NewEventForm() {
     if (!place.city) next.city = "Which city or town is it in?";
     if (!date) next.date = "Pick a date.";
     if (!start) next.startsAt = "Pick a start time.";
-    const from = toIso(date, start);
-    const to = end ? toIso(date, end) : null;
+    const from = toIso(date, start, zone);
+    const to = end ? toIso(date, end, zone) : null;
     if (to && from && to <= from) next.endsAt = "End time must be after the start.";
     const joinLink = online ? normalizeLink(onlineUrl) : "";
     if (joinLink && !isHttpLink(joinLink)) next.onlineUrl = "Enter a valid link, like https://meet.google.com/abc-defg-hij";
@@ -129,8 +133,8 @@ function NewEventForm() {
     if (step === 1) return goNext();
     if (!requireAuth()) return;
     const next: Record<string, string> = firstPageProblems();
-    const startsAt = toIso(date, start);
-    const endsAt = end ? toIso(date, end) : null;
+    const startsAt = toIso(date, start, zone);
+    const endsAt = end ? toIso(date, end, zone) : null;
     const tickets = normalizeLink(ticketUrl);
     const joinLink = online ? normalizeLink(onlineUrl) : "";
     if (tickets && !isHttpLink(tickets)) next.ticketUrl = "Enter a valid link, like https://tix.africa/your-event";
@@ -156,6 +160,7 @@ function NewEventForm() {
       venue: venue.trim(),
       startsAt,
       endsAt,
+      timeZone: zone,
       priceNaira: priceNum,
       capacity: cap,
       coverImage: cover.trim() || null,
@@ -261,7 +266,7 @@ function NewEventForm() {
         <TextField label="Starts" type="time" value={start} onChange={(e) => setStart(e.target.value)} error={errors.startsAt} />
         <TextField label="Ends (optional)" type="time" value={end} onChange={(e) => setEnd(e.target.value)} error={errors.endsAt} />
       </div>
-      <p className="-mt-3 text-xs text-ink-muted">Times are shown in West Africa Time (Lagos) for now.</p>
+      <ZoneField zone={zone} choices={zoneChoices} onChange={setZone} />
       </>
       ) : (
       <>
@@ -269,7 +274,7 @@ function NewEventForm() {
         {/* eslint-disable-next-line @next/next/no-img-element */}
         {cover.trim() ? <img src={cover.trim()} alt="" className="aspect-[16/9] w-full object-cover" /> : <div className="flex aspect-[16/9] w-full items-center justify-center bg-raised text-ink-muted"><Icon name="calendar" size={30} /></div>}
         <div className="space-y-1 p-4">
-          <p className="eyebrow">{online ? "Online" : place.city || "Event"} · {toIso(date, start) ? formatDateShort(toIso(date, start)!) : ""}</p>
+          <p className="eyebrow">{online ? "Online" : place.city || "Event"} · {toIso(date, start, zone) ? formatDateShort(toIso(date, start, zone)!, zone) : ""}</p>
           <h2 className="text-xl font-semibold tracking-[-0.02em]">{title.trim()}</h2>
           <p className="text-sm text-ink-muted">{venue.trim()}{neighborhood ? ` · ${neighborhood}` : ""}</p>
           <p className="text-sm font-semibold">{formatPrice(priceNum, cur)}</p>

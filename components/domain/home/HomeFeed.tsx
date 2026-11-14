@@ -45,7 +45,7 @@ function CommunityTile({ c, onChange }: { c: CommunityCardDTO; onChange: (c: Com
 
 /** An upcoming event: picture with the date on it, title, time and place, how many are going, and Going. */
 function EventTile({ e, onChange }: { e: EventDTO; onChange: (e: EventDTO) => void }) {
-  const d = dateChip(e.startsAt);
+  const d = dateChip(e.startsAt, e.timeZone);
   const { busy, rsvp } = useEventActions(e, onChange);
   const going = e.viewer.rsvp === "going";
   return (
@@ -63,7 +63,7 @@ function EventTile({ e, onChange }: { e: EventDTO; onChange: (e: EventDTO) => vo
           {e.title}
         </Link>
         <p className="truncate font-mono text-[11px] text-ink-muted">
-          {formatTime(e.startsAt)} · {e.online ? "Online" : e.venue}
+          {formatTime(e.startsAt, e.timeZone)} · {e.online ? "Online" : e.venue}
         </p>
         <div className="mt-auto flex items-center justify-between gap-2 pt-2">
           <span className="inline-flex items-center gap-1 font-mono text-[11px] text-ink-muted">
@@ -94,7 +94,7 @@ function EventTile({ e, onChange }: { e: EventDTO; onChange: (e: EventDTO) => vo
 
 /** One event, full width, between posts in the feed: picture, date, title, where, how many are going, Going. */
 export function EventFeedCard({ e, onChange }: { e: EventDTO; onChange: (e: EventDTO) => void }) {
-  const d = dateChip(e.startsAt);
+  const d = dateChip(e.startsAt, e.timeZone);
   const { busy, rsvp } = useEventActions(e, onChange);
   const going = e.viewer.rsvp === "going";
   return (
@@ -114,7 +114,7 @@ export function EventFeedCard({ e, onChange }: { e: EventDTO; onChange: (e: Even
             {e.title}
           </Link>
           <p className="mt-1 truncate font-mono text-[11px] text-ink-muted">
-            {formatTime(e.startsAt)} · {e.online ? "Online" : e.venue} · {compactCount(e.goingCount)} going
+            {formatTime(e.startsAt, e.timeZone)} · {e.online ? "Online" : e.venue} · {compactCount(e.goingCount)} going
           </p>
         </div>
         {e.viewer.isHost ? (

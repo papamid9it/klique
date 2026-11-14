@@ -67,7 +67,7 @@ function CommunityListRow({ c, onNavigate }: { c: CommunityCardDTO; onNavigate: 
 }
 
 function EventListRow({ e, onNavigate }: { e: EventDTO; onNavigate: () => void }) {
-  const d = dateChip(e.startsAt);
+  const d = dateChip(e.startsAt, e.timeZone);
   return (
     <Link href={`/events/${e.id}`} onClick={onNavigate} className="flex items-center gap-3.5 rounded-card border border-line bg-surface p-3 transition hover:bg-raised">
       <span className="flex size-12 shrink-0 flex-col items-center justify-center rounded-xl bg-raised leading-none">

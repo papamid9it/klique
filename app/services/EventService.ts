@@ -41,6 +41,8 @@ export interface EventInput {
   /** ISO 8601 */
   startsAt: string;
   endsAt?: string | null;
+  /** the zone startsAt/endsAt were typed in (IANA) */
+  timeZone?: string;
   priceNaira?: number;
   currency?: string;
   capacity?: number | null;

@@ -23,11 +23,10 @@ const ICON: Record<string, IconName> = { mentions: "message", replies: "topics",
 const SHORT: Record<string, string> = { mentions: "Mentions & replies", replies: "Topic comments", crews: "Kliques", admin: "Communities you run", community: "Your communities", events: "Events", ads: "Your ads", points: "Hype & styles", friends: "Friends" };
 const FILTERS = [{ id: "all", label: "All", icon: "bell" as IconName }, { id: "unread", label: "Unread", icon: "asterisk" as IconName }, ...NOTIFY_CATEGORIES.filter((c) => !("pushOnly" in c)).map((c) => ({ id: c.id as string, label: SHORT[c.id] ?? c.label, icon: ICON[c.id] ?? "bell" }))];
 
-/** Today / Yesterday / This week / Earlier, in Lagos time. */
+/** Today / Yesterday / This week / Earlier, by the viewer's own device's days. */
 function bucketOf(iso: string, now: Date): string {
-  const lagos = (d: Date) => new Date(d.toLocaleString("en-US", { timeZone: "Africa/Lagos" }));
-  const a = lagos(new Date(iso));
-  const b = lagos(now);
+  const a = new Date(iso);
+  const b = now;
   const days = Math.floor((Date.UTC(b.getFullYear(), b.getMonth(), b.getDate()) - Date.UTC(a.getFullYear(), a.getMonth(), a.getDate())) / 86_400_000);
   return days <= 0 ? "Today" : days === 1 ? "Yesterday" : days < 7 ? "This week" : "Earlier";
 }

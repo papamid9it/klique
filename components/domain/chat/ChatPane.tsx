@@ -42,7 +42,8 @@ import { shiftHeld } from "@/lib/shiftKey";
 
 
 const GROUP_GAP_MS = 5 * 60 * 1000;
-const dayKey = (iso: string) => new Date(iso).toLocaleDateString("en-CA", { timeZone: "Africa/Lagos" });
+/** days as the viewer's own device sees them */
+const dayKey = (iso: string) => new Date(iso).toLocaleDateString("en-CA");
 
 function dayLabel(iso: string) {
   const today = dayKey(new Date().toISOString());
@@ -50,7 +51,7 @@ function dayLabel(iso: string) {
   const k = dayKey(iso);
   if (k === today) return "Today";
   if (k === yesterday) return "Yesterday";
-  return new Date(iso).toLocaleDateString("en-GB", { timeZone: "Africa/Lagos", weekday: "long", day: "numeric", month: "long" });
+  return new Date(iso).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
 }
 
 /**

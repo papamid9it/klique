@@ -25,7 +25,7 @@ import type { EventDTO, UserBrief, AttendeesDTO } from "@/lib/types";
 
 /** A small event row in the panel: a date badge, the title and where. */
 function MiniEvent({ e }: { e: EventDTO }) {
-  const d = dateChip(e.startsAt);
+  const d = dateChip(e.startsAt, e.timeZone);
   return (
     <li>
       <Link href={`/events/${e.id}`} className="flex items-center gap-2.5 rounded-control px-2 py-1.5 transition hover:bg-raised/60">

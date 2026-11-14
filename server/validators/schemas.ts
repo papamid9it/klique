@@ -344,6 +344,8 @@ const eventFields = {
   /** ISO 4217 code; defaults to the country's currency */
   currency: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/).optional(),
   online: z.boolean().default(false),
+  /** the zone the times were typed in (IANA); the server keeps it only if it fits the place */
+  timeZone: z.string().trim().max(64).optional(),
   ticketUrl: clearableUrl,
   ticketLabel: z.string().trim().max(LIMITS.ticketLabel, `Keep it to ${LIMITS.ticketLabel} characters`).optional(),
   onlineUrl: clearableUrl,
@@ -375,6 +377,8 @@ export const eventUpdateSchema = z.object({
   priceNaira: z.number().int().min(0).max(100_000_000).optional(),
   currency: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/).optional(),
   online: z.boolean().optional(),
+  /** the zone the times were typed in (IANA); the server keeps it only if it fits the place */
+  timeZone: z.string().trim().max(64).optional(),
   ticketUrl: clearableUrl,
   ticketLabel: z.string().trim().max(LIMITS.ticketLabel, `Keep it to ${LIMITS.ticketLabel} characters`).optional(),
   onlineUrl: clearableUrl,
@@ -711,6 +715,8 @@ const crewFields = {
   area: text(40, 2),
   meetupPoint: text(120, 2),
   meetupAt: isoDate,
+  /** the zone the times were typed in (IANA); the server keeps it only if it fits the place */
+  timeZone: z.string().trim().max(64).optional(),
   note: text(300).default(""),
   joinMode: z.enum(["open", "approval"]).default("approval"),
   maxMembers: z.number().int().min(2, "Leave at least 1 spot for someone else").max(100, "A klique can have up to 99 spots").default(10),
@@ -780,6 +786,7 @@ export const crewUpdateSchema = z
     area: crewFields.area.optional(),
     meetupPoint: crewFields.meetupPoint.optional(),
     meetupAt: isoDate.optional(),
+    timeZone: z.string().trim().max(64).optional(),
     note: text(300).optional(),
     joinMode: z.enum(["open", "approval"]).optional(),
     maxMembers: z.number().int().min(2).max(100).optional(),

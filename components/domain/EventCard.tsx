@@ -13,8 +13,8 @@ import { useEventActions } from "@/lib/hooks/useEventActions";
 import type { EventDTO } from "@/lib/types";
 
 /** The date block + price tag used on event covers. */
-export function DateChip({ iso }: { iso: string }) {
-  const d = dateChip(iso);
+export function DateChip({ iso, zone }: { iso: string; /** the event's own zone */ zone?: string }) {
+  const d = dateChip(iso, zone);
   return (
     <span className="inline-flex min-w-11 flex-col items-center rounded-lg bg-white px-2 py-1 text-center leading-none text-neutral-900 shadow-md">
       <span className="font-mono text-[10px] font-medium tracking-wider">{d.month}</span>
@@ -41,7 +41,7 @@ export function EventCard({ event, onChange }: { event: EventDTO; onChange: (e: 
       <Link href={`/events/${event.id}`} className="block" aria-label={`${event.title} — open event`}>
         <Cover src={eventPhoto(event.id, event.coverImage)} seed={event.id} interest={event.interest} className="aspect-[16/9]">
           <div className="absolute inset-x-3 top-3 flex items-start justify-between">
-            <DateChip iso={event.startsAt} />
+            <DateChip iso={event.startsAt} zone={event.timeZone} />
             <PriceTag amount={event.priceNaira} currency={event.currency} />
           </div>
           {(event.isPast || event.online || event.audience !== "public") && (
@@ -69,7 +69,7 @@ export function EventCard({ event, onChange }: { event: EventDTO; onChange: (e: 
           </Link>
         </h3>
         <p className="mt-2 flex items-center gap-1.5 text-[13px] text-ink-muted">
-          <Icon name="clock" size={13} className="shrink-0" /> {formatDateShort(event.startsAt)}
+          <Icon name="clock" size={13} className="shrink-0" /> {formatDateShort(event.startsAt, event.timeZone)}
         </p>
         <p className="mt-1 flex items-center gap-1.5 truncate text-[13px] text-ink-muted">
           {event.online ? <Icon name="globe" size={13} className="shrink-0" /> : <span className="w-[13px] shrink-0 text-center leading-none" aria-hidden="true">{flag(event.country)}</span>}

@@ -18,7 +18,8 @@ import { formatTime } from "@/lib/format";
 import { useApi, useNow } from "@/lib/hooks/useApi";
 import type { UserBrief } from "@/lib/types";
 
-const lagosDay = (d: Date | string) => new Date(d).toLocaleDateString("en-CA", { timeZone: "Africa/Lagos" });
+/** a day as the viewer's own device sees it */
+const lagosDay = (d: Date | string) => new Date(d).toLocaleDateString("en-CA");
 
 function Box({ title, children, icon }: { title: string; icon: Parameters<typeof Icon>[0]["name"]; children: React.ReactNode }) {
   return (
@@ -136,7 +137,7 @@ export function InboxSide() {
                   <Link href={`/events/${e.id}`} className="flex items-center gap-2.5 rounded-control px-1.5 py-1.5 hover:bg-raised">
                     <span className="inline-flex h-9 w-14 shrink-0 flex-col items-center justify-center rounded-[10px] bg-raised font-mono text-[10px] leading-tight text-ink-muted">
                       <span className="font-semibold text-ink">{lagosDay(e.startsAt) === today ? "Today" : "Tmrw"}</span>
-                      {formatTime(e.startsAt)}
+                      {formatTime(e.startsAt, e.timeZone)}
                     </span>
                     <span className="min-w-0">
                       <span className="block truncate text-[13px] font-semibold">{e.title}</span>

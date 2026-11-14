@@ -30,7 +30,7 @@ const PILL = "absolute top-2.5 right-2.5 inline-flex h-7 min-w-7 items-center ju
 
 /** An event in the big grid, in the same look as a place's tile: its picture, title and when. */
 function EventTile({ e, big }: { e: EventDTO; big?: boolean }) {
-  const when = formatDateShort(e.startsAt);
+  const when = formatDateShort(e.startsAt, e.timeZone);
   return (
     <Link href={`/events/${e.id}`} aria-label={`${e.title}, ${when}`} className={big ? "relative col-span-2 h-56 overflow-hidden rounded-[20px] border border-line lg:col-span-2 lg:row-span-2 lg:h-auto" : "relative h-36 overflow-hidden rounded-card border border-line lg:h-auto"}>
       <Cover src={eventPhoto(e.id, e.coverImage)} seed={e.id} interest={e.interest} className="absolute inset-0" />
@@ -200,7 +200,7 @@ export function HomeKliques({ cards }: { /** the side column's cards: event tag,
           {forYou.map((k) => (
             <Link key={k.id} href={crewHref(k)} className="flex flex-col gap-2 rounded-card border border-line bg-surface p-3.5 hover:border-ink-muted/50">
               <span className="flex justify-between gap-2 font-mono text-[11px] tracking-[.06em] text-ink-muted uppercase">
-                <span className="truncate">{k.event?.title ?? k.community?.name ?? formatDateShort(k.meetupAt)}</span>
+                <span className="truncate">{k.event?.title ?? k.community?.name ?? formatDateShort(k.meetupAt, k.timeZone)}</span>
                 <span className="shrink-0">{k.memberCount}/{k.maxMembers} spots</span>
               </span>
               <span className="truncate text-[15px] font-semibold">{k.title}</span>
@@ -217,7 +217,7 @@ export function HomeKliques({ cards }: { /** the side column's cards: event tag,
       <div className="flex flex-col gap-2">
         {forYou.map((k) => (
           <Row key={k.id} href={crewHref(k)} src={k.coverImage} seed={k.id} interest={k.interest} title={k.title}
-            line={`${yours.some((y) => y.id === k.id) ? "Yours · " : ""}${formatDateShort(k.meetupAt)} · ${k.memberCount} of ${k.maxMembers} going`} />
+            line={`${yours.some((y) => y.id === k.id) ? "Yours · " : ""}${formatDateShort(k.meetupAt, k.timeZone)} · ${k.memberCount} of ${k.maxMembers} going`} />
         ))}
         {/* always there, even with none */}
         <Link href="/kliques?start=1" className="flex min-w-0 items-center gap-3 rounded-card border border-dashed border-line p-2 hover:border-ink-muted/50">

@@ -121,7 +121,7 @@ function EventCrewList({ event, onChanged }: { event: EventDTO; onChanged: () =>
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold">{event.title}</p>
           <p className="truncate text-xs text-ink-muted">
-            {formatDateShort(event.startsAt)} · {event.venue}
+            {formatDateShort(event.startsAt, event.timeZone)} · {event.venue}
           </p>
         </div>
         <div className="flex gap-2">

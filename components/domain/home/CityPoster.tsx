@@ -147,7 +147,7 @@ export function CityPoster({
           ) : next.length ? (
             <ol className="border-t border-line">
               {next.map((e) => {
-                const d = dateChip(e.startsAt);
+                const d = dateChip(e.startsAt, e.timeZone);
                 return (
                   <li key={e.id}>
                     <Link href={`/events/${e.id}`} className="group flex items-center gap-4 border-b border-line py-4 pr-1">
@@ -155,7 +155,7 @@ export function CityPoster({
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-[15px] font-semibold group-hover:underline">{e.title}</span>
                         <span className="block truncate text-[13px] text-ink-muted">
-                          {d.weekday} {formatTime(e.startsAt)} · {e.goingCount} going
+                          {d.weekday} {formatTime(e.startsAt, e.timeZone)} · {e.goingCount} going
                         </span>
                       </span>
                       <Cover src={eventPhoto(e.id, e.coverImage)} seed={e.id} interest={e.interest} className="size-14 shrink-0 !rounded-control" />
