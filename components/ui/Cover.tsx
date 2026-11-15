@@ -117,7 +117,13 @@ export function Cover({
   children,
   fit = "cover",
   initialsOf,
+  small,
 }: {
+  /**
+   * A small picture (an icon in a list or the sidebar): it loads the small copy at once instead of the full-size
+   * picture later. Set it, or give the box a Tailwind size up to size-16 and it's worked out.
+   */
+  small?: boolean;
   /** a small icon (the community rail): no picture, or one that won't load, shows the name's initials on the art */
   initialsOf?: string;
   src?: string | null;
@@ -129,6 +135,7 @@ export function Cover({
 }) {
   const [failed, setFailed] = useState(false);
   const showArt = !src || failed;
+  const tiny = small ?? Number(/\bsize-(\d+)\b/.exec(className ?? "")?.[1] ?? 99) <= 16;
   return (
     // "relative" only when the caller doesn't place it themselves: both at once and "relative" wins, which
     // collapses a full-bleed background (the Discover banner) to zero height
@@ -140,7 +147,7 @@ export function Cover({
         </>
       ) : (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={cdn(src, { w: 1200 })} alt="" loading="lazy" onError={() => setFailed(true)} style={fit === "cover" ? focalStyle(splitFocal(src).focal) : undefined} className={cx("absolute inset-0 size-full", fit === "cover" ? "object-cover" : "object-contain")} />
+        <img src={cdn(src, { w: tiny ? 128 : 1200 })} alt="" loading={tiny ? "eager" : "lazy"} decoding="async" onError={() => setFailed(true)} style={fit === "cover" ? focalStyle(splitFocal(src).focal) : undefined} className={cx("absolute inset-0 size-full", fit === "cover" ? "object-cover" : "object-contain")} />
       )}
       {children}
     </div>

@@ -153,7 +153,7 @@ function MyCommunities() {
             <li key={c.id}>
               <Link href={`/communities/${c.slug}`} onPointerEnter={() => void prefetchCommunity(c.slug)} onFocus={() => void prefetchCommunity(c.slug)} className="flex items-center gap-2.5 rounded-control px-2 py-1.5 transition hover:bg-raised/60">
                 <span className="relative block size-8 shrink-0 overflow-hidden rounded-[10px]">
-                  <Cover src={c.coverImage} seed={c.id} interest={c.interest} className="size-full" />
+                  <Cover src={c.coverImage} seed={c.id} interest={c.interest} className="size-full" small />
                 </span>
                 <span className={cx("flex min-w-0 flex-1 items-center gap-1 text-[13.5px]", c.unread ? "font-semibold text-ink" : "font-medium text-ink-muted")}>
                   <span className="truncate">{c.name}</span>
