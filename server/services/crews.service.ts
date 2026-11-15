@@ -1296,7 +1296,7 @@ export async function editCrewMessage(viewer: IUser, crewId: string, messageId: 
 }
 
 /** Delete your own message; the host can remove anyone's. Its pictures go with it. */
-export async function deleteCrewMessage(viewer: IUser, crewId: string, messageId: string) {
+export async function deleteCrewMessage(viewer: IUser, crewId: string, messageId: string, opts: { quiet?: boolean } = {}) {
   const { crew } = await assertInCrew(viewer, crewId, { admin: true });
   const msg = await loadCrewMessage(crew._id, messageId);
   const asMod = sid(msg.userId) !== sid(viewer._id) && sid(crew.hostId) !== sid(viewer._id) && (await isKliqueMod(viewer, crew));
@@ -1306,8 +1306,30 @@ export async function deleteCrewMessage(viewer: IUser, crewId: string, messageId
   await deletePoll(msg.pollId);
   await purgeReactions("crew", [msg._id]);
   deleteUploads(msg.images ?? []);
-  void pingCrew(crew._id, { chat: true });
+  // one at a time: open chats reload now; in a batch, once at the end (a reload halfway shows some as not deleted)
+  if (!opts.quiet) void pingCrew(crew._id, { chat: true });
   return { deleted: true };
+}
+
+/**
+ * Several messages at once (Select mode, like WhatsApp), each by the same rule as deleting one: your own, or anyone's
+ * for the host (and community moderators). Any that can't go are skipped and counted; the chat reloads once.
+ */
+export async function deleteCrewMessages(viewer: IUser, crewId: string, ids: string[]): Promise<{ deleted: string[]; skipped: number }> {
+  const deleted: string[] = [];
+  for (const messageId of [...new Set(ids)]) {
+    try {
+      await deleteCrewMessage(viewer, crewId, messageId, { quiet: true });
+      deleted.push(messageId);
+    } catch {
+      /* not allowed, or gone already */
+    }
+  }
+  if (deleted.length) {
+    const { crew } = await assertInCrew(viewer, crewId, { admin: true });
+    void pingCrew(crew._id, { chat: true });
+  }
+  return { deleted, skipped: new Set(ids).size - deleted.length };
 }
 
 export async function reactToCrewMessage(viewer: IUser, crewId: string, messageId: string, kind: ReactionKind): Promise<ReactionDTO[]> {

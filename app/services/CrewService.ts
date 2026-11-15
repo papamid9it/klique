@@ -71,6 +71,8 @@ export const CrewService = {
   send: (id: string, input: SendInput) => api.post<Envelope<ChannelMessageDTO>>(`/api/crews/${id}/messages`, input),
   editMessage: (id: string, messageId: string, body: string) => api.patch<Envelope<ChannelMessageDTO>>(`/api/crews/${id}/messages/${messageId}`, { body }),
   deleteMessage: (id: string, messageId: string) => api.delete<Envelope<{ deleted: boolean }>>(`/api/crews/${id}/messages/${messageId}`),
+  /** Select mode: several at once (yours; the host can remove anyone's); any that can't go are skipped */
+  removeMessages: (id: string, ids: string[]) => api.post<Envelope<{ deleted: string[]; skipped: number }>>(`/api/crews/${id}/messages/bulk-delete`, { ids }),
   react: (id: string, messageId: string, kind: ReactionKind) => api.post<Envelope<ReactionDTO[]>>(`/api/crews/${id}/messages/${messageId}/reactions`, { kind }),
   reactions: (id: string, ids: string[]) => api.get<Envelope<Record<string, ReactionDTO[]>>>(`/api/crews/${id}/reactions`, { ids: ids.join(",") }),
   markRead: (id: string) => api.post<Envelope<{ read: boolean }>>(`/api/crews/${id}/read`),

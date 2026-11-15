@@ -62,6 +62,7 @@ export function crewSource(crewId: string): ChatSource {
     send: (input) => CrewService.send(crewId, input),
     edit: (id, body) => CrewService.editMessage(crewId, id, body),
     remove: (id) => CrewService.deleteMessage(crewId, id),
+    removeMany: (ids) => CrewService.removeMessages(crewId, ids),
     react: (id, kind) => CrewService.react(crewId, id, kind),
     reactions: (ids) => CrewService.reactions(crewId, ids),
     markRead: () => CrewService.markRead(crewId),

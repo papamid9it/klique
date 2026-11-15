@@ -963,16 +963,21 @@ export async function deleteMessages(viewer: IUser, space: Space, access: SpaceA
   const deleted: string[] = [];
   for (const messageId of [...new Set(ids)]) {
     try {
-      await deleteMessage(viewer, space, access, channelSlug, messageId);
+      await deleteMessage(viewer, space, access, channelSlug, messageId, { quiet: true });
       deleted.push(messageId);
     } catch {
       /* not allowed, or gone already */
     }
   }
+  // everyone in the channel reloads once, with all of them gone
+  if (deleted.length) {
+    const { channel } = await loadChannel(viewer, space, access, channelSlug);
+    emitChannel(channel.communityId, channel._id);
+  }
   return { deleted, skipped: new Set(ids).size - deleted.length };
 }
 
-export async function deleteMessage(viewer: IUser, space: Space, access: SpaceAccess, channelSlug: string, messageId: string) {
+export async function deleteMessage(viewer: IUser, space: Space, access: SpaceAccess, channelSlug: string, messageId: string, opts: { quiet?: boolean } = {}) {
   const { channel } = await loadChannel(viewer, space, access, channelSlug);
   const msg = await ChannelMessage.findOne({ _id: messageId, channelId: channel._id }).lean<IChannelMessage>();
   if (!msg) throw notFound("We couldn't find that message.");
@@ -993,7 +998,8 @@ export async function deleteMessage(viewer: IUser, space: Space, access: SpaceAc
   await ChannelMessage.updateOne({ _id: msg._id }, { body: "", mentions: [], images: [], cards: [], sticker: null, stickerUrl: null, pinnedAt: null, pinnedById: null, deletedAt: new Date(), deletedById: viewer._id });
   deleteUploads(msg.images ?? []); // its photos and videos go with it
   await deletePoll(msg.pollId);
-  emitChannel(channel.communityId, channel._id);
+  // one at a time: open chats reload now; in a batch, once at the end (a reload halfway shows some as not deleted)
+  if (!opts.quiet) emitChannel(channel.communityId, channel._id);
   if (channel.topicId) {
     await Topic.updateOne({ _id: channel.topicId, commentCount: { $gt: 0 } }, { $inc: { commentCount: -1 } });
     emitTopic(channel.communityId, channel.topicId);

@@ -405,13 +405,14 @@ export async function editMessage(viewer: IUser, id: string, messageId: string, 
   return toMessage(fresh, viewer._id, (await summarizeReactions("dm", [msg._id], viewer._id)).get(sid(msg._id)) ?? [], reply);
 }
 
-export async function deleteMessage(viewer: IUser, id: string, messageId: string) {
+export async function deleteMessage(viewer: IUser, id: string, messageId: string, opts: { quiet?: boolean } = {}) {
   const { convo, msg } = await loadOwnMessage(viewer, id, messageId);
   await Message.updateOne({ _id: msg._id }, { $set: { body: "", sticker: null, stickerUrl: null, images: [], deletedAt: new Date() } });
   deleteUploads(msg.images ?? []); // its photos and videos go with it
   await deletePoll(msg.pollId);
   await refreshPreview(convo, msg, "Message deleted");
-  emitDm(convo.participants, convo._id);
+  // one at a time: open chats reload now; in a batch, once at the end (a reload halfway shows some as not deleted)
+  if (!opts.quiet) emitDm(convo.participants, convo._id);
   return { deleted: true };
 }
 
@@ -423,11 +424,16 @@ export async function deleteMessages(viewer: IUser, id: string, ids: string[]): 
   const deleted: string[] = [];
   for (const messageId of [...new Set(ids)]) {
     try {
-      await deleteMessage(viewer, id, messageId);
+      await deleteMessage(viewer, id, messageId, { quiet: true });
       deleted.push(messageId);
     } catch {
       /* not yours, or gone already */
     }
+  }
+  // everyone in the chat reloads once, with all of them gone
+  if (deleted.length) {
+    const convo = await loadMyConversation(viewer, id);
+    emitDm(convo.participants, convo._id);
   }
   return { deleted, skipped: new Set(ids).size - deleted.length };
 }
