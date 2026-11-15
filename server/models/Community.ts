@@ -10,7 +10,10 @@ export interface ICommunity {
   interest: InterestId;
   country: string;
   region: string;
+  /** "" when it reaches further than a city (lib/places communityReach) */
   city: string;
+  /** set only when it reaches a whole continent (country, region and city are then "") */
+  continent?: string;
   neighborhood: string;
   privacy: "public" | "private";
   coverImage: string | null;
@@ -25,6 +28,11 @@ export interface ICommunity {
   feedPolicy?: "admins" | "members" | "off";
   /** no board (policies/features); unset = on */
   boardsOff?: boolean;
+  /**
+   * Where the Boards section sits in the channel list: how many sections come above it, counting the loose
+   * channels ("Channels") as the first section and then each category. Unset or 0: at the top.
+   */
+  boardsAt?: number;
   /** no kliques in the community itself (policies/features); unset = on, except Klique HQ (official) */
   kliquesOff?: boolean;
   /** made by Klique, can't be deleted. The default "Klique" community (slug "klique") is the official one */
@@ -90,7 +98,8 @@ const CommunitySchema = new Schema<ICommunity>(
     interest: { type: String, required: true },
     country: { type: String, default: "NG", index: true },
     region: { type: String, default: "" },
-    city: { type: String, required: true },
+    city: { type: String, default: "" },
+    continent: { type: String, default: "" },
     neighborhood: { type: String, default: "", maxlength: 60 },
     privacy: { type: String, enum: ["public", "private"], default: "public" },
     coverImage: { type: String, default: null },
@@ -100,6 +109,7 @@ const CommunitySchema = new Schema<ICommunity>(
     groupPolicy: { type: String, enum: ["admins", "members", "off"], default: "admins" },
     feedPolicy: { type: String, enum: ["admins", "members", "off"], default: "off" },
     boardsOff: { type: Boolean, default: undefined },
+    boardsAt: { type: Number, default: undefined, min: 0, max: 1000 },
     kliquesOff: { type: Boolean, default: undefined },
     minPointsJoin: { type: Number, default: 0, min: 0, max: 1_000_000 },
     minPointsPost: { type: Number, default: 0, min: 0, max: 1_000_000 },

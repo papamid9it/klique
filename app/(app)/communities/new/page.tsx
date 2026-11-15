@@ -1,5 +1,6 @@
 "use client";
 
+import { emitAppEvent } from "@/lib/appEvents";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
@@ -47,6 +48,8 @@ export default function NewCommunityPage() {
         onCancel={leave}
         onSubmit={async (input) => {
           const res = await CommunityService.create(input);
+          // the rail, Your communities and the Communities page show it at once
+          emitAppEvent("membership");
           toast("Community created", "success");
           router.push(`/communities/${res.data.slug}`);
         }}

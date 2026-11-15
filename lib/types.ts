@@ -244,7 +244,10 @@ export interface CommunityCardDTO {
   interest: InterestId;
   country: string;
   region: string;
+  /** "" when it reaches further than a city (a state, a country, a continent or the world: lib/places reachOf) */
   city: CityId;
+  /** set only for a community that reaches a whole continent */
+  continent?: string;
   neighborhood: string;
   privacy: CommunityPrivacy;
   /** null when hidden from this viewer (locked private community) */
@@ -1021,9 +1024,17 @@ export interface ChannelGroupDTO {
   channels: ChannelDTO[];
 }
 
+/** where a channel, category or board moves to among its neighbours */
+export type Move = "top" | "up" | "down" | "bottom";
+
 export interface ChannelsDTO {
   categories: ChannelCategoryDTO[];
   channels: ChannelDTO[];
+  /**
+   * Community lists only: where the Boards section goes, as the number of sections above it (the loose channels
+   * first, then each category in order). 0: at the top. Clamp it to the sections there are.
+   */
+  boardsAt?: number;
   /** only in a community's own list: the groups you're in (a group's own list has none) */
   groups: ChannelGroupDTO[];
 }

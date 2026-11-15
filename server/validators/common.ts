@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { HANDLE_REGEX, isInterestId, LIMITS } from "@/lib/constants";
-import { COUNTRY_CODES, parseScope } from "@/lib/places";
+import { CONTINENTS, COUNTRY_CODES, parseScope } from "@/lib/places";
 import { RESERVED_HANDLES } from "@/lib/mentions";
 
 export const OBJECT_ID_REGEX = /^[a-f\d]{24}$/i;
@@ -18,6 +18,26 @@ export const regionSlug = z.string().trim().toLowerCase().regex(/^[a-z0-9-]{0,40
 export const placeRequired = { country: countryCode, region: regionSlug, city: citySlug };
 /** ... optional on update (send country + city together) ... */
 export const placeOptional = { country: countryCode.optional(), region: z.string().trim().toLowerCase().regex(/^[a-z0-9-]{0,40}$/).optional(), city: citySlug.optional() };
+/**
+ * A community's reach: as wide as it likes. The fields set say how far it reaches: a city (country + city), a state
+ * (country + region), a whole country (country only), a continent (continent only) or the world (nothing).
+ */
+const continentId = z.enum(CONTINENTS.map((c) => c.id) as [string, ...string[]]);
+export const placeReach = {
+  country: z.union([countryCode, z.literal("")]).default(""),
+  region: regionSlug,
+  city: z.union([citySlug, z.literal("")]).default(""),
+  continent: z.union([continentId, z.literal("")]).default(""),
+  /** what the person picked (a city, a state…): when sent, the fields must fill it (else "Pick a state") */
+  reach: z.enum(["city", "region", "country", "continent", "world"]).optional(),
+};
+export const placeReachOptional = {
+  country: z.union([countryCode, z.literal("")]).optional(),
+  region: z.string().trim().toLowerCase().regex(/^[a-z0-9-]{0,40}$/).optional(),
+  city: z.union([citySlug, z.literal("")]).optional(),
+  continent: z.union([continentId, z.literal("")]).optional(),
+  reach: z.enum(["city", "region", "country", "continent", "world"]).optional(),
+};
 /** ... and defaulted at signup. */
 export const placeDefault = { country: countryCode.default("NG"), region: regionSlug, city: citySlug.default("lagos") };
 

@@ -122,7 +122,8 @@ export async function acceptWelcome(viewer: IUser, slug: string, input: z.infer<
 /** After someone joins: the greeting in the chosen channel ("Welcome {user}!"), posted as the community. */
 export async function greetNewMember(community: ICommunity, userId: Types.ObjectId) {
   const w = community.welcome;
-  if (!w?.enabled || !w.greetChannelId) return;
+  // the greeting stands on its own: a channel picked is all it needs (the welcome screen can be off)
+  if (!w?.greetChannelId) return;
   try {
     const [channel, owner, who] = await Promise.all([Channel.findOne({ _id: w.greetChannelId, communityId: community._id }).lean<IChannel>(), User.findById(community.ownerId).lean<IUser>(), User.findById(userId).select("handle displayName").lean<Pick<IUser, "handle" | "displayName">>()]);
     if (!channel || !owner || !who) return;

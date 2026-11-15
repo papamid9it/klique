@@ -5,7 +5,7 @@ import { useCategories } from "@/lib/hooks/useCategories";
 import { useState } from "react";
 import { isApiError } from "@/app/ApiCore";
 import type { CommunityInput } from "@/app/services/CommunityService";
-import { PlaceFields } from "@/components/domain/places/PlaceFields";
+import { ReachFields, type ReachValue } from "@/components/domain/places/PlaceFields";
 import { Button } from "@/components/ui/Button";
 import { SelectField, TextArea, TextField } from "@/components/ui/Field";
 import { ImageField } from "@/components/ui/ImageField";
@@ -36,7 +36,8 @@ export function CommunityWizard({ onSubmit, onCancel }: { onSubmit: (input: Comm
   const [description, setDescription] = useState("");
   const [interest, setInterest] = useState<InterestId>(categories[0].id);
   const [coverImage, setCoverImage] = useState("");
-  const [place, setPlace] = useState({ country: "NG", region: "lagos", city: "lagos" });
+  // a city by default; it can reach a state, a country, a continent or the world instead
+  const [place, setPlace] = useState<ReachValue>({ country: "NG", region: "lagos", city: "lagos", continent: "", reach: "city" });
   const [neighborhood, setNeighborhood] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [general, setGeneral] = useState<string | null>(null);
@@ -173,7 +174,7 @@ export function CommunityWizard({ onSubmit, onCancel }: { onSubmit: (input: Comm
 
         {step === 2 && (
           <div className="space-y-5">
-            <PlaceFields value={place} onChange={(p) => setPlace((x) => ({ ...x, ...p }))} neighborhood={neighborhood} onNeighborhood={setNeighborhood} errors={errors} />
+            <ReachFields value={place} onChange={setPlace} neighborhood={neighborhood} onNeighborhood={setNeighborhood} errors={errors} />
             {general && (
               <p role="alert" className="text-sm font-medium text-danger">
                 {general}

@@ -1,4 +1,5 @@
 import { Types } from "mongoose";
+import { moveAmong } from "./reorder";
 import { boardsOn } from "../policies/features";
 import { deleteUploads } from "./media.service";
 import type { z } from "zod";
@@ -22,13 +23,13 @@ function assertCommunity(space: Space) {
 }
 
 /**
- * A community with no boards yet gets a default one called "Topics", and topics made before boards
- * existed move into it. Cheap and idempotent: runs on the first read.
+ * The community's boards. A new community starts with none (its owner and admins add them); only an old
+ * community whose topics were made before boards existed gets a "Topics" board for them. Cheap and idempotent.
  */
 export async function ensureBoards(space: Space, ownerId: Types.ObjectId): Promise<IBoard[]> {
   const communityId = space.community._id;
   let rows = await Board.find({ communityId }).sort({ position: 1, _id: 1 }).lean<IBoard[]>();
-  if (!rows.length) {
+  if (!rows.length && (await Topic.exists({ communityId, boardId: null }))) {
     try {
       await Board.create({ communityId, slug: "topics", name: "Topics", description: "", postPolicy: "members", position: 0, createdById: ownerId });
     } catch {
@@ -170,10 +171,13 @@ export async function updateBoard(viewer: IUser, space: Space, access: SpaceAcce
   if (patch.description !== undefined) set.description = patch.description;
   if (patch.postPolicy !== undefined) set.postPolicy = patch.postPolicy;
   if (patch.rules !== undefined) set.rules = patch.rules;
-  if (Object.keys(set).length) {
-    await Board.updateOne({ _id: b._id }, { $set: set });
-    emitTopic(b.communityId, b._id); // open boards refresh their header and sidebar
+  if (Object.keys(set).length) await Board.updateOne({ _id: b._id }, { $set: set });
+  // up, down, to the top or the bottom of the community's boards
+  if (patch.move) {
+    const siblings = await Board.find({ communityId: b.communityId }).sort({ position: 1, _id: 1 }).select("_id").lean<{ _id: Types.ObjectId }[]>();
+    await moveAmong(Board as never, siblings, b._id, patch.move);
   }
+  if (Object.keys(set).length || patch.move) emitTopic(b.communityId, b._id); // open boards refresh their header and sidebar
   return dto((await Board.findById(b._id).lean<IBoard>()) as IBoard, access, viewer);
 }
 
@@ -217,7 +221,7 @@ export async function deleteBoard(viewer: IUser, space: Space, access: SpaceAcce
   assertCommunity(space);
   assertManager(access);
   const b = await loadBoard(space, boardId);
-  if ((await Board.countDocuments({ communityId: b.communityId })) <= 1) throw new ApiError(422, "A community needs at least one board.", { code: "last_board" });
+  // a community may have no boards at all: then members simply don't see the section
   const topics = await Topic.find({ boardId: b._id }).select("_id imageUrl media").lean<Pick<ITopic, "_id" | "imageUrl" | "media">[]>();
   const topicIds = topics.map((t) => t._id);
   deleteUploads(topics.flatMap(topicFileUrls));

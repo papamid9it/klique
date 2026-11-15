@@ -157,7 +157,7 @@ export function WelcomePanel({ slug, name }: { slug: string; name: string }) {
     setBusy(true);
     try {
       await api.put(`/api/communities/${slug}/welcome`, body);
-      toast("Welcome screen saved", "success");
+      toast("Saved", "success");
       await reload();
     } catch (e) {
       toast(errorMessage(e), "error");
@@ -220,22 +220,45 @@ export function WelcomePanel({ slug, name }: { slug: string; name: string }) {
             )}
           </div>
         </SettingsBlock>
-        <SettingsBlock title="Greeting" intro="Post a hello in a channel when someone joins.">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <SelectField label="Channel" value={w.greetChannelId ?? ""} onChange={(e) => set({ greetChannelId: e.target.value || null })}>
-              <option value="">Don&apos;t post a greeting</option>
-              {list.map((x) => (
-                <option key={x.id} value={x.id}>
-                  #{x.name}
-                </option>
-              ))}
-            </SelectField>
-            <TextField label="Message" value={w.greetText} onChange={(e) => set({ greetText: e.target.value })} maxLength={300} placeholder="Welcome {user}! 👋" hint="{user} mentions them, {name} is their name." />
-          </div>
-        </SettingsBlock>
       </fieldset>
+      {/* on its own: it works with or without the welcome screen */}
+      <SettingsBlock title="Greeting" intro="When someone joins, post a hello for them in a channel you pick.">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <SelectField label="Channel" value={w.greetChannelId ?? ""} onChange={(e) => set({ greetChannelId: e.target.value || null })}>
+            <option value="">Off: don&apos;t post a greeting</option>
+            {list.map((x) => (
+              <option key={x.id} value={x.id}>
+                #{x.name}
+              </option>
+            ))}
+          </SelectField>
+          <TextField label="Message" value={w.greetText} onChange={(e) => set({ greetText: e.target.value })} maxLength={300} placeholder="Welcome {user}! 👋" hint="Put {user} where their @username goes. {name} is their display name." />
+        </div>
+        {w.greetChannelId && (
+          <div className="mt-3 rounded-card border border-line bg-raised/50 p-3">
+            <p className="eyebrow mb-1.5">Preview in #{list.find((x) => x.id === w.greetChannelId)?.name ?? "channel"}</p>
+            <p className="text-[15px] break-words">
+              {greetPreview(w.greetText, name).map((part, i) =>
+                part.mention ? (
+                  <span key={i} className="rounded bg-accent/15 px-1 font-semibold text-accent-text">
+                    {part.text}
+                  </span>
+                ) : (
+                  <span key={i}>{part.text}</span>
+                ),
+              )}
+            </p>
+          </div>
+        )}
+      </SettingsBlock>
       <SaveBar dirty={dirty} busy={busy} onReset={() => data && (setW({ enabled: data.enabled, message: data.message, rules: data.rules, requireAccept: data.requireAccept, channels: data.channels, greetChannelId: data.greetChannelId, greetText: data.greetText }), setRulesText(data.rules.join("\n")))} onSave={() => void save()} />
       {preview && <WelcomeModal slug={slug} name={name} onClose={() => setPreview(false)} onDone={() => setPreview(false)} />}
     </>
   );
+}
+
+/** The greeting as it will read, with a sample person: {user} becomes a highlighted @username. */
+function greetPreview(text: string, community: string): { text: string; mention?: boolean }[] {
+  const filled = (text.trim() || "Welcome {user}! 👋").replace(/\{name\}/g, "Ada").replace(/\{community\}/g, community);
+  return filled.split(/(\{user\})/g).filter(Boolean).map((p) => (p === "{user}" ? { text: "@username", mention: true } : { text: p }));
 }

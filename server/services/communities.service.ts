@@ -1,6 +1,6 @@
 import { searchFilter } from "./search-terms";
 import { audienceRefusal } from "@/lib/constants";
-import { countriesOf, getCityEntry, getCountry, parseScope, scopeFilter, type Scope } from "@/lib/places";
+import { countriesOf, getCityEntry, getCountry, parseScope, placeForReach, reachError, reachFilter, reachOf, type Reach, type ReachPlace, type Scope } from "@/lib/places";
 import { forgetAdultCommunities, isAdult } from "../policies/adult";
 import { deleteUploads } from "./media.service";
 import { sameFile } from "@/lib/focal";
@@ -18,9 +18,11 @@ import { Subcommunity, type ISubcommunity } from "../models/Subcommunity";
 import { User, type IUser } from "../models/User";
 import { spaceAccess } from "../policies/access";
 import { ensureDefaultChannels } from "./channels.service";
+import { Channel, ChannelCategory } from "../models/Channel";
+import { emitChannel } from "./realtime";
 import { toCommunityCards, toCommunityDetail } from "../serializers";
 import type { communityCreateSchema, communityListQuery, communityUpdateSchema } from "../validators/schemas";
-import { assertPlace, PAGE_SIZE, purgeSpaceData, recountMembers, sid, uniqueCommunitySlug } from "./helpers";
+import { PAGE_SIZE, purgeSpaceData, recountMembers, sid, uniqueCommunitySlug } from "./helpers";
 import { resolveSpace } from "./spaces.service";
 import { countVisibleSubs } from "./subcommunities.service";
 import { assertCanCreateCommunity } from "./space-limits";
@@ -56,6 +58,8 @@ function placeBoost(near: Scope | null | undefined): Record<string, unknown> | 0
     branches.push({ case: { $eq: ["$country", near.country] }, then: PLACE_BOOST.country });
     const continent = getCountry(near.country)?.continent;
     if (continent) branches.push({ case: { $in: ["$country", countriesOf(continent).map((c) => c.code)] }, then: PLACE_BOOST.continent });
+    // reaching the whole continent counts as being on it
+    if (continent) branches.push({ case: { $eq: ["$continent", continent] }, then: PLACE_BOOST.continent });
   }
   return { $switch: { branches, default: 0 } };
 }
@@ -96,7 +100,8 @@ export async function listCommunities(viewer: IUser | null, q: ListQuery): Promi
   // a place only lifts the communities based there in the popular list (anyone anywhere can still find the rest);
   // newest first and your own still keep to it
   const popular = !(q.sort === "new" || q.scope === "joined");
-  if (where && !popular) Object.assign(filter, scopeFilter(where));
+  // (communities reaching wider count too: a Nigeria-wide one is in Lagos, a worldwide one everywhere)
+  if (where && !popular) Object.assign(filter, reachFilter(where));
   if (q.interest) filter.interest = q.interest;
   if (q.q) {
     Object.assign(filter, searchFilter(q.q, ["name", "description", "neighborhood", "city", "interest"]));
@@ -182,7 +187,9 @@ async function assertAdultFlags(viewer: IUser, next: { privacy: string; adult: b
 
 export async function createCommunity(viewer: IUser, input: z.infer<typeof communityCreateSchema>): Promise<CommunityDTO> {
   assertVerified(viewer);
-  assertPlace(input, true);
+  // a city, a state, a country, a continent or the world (lib/places reach): only what that reach uses is kept
+  const place = placeForReach(input.reach ?? reachOf(input), input);
+  assertReach(place, input.reach);
   await assertAdultFlags(viewer, { privacy: input.privacy, adult: input.adult, explicit: input.explicit });
   if (input.audience !== "everyone") {
     if (input.privacy !== "private") throw new ApiError(422, "Women-only and men-only communities have to be private.", { code: "audience_private" });
@@ -197,10 +204,8 @@ export async function createCommunity(viewer: IUser, input: z.infer<typeof commu
     name: input.name,
     description: input.description,
     interest: input.interest,
-    country: input.country,
-    region: input.region,
-    city: input.city,
-    neighborhood: input.neighborhood,
+    ...place,
+    neighborhood: place.city ? input.neighborhood : "",
     privacy: input.privacy,
     groupPolicy: input.groupPolicy,
     feedPolicy: input.feedPolicy,
@@ -232,11 +237,14 @@ export async function updateCommunity(viewer: IUser, slug: string, patch: z.infe
   if (patch.name !== undefined) set.name = patch.name;
   if (patch.description !== undefined) set.description = patch.description;
   if (patch.interest !== undefined) set.interest = patch.interest as ICommunity["interest"];
-  assertPlace(patch, false);
-  if (patch.country !== undefined) set.country = patch.country;
-  if (patch.region !== undefined) set.region = patch.region;
-  if (patch.city !== undefined) set.city = patch.city;
-  if (patch.neighborhood !== undefined) set.neighborhood = patch.neighborhood;
+  // the place is sent whole (country, region, city, continent): its reach is read from which are set
+  if (patch.country !== undefined || patch.region !== undefined || patch.city !== undefined || patch.continent !== undefined) {
+    const place = placeForReach(patch.reach ?? reachOf(patch), patch);
+    assertReach(place, patch.reach);
+    Object.assign(set, place);
+    if (!place.city) set.neighborhood = "";
+  }
+  if (patch.neighborhood !== undefined && set.neighborhood === undefined) set.neighborhood = patch.neighborhood;
   if (patch.coverImage) set.coverImage = patch.coverImage;
   // a cover can be replaced, not taken away (older communities that never had one can still save)
   else if (patch.coverImage !== undefined && space.community.coverImage) throw new ApiError(422, "A community needs a cover image. Upload a new one to replace it.", { errors: { coverImage: "Upload a new one to replace it" } });
@@ -265,7 +273,11 @@ export async function updateCommunity(viewer: IUser, slug: string, patch: z.infe
     if (patch.minPointsPost !== undefined) set.minPointsPost = patch.minPointsPost;
   }
 
+  // the Boards section among the channel list's sections (the loose channels, then each category)
+  if (patch.moveBoards) set.boardsAt = await movedBoardsAt(space.community, patch.moveBoards);
+
   await Community.updateOne({ _id: space.community._id }, set);
+  if (set.boardsAt !== undefined) emitChannel(space.community._id, space.community._id); // open channel lists follow
   if (set.coverImage !== undefined && space.community.coverImage && !sameFile(space.community.coverImage, set.coverImage)) deleteUploads([space.community.coverImage]);
 
   // Events hosted directly in this community inherit its privacy — keep them in sync.
@@ -276,6 +288,36 @@ export async function updateCommunity(viewer: IUser, slug: string, patch: z.infe
     );
   }
   return getCommunity(viewer, slug);
+}
+
+/**
+ * The Boards section moved one step (or to an end). Its slots are "above section n" for each section of the channel
+ * list: the loose channels count as the first section only when the community has any, so no step does nothing.
+ */
+async function movedBoardsAt(c: ICommunity, move: "top" | "up" | "down" | "bottom"): Promise<number> {
+  const [categories, loose] = await Promise.all([
+    ChannelCategory.countDocuments({ communityId: c._id }),
+    Channel.exists({ communityId: c._id, subcommunityId: null, categoryId: null, topicId: null, parentChannelId: null }),
+  ]);
+  // the places it can be: before the loose channels (0, only when there are some), then before each category, then last
+  const slots = [...(loose ? [0] : []), ...Array.from({ length: categories + 1 }, (_, i) => i + 1)];
+  const now = Math.min(Math.max(c.boardsAt ?? 0, 0), categories + 1);
+  let at = slots.findIndex((s) => s >= now);
+  if (at < 0) at = slots.length - 1;
+  const next = move === "top" ? 0 : move === "bottom" ? slots.length - 1 : move === "up" ? Math.max(0, at - 1) : Math.min(slots.length - 1, at + 1);
+  return slots[next];
+}
+
+/** A community's place must make sense for its reach (a real country, its state, a continent…). */
+function assertReach(p: ReachPlace, picked?: Reach) {
+  // picked "A state" (or a city) but didn't say which
+  if (picked && reachOf(p) !== picked) {
+    const field = picked === "city" ? "city" : picked === "region" ? "region" : picked === "continent" ? "continent" : "country";
+    const message = picked === "city" ? "Enter a city or town." : picked === "region" ? "Pick a state." : picked === "continent" ? "Pick a continent." : "Pick a country.";
+    throw new ApiError(422, message, { errors: { [field]: message } });
+  }
+  const err = reachError(p);
+  if (err) throw new ApiError(422, err.message, { errors: { [err.field]: err.message } });
 }
 
 export async function deleteCommunity(viewer: IUser, slug: string) {

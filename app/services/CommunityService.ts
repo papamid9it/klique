@@ -1,6 +1,7 @@
 import ApiClient from "@/app/ApiCore";
+import type { Reach } from "@/lib/places";
 import type { CityId, InterestId } from "@/lib/constants";
-import type { CommunityCardDTO, CommunityDTO, CommunityPrivacy, Envelope, GroupPolicy, MyCommunityDTO, Paginated, SidebarDTO, CommunityDashboardDTO, GrowthStatsDTO, VerificationDTO } from "@/lib/types";
+import type { CommunityCardDTO, CommunityDTO, CommunityPrivacy, Envelope, GroupPolicy, MyCommunityDTO, Paginated, SidebarDTO, CommunityDashboardDTO, GrowthStatsDTO, VerificationDTO, Move } from "@/lib/types";
 
 const api = new ApiClient();
 
@@ -21,7 +22,12 @@ export interface CommunityInput {
   interest: InterestId;
   country: string;
   region: string;
+  /** "" when it reaches further than a city */
   city: CityId;
+  /** set only when it reaches a whole continent */
+  continent?: string;
+  /** what was picked: a city, a state, a country, a continent or worldwide (the server checks the fields fill it) */
+  reach?: Reach;
   neighborhood?: string;
   privacy?: CommunityPrivacy;
   /** 18+ (private only), and allowing explicit content (18+ only) */
@@ -54,7 +60,7 @@ export const CommunityService = {
   sidebars: (slugs: string[]) => api.get<Envelope<Record<string, SidebarDTO | null>>>("/api/me/sidebars", { slugs: slugs.join(",") }),
   get: (slug: string) => api.get<Envelope<CommunityDTO>>(`/api/communities/${slug}`, undefined, { ttl: 15 }),
   create: (input: CommunityInput) => api.post<Envelope<CommunityDTO>>("/api/communities", input),
-  update: (slug: string, patch: Partial<CommunityInput>) => api.patch<Envelope<CommunityDTO>>(`/api/communities/${slug}`, patch),
+  update: (slug: string, patch: Partial<CommunityInput> & { moveBoards?: Move }) => api.patch<Envelope<CommunityDTO>>(`/api/communities/${slug}`, patch),
   /** the owner's dashboard: members and growth, what's waiting for approval, this week (owners and admins) */
   dashboard: (slug: string) => api.get<Envelope<CommunityDashboardDTO>>(`/api/communities/${slug}/dashboard`),
   growth: (slug: string) => api.get<Envelope<GrowthStatsDTO>>(`/api/communities/${slug}/growth`),

@@ -70,7 +70,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (status !== "authed") return;
     // at most every few minutes, and coming back to the tab only counts after a minute away
-    const tick = () => document.visibilityState === "visible" && Date.now() - lastRun.current > 60_000 && void refresh();
+    // (this also keeps you "online" for others: the desktop app counts while it sits in the tray, like Discord)
+    const tick = () => (document.visibilityState === "visible" || "kliqueDesktop" in window) && Date.now() - lastRun.current > 60_000 && void refresh();
     const t = setInterval(tick, 180_000);
     document.addEventListener("visibilitychange", tick);
     return () => {

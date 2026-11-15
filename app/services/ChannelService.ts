@@ -4,6 +4,7 @@ import type { ReactionKind } from "@/lib/reactions";
 import type {
   ReactionDTO,
   ChannelCategoryDTO,
+  Move,
   ChannelDTO,
   ChannelMessageDTO,
   ChannelType,
@@ -70,6 +71,9 @@ export const ChannelService = {
   /** categories exist on communities only */
   createCategory: (slug: string, name: string) => api.post<Envelope<ChannelCategoryDTO>>(`/api/communities/${slug}/categories`, { name }),
   renameCategory: (slug: string, categoryId: string, name: string, overrides?: RoleOverrideDTO[]) => api.patch<Envelope<ChannelCategoryDTO>>(`/api/communities/${slug}/categories/${categoryId}`, { name, ...(overrides ? { overrides } : {}) }),
+  /** owners and admins: up, down, to the top or the bottom (a channel among its category's, a category among the categories) */
+  move: (s: SpaceRef, channelSlug: string, move: Move) => api.patch<Envelope<ChannelDTO>>(`${base(s)}/channels/${channelSlug}`, { move }),
+  moveCategory: (slug: string, categoryId: string, move: Move) => api.patch<Envelope<ChannelCategoryDTO>>(`/api/communities/${slug}/categories/${categoryId}`, { move }),
   removeCategory: (slug: string, categoryId: string) => api.delete<Envelope<{ deleted: boolean }>>(`/api/communities/${slug}/categories/${categoryId}`),
 
   /** Newest page (no cursor), older page (`before` = oldest id on screen) or new messages (`after` = newest id). */

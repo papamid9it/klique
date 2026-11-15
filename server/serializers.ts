@@ -195,7 +195,9 @@ export function communityCard(c: ICommunity, access: SpaceAccess): CommunityCard
     interest: c.interest,
     country: c.country ?? "NG",
     region: c.region ?? "",
-    city: c.city,
+    city: c.city ?? "",
+    // reaching a whole continent: its id (country, region and city are then ""); worldwide: all four ""
+    continent: c.continent ?? "",
     neighborhood: c.neighborhood,
     privacy: c.privacy,
     memberCount: locked ? null : c.memberCount,

@@ -9,7 +9,7 @@ import { REACTION_IDS, STICKER_IDS } from "@/lib/reactions";
 import { SOCIAL_IDS, socialHandle, socialOf, type SocialId } from "@/lib/socials";
 import { FEED_TITLE_MAX, TEXT_BACKGROUND_IDS, TEXT_CARD_MAX } from "@/lib/feedText";
 import { NOTIFY_CATEGORY_IDS } from "@/lib/notifications";
-import { blankToUndef, handle, httpUrl, interestId, objectId, pageQuery, placeDefault, placeOptional, placeRequired, whereParam } from "./common";
+import { blankToUndef, handle, httpUrl, interestId, objectId, pageQuery, placeDefault, placeOptional, placeReach, placeReachOptional, placeRequired, whereParam } from "./common";
 
 const text = (max: number, min = 0) => z.string().trim().min(min).max(max);
 const optText = (max: number) => z.string().trim().max(max).optional();
@@ -120,7 +120,7 @@ export const communityCreateSchema = z.object({
   name: text(LIMITS.communityName, 3),
   description: text(LIMITS.communityDescription).default(""),
   interest: interestId,
-  ...placeRequired,
+  ...placeReach,
   neighborhood: optText(60).default(""),
   privacy: z.enum(["public", "private"]).default("public"),
   groupPolicy: z.enum(["admins", "members", "off"]).default("admins"),
@@ -141,7 +141,7 @@ export const communityUpdateSchema = z.object({
   name: text(LIMITS.communityName, 3).optional(),
   description: optText(LIMITS.communityDescription),
   interest: interestId.optional(),
-  ...placeOptional,
+  ...placeReachOptional,
   neighborhood: optText(60),
   privacy: z.enum(["public", "private"]).optional(),
   groupPolicy: z.enum(["admins", "members", "off"]).optional(),
@@ -149,6 +149,8 @@ export const communityUpdateSchema = z.object({
   /** the community's board and its kliques (policies/features): on or off */
   boardsOn: z.boolean().optional(),
   kliquesOn: z.boolean().optional(),
+  /** move the Boards section up, down, to the top or the bottom of the channel list */
+  moveBoards: z.enum(["top", "up", "down", "bottom"]).optional(),
   minPointsJoin: minPoints,
   minPointsPost: minPoints,
   memberEvents: z.boolean().optional(),
@@ -300,6 +302,8 @@ export const boardUpdateSchema = z.object({
   description: text(LIMITS.boardDescription).optional(),
   rules: text(LIMITS.boardRules).optional(),
   postPolicy: z.enum(["members", "admins"]).optional(),
+  /** move it among the community's boards */
+  move: z.enum(["top", "up", "down", "bottom"]).optional(),
 });
 
 /** a board post's media: up to a few pictures, or one video on its own (the same rule as community posts) */
@@ -504,6 +508,8 @@ export const channelUpdateSchema = z.object({
   type: z.enum(["text", "announcement", "voice"]).optional(),
   visibility: z.enum(["all", "managers", "invite"]).optional(),
   categoryId: objectId.nullable().optional(),
+  /** move it among the channels of its category (after moving it to another one, if categoryId is sent too) */
+  move: z.enum(["top", "up", "down", "bottom"]).optional(),
   /** slow mode in seconds, one of SLOW_MODE_STEPS (0 = off) */
   slowModeSec: z
     .number()
@@ -519,7 +525,7 @@ export const memberSearchQuery = z.object({ q: z.preprocess(blankToUndef, z.stri
 export const unfurlQuery = z.object({ url: z.string().trim().max(2000) });
 
 export const categorySchema = z.object({ name: text(40, 2) });
-export const categoryUpdateSchema = z.object({ name: text(40, 2).optional(), overrides: roleOverridesSchema.optional() });
+export const categoryUpdateSchema = z.object({ name: text(40, 2).optional(), overrides: roleOverridesSchema.optional(), move: z.enum(["top", "up", "down", "bottom"]).optional() });
 
 export const chatBodySchema = chatPayload;
 export const pinSchema = z.object({ pinned: z.boolean() });

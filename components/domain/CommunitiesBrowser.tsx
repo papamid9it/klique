@@ -1,5 +1,6 @@
 "use client";
 
+import { useAppEvent } from "@/lib/appEvents";
 import { useCategories } from "@/lib/hooks/useCategories";
 import { useState } from "react";
 import { CommunityService } from "@/app/services/CommunityService";
@@ -34,6 +35,8 @@ export function CommunitiesBrowser({ initialInterest, scope = "discover" }: { in
     [where, interest, dq, scope],
     { keepPrevious: true, key: `communities:${scope}:${where}:${interest}:${dq}`, wait: !ready },
   );
+  // joined, left or made one (here or in another screen): the list follows at once
+  useAppEvent("membership", () => void reload());
   const filtered = !!(interest || q);
   const [kindsOpen, setKindsOpen] = useState(false);
 

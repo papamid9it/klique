@@ -8,7 +8,8 @@ import type { CommunityInput } from "@/app/services/CommunityService";
 import { Button } from "@/components/ui/Button";
 import { SelectField, TextArea, TextField } from "@/components/ui/Field";
 import { ImageField } from "@/components/ui/ImageField";
-import { PlaceFields } from "@/components/domain/places/PlaceFields";
+import { ReachFields, reachValueOf } from "@/components/domain/places/PlaceFields";
+import type { Reach } from "@/lib/places";
 import { LIMITS, isInterestId, type InterestId } from "@/lib/constants";
 import type { CommunityPrivacy } from "@/lib/types";
 
@@ -19,6 +20,10 @@ export interface CommunityFormValues {
   country: string;
   region: string;
   city: string;
+  /** set when it reaches a whole continent */
+  continent: string;
+  /** what it reaches: a city, a state, a country, a continent or the world */
+  reach: Reach;
   neighborhood: string;
   privacy: CommunityPrivacy;
   coverImage: string;
@@ -49,6 +54,8 @@ export function CommunityForm({
     country: initial?.country ?? "NG",
     region: initial?.region ?? "lagos",
     city: initial?.city ?? "lagos",
+    continent: initial?.continent ?? "",
+    reach: initial ? reachValueOf(initial).reach : ("city" as const),
     neighborhood: initial?.neighborhood ?? "",
     privacy: initial?.privacy ?? "public",
     coverImage: initial?.coverImage ?? "",
@@ -78,6 +85,8 @@ export function CommunityForm({
         country: v.country,
         region: v.region,
         city: v.city,
+        continent: v.continent,
+        reach: v.reach,
         neighborhood: v.neighborhood.trim(),
         ...(showPrivacy ? { privacy: v.privacy, adult: v.privacy === "private" && v.adult, explicit: v.privacy === "private" && v.adult && v.explicit } : {}),
         coverImage: v.coverImage.trim() || null,
@@ -103,7 +112,7 @@ export function CommunityForm({
           ))}
         </SelectField>
       </div>
-      <PlaceFields value={{ country: v.country, region: v.region, city: v.city }} onChange={(p) => setV((x) => ({ ...x, ...p }))} neighborhood={v.neighborhood} onNeighborhood={(n) => set("neighborhood", n)} errors={errors} />
+      <ReachFields value={{ country: v.country, region: v.region, city: v.city, continent: v.continent, reach: v.reach }} onChange={(p) => setV((x) => ({ ...x, ...p }))} neighborhood={v.neighborhood} onNeighborhood={(n) => set("neighborhood", n)} errors={errors} />
 
       {showPrivacy && (
         <fieldset>

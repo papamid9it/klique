@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { isKlique } from "./klique-id";
 import { audienceRefusal, LIMITS } from "@/lib/constants";
 import { planOf } from "./subscriptions.service";
@@ -105,9 +106,16 @@ async function addMember(space: Space, userId: Types.ObjectId, role: Role = "mem
     { $setOnInsert: { role }, $set: { status: "active" } },
     { upsert: true },
   );
-  // a new member of the community: the welcome greeting in its chosen channel; its bots hear about it
-  if (!space.sub && res.upsertedCount) {
-    void (await import("./welcome.service")).greetNewMember(space.community, userId);
+  // a new member of the community (or one coming back): the greeting in its chosen channel; its bots hear about it.
+  // The greeting runs with after(): fired and forgotten, the post could be frozen with the function and never appear.
+  if (!space.sub && (res.upsertedCount || res.modifiedCount)) {
+    const { greetNewMember } = await import("./welcome.service");
+    const greet = () => greetNewMember(space.community, userId);
+    try {
+      after(greet);
+    } catch {
+      void greet();
+    }
     const joiner = (await loadBriefs([userId])).get(sid(userId)) ?? { id: sid(userId) };
     void import("./bots.service").then((b) => b.emitBotEvent(space.community._id, "member.join", { user: joiner }));
   }

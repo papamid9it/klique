@@ -158,15 +158,70 @@ export interface Place {
   city: string;
 }
 
-/** "Lagos, Nigeria" — city and country, the way you'd write it on a flyer. */
-export function placeLabel(p: Partial<Place> | null | undefined): string {
-  if (!p?.country) return p?.city ? prettify(p.city) : "Anywhere";
+/* ------------------------------- reach ------------------------------ */
+/**
+ * How far a community reaches, read from which place fields it has: a city (country + city), a state (country +
+ * region), a whole country, a continent (continent only) or the world (nothing set).
+ */
+export type Reach = "city" | "region" | "country" | "continent" | "world";
+export type ReachPlace = { country?: string | null; region?: string | null; city?: string | null; continent?: string | null };
+export const REACHES: { id: Reach; label: string }[] = [
+  { id: "city", label: "A city" },
+  { id: "region", label: "A state" },
+  { id: "country", label: "A country" },
+  { id: "continent", label: "A continent" },
+  { id: "world", label: "Worldwide" },
+];
+export function reachOf(p: ReachPlace): Reach {
+  if (p.country) return p.city ? "city" : p.region ? "region" : "country";
+  return p.continent ? "continent" : "world";
+}
+export const continentName = (id: string) => CONTINENTS.find((c) => c.id === id)?.name ?? prettify(id);
+/** Only the fields that reach uses (the rest emptied): what gets saved. */
+export function placeForReach(reach: Reach, p: ReachPlace): Required<{ [K in keyof ReachPlace]: string }> {
+  const country = p.country ?? "";
+  if (reach === "world") return { country: "", region: "", city: "", continent: "" };
+  if (reach === "continent") return { country: "", region: "", city: "", continent: p.continent || (getCountry(country)?.continent ?? "") };
+  if (reach === "country") return { country, region: "", city: "", continent: "" };
+  if (reach === "region") return { country, region: p.region ?? "", city: "", continent: "" };
+  return { country, region: p.region ?? "", city: p.city ?? "", continent: "" };
+}
+/** What's wrong with a reach's place, or null. */
+export function reachError(p: ReachPlace): { field: "country" | "region" | "city" | "continent"; message: string } | null {
+  const r = reachOf(p);
+  if (r === "world") return null;
+  if (r === "continent") return CONTINENTS.some((c) => c.id === p.continent) ? null : { field: "continent", message: "Pick a continent." };
+  if (!isCountryCode(p.country ?? "")) return { field: "country", message: "Pick a country." };
+  if (p.region && regionsOf(p.country!).length && !getRegion(p.country!, p.region)) return { field: "region", message: "That state / region doesn't belong to that country." };
+  if (r === "city" && !SLUG.test(p.city ?? "")) return { field: "city", message: "Enter a city or town." };
+  return null;
+}
+/**
+ * Communities that reach a place: based there, or reaching wider and covering it (a country-wide community counts in
+ * each of its cities; a continent's in each of its countries; a worldwide one everywhere). For Mongo.
+ */
+export function reachFilter(s: Scope | null | undefined): Record<string, unknown> {
+  if (!s || s.level === "world") return {};
+  const blank = { $in: [null, ""] };
+  const world = { country: blank, continent: blank };
+  if (s.level === "continent") return { $or: [{ country: { $in: countriesOf(s.continent).map((x) => x.code) } }, { country: blank, continent: s.continent }, world] };
+  const continent = getCountry(s.country)?.continent;
+  const wider: Record<string, unknown>[] = [{ country: s.country, region: blank, city: blank }, ...(continent ? [{ country: blank, continent }] : []), world];
+  if (s.level === "country") return { $or: [{ country: s.country }, ...wider.slice(1)] };
+  const region = s.level === "region" ? s.region : (getCityEntry(s.country, s.city)?.region ?? "");
+  const here = s.level === "region" ? [{ country: s.country, region: s.region }] : [{ country: s.country, city: s.city }];
+  return { $or: [...here, ...(region && s.level === "city" ? [{ country: s.country, region, city: blank }] : []), ...wider] };
+}
+
+/** "Lagos, Nigeria" — city and country, the way you'd write it on a flyer. A continent's name; "Worldwide" for a place with none. */
+export function placeLabel(p: (Partial<Place> & { continent?: string | null }) | null | undefined): string {
+  if (!p?.country) return p?.continent ? continentName(p.continent) : p?.city ? prettify(p.city) : "Anywhere";
   const parts = [p.city ? cityName(p.country, p.city) : p.region ? regionName(p.country, p.region) : "", countryName(p.country)];
   return parts.filter(Boolean).join(", ");
 }
 /** "Lagos" (or the state / country when there is no city). */
-export function placeShort(p: Partial<Place> | null | undefined): string {
-  if (!p?.country) return p?.city ? prettify(p.city) : "Anywhere";
+export function placeShort(p: (Partial<Place> & { continent?: string | null }) | null | undefined): string {
+  if (!p?.country) return p?.continent ? continentName(p.continent) : p?.city ? prettify(p.city) : "Anywhere";
   return p.city ? cityName(p.country, p.city) : p.region ? regionName(p.country, p.region) : countryName(p.country);
 }
 

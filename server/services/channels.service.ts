@@ -1,4 +1,5 @@
 import { VOICE_ENABLED, slowModeLabel } from "@/lib/constants";
+import { moveAmong } from "./reorder";
 import { isSiteAdmin } from "../policies/hosting";
 import { SignJWT } from "jose";
 import { deleteUploads } from "./media.service";
@@ -288,7 +289,7 @@ export async function listChannels(viewer: IUser | null, space: Space, access: S
     }
   }
 
-  return { categories: categories.map(toCategory), channels: visible.map((c) => toChannel(c, ctx)), groups };
+  return { categories: categories.map(toCategory), channels: visible.map((c) => toChannel(c, ctx)), groups, ...(space.sub ? {} : { boardsAt: space.community.boardsAt ?? 0 }) };
 }
 
 async function guestCounts(channels: IChannel[]): Promise<Map<string, number>> {
@@ -400,15 +401,24 @@ export async function updateChannel(viewer: IUser, space: Space, access: SpaceAc
   if (patch.type === "voice" && !VOICE_ENABLED) throw badRequest("Voice channels are coming soon.");
   if (patch.type !== undefined) set.type = patch.type;
   if (patch.visibility !== undefined) set.visibility = patch.visibility;
+  const sameCategory = (a: Types.ObjectId | null | undefined, b: Types.ObjectId | null | undefined) => String(a ?? "") === String(b ?? "");
   if (patch.categoryId !== undefined) {
     set.categoryId = await assertCategory(space, patch.categoryId);
     // it takes on its new category's role overrides
     const cat = set.categoryId ? await ChannelCategory.findById(set.categoryId).select("overrides").lean<Pick<IChannelCategory, "overrides">>() : null;
     set.categoryOverrides = cat?.overrides ?? [];
+    // moved to another category: it goes to the bottom of that one
+    if (!sameCategory(set.categoryId, channel.categoryId)) set.position = await Channel.countDocuments({ communityId: channel.communityId, subcommunityId: channel.subcommunityId ?? null, categoryId: set.categoryId ?? null, topicId: null, parentChannelId: null });
   }
   if (patch.overrides !== undefined) set.overrides = await cleanOverrides(space, patch.overrides);
   if (patch.slowModeSec !== undefined) set.slowModeSec = patch.slowModeSec;
   await Channel.updateOne({ _id: channel._id }, set);
+  // up, down, to the top or the bottom of its category (its new one, when that changed too)
+  if (patch.move) {
+    const categoryId = set.categoryId !== undefined ? set.categoryId : channel.categoryId;
+    const siblings = await Channel.find({ communityId: channel.communityId, subcommunityId: channel.subcommunityId ?? null, categoryId: categoryId ?? null, topicId: null, parentChannelId: null }).sort({ position: 1, createdAt: 1 }).select("_id").lean<{ _id: Types.ObjectId }[]>();
+    await moveAmong(Channel as never, siblings, channel._id, patch.move);
+  }
   // open chats and channel lists pick the change up (slow mode, name, who can post) without a reload
   emitChannel(channel.communityId, channel._id);
   const next = await Channel.findById(channel._id).lean<IChannel>();
@@ -452,8 +462,15 @@ export async function renameCategory(space: Space, access: SpaceAccess, category
   const set: Partial<IChannelCategory> = {};
   if (input.name) set.name = input.name;
   if (input.overrides) set.overrides = await cleanOverrides(space, input.overrides);
-  const cat = await ChannelCategory.findOneAndUpdate({ _id: categoryId, communityId: space.community._id }, { $set: set }, { returnDocument: "after" }).lean<IChannelCategory>();
+  let cat = await ChannelCategory.findOneAndUpdate({ _id: categoryId, communityId: space.community._id }, { $set: set }, { returnDocument: "after" }).lean<IChannelCategory>();
   if (!cat) throw notFound("We couldn't find that category.");
+  // up, down, to the top or the bottom of the community's categories; everyone's channel list follows
+  if (input.move) {
+    const siblings = await ChannelCategory.find({ communityId: space.community._id }).sort({ position: 1, createdAt: 1 }).select("_id").lean<{ _id: Types.ObjectId }[]>();
+    await moveAmong(ChannelCategory as never, siblings, cat._id, input.move);
+    cat = (await ChannelCategory.findById(cat._id).lean<IChannelCategory>()) ?? cat;
+    emitChannel(space.community._id, cat._id);
+  }
   // its channels carry a copy, so checks don't need the category
   if (input.overrides) {
     await Channel.updateMany({ communityId: space.community._id, categoryId: cat._id }, { $set: { categoryOverrides: cat.overrides ?? [] } });

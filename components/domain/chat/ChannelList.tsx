@@ -7,6 +7,7 @@ import { isSamePage, softNavigate } from "@/lib/nav";
 import { useRouter } from "next/navigation";
 import { Fragment, useMemo, useState, useEffect } from "react";
 import { ChannelService } from "@/app/services/ChannelService";
+import { CommunityService } from "@/app/services/CommunityService";
 import { SpaceService } from "@/app/services/SpaceService";
 import { TopicService } from "@/app/services/TopicService";
 import { BoardFormModal } from "@/components/domain/topics/BoardFormModal";
@@ -22,7 +23,7 @@ import { crewLeaveWarning } from "@/components/domain/crews/parts";
 import { CountBadge } from "@/components/ui/CountBadge";
 import { cx } from "@/components/ui/cx";
 import { compactCount } from "@/lib/format";
-import type { BoardDTO, ChannelCategoryDTO, ChannelDTO, ChannelGroupDTO, ChannelsDTO, CommunityDTO, MyCrewDTO } from "@/lib/types";
+import type { BoardDTO, ChannelCategoryDTO, ChannelDTO, ChannelGroupDTO, ChannelsDTO, CommunityDTO, Move, MyCrewDTO } from "@/lib/types";
 import { CategoryModal, ChannelSettings, CreateChannelModal } from "./ChannelFormModal";
 
 export type WorkspaceView = "dashboard" | "topics" | "posts" | "events" | "kliques" | "search" | "members";
@@ -315,7 +316,7 @@ export function ChannelList({
     </>
   );
 
-  const channelMenu = (ch: ChannelDTO, sub: string | null, href: string, canEdit: boolean): MenuEntry[] => {
+  const channelMenu = (ch: ChannelDTO, sub: string | null, href: string, canEdit: boolean, move?: { index: number; count: number; onMove: (m: Move) => void }): MenuEntry[] => {
     const space = { slug: c.slug, subSlug: sub ?? undefined };
     const member = sub ? true : c.viewer.isMember;
     const refresh = () => {
@@ -351,6 +352,7 @@ export function ChannelList({
             { type: "sep" },
             { label: "Edit channel", icon: "edit", onSelect: () => setEditing({ channel: ch, sub, tab: "overview" }) },
             { label: "Permissions", icon: "lock", onSelect: () => setEditing({ channel: ch, sub, tab: "permissions" }) },
+            ...(move ? moveEntries(move.index, move.count, move.onMove) : []),
             { type: "sep" },
             { label: "Delete channel", icon: "trash", danger: true, onSelect: () => setDeletingChannel({ channel: ch, sub }) },
           ] as MenuEntry[])
@@ -530,6 +532,103 @@ export function ChannelList({
     );
   }
 
+  const slotOf = (cat: ChannelCategoryDTO | null) => (cat ? 1 + data.categories.findIndex((k) => k.id === cat.id) : 0);
+  const boardsBefore = sections.findIndex((x) => slotOf(x.category) >= (data.boardsAt ?? 0));
+  // where it is among the places it can go (for the Move menu): before section n, or last
+  const boardsSlot = boardsBefore < 0 ? sections.length : boardsBefore;
+  // a move: send it, then everyone's list (yours first) follows
+  const act = (p: Promise<unknown>, then: () => void) => p.then(then, (e) => toast(errorMessage(e), "error"));
+  // the Boards section, wherever the community put it among the sections (data.boardsAt: sections above it)
+  const boardsSection =
+    c.boardsOn && (boards.length > 0 || manage) ? (
+      <section className="mt-3" aria-label="Boards">
+        <div className="flex items-center pr-1">
+          <p className="flex-1 px-2 py-1 text-[11px] font-bold tracking-[0.08em] text-ink-muted uppercase">Boards</p>
+          {manage && (
+            <Dropdown
+              label="Boards options"
+              align="right"
+              items={moveEntries(boardsSlot, sections.length + 1, (m) => void act(CommunityService.update(c.slug, { moveBoards: m }), onChanged), "section")}
+              trigger={({ props }) => (
+                <button {...props} aria-label="Boards options" title="Move the Boards section" className="inline-flex size-6 items-center justify-center rounded-full text-ink-muted hover:bg-raised hover:text-ink">
+                  <Icon name="more" size={14} />
+                </button>
+              )}
+            />
+          )}
+          {manage && (
+            <button type="button" onClick={() => setBoardModal({})} aria-label="Create board" title="Create board" className="inline-flex size-6 items-center justify-center rounded-full text-ink-muted hover:bg-raised hover:text-ink">
+              <Icon name="plus" size={13} />
+            </button>
+          )}
+        </div>
+        <ul className="space-y-0.5">
+          {boards.map((b) => {
+            const on = view === "topics" && activeBoard === b.slug;
+            return (
+              <li key={b.id}>
+                {/* the hover that shows the options is the board row only, not your posts under it */}
+                <div className="group/board relative">
+                  <SoftLink
+                    href={`${base}?view=topics&b=${b.slug}`}
+                    scroll={false}
+                    onClick={onNavigate}
+                    aria-current={on ? "page" : undefined}
+                    className={cx("flex h-9 items-center gap-2.5 rounded-control px-2.5 text-[14px] font-medium transition", on ? "bg-raised text-ink" : "text-ink-muted hover:bg-raised/60 hover:text-ink")}
+                  >
+                    <Icon name={b.postPolicy === "admins" ? "megaphone" : "topics"} size={16} />
+                    <span className="truncate">{b.name}</span>
+                    {b.topicCount > 0 && <span className={cx("ml-auto font-mono text-[11px] text-ink-muted", manage && "group-hover/board:hidden")}>{compactCount(b.topicCount)}</span>}
+                  </SoftLink>
+                  {manage && (
+                    <div className="absolute top-1.5 right-1 hidden group-focus-within/board:block group-hover/board:block">
+                      <Dropdown
+                        label={`${b.name} options`}
+                        align="right"
+                        items={[
+                          { label: "Edit board", icon: "edit", onSelect: () => setBoardModal({ board: b }) },
+                          ...moveEntries(boards.indexOf(b), boards.length, (mv) => void act(TopicService.moveBoard(c.slug, b.id, mv), onBoardsChanged)),
+                          { type: "sep" },
+                          { label: "Delete board", icon: "trash", danger: true, onSelect: () => setDeletingBoard(b) },
+                        ]}
+                        trigger={({ props }) => (
+                          <button {...props} aria-label={`${b.name} options`} title="Board options" className="inline-flex size-6 items-center justify-center rounded-full text-ink-muted hover:bg-line hover:text-ink">
+                            <Icon name="more" size={14} />
+                          </button>
+                        )}
+                      />
+                    </div>
+                  )}
+                </div>
+                {!!b.mine?.length && (
+                  <ul aria-label={`Your posts in ${b.name}`} className="relative mt-0.5 mb-1 ml-[18px] space-y-0.5 border-l border-line pl-2">
+                    {b.mine.map((p) => {
+                      const open = on && activeTopic === p.id;
+                      const n = open ? 0 : p.unread;
+                      return (
+                        <li key={p.id}>
+                          <SoftLink
+                            href={`${base}?view=topics&b=${b.slug}&t=${p.id}&full=1`}
+                            scroll={false}
+                            onClick={onNavigate}
+                            aria-current={open ? "page" : undefined}
+                            className={cx("flex h-8 items-center gap-2 rounded-control px-2 text-[13px] transition", open ? "bg-raised text-ink" : n ? "font-semibold text-ink hover:bg-raised/60" : "text-ink-muted hover:bg-raised/60 hover:text-ink")}
+                          >
+                            <span className="truncate">{p.title}</span>
+                            {n > 0 && <span className="ml-auto shrink-0 font-mono text-[11px] font-bold text-ink">{n >= 99 ? "99+" : n} new</span>}
+                          </SoftLink>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+    ) : null;
+
   return (
     <nav aria-label={`${c.name} channels`} className="flex h-full flex-col">
       <div className="border-b border-line px-2 py-2.5 pr-14 lg:pr-2">
@@ -555,81 +654,6 @@ export function ChannelList({
         {groupSection}
         {crewSection(crews)}
 
-        {c.boardsOn && (boards.length > 0 || manage) && (
-          <section className="mt-3" aria-label="Boards">
-            <div className="flex items-center pr-1">
-              <p className="flex-1 px-2 py-1 text-[11px] font-bold tracking-[0.08em] text-ink-muted uppercase">Boards</p>
-              {manage && (
-                <button type="button" onClick={() => setBoardModal({})} aria-label="Create board" title="Create board" className="inline-flex size-6 items-center justify-center rounded-full text-ink-muted hover:bg-raised hover:text-ink">
-                  <Icon name="plus" size={13} />
-                </button>
-              )}
-            </div>
-            <ul className="space-y-0.5">
-              {boards.map((b) => {
-                const on = view === "topics" && activeBoard === b.slug;
-                return (
-                  <li key={b.id}>
-                    {/* the hover that shows the options is the board row only, not your posts under it */}
-                    <div className="group/board relative">
-                      <SoftLink
-                        href={`${base}?view=topics&b=${b.slug}`}
-                        scroll={false}
-                        onClick={onNavigate}
-                        aria-current={on ? "page" : undefined}
-                        className={cx("flex h-9 items-center gap-2.5 rounded-control px-2.5 text-[14px] font-medium transition", on ? "bg-raised text-ink" : "text-ink-muted hover:bg-raised/60 hover:text-ink")}
-                      >
-                        <Icon name={b.postPolicy === "admins" ? "megaphone" : "topics"} size={16} />
-                        <span className="truncate">{b.name}</span>
-                        {b.topicCount > 0 && <span className={cx("ml-auto font-mono text-[11px] text-ink-muted", manage && "group-hover/board:hidden")}>{compactCount(b.topicCount)}</span>}
-                      </SoftLink>
-                      {manage && (
-                        <div className="absolute top-1.5 right-1 hidden group-focus-within/board:block group-hover/board:block">
-                          <Dropdown
-                            label={`${b.name} options`}
-                            align="right"
-                            items={[
-                              { label: "Edit board", icon: "edit", onSelect: () => setBoardModal({ board: b }) },
-                              { type: "sep" },
-                              { label: "Delete board", icon: "trash", danger: true, onSelect: () => setDeletingBoard(b) },
-                            ]}
-                            trigger={({ props }) => (
-                              <button {...props} aria-label={`${b.name} options`} title="Board options" className="inline-flex size-6 items-center justify-center rounded-full text-ink-muted hover:bg-line hover:text-ink">
-                                <Icon name="more" size={14} />
-                              </button>
-                            )}
-                          />
-                        </div>
-                      )}
-                    </div>
-                    {!!b.mine?.length && (
-                      <ul aria-label={`Your posts in ${b.name}`} className="relative mt-0.5 mb-1 ml-[18px] space-y-0.5 border-l border-line pl-2">
-                        {b.mine.map((p) => {
-                          const open = on && activeTopic === p.id;
-                          const n = open ? 0 : p.unread;
-                          return (
-                            <li key={p.id}>
-                              <SoftLink
-                                href={`${base}?view=topics&b=${b.slug}&t=${p.id}&full=1`}
-                                scroll={false}
-                                onClick={onNavigate}
-                                aria-current={open ? "page" : undefined}
-                                className={cx("flex h-8 items-center gap-2 rounded-control px-2 text-[13px] transition", open ? "bg-raised text-ink" : n ? "font-semibold text-ink hover:bg-raised/60" : "text-ink-muted hover:bg-raised/60 hover:text-ink")}
-                              >
-                                <span className="truncate">{p.title}</span>
-                                {n > 0 && <span className="ml-auto shrink-0 font-mono text-[11px] font-bold text-ink">{n >= 99 ? "99+" : n} new</span>}
-                              </SoftLink>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
-        )}
 
         <div className="my-3 h-px bg-line" />
 
@@ -645,12 +669,14 @@ export function ChannelList({
           </div>
         )}
 
-        {sections.map(({ category, channels }) => {
+        {sections.map(({ category, channels }, i) => {
           const isCollapsed = !!category && collapsed.has(category.id);
           // keep the active channel visible even in a collapsed category
           const shown = isCollapsed ? channels.filter((ch) => ch.slug === activeChannel && !view) : channels;
           return (
-            <section key={category?.id ?? "loose"} className="mb-3" aria-label={category?.name ?? "Channels"}>
+            <Fragment key={category?.id ?? "loose"}>
+            {i === boardsBefore && <div className="mb-3">{boardsSection}</div>}
+            <section className="mb-3" aria-label={category?.name ?? "Channels"}>
               <div className="flex items-center pr-1">
                 {category ? (
                   <button
@@ -684,6 +710,7 @@ export function ChannelList({
                         items={[
                           { label: "Edit category", icon: "edit", onSelect: () => setCategoryModal({ category }) },
                           { label: "Create channel", icon: "hash", onSelect: () => setCreating({ categoryId: category.id }) },
+                          ...moveEntries(data.categories.indexOf(category), data.categories.length, (mv) => void act(ChannelService.moveCategory(c.slug, category.id, mv), onChanged)),
                           { type: "sep" },
                           { label: "Delete category", icon: "trash", danger: true, onSelect: () => setDeletingCategory(category) },
                         ]}
@@ -699,12 +726,15 @@ export function ChannelList({
               </div>
               <ul className="space-y-0.5">
                 {pins.first(shown).map((ch) => (
-                  <ChannelRow key={ch.id} ch={ch} pinned={pins.has(ch.id)} href={`${base}?c=${ch.slug}`} active={!view && ch.slug === activeChannel} menu={channelMenu(ch, null, `${base}?c=${ch.slug}`, chMgr)} onNavigate={onNavigate} />
+                  <ChannelRow key={ch.id} ch={ch} pinned={pins.has(ch.id)} href={`${base}?c=${ch.slug}`} active={!view && ch.slug === activeChannel} menu={channelMenu(ch, null, `${base}?c=${ch.slug}`, chMgr, chMgr ? { index: channels.indexOf(ch), count: channels.length, onMove: (mv) => void act(ChannelService.move({ slug: c.slug }, ch.slug, mv), onChanged) } : undefined)} onNavigate={onNavigate} />
                 ))}
               </ul>
             </section>
+            </Fragment>
           );
         })}
+        {/* last of all when the community put it at the bottom (or there are no sections yet) */}
+        {boardsBefore < 0 && boardsSection}
       </div>
 
       {modals}
@@ -760,4 +790,22 @@ function ChannelRow({ ch, href, active, menu, pinned, onNavigate }: { ch: Channe
       )}
     </li>
   );
+}
+
+/**
+ * Move up / down / to the top / to the bottom, for owners and admins (channels in a category, categories, boards,
+ * the Boards section). Nothing when there's only one; the ends are greyed out where they can't go further.
+ */
+function moveEntries(index: number, count: number, onMove: (m: Move) => void, what = ""): MenuEntry[] {
+  if (count < 2 || index < 0) return [];
+  const first = index === 0;
+  const last = index >= count - 1;
+  const w = what ? ` ${what}` : "";
+  return [
+    { type: "sep" },
+    { label: `Move${w} to top`, icon: "chevron-up", disabled: first, onSelect: () => onMove("top") },
+    { label: `Move${w} up`, icon: "chevron-up", disabled: first, onSelect: () => onMove("up") },
+    { label: `Move${w} down`, icon: "chevron-down", disabled: last, onSelect: () => onMove("down") },
+    { label: `Move${w} to bottom`, icon: "chevron-down", disabled: last, onSelect: () => onMove("bottom") },
+  ];
 }

@@ -13,8 +13,14 @@ import {
   REGION_KIND,
   regionsOf,
   slugify,
+  getCountry,
+  placeForReach,
+  reachOf,
+  REACHES,
   type Place,
+  type Reach,
 } from "@/lib/places";
+import { cx } from "@/components/ui/cx";
 
 /**
  * Country · state · city (and an optional neighbourhood). The city can be any town: pick a suggestion
@@ -27,7 +33,10 @@ export function PlaceFields({
   neighborhood,
   onNeighborhood,
   disabled,
+  upTo = "city",
 }: {
+  /** how deep to ask: just the country, the country and state, or down to the city (the default) */
+  upTo?: "country" | "region" | "city";
   value: Place;
   onChange: (p: Place) => void;
   errors?: Partial<Record<"country" | "region" | "city" | "neighborhood", string>>;
@@ -68,7 +77,7 @@ export function PlaceFields({
         ))}
       </SelectField>
 
-      {regions.length > 0 ? (
+      {upTo === "country" ? null : regions.length > 0 ? (
         <SelectField label={REGION_KIND[value.country] ?? "Region"} value={value.region} onChange={(e) => setRegion(e.target.value)} error={errors?.region} disabled={disabled}>
           <option value="">Choose…</option>
           {regions.map((r) => (
@@ -79,6 +88,7 @@ export function PlaceFields({
         <div className="hidden sm:block" />
       )}
 
+      {upTo === "city" && (
       <div>
         <TextField label="City or town" value={text} onChange={(e) => typeCity(e.target.value)} list={listId} placeholder="Start typing…" error={errors?.city} disabled={disabled} autoComplete="off" maxLength={40} />
         <datalist id={listId}>
@@ -87,8 +97,9 @@ export function PlaceFields({
           ))}
         </datalist>
       </div>
+      )}
 
-      {onNeighborhood && (
+      {onNeighborhood && upTo === "city" && (
         <div>
           <TextField label="Neighbourhood (optional)" id={nbId} value={neighborhood ?? ""} onChange={(e) => onNeighborhood(e.target.value)} list={`${nbId}-l`} maxLength={60} placeholder={hoods[0] ? `e.g. ${hoods[0]}` : "Area or district"} error={errors?.neighborhood} disabled={disabled} autoComplete="off" />
           <datalist id={`${nbId}-l`}>
@@ -101,6 +112,69 @@ export function PlaceFields({
     </div>
   );
 }
+
+/** A community's place, as wide as it wants: a city, a state, a country, a continent or worldwide (lib/places reach). */
+export type ReachValue = Place & { continent: string; reach: Reach };
+export function ReachFields({
+  value,
+  onChange,
+  errors,
+  neighborhood,
+  onNeighborhood,
+}: {
+  value: ReachValue;
+  onChange: (p: ReachValue) => void;
+  errors?: Partial<Record<"country" | "region" | "city" | "continent" | "neighborhood", string>>;
+  neighborhood?: string;
+  onNeighborhood?: (n: string) => void;
+}) {
+  const reach = value.reach;
+  // switching keeps what it can: the country you had, its continent, your state and city
+  const [last, setLast] = useState<Place>(value.country ? value : { country: "NG", region: "", city: "" });
+  const pick = (r: Reach) => {
+    const next = placeForReach(r, { ...last, continent: value.continent || (getCountry(last.country)?.continent ?? "africa") });
+    onChange({ ...next, reach: r });
+  };
+  const place = (p: Place) => {
+    setLast(p);
+    onChange({ ...placeForReach(reach, { ...p, continent: "" }), reach });
+  };
+  return (
+    <div className="space-y-4">
+      <div>
+        <p className="mb-1.5 text-sm font-medium">Where it&apos;s for</p>
+        <div role="radiogroup" aria-label="Where it's for" className="flex flex-wrap gap-1.5">
+          {REACHES.map((r) => (
+            <button key={r.id} type="button" role="radio" aria-checked={reach === r.id} onClick={() => pick(r.id)} className={cx("h-9 rounded-full border px-3.5 text-sm font-semibold transition", reach === r.id ? "border-ink bg-ink text-canvas" : "border-line text-ink hover:bg-raised")}>
+              {r.label}
+            </button>
+          ))}
+        </div>
+        <p className="mt-1.5 text-xs text-ink-muted">
+          {reach === "world" ? "People anywhere find it in Discover." : reach === "continent" ? "People across the continent find it." : reach === "country" ? "People anywhere in the country find it." : reach === "region" ? "People across the state find it." : "People in and around the city find it first."}
+        </p>
+      </div>
+      {reach === "continent" ? (
+        <SelectField label="Continent" value={value.continent} onChange={(e) => onChange({ country: "", region: "", city: "", continent: e.target.value, reach })} error={errors?.continent}>
+          {CONTINENTS.map((ct) => (
+            <option key={ct.id} value={ct.id}>{ct.name}</option>
+          ))}
+        </SelectField>
+      ) : reach !== "world" ? (
+        <PlaceFields value={value} onChange={place} errors={errors} upTo={reach === "country" ? "country" : reach === "region" ? "region" : "city"} neighborhood={neighborhood} onNeighborhood={onNeighborhood} />
+      ) : null}
+    </div>
+  );
+}
+
+/** A saved community's place as the picker's value (its reach read from which fields it has). */
+export const reachValueOf = (p: { country?: string | null; region?: string | null; city?: string | null; continent?: string | null }): ReachValue => ({
+  country: p.country ?? "",
+  region: p.region ?? "",
+  city: p.city ?? "",
+  continent: p.continent ?? "",
+  reach: reachOf(p),
+});
 
 /** The state a known city belongs to, for forms that only collect a city. */
 export const regionOfCity = (country: string, city: string) => getCityEntry(country, city)?.region ?? "";
