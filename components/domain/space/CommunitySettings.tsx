@@ -31,7 +31,7 @@ import { WelcomePanel } from "./Welcome";
 import { EmojiPanel } from "./EmojiPanel";
 
 export type CommunityTab = "overview" | "groups" | "posts" | "donations" | "payouts" | "members" | "requests" | "invites" | "screening" | "roles" | "automod" | "welcome" | "emoji" | "modlog" | "webhooks" | "notifications" | "privacy" | "delete" | "sections";
-const TITLES: Record<CommunityTab, string> = { overview: "Overview", groups: "Events and mentions", posts: "Posts", donations: "Donations", payouts: "Payouts", members: "Members", requests: "Join requests", invites: "Invite links", screening: "Entry questions", roles: "Roles", automod: "AutoMod", welcome: "Welcome screen", emoji: "Emoji", modlog: "Moderation log", webhooks: "Webhooks & bots", notifications: "Your notifications", privacy: "Privacy", delete: "Delete community", sections: "Board and kliques" };
+const TITLES: Record<CommunityTab, string> = { overview: "Overview", groups: "Events and mentions", posts: "Posts, boards & kliques", donations: "Donations", payouts: "Payouts", members: "Members", requests: "Join requests", invites: "Invite links", screening: "Entry questions", roles: "Roles", automod: "AutoMod", welcome: "Welcome screen", emoji: "Emoji", modlog: "Moderation log", webhooks: "Webhooks & bots", notifications: "Your notifications", privacy: "Privacy", delete: "Delete community", sections: "Board and kliques" };
 
 /** Discord-style full-screen community settings. Owners and admins only; the server re-checks every change. */
 export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: CommunityDTO; tab: string; onTab: (t: CommunityTab) => void; onClose: () => void; onChanged: () => Promise<void> | void }) {
@@ -87,8 +87,8 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
       items: [
         { id: "overview", label: "Overview", icon: "sliders", hidden: !admin },
         { id: "groups", label: "Events and mentions", icon: "calendar", hidden: !admin },
-        { id: "posts", label: "Posts", icon: "image", hidden: !admin },
-        { id: "sections", label: "Board and kliques", icon: "pin", hidden: !admin },
+        // one place for what the community is made of: its Posts, its boards and its kliques
+        { id: "posts", label: "Posts, boards & kliques", icon: "image", hidden: !admin },
         { id: "privacy", label: "Privacy", icon: "lock", hidden: !isOwner },
         // your own (every member has one; members reach it from the community's menu)
         { id: "notifications", label: "Your notifications", icon: "bell" },
@@ -205,7 +205,7 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
         </SettingsBlock>
       )}
 
-      {active === "sections" && (
+      {(active === "posts" || active === "sections") && (
         <SettingsBlock title="Board and kliques" intro="Switch off what this community doesn't use. Nothing is deleted: switching it back on brings it all back.">
           <Switch
             checked={boardsSave.pending ?? c.boardsOn}
