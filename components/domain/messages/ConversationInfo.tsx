@@ -1,5 +1,6 @@
 "use client";
 
+import { ProfileBanner } from "@/components/domain/profile/ProfileParts";
 import { placeLabel } from "@/lib/places";
 import Link from "next/link";
 import { CommunityService } from "@/app/services/CommunityService";
@@ -54,7 +55,8 @@ export function ConversationInfo({
 
   return (
     <div className="flex flex-col gap-5 pb-6">
-      <div className="relative h-24 bg-gradient-to-br from-accent/40 via-accent/10 to-transparent" aria-hidden="true" />
+      {/* their own banner (picture or colour), the same as on their profile */}
+      <ProfileBanner handle={p.handle} bannerUrl={p.bannerUrl} bannerColor={p.bannerColor} className="relative h-24" />
       <div className="-mt-14 px-5">
         <span className="inline-block rounded-full bg-canvas p-1.5">
           <Avatar name={p.displayName} src={p.avatarUrl} frame={p.avatarFrame} size={84} />
