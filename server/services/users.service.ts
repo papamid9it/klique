@@ -180,7 +180,8 @@ export async function getProfile(viewer: IUser | null, handle: string): Promise<
     communities,
     createdCommunities,
     // only what this viewer may see counts, so a hidden private community's size never shows through
-    communityReach: reachShown ? owned.reduce((sum, c) => sum + (c.memberCount ?? 0), 0) : null,
+    // their regulars: the members of the communities they made, not counting themselves (they're in each one)
+    communityReach: reachShown ? owned.reduce((sum, c) => sum + Math.max(0, (c.memberCount ?? 0) - 1), 0) : null,
     communityReachVerified: reachShown && owned.some((c) => c.verified),
     hostedEvents,
     upcomingEvents,

@@ -10,7 +10,7 @@ export interface ICommunity {
   interest: InterestId;
   country: string;
   region: string;
-  /** "" when it reaches further than a city (lib/places communityReach) */
+  /** "" when it reaches further than a city (lib/places reachOf) */
   city: string;
   /** set only when it reaches a whole continent (country, region and city are then "") */
   continent?: string;

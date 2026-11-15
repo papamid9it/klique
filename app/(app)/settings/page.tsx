@@ -34,6 +34,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { PlacePicker } from "@/components/domain/places/PlacePicker";
 import { usePlace } from "@/components/providers/PlaceProvider";
 import { SettingsShellSkeleton } from "@/components/ui/SettingsShell";
+import { confirmLeave, useUnsavedGuard } from "@/lib/hooks/useUnsavedGuard";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { cx } from "@/components/ui/cx";
 import { PlaceFields } from "@/components/domain/places/PlaceFields";
@@ -147,6 +148,20 @@ function ProfileForm({ me, onDraft }: { me: UserMe; onDraft?: (d: ProfileDraft) 
   }
 
   const genderLocked = me.gender === "woman" || me.gender === "man";
+  // anything different from what's saved: leaving asks Keep editing / Discard first
+  const dirty =
+    displayName !== me.displayName ||
+    bio !== me.bio ||
+    pronouns !== (me.pronouns ?? "") ||
+    gender !== (me.gender ?? "unspecified") ||
+    place.country !== me.country ||
+    place.region !== me.region ||
+    place.city !== me.city ||
+    neighborhood !== me.neighborhood ||
+    avatarUrl !== (me.avatarUrl ?? "") ||
+    bannerUrl !== (me.bannerUrl ?? "") ||
+    interestsChanged;
+  useUnsavedGuard(dirty);
   async function save(e: React.FormEvent) {
     e.preventDefault();
     if (!genderLocked && gender !== "unspecified" && !(await confirm({ title: `Set your gender to ${gender}?`, body: "You can't change it yourself after this.", confirmLabel: "Set it", danger: false }))) return;
@@ -573,6 +588,7 @@ function StyleTab({ me, go }: { me: UserMe; go: (t: Tab) => void }) {
   const [error, setError] = useState<string | null>(null);
   const saved = styleOf(me);
   const dirty = (Object.keys(style) as (keyof StyleDraft)[]).some((k) => style[k] !== saved[k]);
+  useUnsavedGuard(dirty);
 
   /** Saving in one of the pickers: just that design, straight away (the server checks it's theirs). */
   async function saveDesign(patch: Partial<StyleDraft>) {
@@ -680,7 +696,9 @@ export default function SettingsPage() {
   // phones show the list of categories first, then one category at a time
   const [menu, setMenu] = useState(true);
 
-  const select = useCallback((t: Tab) => {
+  // another section: unsaved changes in this one ask first (Keep editing / Discard)
+  const select = useCallback(async (t: Tab) => {
+    if (!(await confirmLeave())) return;
     setTab(t);
     setMenu(false);
     try {

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { confirmLeave, useUnsavedGuard } from "@/lib/hooks/useUnsavedGuard";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "./Button";
 import { Icon, type IconName } from "./Icon";
@@ -28,8 +29,8 @@ export function SettingsShell({
   heading,
   groups,
   active,
-  onSelect,
-  onClose,
+  onSelect: selectNow,
+  onClose: closeNow,
   title,
   children,
   footer,
@@ -44,6 +45,9 @@ export function SettingsShell({
   children: ReactNode;
   footer?: ReactNode;
 }) {
+  // unsaved changes in the open section: closing settings or switching section asks first (Keep editing / Discard)
+  const onClose = useCallback(() => void confirmLeave().then((ok) => ok && closeNow()), [closeNow]);
+  const onSelect = (id: string) => void confirmLeave().then((ok) => ok && selectNow(id));
   const [menu, setMenu] = useState(false); // phones: showing the category list
   const [mounted, setMounted] = useState(false);
 
@@ -162,6 +166,8 @@ export function SettingsBlock({ title, intro, children, danger }: { title?: stri
  * while `dirty`, with Reset and Save Changes.
  */
 export function SaveBar({ dirty, busy, onReset, onSave, disabled }: { dirty: boolean; busy?: boolean; onReset: () => void; onSave: () => void; disabled?: boolean }) {
+  // while it shows, leaving the page (a link, Back, closing settings) asks Keep editing / Discard first
+  useUnsavedGuard(dirty);
   if (!dirty) return null;
   return (
     <div className="sticky bottom-4 z-10 mt-8" role="region" aria-label="Unsaved changes">

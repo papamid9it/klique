@@ -11,6 +11,8 @@ export interface ConfirmOptions {
   body?: string;
   /** the red button; default "Delete" */
   confirmLabel?: string;
+  /** the other button; default "Cancel" */
+  cancelLabel?: string;
   /** false: a normal (not red) button, for things that aren't destructive */
   danger?: boolean;
 }
@@ -56,7 +58,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
           }}
         >
           <Button autoFocus onClick={() => answer(false)}>
-            Cancel
+            {ask?.cancelLabel ?? "Cancel"}
           </Button>
           <Button variant={ask?.danger === false ? "primary" : "danger"} onClick={() => answer(true)}>
             {ask?.confirmLabel ?? "Delete"}
