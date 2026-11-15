@@ -1,5 +1,7 @@
 "use client";
 
+import { useConfirm } from "@/components/providers/ConfirmProvider";
+import { SelectBar, SelectTick } from "@/components/domain/chat/SelectBar";
 import { HeaderIcons } from "@/components/layout/HeaderIcons";
 import { isDataSaver } from "@/lib/data-saver";
 import { ProfileTrigger } from "@/components/providers/ProfileCardProvider";
@@ -89,6 +91,11 @@ export default function ConversationPage() {
   const [infoOpen, setInfoOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteMsg, setDeleteMsg] = useState<Local | null>(null);
+  // Select mode (like WhatsApp): your messages ticked for deleting together; null when not selecting
+  const [picked, setPicked] = useState<Set<string> | null>(null);
+  const [deletingMany, setDeletingMany] = useState(false);
+  const ask = useConfirm();
+  const togglePick = (mid: string) => setPicked((p) => { const n = new Set(p ?? []); if (n.has(mid)) n.delete(mid); else n.add(mid); return n; });
   const [replyTo, setReplyTo] = useState<Local | null>(null);
   const attach = useAttachments();
   const fileInput = useRef<HTMLInputElement>(null);
@@ -104,6 +111,7 @@ export default function ConversationPage() {
     ...(detail?.canSend ? [{ label: "Reply", icon: "reply" as const, onSelect: () => setReplyTo(m) }] : []),
     ...(m.mine && !(m.sticker || m.stickerUrl) ? [{ label: "Edit message", icon: "edit" as const, onSelect: () => setEditingId(m.id) }] : []),
     ...saveItem(m),
+    ...(m.mine ? [{ label: "Select", icon: "check" as const, onSelect: () => setPicked(new Set([m.id])) }] : []),
     ...(m.mine ? [{ label: "Delete message", icon: "trash" as const, danger: true, onSelect: () => (shiftHeld() ? deleteNow(m) : setDeleteMsg(m)) }] : [{ label: "Report message", icon: "flag" as const, danger: true, onSelect: () => setReportMsg(m.id) }]),
   ];
   const [sheetFor, setSheetFor] = useState<Local | null>(null);
@@ -114,6 +122,30 @@ export default function ConversationPage() {
       setMessages((prev) => prev.map((x) => (x.id === before.id ? before : x)));
       toast(errorMessage(e), "error");
     });
+  };
+
+  /** Select mode's Delete: the ticked messages go at once; any the server keeps come back with a note */
+  const deletePicked = async () => {
+    const ids = [...(picked ?? [])];
+    if (!ids.length) return;
+    if (!(await ask({ title: ids.length === 1 ? "Delete this message?" : `Delete ${ids.length} messages?`, body: "They're removed for everyone in this chat.", confirmLabel: "Delete" }))) return;
+    const before = messages;
+    setDeletingMany(true);
+    setMessages((prev) => prev.map((x) => (picked?.has(x.id) ? { ...x, body: "", sticker: null, stickerUrl: null, images: [], replyTo: null, deleted: true } : x)));
+    try {
+      const res = (await MessageService.removeMany(id, ids)).data;
+      const gone = new Set(res.deleted);
+      if (res.skipped) {
+        setMessages((prev) => prev.map((x) => (picked?.has(x.id) && !gone.has(x.id) ? (before.find((b) => b.id === x.id) ?? x) : x)));
+        toast(`${res.skipped} couldn't be deleted.`, "error");
+      }
+      setPicked(null);
+    } catch (e) {
+      setMessages(before);
+      toast(errorMessage(e), "error");
+    } finally {
+      setDeletingMany(false);
+    }
   };
 
   const jump = (mid: string) => {
@@ -385,6 +417,7 @@ export default function ConversationPage() {
         <HeaderIcons className="ml-auto" />
       </header>
 
+      {picked && <SelectBar count={picked.size} busy={deletingMany} onCancel={() => setPicked(null)} onDelete={() => void deletePicked()} />}
       <div className="kq-calm min-h-0 flex-1 space-y-1.5 overflow-y-auto px-4 py-5 sm:px-6" aria-live="polite">
         {hasMore && (
           <div className="mb-3 flex justify-center">
@@ -401,7 +434,13 @@ export default function ConversationPage() {
           return (
             <div key={m.id} className="kq-live">
               {showDay && <p className="eyebrow my-4 text-center">{day}</p>}
-              <PressRow onLong={() => !m.pending && !m.failed && !m.deleted && editingId !== m.id && setSheetFor(m)} className={cx("group flex items-end gap-1.5", m.mine ? "flex-row-reverse" : "flex-row")}>
+              <PressRow
+                onLong={() => !picked && !m.pending && !m.failed && !m.deleted && editingId !== m.id && setSheetFor(m)}
+                // selecting: a tap ticks or unticks your message (and nothing else happens)
+                onClickCapture={picked ? (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); if (m.mine && !m.deleted && !m.pending) togglePick(m.id); } : undefined}
+                className={cx("group flex items-end gap-1.5", m.mine ? "flex-row-reverse" : "flex-row", picked && "cursor-pointer rounded-xl px-1", picked?.has(m.id) && "bg-accent/10", picked && (!m.mine || m.deleted) && "opacity-50")}
+              >
+                {picked && m.mine && !m.deleted && !m.pending && <SelectTick on={picked.has(m.id)} className="mb-2" />}
                 <div className={cx("flex max-w-[80%] flex-col", m.mine ? "items-end" : "items-start")}>
                   {chatGroup && !m.mine && m.sender && <ProfileTrigger handle={m.sender.handle} className="mb-0.5 px-1 text-left text-xs font-semibold text-accent-text hover:underline">{m.sender.displayName}</ProfileTrigger>}
                   {m.deleted ? (

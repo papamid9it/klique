@@ -1,5 +1,6 @@
 "use client";
 
+import { SelectTick } from "./SelectBar";
 import { ProfileTrigger } from "@/components/providers/ProfileCardProvider";
 import { memo, useState, type ReactNode } from "react";
 import { OverflowMenu, type OverflowItem } from "@/components/domain/OverflowMenu";
@@ -115,7 +116,17 @@ export const Message = memo(function Message({
   onOpenThread,
   onCardPress,
   gifts,
+  selecting,
+  picked,
+  onPick,
+  onSelectStart,
 }: {
+  /** Select mode (like WhatsApp): a tap ticks or unticks a message you may delete */
+  selecting?: boolean;
+  picked?: boolean;
+  onPick?: (m: ChannelMessageDTO) => void;
+  /** start Select mode with this message ticked */
+  onSelectStart?: (m: ChannelMessageDTO) => void;
   /** a board reply: show its gifts and the 🎁 button */
   gifts?: boolean;
   /** press a button on a bot's card; left out when you can't (not a member) */
@@ -153,6 +164,7 @@ export const Message = memo(function Message({
     ...(onThread && !m.deleted && !m.pending ? [{ label: m.thread ? "Open thread" : "Start thread", icon: "message" as const, onSelect: () => onThread(m) }] : []),
     ...(m.canPin && onPin ? [{ label: m.pinned ? "Unpin message" : "Pin message", icon: "pushpin" as const, onSelect: () => onPin(m, !m.pinned) }] : []),
     ...(m.canEdit && onEdit ? [{ label: "Edit message", icon: "edit" as const, onSelect: () => setEditing(true) }] : []),
+    ...(m.canDelete && onSelectStart ? [{ label: "Select", icon: "check" as const, onSelect: () => onSelectStart(m) }] : []),
     ...(m.canDelete ? [{ label: "Delete message", icon: "trash" as const, danger: true, onSelect: () => onDelete(m) }] : []),
     ...(!mine && onReport && !m.deleted ? [{ label: "Report message", icon: "flag" as const, onSelect: () => onReport(m) }] : []),
   ];
@@ -161,7 +173,9 @@ export const Message = memo(function Message({
 
   return (
     // on a touch screen, press and hold for the actions sheet (the hover toolbar is for mice)
-    <li id={`msg-${m.id}`} tabIndex={-1} {...(!m.pending && !m.deleted && !editing ? sheet.press : {})} className={cx("group relative flex gap-3 px-4 outline-none hover:bg-raised/40 has-[:focus-visible]:bg-raised/40 has-[[data-hover-bar]_[aria-expanded=true]]:bg-raised/40 sm:px-6", showHead ? "mt-4 pt-0.5" : "", m.mentionsMe && "border-l-2 border-accent bg-accent/10 hover:bg-accent/15", m.pending && "opacity-60")}>
+    <li id={`msg-${m.id}`} tabIndex={-1} {...(!selecting && !m.pending && !m.deleted && !editing ? sheet.press : {})}
+      onClickCapture={selecting ? (e) => { e.preventDefault(); e.stopPropagation(); if (m.canDelete && !m.deleted && !m.pending) onPick?.(m); } : undefined} className={cx(selecting && "cursor-pointer", picked && "!bg-accent/10", selecting && !(m.canDelete && !m.deleted && !m.pending) && "opacity-50", "group relative flex gap-3 px-4 outline-none hover:bg-raised/40 has-[:focus-visible]:bg-raised/40 has-[[data-hover-bar]_[aria-expanded=true]]:bg-raised/40 sm:px-6", showHead ? "mt-4 pt-0.5" : "", m.mentionsMe && "border-l-2 border-accent bg-accent/10 hover:bg-accent/15", m.pending && "opacity-60")}>
+      {selecting && <SelectTick on={!!picked} className={cx("mt-2.5", !(m.canDelete && !m.deleted && !m.pending) && "invisible")} />}
       <div className="w-10 shrink-0 pt-0.5">
         {showHead ? (
           m.bot ? (

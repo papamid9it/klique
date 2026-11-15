@@ -66,6 +66,8 @@ export const ChannelService = {
   create: (s: SpaceRef, input: ChannelInput) => api.post<Envelope<ChannelDTO>>(`${base(s)}/channels`, input),
   update: (s: SpaceRef, channelSlug: string, patch: Partial<Omit<ChannelInput, "memberIds">>) => api.patch<Envelope<ChannelDTO>>(`${base(s)}/channels/${channelSlug}`, patch),
   editMessage: (s: SpaceRef, channelSlug: string, messageId: string, body: string) => api.patch<Envelope<ChannelMessageDTO>>(`${base(s)}/channels/${channelSlug}/messages/${messageId}`, { body }),
+  /** Select mode: several messages at once (yours, or others' if you may remove them); any that can't go are skipped */
+  removeMessages: (s: SpaceRef, channelSlug: string, ids: string[]) => api.post<Envelope<{ deleted: string[]; skipped: number }>>(`${base(s)}/channels/${channelSlug}/messages/bulk-delete`, { ids }),
   remove: (s: SpaceRef, channelSlug: string) => api.delete<Envelope<{ deleted: boolean }>>(`${base(s)}/channels/${channelSlug}`),
 
   /** categories exist on communities only */

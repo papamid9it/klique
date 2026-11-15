@@ -8,6 +8,7 @@ import {
   deleteCategory,
   deleteChannel,
   deleteMessage,
+  deleteMessages,
   editMessage,
   listChannelMembers,
   listChannels,
@@ -30,7 +31,7 @@ import {
   listThreads,
   startThread,
 } from "../services/channels.service";
-import { categorySchema, categoryUpdateSchema, channelCreateSchema, channelMemberSchema, channelUpdateSchema, chatBodySchema, chatListQuery, editMessageSchema, memberSearchQuery, pinSchema, reactSchema, reactionIdsQuery } from "../validators/schemas";
+import { bulkDeleteSchema, categorySchema, categoryUpdateSchema, channelCreateSchema, channelMemberSchema, channelUpdateSchema, chatBodySchema, chatListQuery, editMessageSchema, memberSearchQuery, pinSchema, reactSchema, reactionIdsQuery } from "../validators/schemas";
 
 /**
  * Handlers for chat channels of a community (`/api/communities/[slug]/…`) and of its groups
@@ -101,6 +102,12 @@ export const pinsList = withApi<Chan>({ auth: "optional" }, async ({ params, vie
 export const messageDelete = withApi<Msg, "required">({ auth: "required" }, async ({ params, viewer }) => {
   const { space, access } = await resolveSpaceFor(viewer, params.slug, params.subSlug);
   return deleteMessage(viewer, space, access, params.channelSlug, params.messageId);
+});
+
+export const messagesBulkDelete = withApi<Chan, "required">({ auth: "required", limit: { name: "chat-bulk-delete", max: 20, windowMs: 60_000 } }, async ({ req, params, viewer }) => {
+  const { ids } = await readJson(req, bulkDeleteSchema);
+  const { space, access } = await resolveSpaceFor(viewer, params.slug, params.subSlug);
+  return deleteMessages(viewer, space, access, params.channelSlug, ids);
 });
 
 const muteBody = z.object({ muted: z.boolean() });

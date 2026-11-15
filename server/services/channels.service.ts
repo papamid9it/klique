@@ -952,6 +952,23 @@ export async function findCardButton(viewer: IUser, space: Space, access: SpaceA
   return { channel, message, button };
 }
 
+/**
+ * Several messages at once (Select mode, like WhatsApp), each by the same rule as deleting one: your own, or other
+ * people's if you may remove messages and they're below you. Any that can't go are skipped and counted.
+ */
+export async function deleteMessages(viewer: IUser, space: Space, access: SpaceAccess, channelSlug: string, ids: string[]): Promise<{ deleted: string[]; skipped: number }> {
+  const deleted: string[] = [];
+  for (const messageId of [...new Set(ids)]) {
+    try {
+      await deleteMessage(viewer, space, access, channelSlug, messageId);
+      deleted.push(messageId);
+    } catch {
+      /* not allowed, or gone already */
+    }
+  }
+  return { deleted, skipped: new Set(ids).size - deleted.length };
+}
+
 export async function deleteMessage(viewer: IUser, space: Space, access: SpaceAccess, channelSlug: string, messageId: string) {
   const { channel } = await loadChannel(viewer, space, access, channelSlug);
   const msg = await ChannelMessage.findOne({ _id: messageId, channelId: channel._id }).lean<IChannelMessage>();

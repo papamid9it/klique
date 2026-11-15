@@ -15,6 +15,8 @@ export interface ChatSource {
   send(input: SendInput): Promise<Envelope<ChannelMessageDTO>>;
   edit(messageId: string, body: string): Promise<Envelope<ChannelMessageDTO>>;
   remove(messageId: string): Promise<Envelope<{ deleted: boolean }>>;
+  /** several at once (Select mode); left out: they go one by one */
+  removeMany?(ids: string[]): Promise<Envelope<{ deleted: string[]; skipped: number }>>;
   react(messageId: string, kind: ReactionKind): Promise<Envelope<ReactionDTO[]>>;
   reactions(ids: string[]): Promise<Envelope<Record<string, ReactionDTO[]>>>;
   markRead(): Promise<unknown>;
@@ -38,6 +40,7 @@ export function channelSource(space: SpaceRef, channelSlug: string, channelId?: 
     send: (input) => ChannelService.send(space, channelSlug, input),
     edit: (id, body) => ChannelService.editMessage(space, channelSlug, id, body),
     remove: (id) => ChannelService.deleteMessage(space, channelSlug, id),
+    removeMany: (ids) => ChannelService.removeMessages(space, channelSlug, ids),
     react: (id, kind) => ChannelService.react(space, channelSlug, id, kind),
     reactions: (ids) => ChannelService.reactions(space, channelSlug, ids),
     markRead: () => ChannelService.markRead(space, channelSlug),

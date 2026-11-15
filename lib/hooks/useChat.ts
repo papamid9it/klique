@@ -249,6 +249,34 @@ export function useChat(source: ChatSource) {
     [src, commit],
   );
 
+  /**
+   * Select mode's Delete: the messages go at once, the server is told behind. Any it kept (not allowed, or an error)
+   * come back. Returns how many couldn't be deleted, and an error message if the whole thing failed.
+   */
+  const removeMany = useCallback(
+    async (ids: string[]): Promise<{ kept: number; error: string | null }> => {
+      const want = new Set(ids);
+      const before = itemsRef.current.filter((m) => want.has(m.id));
+      commit((prev) => prev.map((m) => (want.has(m.id) ? { ...m, body: "", images: [], pinned: false, deleted: true, canDelete: false, canEdit: false } : m)));
+      const putBack = (keep: Set<string>) => commit((prev) => prev.map((m) => (keep.has(m.id) ? (before.find((b) => b.id === m.id) ?? m) : m)));
+      try {
+        let gone: Set<string>;
+        if (src.removeMany) gone = new Set((await src.removeMany(ids)).data.deleted);
+        else {
+          gone = new Set();
+          for (const id of ids) await src.remove(id).then(() => gone.add(id), () => undefined);
+        }
+        const kept = new Set(ids.filter((id) => !gone.has(id)));
+        if (kept.size) putBack(kept);
+        return { kept: kept.size, error: null };
+      } catch (e) {
+        putBack(want);
+        return { kept: ids.length, error: errorMessage(e) };
+      }
+    },
+    [src, commit],
+  );
+
   /** Save a new text for one of your messages. Returns an error message on failure (the editor stays open). */
   const edit = useCallback(
     async (id: string, body: string): Promise<string | null> => {
@@ -301,5 +329,5 @@ export function useChat(source: ChatSource) {
   );
 
   const reload = useCallback(() => load(), [load]);
-  return { react, edit, pin, items, hasOlder, loading, loadingOlder, error, status, reload, loadOlder, send, remove };
+  return { react, edit, pin, items, hasOlder, loading, loadingOlder, error, status, reload, loadOlder, send, remove, removeMany };
 }

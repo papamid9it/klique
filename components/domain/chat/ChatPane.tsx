@@ -1,5 +1,7 @@
 "use client";
 
+import { useConfirm } from "@/components/providers/ConfirmProvider";
+import { SelectBar } from "./SelectBar";
 import ApiClient, { errorMessage } from "@/app/ApiCore";
 import { FormatButton } from "@/components/ui/FormatButton";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -100,6 +102,23 @@ export function ChatPane({
   const toast = useToast();
   const [src] = useState(() => source ?? channelSource(space!, channel.slug, channel.id));
   const chat = useChat(src);
+  // Select mode (like WhatsApp): messages ticked to delete together; null when not selecting
+  const [picked, setPicked] = useState<Set<string> | null>(null);
+  const [deletingMany, setDeletingMany] = useState(false);
+  const ask = useConfirm();
+  const togglePick = useCallback((m: ChannelMessageDTO) => setPicked((p) => { const n = new Set(p ?? []); if (n.has(m.id)) n.delete(m.id); else n.add(m.id); return n; }), []);
+  const startPick = useCallback((m: ChannelMessageDTO) => setPicked(new Set([m.id])), []);
+  const deletePicked = async () => {
+    const ids = [...(picked ?? [])];
+    if (!ids.length) return;
+    if (!(await ask({ title: ids.length === 1 ? "Delete this message?" : `Delete ${ids.length} messages?`, body: "They're removed for everyone.", confirmLabel: "Delete" }))) return;
+    setDeletingMany(true);
+    const res = await chat.removeMany(ids);
+    setDeletingMany(false);
+    if (res.error) toast(res.error, "error");
+    else if (res.kept) toast(`${res.kept} couldn't be deleted.`, "error");
+    if (!res.error) setPicked(null);
+  };
   const pressCard = async (m: ChannelMessageDTO, buttonId: string) => {
     try {
       const res = await src.pressButton!(m.id, buttonId);
@@ -232,6 +251,7 @@ export function ChatPane({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      {picked && <SelectBar count={picked.size} busy={deletingMany} onCancel={() => setPicked(null)} onDelete={() => void deletePicked()} />}
       <PinnedBar source={src} tick={pinTick} items={items} onJump={jump} onUnpin={(id) => void chat.pin(id, false).then((err) => (err ? toast(err, "error") : setPinTick((n) => n + 1)))} />
       <div className="relative min-h-0 flex-1">
         <div ref={scroller} onScroll={onScroll} className="kq-calm h-full overflow-y-auto overscroll-contain pb-3" role="log" aria-live="polite" aria-relevant="additions" aria-label={`Messages in ${channel.name}`}>
@@ -282,7 +302,7 @@ export function ChatPane({
                           <span className="h-px flex-1 bg-line" />
                         </li>
                       )}
-                      <Message gifts={gifts ?? !!space} m={m} showHead={showHead} mine={!!user && m.author.id === user.id} meId={user?.id ?? null} onDelete={(msg) => (shiftHeld() ? void chat.remove(msg.id).then((err) => err && toast(err, "error")) : setDeleting(msg))} onEdit={(msg, body) => chat.edit(msg.id, body)} onReport={user ? setReporting : undefined} onReply={isMember && channel.canPost ? setReplyTo : undefined} onPin={(msg, pinned) => void chat.pin(msg.id, pinned).then((err) => (err ? toast(err, "error") : setPinTick((n) => n + 1)))} onJump={jump} canReact={isMember && !!user} onReact={(msg, kind) => (countReaction(kind), void chat.react(msg.id, kind).then((err) => err && toast(err, "error")))} onSaveSticker={user ? saveSticker : undefined} onOpenThread={onOpenThread} onCardPress={src.pressButton && isMember ? pressCard : undefined} onThread={onOpenThread && space && !space.sub && isMember && !channel.thread ? (msg) => onOpenThread(msg.thread ? msg.thread.slug : draftThread({ space, channelSlug: channel.slug, messageId: msg.id, author: msg.author.displayName, body: msg.body })) : undefined} />
+                      <Message gifts={gifts ?? !!space} m={m} selecting={!!picked} picked={!!picked?.has(m.id)} onPick={togglePick} onSelectStart={startPick} showHead={showHead} mine={!!user && m.author.id === user.id} meId={user?.id ?? null} onDelete={(msg) => (shiftHeld() ? void chat.remove(msg.id).then((err) => err && toast(err, "error")) : setDeleting(msg))} onEdit={(msg, body) => chat.edit(msg.id, body)} onReport={user ? setReporting : undefined} onReply={isMember && channel.canPost ? setReplyTo : undefined} onPin={(msg, pinned) => void chat.pin(msg.id, pinned).then((err) => (err ? toast(err, "error") : setPinTick((n) => n + 1)))} onJump={jump} canReact={isMember && !!user} onReact={(msg, kind) => (countReaction(kind), void chat.react(msg.id, kind).then((err) => err && toast(err, "error")))} onSaveSticker={user ? saveSticker : undefined} onOpenThread={onOpenThread} onCardPress={src.pressButton && isMember ? pressCard : undefined} onThread={onOpenThread && space && !space.sub && isMember && !channel.thread ? (msg) => onOpenThread(msg.thread ? msg.thread.slug : draftThread({ space, channelSlug: channel.slug, messageId: msg.id, author: msg.author.displayName, body: msg.body })) : undefined} />
                     </div>
                   );
                 })}

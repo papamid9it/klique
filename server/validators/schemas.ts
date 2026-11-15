@@ -529,6 +529,8 @@ export const categoryUpdateSchema = z.object({ name: text(40, 2).optional(), ove
 
 export const chatBodySchema = chatPayload;
 export const pinSchema = z.object({ pinned: z.boolean() });
+/** several messages at once (chat's Select mode): up to 100 */
+export const bulkDeleteSchema = z.object({ ids: z.array(objectId).min(1).max(100) });
 export const reactSchema = z.object({ kind: z.enum(REACTION_IDS) });
 export const reactionIdsQuery = z.object({ ids: z.string().max(2000).transform((v) => v.split(",").map((x) => x.trim()).filter((x) => /^[a-f0-9]{24}$/i.test(x)).slice(0, 80)) });
 

@@ -415,6 +415,23 @@ export async function deleteMessage(viewer: IUser, id: string, messageId: string
   return { deleted: true };
 }
 
+/**
+ * Several of your messages at once (Select mode, like WhatsApp), each by the same rule as deleting one. Any that
+ * can't go (someone else's, already gone) are skipped and counted, not a reason to stop.
+ */
+export async function deleteMessages(viewer: IUser, id: string, ids: string[]): Promise<{ deleted: string[]; skipped: number }> {
+  const deleted: string[] = [];
+  for (const messageId of [...new Set(ids)]) {
+    try {
+      await deleteMessage(viewer, id, messageId);
+      deleted.push(messageId);
+    } catch {
+      /* not yours, or gone already */
+    }
+  }
+  return { deleted, skipped: new Set(ids).size - deleted.length };
+}
+
 /* ------------------------------------------------------------------ */
 /* Message requests                                                    */
 /* ------------------------------------------------------------------ */

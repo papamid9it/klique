@@ -117,10 +117,10 @@ export function useMessageSheet() {
 }
 
 /** A row that opens a message's sheet on a long press (for lists that render messages inline). */
-export function PressRow({ onLong, className, children }: { onLong: () => void; className?: string; children: React.ReactNode }) {
+export function PressRow({ onLong, className, children, onClickCapture }: { onLong: () => void; className?: string; children: React.ReactNode; /** Select mode: a tap picks the message instead */ onClickCapture?: (e: React.MouseEvent) => void }) {
   const press = useLongPress(onLong);
   return (
-    <div {...press} className={className}>
+    <div {...press} onClickCapture={onClickCapture} className={className}>
       {children}
     </div>
   );
