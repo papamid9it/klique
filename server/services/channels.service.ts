@@ -304,14 +304,15 @@ async function loadChannel(viewer: IUser | null, space: Space, access: SpaceAcce
   assertCanView(access, "this channel");
   const found = await Channel.findOne({ ...scopeOf(space), slug: channelSlug.toLowerCase() }).lean<IChannel>();
   if (!found) throw notFound("We couldn't find that channel.");
-  // a thread follows its channel: whoever can see the channel sees the thread (and anyone who may post there, or
-  // in an announcement channel any member, may reply in it)
+  // a thread follows its channel: whoever can see the channel sees the thread, and only those who may post in the
+  // channel may reply in it (an announcement channel's threads are for its owners and admins too)
   let channel = found;
   let guestOf = found._id;
   if (found.parentChannelId) {
     const parent = await Channel.findById(found.parentChannelId).lean<IChannel>();
     if (!parent) throw notFound("We couldn't find that thread.");
-    channel = { ...found, visibility: parent.visibility, overrides: parent.overrides, categoryOverrides: parent.categoryOverrides, type: parent.type === "voice" ? "voice" : "text" };
+    // ...and its slow mode: a thread can't be used to get round the channel's
+    channel = { ...found, visibility: parent.visibility, overrides: parent.overrides, categoryOverrides: parent.categoryOverrides, type: parent.type === "voice" ? "voice" : parent.type === "announcement" ? "announcement" : "text", slowModeSec: parent.slowModeSec ?? 0 };
     guestOf = parent._id;
   }
   const invited = !!viewer && channel.visibility === "invite" && !!(await ChannelMember.exists({ channelId: guestOf, userId: viewer._id }));
@@ -787,6 +788,8 @@ export async function startThread(viewer: IUser, space: Space, access: SpaceAcce
   const { channel, invited } = await loadChannel(viewer, space, access, channelSlug);
   if (channel.parentChannelId || channel.topicId || channel.type === "voice") throw badRequest("Threads can only start from messages in a text channel.");
   if (!access.canPost) throw forbidden("Join to start a thread.");
+  // only someone who may post in the channel starts a thread there (an announcement channel: owners and admins)
+  if (!canPostInChannel(channel, access, invited)) throw forbidden("Only people who can post in this channel can start a thread here.");
   const msg = await ChannelMessage.findOne({ _id: messageId, channelId: channel._id }).lean<IChannelMessage>();
   if (!msg || msg.deletedAt) throw notFound("We couldn't find that message.");
   const slug = `t-${sid(msg._id)}`;

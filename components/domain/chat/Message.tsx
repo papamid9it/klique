@@ -120,7 +120,10 @@ export const Message = memo(function Message({
   picked,
   onPick,
   onSelectStart,
+  canStartThread = true,
 }: {
+  /** may start a thread here (can post in the channel); opening an existing one is for everyone */
+  canStartThread?: boolean;
   /** Select mode (like WhatsApp): a tap ticks or unticks a message you may delete */
   selecting?: boolean;
   picked?: boolean;
@@ -161,7 +164,8 @@ export const Message = memo(function Message({
   const items: OverflowItem[] = [
     ...(saveable && onSaveSticker ? [{ label: m.stickerUrl ? "Save sticker" : "Save as sticker", icon: "sticker" as const, onSelect: () => onSaveSticker(saveable) }] : []),
     ...(onReply && !m.deleted && !m.pending ? [{ label: "Reply", icon: "reply" as const, onSelect: () => onReply(m) }] : []),
-    ...(onThread && !m.deleted && !m.pending ? [{ label: m.thread ? "Open thread" : "Start thread", icon: "message" as const, onSelect: () => onThread(m) }] : []),
+    // a thread anyone can open; starting one is for people who may post in the channel
+    ...(onThread && !m.deleted && !m.pending && (m.thread || canStartThread) ? [{ label: m.thread ? "Open thread" : "Start thread", icon: "message" as const, onSelect: () => onThread(m) }] : []),
     ...(m.canPin && onPin ? [{ label: m.pinned ? "Unpin message" : "Pin message", icon: "pushpin" as const, onSelect: () => onPin(m, !m.pinned) }] : []),
     ...(m.canEdit && onEdit ? [{ label: "Edit message", icon: "edit" as const, onSelect: () => setEditing(true) }] : []),
     ...(m.canDelete && onSelectStart ? [{ label: "Select", icon: "check" as const, onSelect: () => onSelectStart(m) }] : []),
