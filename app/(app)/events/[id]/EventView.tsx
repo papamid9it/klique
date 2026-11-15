@@ -24,6 +24,7 @@ import { eventPhoto } from "@/lib/fake";
 import { Cover } from "@/components/ui/Cover";
 import { SelectField, TextArea, TextField } from "@/components/ui/Field";
 import { Icon } from "@/components/ui/Icon";
+import { goBack } from "@/lib/nav";
 import { InterestChip } from "@/components/ui/Chip";
 import { Modal } from "@/components/ui/Modal";
 import { EventPageSkeleton } from "@/components/ui/Skeleton";
@@ -322,9 +323,14 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
   return (
     <article>
       <EventPanel event={event} people={people} nextCursor={attendees.data?.nextCursor ?? null} friends={attendees.data?.friends} friendCount={attendees.data?.friendCount} limited={!!attendees.data?.limited} />
-      <Link href="/events" className="mb-4 inline-flex items-center gap-1.5 text-sm text-ink-muted hover:text-ink lg:hidden">
-        <Icon name="arrow-left" size={15} /> All events
-      </Link>
+      {/* back to where you came from (a community, Home, a post), or All events when the event was opened from a link */}
+      <button
+        type="button"
+        onClick={() => goBack(router, "/events")}
+        className="mb-4 inline-flex h-9 items-center gap-1.5 rounded-full border border-line px-3.5 text-sm font-semibold text-ink hover:bg-raised"
+      >
+        <Icon name="arrow-left" size={15} /> Back
+      </button>
       <Cover src={eventPhoto(event.id, event.coverImage)} seed={event.id} interest={event.interest} className="aspect-[16/8] w-full rounded-card border border-line">
         <div className="absolute top-4 left-4">
           <DateChip iso={event.startsAt} zone={event.timeZone} />
