@@ -1,5 +1,6 @@
 "use client";
 
+import { useAppEvent } from "@/lib/appEvents";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -47,6 +48,8 @@ export function DmSidebar({ onNavigate }: { onNavigate?: () => void }) {
   useRealtimeEvent(() => void requests.reload(), { filter: (e) => e.type === "dm", debounceMs: 600 });
   // a friend request or an accept: the counts update by themselves
   useRealtimeEvent(() => void summary.reload(), { filter: (e) => e.type === "notify" && e.category === "friends", debounceMs: 400 });
+  // ...and when you answer one yourself (no notification comes back for that)
+  useAppEvent("friends", () => void summary.reload());
 
   const reloadInbox = inbox.reload;
   const reloadSummary = summary.reload;

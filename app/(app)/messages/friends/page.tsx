@@ -1,5 +1,6 @@
 "use client";
 
+import { emitAppEvent } from "@/lib/appEvents";
 import { HeaderIcons } from "@/components/layout/HeaderIcons";
 import { placeShort } from "@/lib/places";
 import { ProfileTrigger, useProfileCard } from "@/components/providers/ProfileCardProvider";
@@ -64,7 +65,10 @@ export default function FriendsPage() {
   const outgoing = (requests.data ?? []).filter((r) => r.direction === "outgoing");
 
   const go = (t: Tab) => router.replace(t === "all" ? "/messages/friends" : `/messages/friends?tab=${t}`, { scroll: false });
-  const refresh = () => void Promise.all([friends.reload(), requests.reload(), suggestions.reload()]);
+  const refresh = () => {
+    emitAppEvent("friends"); // the sidebar's Friend requests count too
+    void Promise.all([friends.reload(), requests.reload(), suggestions.reload()]);
+  };
 
   async function message(u: UserBrief) {
     try {

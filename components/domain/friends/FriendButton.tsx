@@ -1,5 +1,6 @@
 "use client";
 
+import { emitAppEvent } from "@/lib/appEvents";
 import { useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
 import { FriendService } from "@/app/services/FriendService";
@@ -28,6 +29,7 @@ export function FriendButton({ handle, status, onChange, size = "md", noMenu, ic
     try {
       const next = await fn();
       if (next) onChange(next);
+      emitAppEvent("friends"); // the Friend requests count elsewhere follows at once
       if (done) toast(done, "success");
     } catch (e) {
       toast(errorMessage(e), "error");

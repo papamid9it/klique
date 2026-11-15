@@ -5,9 +5,10 @@ import { useEffect, useRef } from "react";
 /**
  * Things that happened in this tab that other screens care about, so they update without a refresh:
  * "membership" when you join, ask to join or leave a community or group (crew pages show their Join button);
- * "welcome" to open the community's welcome screen (accept its rules, pick roles).
+ * "welcome" to open the community's welcome screen (accept its rules, pick roles);
+ * "friends" when a friend request is sent, accepted, declined or cancelled (the requests count updates).
  */
-export type AppEvent = "membership" | "welcome";
+export type AppEvent = "membership" | "welcome" | "friends";
 
 const TARGET = typeof window !== "undefined" ? window : null;
 
