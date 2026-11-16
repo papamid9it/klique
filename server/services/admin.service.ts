@@ -9,7 +9,7 @@ import { HypePurchase } from "../models/Wallet";
 import { HomeStyleReport } from "../models/HomeStyleReport";
 import { FeedComment, FeedPost, FeedVote, type IFeedPost } from "../models/FeedPost";
 import { Reaction } from "../models/Reaction";
-import { VOICE_ENABLED } from "@/lib/constants";
+import { VOICE_ENABLED, WEB_PAYMENTS_ENABLED } from "@/lib/constants";
 import { Types } from "mongoose";
 import type {
   AdminCommunityRow,
@@ -29,7 +29,7 @@ import type {
   SystemStatusDTO,
   UserBrief,
 } from "@/lib/types";
-import { ablyKey, adminEmails, appUrl, cronSecret, googleConfig, isProd, livekitConfig, paystackConfig, promotionPricePerDay, promotionReview, r2Config, smtpConfig, webPushConfig } from "../env";
+import { ablyKey, adminEmails, appUrl, cronSecret, googleConfig, isProd, livekitConfig, promotionPricePerDay, promotionReview, r2Config, smtpConfig, webPushConfig, webPaymentsOn } from "../env";
 import { badRequest, forbidden, notFound } from "../http/errors";
 import { Channel, ChannelMessage, type IChannel, type IChannelMessage } from "../models/Channel";
 import { Community, type ICommunity } from "../models/Community";
@@ -698,7 +698,7 @@ export function systemStatus(): SystemStatusDTO {
       { id: "webpush", label: "Browser notifications", ok: !!webPushConfig(), detail: webPushConfig() ? "Desktop and web-app notifications are on." : "VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY aren't set, so desktop and browser notifications are off." },
       { id: "report", label: "Report email", ok: !!(process.env.NEXT_PUBLIC_REPORT_EMAIL?.trim() || process.env.NEXT_PUBLIC_SUPPORT_EMAIL?.trim()), detail: process.env.NEXT_PUBLIC_REPORT_EMAIL?.trim() ? `Shown for abuse and safety reports: ${process.env.NEXT_PUBLIC_REPORT_EMAIL.trim()}` : "NEXT_PUBLIC_REPORT_EMAIL isn't set, so abuse and safety reports point to the support email.", optional: true },
       { id: "support", label: "Support email", ok: !!process.env.NEXT_PUBLIC_SUPPORT_EMAIL?.trim(), detail: process.env.NEXT_PUBLIC_SUPPORT_EMAIL?.trim() ? `Shown on Terms and Privacy: ${process.env.NEXT_PUBLIC_SUPPORT_EMAIL.trim()}` : "NEXT_PUBLIC_SUPPORT_EMAIL isn't set, so Terms and Privacy have no contact address." },
-      { id: "paystack", label: "Paid promotions (Paystack)", ok: !!paystackConfig(), detail: paystackConfig() ? `Hosts can pay to promote events (₦${promotionPricePerDay().toLocaleString()}/day for a city${promotionReview() ? ", approved by you first" : ""}).` : "PAYSTACK_SECRET_KEY isn't set, so hosts can't buy promotions. You can still create promoted events yourself in Ads.", optional: true },
+      { id: "paystack", label: "Payments on the website (Paystack)", ok: webPaymentsOn() || !WEB_PAYMENTS_ENABLED, detail: !WEB_PAYMENTS_ENABLED ? "Paused (WEB_PAYMENTS_ENABLED is off): buying happens in the phone app, and donations are off." : webPaymentsOn() ? `On: Lite and Pro, Hype, ads and promotions can be paid by card (promotions ₦${promotionPricePerDay().toLocaleString()}/day for a city${promotionReview() ? ", approved by you first" : ""}).` : "PAYSTACK_SECRET_KEY isn't set, so nothing can be paid by card on the website.", optional: true },
       { id: "cron", label: "Scheduled jobs", ok: !!cronSecret(), detail: cronSecret() ? "CRON_SECRET is set: reminders, cleanup and the nightly event finder can run." : "CRON_SECRET isn't set, so reminders, cleanup and the nightly event finder won't run." },
     ],
     admins: [...adminEmails()],

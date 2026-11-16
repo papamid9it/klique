@@ -1,4 +1,5 @@
 "use client";
+import { ANDROID_APP_URL, WEB_PAYMENTS_ENABLED } from "@/lib/constants";
 
 import { ProfileEffect } from "@/components/ui/ProfileEffect";
 import { useEffect, useRef, useState } from "react";
@@ -272,7 +273,19 @@ export function HypeTab({ me, onStyle }: { me: UserMe; onStyle: () => void }) {
             </div>
           ))}
         </div>
-        <p className="mt-2 text-xs text-ink-muted">{w.canBuy ? "Paid by card on Paystack. Hype can't be cashed out or sent to someone else, and it never adds to your points." : "Buying Hype isn't switched on yet."}</p>
+        <p className="mt-2 text-xs text-ink-muted">
+          {w.canBuy ? (
+            "Paid by card on Paystack. Hype can't be cashed out or sent to someone else, and it never adds to your points."
+          ) : !WEB_PAYMENTS_ENABLED ? (
+            // paying on the website is paused: Hype is bought in the phone app for now
+            <>
+              For now, buy Hype in the Klique app.{" "}
+              <a href={ANDROID_APP_URL} target="_blank" rel="noopener noreferrer" className="font-semibold text-accent-text hover:underline">Get the app</a>
+            </>
+          ) : (
+            "Buying Hype isn't switched on yet."
+          )}
+        </p>
       </section>
 
       <section>

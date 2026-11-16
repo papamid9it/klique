@@ -1,4 +1,5 @@
 "use client";
+import { ANDROID_APP_URL, WEB_PAYMENTS_ENABLED } from "@/lib/constants";
 
 import { Icon } from "@/components/ui/Icon";
 import { useEffect, useState } from "react";
@@ -90,7 +91,16 @@ export function HypeTab() {
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold">Top up</h2>
-        {!data.canBuyWeb && <p className="text-sm text-ink-muted">Buying Hype isn&apos;t set up yet.</p>}
+        {!data.canBuyWeb &&
+          (WEB_PAYMENTS_ENABLED ? (
+            <p className="text-sm text-ink-muted">Buying Hype isn&apos;t set up yet.</p>
+          ) : (
+            // paying on the website is paused: Hype is bought in the phone app for now
+            <p className="text-sm text-ink-muted">
+              For now, buy Hype in the Klique app.{" "}
+              <a href={ANDROID_APP_URL} target="_blank" rel="noopener noreferrer" className="font-semibold text-accent-text hover:underline">Get the app</a>
+            </p>
+          ))}
         {/* pick a pack (or type an amount); nothing is charged until the button below, as on Plans */}
         <div role="radiogroup" aria-label="Choose a Hype pack" className="grid grid-cols-2 gap-2.5 sm:grid-cols-5">
           {data.webPacks.map((p) => {

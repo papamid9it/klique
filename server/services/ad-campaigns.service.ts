@@ -5,7 +5,7 @@ import type { z } from "zod";
 import { AD_PLACEMENTS, MAX_AD_INTERESTS, adPrice, adStoreProductId, adStoreTier, pricingOf, type AdPlacement, type AdPricing } from "@/lib/ads";
 import { parseScope, scopeLabel } from "@/lib/places";
 import type { AdCampaignDTO, AdCampaignPhase } from "@/lib/types";
-import { adminEmails, appUrl, paystackConfig } from "../env";
+import { adminEmails, appUrl, paystackConfig, webPaymentsOn } from "../env";
 import { ApiError, badRequest, conflict, forbidden, notFound } from "../http/errors";
 import { rateLimit } from "../http/rate-limit";
 import { Ad, type IAd } from "../models/Ad";
@@ -76,7 +76,7 @@ async function toDtos(rows: IAdCampaign[], withUser = false): Promise<AdCampaign
   const ev = new Map(events.map((e) => [sid(e._id), e]));
   const co = new Map(communities.map((c) => [sid(c._id), c]));
   const ad = new Map(ads.map((a) => [sid(a._id), a]));
-  const online = !!paystackConfig();
+  const online = webPaymentsOn();
   const billing = storeBillingStatus();
   return rows.map((c) => {
     const tier = adStoreTier(c.amount);
@@ -279,7 +279,7 @@ export async function cancelCampaign(viewer: IUser, id: string): Promise<AdCampa
 export async function payCampaign(viewer: IUser, id: string): Promise<{ authorizationUrl: string; reference: string }> {
   const c = await myCampaign(viewer, id);
   if (c.status !== "approved") throw conflict(c.status === "paid" ? "This ad is already paid for." : "You can pay once an admin has approved your ad.");
-  if (!paystackConfig()) throw badRequest("Card payments aren't set up yet. An admin will tell you how to pay by transfer.");
+  if (!webPaymentsOn()) throw badRequest("Card payments aren't set up yet. An admin will tell you how to pay by transfer.");
   // Paying again (they closed the checkout, or came back later): Paystack won't open a second checkout with the
   // same reference, so check the first one went through, and if not send them back to that same checkout.
   if (c.paymentRef && c.paymentUrl) {

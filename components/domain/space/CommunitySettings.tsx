@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { audienceLabel } from "@/lib/constants";
+import { audienceLabel, DONATIONS_ENABLED } from "@/lib/constants";
 import { useAutoSave } from "@/lib/hooks/useAutoSave";
 import { useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
@@ -95,7 +95,8 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
       ],
     },
     // Klique itself takes no donations
-    ...(c.official || !admin ? [] : [{ title: "Money", items: [{ id: "donations", label: "Donations", icon: "heart" as const }, { id: "payouts", label: "Payouts", icon: "coin" as const }] }]),
+    // donations and payouts are paused for now (DONATIONS_ENABLED)
+    ...(c.official || !admin || !DONATIONS_ENABLED ? [] : [{ title: "Money", items: [{ id: "donations", label: "Donations", icon: "heart" as const }, { id: "payouts", label: "Payouts", icon: "coin" as const }] }]),
     {
       title: "People",
       items: [
@@ -224,8 +225,8 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
         </SettingsBlock>
       )}
 
-      {active === "donations" && !c.official && <DonationsSettings slug={c.slug} />}
-      {active === "payouts" && !c.official && <PayoutsSettings slug={c.slug} />}
+      {active === "donations" && !c.official && DONATIONS_ENABLED && <DonationsSettings slug={c.slug} />}
+      {active === "payouts" && !c.official && DONATIONS_ENABLED && <PayoutsSettings slug={c.slug} />}
 
       {active === "members" && <MembersPanel slug={c.slug} />}
       {active === "modlog" && <ModLogPanel slug={c.slug} />}

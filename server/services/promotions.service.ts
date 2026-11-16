@@ -3,7 +3,7 @@ import "server-only";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { PromoteOptionsDTO, PromotionDTO } from "@/lib/types";
 import { parseScope, scopeLabel } from "@/lib/places";
-import { appUrl, paystackConfig, promotionPricePerDay, promotionReview } from "../env";
+import { appUrl, paystackConfig, promotionPricePerDay, promotionReview, webPaymentsOn } from "../env";
 import { ApiError, badRequest, forbidden, notFound } from "../http/errors";
 import { Ad, type IAd } from "../models/Ad";
 import { Event, type IEvent } from "../models/Event";
@@ -54,7 +54,7 @@ async function hostEvent(viewer: IUser, id: string): Promise<IEvent> {
 }
 
 function whyNot(e: IEvent, kliqueIdNow: string): string | null {
-  if (!paystackConfig()) return "Promotions aren't available yet.";
+  if (!webPaymentsOn()) return "Promotions aren't available yet.";
   if (e.cancelled) return "This event was cancelled.";
   if (e.review) return "This event isn't approved yet.";
   if (e.startsAt <= new Date()) return "This event has already started.";

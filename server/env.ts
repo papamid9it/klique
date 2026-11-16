@@ -1,3 +1,4 @@
+import { DONATIONS_ENABLED, WEB_PAYMENTS_ENABLED } from "@/lib/constants";
 /**
  * Server-side configuration. Read lazily so a missing value produces a clear
  * API error at request time instead of crashing the build.
@@ -145,6 +146,11 @@ export function paystackConfig(): { secretKey: string; baseUrl: string } | null 
   if (!secretKey) return null;
   return { secretKey, baseUrl: (process.env.PAYSTACK_API_URL?.trim() || "https://api.paystack.co").replace(/\/$/, "") };
 }
+
+/** Starting a new payment on the website: Paystack set up, and web payments switched on (lib/constants). */
+export const webPaymentsOn = (): boolean => WEB_PAYMENTS_ENABLED && !!paystackConfig();
+/** Donations to communities, and their payouts: also behind their own switch. */
+export const donationsOn = (): boolean => DONATIONS_ENABLED && webPaymentsOn();
 
 /** Promotion pricing: naira per day for a city; wider reach multiplies it. */
 export const promotionPricePerDay = (): number => {

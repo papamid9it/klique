@@ -1,4 +1,5 @@
 "use client";
+import { DONATIONS_ENABLED } from "@/lib/constants";
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
@@ -132,7 +133,13 @@ export function DonateModal({ slug, communityName, button, onClose }: { slug: st
  * A community's donation buttons: gold, one per cause, with a progress bar for those with a goal. Nothing shows when
  * the community has none.
  */
-export function SupportButtons({ slug, communityName, compact }: { slug: string; communityName: string; compact?: boolean }) {
+export function SupportButtons(props: { slug: string; communityName: string; compact?: boolean }) {
+  // donations are paused for now (lib/constants DONATIONS_ENABLED): no Support buttons anywhere
+  if (!DONATIONS_ENABLED) return null;
+  return <SupportButtonsOn {...props} />;
+}
+
+function SupportButtonsOn({ slug, communityName, compact }: { slug: string; communityName: string; compact?: boolean }) {
   const { requireAuth } = useAuth();
   const { data, reload } = useApi(() => MoneyService.buttons(slug), [slug], { key: `donations:${slug}` });
   const [open, setOpen] = useState<DonationButtonDTO | null>(null);

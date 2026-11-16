@@ -1,5 +1,6 @@
 "use client";
 
+import { ANDROID_APP_URL, WEB_PAYMENTS_ENABLED } from "@/lib/constants";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { errorMessage, isApiError } from "@/app/ApiCore";
@@ -172,11 +173,18 @@ export function PlanTab() {
                   ))}
                 </ul>
                 {paid && !current && rank(p) > rank(s.plan) && (
+                  !s.canBuy && !WEB_PAYMENTS_ENABLED ? (
+                    // paying on the website is paused: Lite and Pro are bought in the phone app for now
+                    <Button variant="primary" className="mt-5 w-full" href={ANDROID_APP_URL}>
+                      Get {PLAN_NAMES[p]} in the app
+                    </Button>
+                  ) : (
                   <Button variant="primary" className="mt-5 w-full" loading={busy === p} disabled={!s.canBuy} onClick={() => void upgrade(p as PaidPlan)}>
                     {s.canBuy ? `Get ${PLAN_NAMES[p]}` : "Coming soon"}
                   </Button>
+                  )
                 )}
-                {paid && current && !s.renews && s.status !== "attention" && (
+                {paid && current && !s.renews && s.status !== "attention" && (s.canBuy || WEB_PAYMENTS_ENABLED) && (
                   <Button className="mt-5 w-full" loading={busy === p} disabled={!s.canBuy} onClick={() => void upgrade(p as PaidPlan)}>
                     Subscribe monthly
                   </Button>
