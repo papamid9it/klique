@@ -1,6 +1,6 @@
 import { withApi } from "@/server/http/api";
-import { webPaymentsOn } from "@/server/env";
+import { webPaymentsOn } from "@/server/services/payments-setting";
 import { getPlanConfig } from "@/server/services/subscriptions.service";
 
 /** The plans on offer (prices and limits from Admin → Plans), for the public pricing page. */
-export const GET = withApi({ auth: "optional" }, async () => ({ config: await getPlanConfig(), canBuy: webPaymentsOn() }));
+export const GET = withApi({ auth: "optional" }, async () => ({ config: await getPlanConfig(), canBuy: await webPaymentsOn() }));

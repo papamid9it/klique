@@ -7,7 +7,8 @@ import { isStyleKey, styleName, stylePrice, walletConfigOf, wornKeys, type Style
 import type { AdminHypeOverviewDTO, AdminWalletUserDTO, HypeTxnDTO, HypeWalletDTO, StyleUnlockDTO } from "@/lib/types";
 import { activePlan, planUnlocksStyle } from "@/lib/plans";
 import type { StyleKind } from "@/lib/wallet";
-import { appUrl, paystackConfig, webPaymentsOn } from "../env";
+import { appUrl, paystackConfig } from "../env";
+import { webPaymentsOn } from "./payments-setting";
 import { badRequest, conflict, notFound } from "../http/errors";
 import { rateLimit } from "../http/rate-limit";
 import { AppSetting } from "../models/AppSetting";
@@ -183,7 +184,7 @@ export async function buyPack(viewer: IUser, packId: string): Promise<{ authoriz
   const pack = c.packs.find((p) => p.id === packId);
   if (!HYPE_ON_SALE) throw badRequest("Hype isn't sold any more: Lite and Pro plans replaced it. See Settings, Plan.");
   if (!pack) throw badRequest("That pack isn't on sale any more.");
-  if (!webPaymentsOn()) throw badRequest("Buy Hype in the Klique app for now.");
+  if (!(await webPaymentsOn())) throw badRequest("Buy Hype in the Klique app for now.");
   rateLimit(`points-buy:${sid(viewer._id)}`, 20, 60 * 60 * 1000);
   const reference = `kpt_${randomBytes(9).toString("hex")}`;
   await HypePurchase.create({ userId: viewer._id, packId: pack.id, hype: pack.hype, amount: pack.price, currency: "NGN", reference });

@@ -4,7 +4,8 @@ import mongoose, { Types } from "mongoose";
 import type { z } from "zod";
 import { DEFAULT_GIFTS, GIFT_MAX_PRICE, GIFT_MIN_PRICE, HYPE_NAIRA, TOPUP_MAX, TOPUP_MIN, giftConfigOf, giftHype, giftTargetKey, hypeForNaira, payoutDayFor, receiverShare, earningStatus, type GiftConfig, type GiftTargetType } from "@/lib/gifts";
 import type { AdminGiftsReportDTO, AdminStuckTopupDTO, GiftDTO, GiftEarningsDTO, GiftReceivedDTO, GiftSentDTO, GiftSummaryDTO, GiftWalletDTO, HypeEntryDTO, PayoutDTO } from "@/lib/types";
-import { adminEmails, appUrl, paystackConfig, webPaymentsOn } from "../env";
+import { adminEmails, appUrl, paystackConfig } from "../env";
+import { webPaymentsOn } from "./payments-setting";
 import { ApiError, badRequest, conflict, forbidden, notFound } from "../http/errors";
 import { rateLimit } from "../http/rate-limit";
 import { AppSetting } from "../models/AppSetting";
@@ -176,7 +177,7 @@ export async function getGiftWallet(viewer: IUser, before?: string): Promise<Gif
     webPacks: config.webPacks.map((n) => ({ naira: n, hype: hypeForNaira(n) })),
     customMin: TOPUP_MIN,
     customMax: TOPUP_MAX,
-    canBuyWeb: webPaymentsOn(),
+    canBuyWeb: await webPaymentsOn(),
     store: { apple: store.apple, google: store.google, accountToken: hypeStoreToken(sid(viewer._id)), packs: config.storePacks },
     history: rows.slice(0, HYPE_PAGE).map(entryDto),
     hasMore: rows.length > HYPE_PAGE,
@@ -188,7 +189,7 @@ export async function getGiftWallet(viewer: IUser, before?: string): Promise<Gif
 /** A website top-up: a pack or any amount up to ₦500,000. Paystack checkout; the Hype lands once it's paid. */
 export async function startTopup(viewer: IUser, input: z.infer<typeof giftTopupSchema>): Promise<{ authorizationUrl: string; reference: string }> {
   rateLimit(`hype-topup:${sid(viewer._id)}`, 20, 60 * 60 * 1000);
-  if (!webPaymentsOn()) throw badRequest("Buy Hype in the Klique app for now.");
+  if (!(await webPaymentsOn())) throw badRequest("Buy Hype in the Klique app for now.");
   const config = await getGiftConfig();
   const amount = Math.round(input.amount);
   if (amount < TOPUP_MIN || amount > TOPUP_MAX) throw new ApiError(422, `Top up between ${naira(TOPUP_MIN)} and ${naira(TOPUP_MAX)}.`, { errors: { amount: "Out of range" } });

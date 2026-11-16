@@ -4,7 +4,8 @@ import type { Types } from "mongoose";
 import type { z } from "zod";
 import { PLAN_NAMES, PLAN_STORE_PRODUCTS, activePlan, planAfterPurchase, planConfigOf, planFromStoreProduct, type PaidPlan, type PlanConfig, type PlanId } from "@/lib/plans";
 import type { SubscriptionDTO } from "@/lib/types";
-import { appUrl, webPaymentsOn } from "../env";
+import { appUrl } from "../env";
+import { webPaymentsOn } from "./payments-setting";
 import { ApiError, badRequest, notFound } from "../http/errors";
 import { rateLimit } from "../http/rate-limit";
 import { AppSetting } from "../models/AppSetting";
@@ -105,7 +106,7 @@ export async function mySubscription(viewer: IUser): Promise<SubscriptionDTO> {
     source: paid ? (row?.source ?? null) : null,
     renews: paid && row?.source === "paystack" && (row.status === "active" || row.status === "attention"),
     siteAdmin: isSiteAdmin(viewer),
-    canBuy: webPaymentsOn(),
+    canBuy: await webPaymentsOn(),
     store: { ...storeBillingStatus(), products: PLAN_STORE_PRODUCTS, accountToken: planStoreToken(sid(viewer._id)) },
     config,
     usage,
@@ -146,7 +147,7 @@ async function rememberPlanCode(code: string, plan: PaidPlan) {
 
 /** Start paying for Lite or Pro: a Paystack checkout the browser goes to. */
 export async function startCheckout(viewer: IUser, plan: PaidPlan): Promise<{ authorizationUrl: string; reference: string }> {
-  if (!webPaymentsOn()) throw badRequest("Get Lite or Pro in the Klique app for now.");
+  if (!(await webPaymentsOn())) throw badRequest("Get Lite or Pro in the Klique app for now.");
   if (isSiteAdmin(viewer)) throw badRequest("Site admins have every plan free.");
   const current = planOf(viewer);
   const row = await Subscription.findOne({ userId: viewer._id }).lean<ISubscription>();

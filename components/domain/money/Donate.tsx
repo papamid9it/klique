@@ -1,5 +1,6 @@
 "use client";
-import { DONATIONS_ENABLED } from "@/lib/constants";
+import { usePayments } from "@/lib/hooks/usePayments";
+
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
@@ -134,8 +135,8 @@ export function DonateModal({ slug, communityName, button, onClose }: { slug: st
  * the community has none.
  */
 export function SupportButtons(props: { slug: string; communityName: string; compact?: boolean }) {
-  // donations are paused for now (lib/constants DONATIONS_ENABLED): no Support buttons anywhere
-  if (!DONATIONS_ENABLED) return null;
+  // donations switched off (Admin → System): no Support buttons anywhere
+  if (!usePayments()?.donations) return null;
   return <SupportButtonsOn {...props} />;
 }
 

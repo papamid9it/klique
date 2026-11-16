@@ -1,7 +1,8 @@
 "use client";
+import { usePayments } from "@/lib/hooks/usePayments";
 
 import { useRouter } from "next/navigation";
-import { audienceLabel, DONATIONS_ENABLED } from "@/lib/constants";
+import { audienceLabel } from "@/lib/constants";
 import { useAutoSave } from "@/lib/hooks/useAutoSave";
 import { useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
@@ -81,6 +82,7 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
   const setMass = (next: boolean) => massSave.run(() => saveTo({ membersMassMention: next }, next ? "Members can mention everyone" : "Only owners and admins can mention everyone"), next);
   const setPrivacy = (next: boolean) => privacySave.run(() => saveTo({ privacy: next ? "private" : "public" }, next ? "Community is now private" : "Community is now public"), next);
 
+  const donationsOn = !!usePayments()?.donations;
   const groups: SettingsGroup[] = [
     {
       title: "Community",
@@ -95,8 +97,8 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
       ],
     },
     // Klique itself takes no donations
-    // donations and payouts are paused for now (DONATIONS_ENABLED)
-    ...(c.official || !admin || !DONATIONS_ENABLED ? [] : [{ title: "Money", items: [{ id: "donations", label: "Donations", icon: "heart" as const }, { id: "payouts", label: "Payouts", icon: "coin" as const }] }]),
+    // donations and payouts: only while they're switched on (Admin → System)
+    ...(c.official || !admin || !donationsOn ? [] : [{ title: "Money", items: [{ id: "donations", label: "Donations", icon: "heart" as const }, { id: "payouts", label: "Payouts", icon: "coin" as const }] }]),
     {
       title: "People",
       items: [
@@ -225,8 +227,8 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
         </SettingsBlock>
       )}
 
-      {active === "donations" && !c.official && DONATIONS_ENABLED && <DonationsSettings slug={c.slug} />}
-      {active === "payouts" && !c.official && DONATIONS_ENABLED && <PayoutsSettings slug={c.slug} />}
+      {active === "donations" && !c.official && donationsOn && <DonationsSettings slug={c.slug} />}
+      {active === "payouts" && !c.official && donationsOn && <PayoutsSettings slug={c.slug} />}
 
       {active === "members" && <MembersPanel slug={c.slug} />}
       {active === "modlog" && <ModLogPanel slug={c.slug} />}

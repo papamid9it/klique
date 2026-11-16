@@ -1024,6 +1024,20 @@ export interface ChannelGroupDTO {
   channels: ChannelDTO[];
 }
 
+/** A payment company the website can take payments with (Admin → System). */
+export type PayProvider = "paystack" | "opay" | "flutterwave";
+export interface PaymentsSettingDTO {
+  providers: { id: PayProvider; label: string; on: boolean; connected: boolean }[];
+  donations: boolean;
+  /** the ones people can pay with right now (on and connected) */
+  live: PayProvider[];
+}
+/** Public: can people pay on the website right now, and give to communities? */
+export interface PaymentsPublicDTO {
+  web: boolean;
+  donations: boolean;
+}
+
 /** where a channel, category or board moves to among its neighbours */
 export type Move = "top" | "up" | "down" | "bottom";
 

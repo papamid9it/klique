@@ -1,6 +1,6 @@
 "use client";
 
-import { ANDROID_APP_URL, WEB_PAYMENTS_ENABLED } from "@/lib/constants";
+import { ANDROID_APP_URL } from "@/lib/constants";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
@@ -149,7 +149,7 @@ export default function PricingPage() {
                     Included in your plan
                   </Button>
                 ) : (
-                  !plans.data!.canBuy && !WEB_PAYMENTS_ENABLED ? (
+                  !plans.data!.canBuy ? (
                     // paying on the website is paused: Lite and Pro are bought in the phone app for now
                     <Button variant={p === "pro" ? "primary" : "secondary"} className="w-full" href={ANDROID_APP_URL}>
                       Get {PLAN_NAMES[p]} in the app

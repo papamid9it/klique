@@ -4,7 +4,8 @@ import { Types } from "mongoose";
 import type { z } from "zod";
 import { DEFAULT_MONEY_CONFIG, MAX_PAYMENT, MIN_PAYMENT, feeOf, moneyConfigOf, type MoneyConfig } from "@/lib/money";
 import type { CommunityMoneyDTO, DonationButtonDTO, PaymentDTO, PayoutDTO } from "@/lib/types";
-import { appUrl, donationsOn } from "../env";
+import { appUrl } from "../env";
+import { donationsOn } from "./payments-setting";
 import { ApiError, badRequest, conflict, forbidden, notFound } from "../http/errors";
 import { rateLimit } from "../http/rate-limit";
 import { AppSetting } from "../models/AppSetting";
@@ -141,7 +142,7 @@ export async function deleteDonationButton(viewer: IUser, slug: string, id: stri
 /* ------------------------------ paying ------------------------------ */
 
 async function checkout(viewer: IUser, p: Pick<IPayment, "kind" | "communityId" | "buttonId" | "eventId" | "quantity" | "amount" | "message">, back: string): Promise<{ authorizationUrl: string; reference: string }> {
-  if (!donationsOn()) throw badRequest("Donations are paused for now.");
+  if (!(await donationsOn())) throw badRequest("Donations are paused for now.");
   // no money moves for a community with explicit content (our payment provider doesn't allow adult content)
   if (p.communityId && (await Community.exists({ _id: p.communityId, explicit: true }))) throw forbidden(NO_MONEY_EXPLICIT);
   if (p.amount < MIN_PAYMENT || p.amount > MAX_PAYMENT) throw badRequest(`Pick an amount between ${naira(MIN_PAYMENT)} and ${naira(MAX_PAYMENT)}.`);
@@ -300,7 +301,7 @@ export async function communityMoney(viewer: IUser, slug: string): Promise<Commu
     recent: await paymentDtos(recent),
     payouts: await payoutDtos(payouts),
     bank: bank ? { bankName: bank.bankName, accountName: bank.accountName, bankCode: bank.bankCode, accountNumber: mask(bank.accountNumber) } : null,
-    canTakePayments: donationsOn(),
+    canTakePayments: await donationsOn(),
     canRequestPayout: access.role === "owner",
   };
 }
@@ -308,7 +309,7 @@ export async function communityMoney(viewer: IUser, slug: string): Promise<Commu
 /** Nigerian banks for the payout form (from Paystack; empty when payments aren't set up). Cached for a day. */
 let banksCache: { at: number; list: { code: string; name: string }[] } | null = null;
 export async function listBanks(): Promise<{ code: string; name: string }[]> {
-  if (!donationsOn()) return [];
+  if (!(await donationsOn())) return [];
   if (banksCache && Date.now() - banksCache.at < 24 * 60 * 60 * 1000) return banksCache.list;
   const rows = await paystack<{ code: string; name: string; active?: boolean }[]>("/bank?country=nigeria&perPage=200");
   const list = rows.filter((b) => b.active !== false).map((b) => ({ code: b.code, name: b.name }));
@@ -334,7 +335,7 @@ export async function requestPayout(viewer: IUser, slug: string, input: z.infer<
     if (!input.accountNumber || !/^\d{10}$/.test(input.accountNumber)) throw new ApiError(422, "Enter the 10-digit account number.", { errors: { accountNumber: "10 digits" } });
     if (!input.bankName) throw new ApiError(422, "Pick the bank.", { errors: { bankCode: "Required" } });
     let accountName = (input.accountName ?? "").trim();
-    if (donationsOn() && input.bankCode) {
+    if ((await donationsOn()) && input.bankCode) {
       const r = await paystack<{ account_name: string }>(`/bank/resolve?account_number=${input.accountNumber}&bank_code=${encodeURIComponent(input.bankCode)}`).catch(() => null);
       if (!r) throw new ApiError(422, "That account number doesn't match the bank. Check both.", { errors: { accountNumber: "Not found at this bank" } });
       accountName = r.account_name;

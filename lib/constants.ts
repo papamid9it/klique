@@ -291,14 +291,6 @@ export const TRENDING_MIN_COMMENTS = 30;
  */
 export const VOICE_ENABLED = false;
 
-/**
- * Paying on the website with Paystack: Lite and Pro, Hype, promotions, and card payment for ads. Off while Paystack's
- * review is on hold (Nov 2026): buying happens in the phone app, through Google Play and Apple. Turn it back on once
- * Paystack has activated the account. Payments already made are still confirmed either way.
- */
-export const WEB_PAYMENTS_ENABLED = false;
-/** Donating to communities, and their payouts: off too (it made Klique a "marketplace" for Paystack's review). */
-export const DONATIONS_ENABLED = false;
 /** Where "Get it in the app" sends people. */
 export const ANDROID_APP_URL = "https://play.google.com/store/apps/details?id=app.getklique.mobile";
 

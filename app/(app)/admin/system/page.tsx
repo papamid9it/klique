@@ -12,7 +12,62 @@ import { Icon } from "@/components/ui/Icon";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { ErrorState } from "@/components/ui/States";
 import { cx } from "@/components/ui/cx";
+import { SwitchButton } from "@/components/ui/Field";
+import type { PayProvider } from "@/lib/types";
 import { useApi } from "@/lib/hooks/useApi";
+
+/**
+ * Paying on the website: which payment companies are on (one, several or none) and donations. None on: people buy in
+ * the phone app (Google Play and Apple). A company that isn't connected yet can't be switched on.
+ */
+function PaymentsSwitch() {
+  const toast = useToast();
+  const { data, setData } = useApi(() => AdminService.payments(), []);
+  const [busy, setBusy] = useState<string | null>(null);
+  async function flip(id: PayProvider | "donations", on: boolean, label: string) {
+    setBusy(id);
+    try {
+      setData((await AdminService.setPayments({ [id]: on })).data);
+      toast(`${label} ${on ? "on" : "off"}`, "success");
+    } catch (e) {
+      toast(errorMessage(e), "error");
+    } finally {
+      setBusy(null);
+    }
+  }
+  const live = data?.live ?? [];
+  return (
+    <div className="mb-6">
+      <Panel title="Payments on the website" action={data ? <Badge tone={live.length ? "good" : "bad"}>{live.length ? "On" : "Off"}</Badge> : undefined}>
+        <p className="px-4 pt-3.5 text-sm text-ink-muted">
+          {live.length
+            ? `People can pay on the website with ${live.map((p) => data!.providers.find((x) => x.id === p)?.label).join(" and ")}.${live.length > 1 ? " They choose which at checkout." : ""}`
+            : "Off: people buy Lite, Pro and Hype in the phone app (Google Play and Apple). Payments already made are still confirmed."}
+        </p>
+        <ul className="divide-y divide-line">
+          {(data?.providers ?? []).map((p) => (
+            <li key={p.id} className="flex items-center justify-between gap-4 px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold">{p.label}</p>
+                <p className="text-xs text-ink-muted">{p.connected ? "Connected" : p.id === "paystack" ? "Not connected: set PAYSTACK_SECRET_KEY in Vercel" : "Not connected yet: Klique needs its code and your merchant keys"}</p>
+              </div>
+              <SwitchButton on={p.on} disabled={!p.connected && !p.on} busy={busy === p.id} onChange={(v) => void flip(p.id, v, p.label)} label={`Take payments with ${p.label}`} />
+            </li>
+          ))}
+          {data && (
+            <li className="flex items-center justify-between gap-4 px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold">Donations to communities</p>
+                <p className="text-xs text-ink-muted">Support buttons and payouts to community owners. Payment companies treat this as a marketplace (CAC registration needed).</p>
+              </div>
+              <SwitchButton on={data.donations} disabled={!live.length && !data.donations} busy={busy === "donations"} onChange={(v) => void flip("donations", v, "Donations")} label="Donations to communities" />
+            </li>
+          )}
+        </ul>
+      </Panel>
+    </div>
+  );
+}
 
 /** Reels stay off until you turn them on: tapping a post just opens it. */
 function ReelsSwitch() {
@@ -57,6 +112,7 @@ function AdminSystemPageContent() {
   return (
     <>
       <AdminHeader title="System">What&apos;s switched on for this deployment. Settings live in your environment variables (Vercel → Settings → Environment Variables); change them there and redeploy.</AdminHeader>
+      <PaymentsSwitch />
       <ReelsSwitch />
       {loading ? (
         <Skeleton className="h-80 w-full rounded-card" />

@@ -3,7 +3,8 @@ import "server-only";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { PromoteOptionsDTO, PromotionDTO } from "@/lib/types";
 import { parseScope, scopeLabel } from "@/lib/places";
-import { appUrl, paystackConfig, promotionPricePerDay, promotionReview, webPaymentsOn } from "../env";
+import { appUrl, paystackConfig, promotionPricePerDay, promotionReview } from "../env";
+import { webPaymentsOn } from "./payments-setting";
 import { ApiError, badRequest, forbidden, notFound } from "../http/errors";
 import { Ad, type IAd } from "../models/Ad";
 import { Event, type IEvent } from "../models/Event";
@@ -53,8 +54,8 @@ async function hostEvent(viewer: IUser, id: string): Promise<IEvent> {
   return e;
 }
 
-function whyNot(e: IEvent, kliqueIdNow: string): string | null {
-  if (!webPaymentsOn()) return "Promotions aren't available yet.";
+function whyNot(e: IEvent, kliqueIdNow: string, paymentsOn: boolean): string | null {
+  if (!paymentsOn) return "Promotions aren't available yet.";
   if (e.cancelled) return "This event was cancelled.";
   if (e.review) return "This event isn't approved yet.";
   if (e.startsAt <= new Date()) return "This event has already started.";
@@ -99,7 +100,7 @@ export async function promoteOptions(viewer: IUser, eventId: string): Promise<Pr
   const prices: PromoteOptionsDTO["prices"] = {};
   for (const r of reaches) prices[r] = Object.fromEntries(PROMO_DAYS.map((d) => [String(d), promotionPrice(r, d)]));
   const rows = await Promotion.find({ eventId: e._id, status: { $ne: "failed" } }).sort({ createdAt: -1 }).limit(20).lean<IPromotion[]>();
-  const reason = whyNot(e, String(await kliqueId()));
+  const reason = whyNot(e, String(await kliqueId()), await webPaymentsOn());
   return {
     available: !reason,
     reason,
@@ -133,7 +134,7 @@ export async function paystack<T>(path: string, init?: { method?: string; body?:
 /** Create the order and a Paystack checkout; the client sends the host to `authorizationUrl`. */
 export async function startPromotion(viewer: IUser, eventId: string, input: { days: number; reach: string }) {
   const e = await hostEvent(viewer, eventId);
-  const reason = whyNot(e, String(await kliqueId()));
+  const reason = whyNot(e, String(await kliqueId()), await webPaymentsOn());
   if (reason) throw badRequest(reason);
   if (!PROMO_DAYS.includes(input.days)) throw badRequest("Pick how many days to promote it for.");
   if (!reachesFor(e).includes(input.reach)) throw badRequest("Pick how far to promote it.");
