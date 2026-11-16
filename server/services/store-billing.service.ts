@@ -88,7 +88,11 @@ async function googleAccess(): Promise<string> {
     body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion }),
     cache: "no-store",
   });
-  if (!res.ok) throw new ApiError(503, "We couldn't reach Google. Your payment is safe: try again in a minute.");
+  if (!res.ok) {
+    // the real reason, for the Vercel logs (Google's own words; never the key): usually a wrong or revoked key
+    console.warn("[store-billing] Google sign-in failed", res.status, await googleReason(res));
+    throw new ApiError(503, "We couldn't reach Google. Your payment is safe: try again in a minute.");
+  }
   return ((await res.json()) as { access_token: string }).access_token;
 }
 
@@ -97,10 +101,26 @@ export async function googleSale(productId: string, purchaseToken: string): Prom
   const access = await googleAccess();
   const res = await fetch(`https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${APP_ID}/purchases/products/${encodeURIComponent(productId)}/tokens/${encodeURIComponent(purchaseToken)}`, { headers: { Authorization: `Bearer ${access}` }, cache: "no-store" });
   if (res.status === 404 || res.status === 400) throw new ApiError(402, "Google doesn't know that purchase.", { code: "store_unknown" });
-  if (!res.ok) throw new ApiError(503, "We couldn't reach Google. Your payment is safe: try again in a minute.");
+  if (!res.ok) {
+    // 401/403 almost always means Play Console hasn't given the service account access (Users and permissions), or
+    // the Google Play Android Developer API is off in its Cloud project; Google's words go to the Vercel logs
+    console.warn("[store-billing] Google purchase check failed", res.status, await googleReason(res));
+    throw new ApiError(503, "We couldn't reach Google. Your payment is safe: try again in a minute.");
+  }
   // purchaseState: 0 bought, 1 cancelled, 2 waiting (paying by cash at a shop); purchaseType 0 is a test purchase
   const p = (await res.json()) as { orderId?: string; purchaseState?: number; purchaseType?: number; obfuscatedExternalAccountId?: string };
   return { id: p.orderId ?? createHash("sha256").update(purchaseToken).digest("hex"), productId, accountToken: p.obfuscatedExternalAccountId ?? null, test: p.purchaseType === 0, refunded: p.purchaseState === 1, pending: p.purchaseState === 2 };
+}
+
+/** Google's error message from a failed answer (a line, for the logs). */
+async function googleReason(res: Response): Promise<string> {
+  try {
+    const j = (await res.json()) as { error?: { message?: string; status?: string } | string; error_description?: string };
+    if (typeof j.error === "string") return `${j.error}: ${j.error_description ?? ""}`.slice(0, 300);
+    return `${j.error?.status ?? ""} ${j.error?.message ?? ""}`.trim().slice(0, 300);
+  } catch {
+    return "(no details)";
+  }
 }
 
 export const testSalesAllowed = allowTest;
