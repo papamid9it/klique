@@ -11,7 +11,7 @@ export const GET = withApi({ auth: "required" }, async ({ viewer }) => {
 /** Switch payment companies (Paystack, OPay, Flutterwave) and donations on or off for the website. */
 export const PUT = withApi({ auth: "required" }, async ({ req, viewer }) => {
   assertAdmin(viewer);
-  const patch = await readJson(req, z.object({ paystack: z.boolean().optional(), opay: z.boolean().optional(), flutterwave: z.boolean().optional(), donations: z.boolean().optional() }));
+  const patch = await readJson(req, z.object({ paystack: z.boolean().optional(), opay: z.boolean().optional(), flutterwave: z.boolean().optional(), donations: z.boolean().optional(), earnings: z.boolean().optional() }));
   const next = await setPaymentsSetting(patch);
   const what = Object.entries(patch).map(([k, v]) => `${k} ${v ? "on" : "off"}`).join(", ");
   await logAction(viewer, "payments.switch", "points", null, "Payments", what, "/admin/system");

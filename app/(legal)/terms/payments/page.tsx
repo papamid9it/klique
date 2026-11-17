@@ -1,42 +1,39 @@
 import type { Metadata } from "next";
-import { cacheLife } from "next/cache";
 import Link from "next/link";
 import { Contact, LegalDoc, Section } from "@/components/domain/legal/Legal";
-import { DEFAULT_MONEY_CONFIG } from "@/lib/money";
-import { publicFees } from "@/server/services/share.service";
 
-export const metadata: Metadata = { title: "Payment terms", description: "How Lite and Pro plans, donations, event contributions, refunds, fees and payouts work on klique." };
+export const metadata: Metadata = { title: "Payment terms", description: "How Lite and Pro plans, Hype and awards, and refunds work on klique." };
 
-async function fees() {
-  "use cache";
-  cacheLife("minutes");
-  return publicFees().catch(() => DEFAULT_MONEY_CONFIG);
-}
-
-export default async function PaymentTermsPage() {
-  const f = await fees();
-  const naira = (n: number) => `₦${n.toLocaleString("en-NG")}`;
+/*
+ * Nov 2026: klique sells only its own things (Lite and Pro, Hype, ads). Donations, event contributions and payouts to
+ * communities are off, and so is earning from awards (Admin → System). The earlier wording for those is in git history,
+ * for when they come back.
+ */
+export default function PaymentTermsPage() {
   return (
     <LegalDoc
       title="Payment terms"
-      updated="3 November 2026"
+      updated="17 November 2026"
       intro={
         <p>
-          These terms cover money on klique: the Lite and Pro plans, donations to communities and contributions toward events. They add to our <Link href="/terms" className="font-medium text-accent-text underline">Terms of Service</Link>. Payments are handled by Paystack; klique never sees or keeps your card details.
+          These terms cover what you can buy on klique: the Lite and Pro plans and Hype. They add to our <Link href="/terms" className="font-medium text-accent-text underline">Terms of Service</Link>. In the phone app, payments are handled by Apple or Google; on the website, when card payments are available there, by Paystack. klique never sees or keeps your card details.
         </p>
       }
     >
       <Section n={1} title="Lite and Pro plans" id="plans">
         <ul>
-          <li>klique is free to use. <strong>Lite</strong> and <strong>Pro</strong> are optional monthly plans with higher limits. What each plan includes and its price in naira are shown on the <Link href="/pricing" className="font-medium text-accent-text underline">Pricing</Link> page and before you pay.</li>
+          <li>klique is free to use. <strong>Lite</strong> and <strong>Pro</strong> are optional monthly plans with higher limits. What each plan includes and its price are shown on the <Link href="/pricing" className="font-medium text-accent-text underline">Pricing</Link> page and before you pay.</li>
           <li>
-            <strong>Your plan renews monthly until you cancel.</strong> When you subscribe, Paystack saves your card and charges the same amount again every month. Each payment gives you another month (30 days).
+            <strong>In the phone app</strong>, a plan is bought 30 days at a time through Apple or Google and doesn&apos;t renew by itself. Buying the same plan again adds 30 days to the time you have left. Refunds for these purchases are handled by Apple or Google under their own rules.
           </li>
           <li>
-            <strong>Cancelling:</strong> go to Settings → Plan &amp; points → Cancel subscription at any time. Nothing more is charged. You keep the plan until the end of the month you&apos;ve paid for, then you move to Free. Turning off the subscription from a Paystack email does the same.
+            <strong>On the website</strong> (when card payments are available there): <strong>your plan renews monthly until you cancel.</strong> When you subscribe, Paystack saves your card and charges the same amount again every month. Each payment gives you another month (30 days).
           </li>
           <li>
-            <strong>No refunds for part of a month.</strong> If you cancel or switch plans, we don&apos;t refund the days left. If you were charged by mistake or twice, contact us (see section 7) and we&apos;ll put it right.
+            <strong>Cancelling a website plan:</strong> go to Settings → Plan &amp; points → Cancel subscription at any time. Nothing more is charged. You keep the plan until the end of the month you&apos;ve paid for, then you move to Free. Turning off the subscription from a Paystack email does the same.
+          </li>
+          <li>
+            <strong>No refunds for part of a month.</strong> If you cancel or switch plans, we don&apos;t refund the days left. If you were charged by mistake or twice, contact us (see section 4) and we&apos;ll put it right.
           </li>
           <li>
             <strong>Switching plans:</strong> moving to another plan starts a new month on that plan from the day you pay, and your old plan stops renewing. Days left on the old plan aren&apos;t carried over.
@@ -60,14 +57,17 @@ export default async function PaymentTermsPage() {
       <Section n={2} title="Hype and awards" id="gifts">
         <ul>
           <li>
-            Hype is used only to send awards to posts, comments, board posts and messages in community chats (not private messages, group messages or klique chats). <strong>1 Hype is ₦10.</strong> You can buy it on the website (paid with Paystack) or in the phone app (paid with Apple or Google, where packs cost more because the stores take a share).
+            Hype is used only to send awards to posts, comments, board posts and messages in community chats (not private messages, group messages or klique chats). <strong>1 Hype is ₦10.</strong> You buy it in the phone app (paid with Apple or Google, where packs cost more because the stores take a share), or on the website when card payments are available there.
           </li>
           <li>
             <strong>Hype can&apos;t be refunded, cashed out, or moved to another account.</strong> It isn&apos;t money for the person who buys it, and an award can&apos;t be taken back once it&apos;s sent. Check the award before you send it.
           </li>
           <li>You can send an award anonymously: the person and everyone else see &quot;Someone&quot;. klique still records who sent it, and only klique&apos;s staff can see that, to deal with fraud, abuse or payment problems.</li>
           <li>
-            <strong>Who earns from awards.</strong> You earn from the awards you receive only once you qualify: at least 1,000 points, at least 3 months on klique, and an account in Nigeria (earning is only open in Nigeria for now). klique may change these rules, with notice here; changes apply to awards sent after them.
+            <strong>Earning from awards is paused for now.</strong> Awards still show on posts, comments and messages, but their whole value goes to klique, and nobody earns from awards received while earning is paused. Earnings from before the pause are kept. If earning comes back, the rules below apply, and only to awards sent after it&apos;s back.
+          </li>
+          <li>
+            <strong>Who earns from awards</strong> (when earning is on). You earn from the awards you receive only once you qualify: at least 1,000 points, at least 3 months on klique, and an account in Nigeria (earning is only open in Nigeria for now). klique may change these rules, with notice here; changes apply to awards sent after them.
           </li>
           <li>
             An award sent to someone who doesn&apos;t qualify yet still shows on their post, comment or message, but its whole value goes to klique. It isn&apos;t credited to them later, when they do qualify: only awards received after qualifying earn.
@@ -80,40 +80,14 @@ export default async function PaymentTermsPage() {
         </ul>
       </Section>
 
-      <Section n={3} title="Donations">
-        <ul>
-          <li>A donation goes to the community whose button you used. It&apos;s a gift: you get nothing in return, and it isn&apos;t a purchase.</li>
-          <li>
-            <strong>Donations can&apos;t be refunded.</strong> Please check the amount before you pay.
-          </li>
-          <li>A goal on a donation button shows what the community hopes to raise. Reaching it isn&apos;t promised, and the money is the community&apos;s either way.</li>
-        </ul>
-      </Section>
-
-      <Section n={4} title="Event contributions">
-        <ul>
-          <li>Some events let you chip in toward them (for example equipment or food), at a set price per unit. The money goes to the community the event is in.</li>
-          <li>The event&apos;s host or the community&apos;s owner or admins can refund a contribution until the community has asked for the money to be paid out. A refund is what you paid minus klique&apos;s fee, back to your card.</li>
-          <li>Once the money has been asked for, it shows as &ldquo;Withdrawn&rdquo; and can&apos;t be refunded through klique. Speak to the host or the community.</li>
-        </ul>
-      </Section>
-
-      <Section n={5} title="Klique's fee">
+      <Section n={3} title="Donations, contributions and payouts">
         <p>
-          Klique keeps <strong>{f.donationFeePercent}%</strong> of each donation and <strong>{f.contributionFeePercent}%</strong> of each contribution to run payments and the service. The fee is fixed when you pay, and isn&apos;t returned on a refund.
+          klique doesn&apos;t currently take donations to communities or contributions toward events, and doesn&apos;t pay money out to communities. klique doesn&apos;t sell event tickets either: when an event costs money, you pay its organiser on their own site. If we bring donations or contributions back, we&apos;ll update these terms first.
         </p>
       </Section>
 
-      <Section n={6} title="Payouts to communities">
-        <ul>
-          <li>What a community raises, after klique&apos;s fee, is paid to its owner&apos;s Nigerian bank account when the owner asks (at least {naira(f.minPayout)}).</li>
-          <li>We check the account name with the bank, and may hold or refuse a payout we believe is fraudulent, or that breaks our Terms of Service or the law.</li>
-          <li>Community owners are responsible for using the money as they said they would, and for any taxes on it.</li>
-        </ul>
-      </Section>
-
-      <Section n={7} title="Problems">
-        <p>If a payment went wrong (charged twice, or charged and nothing showed), contact us with the payment reference from your receipt notification and we&apos;ll sort it out with Paystack.</p>
+      <Section n={4} title="Problems">
+        <p>If a payment went wrong (charged twice, or charged and nothing showed), contact us with the receipt or order number and we&apos;ll put it right. For a purchase in the phone app, you can also ask Apple or Google for a refund under their rules.</p>
         <Contact />
       </Section>
     </LegalDoc>

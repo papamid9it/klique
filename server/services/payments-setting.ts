@@ -11,8 +11,8 @@ import { paystackConfig } from "../env";
  */
 
 const KEY = "webPayments";
-type Saved = Record<PayProvider, boolean> & { donations: boolean };
-const OFF: Saved = { paystack: false, opay: false, flutterwave: false, donations: false };
+type Saved = Record<PayProvider, boolean> & { donations: boolean; earnings: boolean };
+const OFF: Saved = { paystack: false, opay: false, flutterwave: false, donations: false, earnings: false };
 
 export const PROVIDER_LABEL: Record<PayProvider, string> = { paystack: "Paystack", opay: "OPay", flutterwave: "Flutterwave" };
 
@@ -52,12 +52,22 @@ export async function donationsOn(): Promise<boolean> {
   return (await saved()).donations && (await webPaymentsOn());
 }
 
+/**
+ * Earning from awards (recipients' 70%, paid to their bank): its own switch. Off: awards still send and show, but their
+ * whole value is Klique's (as for anyone who doesn't qualify), and no new payouts can be asked for. Earnings already
+ * made are kept. It doesn't depend on web payments: Hype is also bought in the phone app.
+ */
+export async function earningsOn(): Promise<boolean> {
+  return (await saved()).earnings;
+}
+
 /** For Admin → System. */
 export async function paymentsSetting(): Promise<PaymentsSettingDTO> {
   const s = await saved();
   return {
     providers: (Object.keys(PROVIDER_LABEL) as PayProvider[]).map((id) => ({ id, label: PROVIDER_LABEL[id], on: s[id], connected: providerConnected(id) })),
     donations: s.donations,
+    earnings: s.earnings,
     live: await liveProviders(),
   };
 }

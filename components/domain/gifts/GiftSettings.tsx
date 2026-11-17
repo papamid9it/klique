@@ -233,7 +233,13 @@ export function EarningsTab() {
   const t = data.totals;
   return (
     <div className="space-y-6">
-      {earningText(data.earning) && (
+      {/* earning from awards switched off for everyone (Admin → System) */}
+      {data.paused && (
+        <p role="status" className="rounded-control border border-line bg-raised/60 px-4 py-3 text-sm">
+          Earning from awards is paused for now. Awards still show on your posts, but they don&apos;t earn, and payouts can&apos;t be asked for. What you&apos;ve earned so far is kept.
+        </p>
+      )}
+      {!data.paused && earningText(data.earning) && (
         <p role="status" className="rounded-control border border-line bg-raised/60 px-4 py-3 text-sm">
           {earningText(data.earning)}
         </p>

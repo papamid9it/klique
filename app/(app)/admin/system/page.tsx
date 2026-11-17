@@ -24,7 +24,7 @@ function PaymentsSwitch() {
   const toast = useToast();
   const { data, setData } = useApi(() => AdminService.payments(), []);
   const [busy, setBusy] = useState<string | null>(null);
-  async function flip(id: PayProvider | "donations", on: boolean, label: string) {
+  async function flip(id: PayProvider | "donations" | "earnings", on: boolean, label: string) {
     setBusy(id);
     try {
       setData((await AdminService.setPayments({ [id]: on })).data);
@@ -61,6 +61,15 @@ function PaymentsSwitch() {
                 <p className="text-xs text-ink-muted">Support buttons and payouts to community owners. Payment companies treat this as a marketplace (CAC registration needed).</p>
               </div>
               <SwitchButton on={data.donations} disabled={!live.length && !data.donations} busy={busy === "donations"} onChange={(v) => void flip("donations", v, "Donations")} label="Donations to communities" />
+            </li>
+          )}
+          {data && (
+            <li className="flex items-center justify-between gap-4 px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold">Award earnings</p>
+                <p className="text-xs text-ink-muted">People who qualify earn a share of the awards they receive, paid to their bank. Off: awards still send and show, but nobody earns from them and payouts can&apos;t be asked for. What was earned is kept.</p>
+              </div>
+              <SwitchButton on={data.earnings} busy={busy === "earnings"} onChange={(v) => void flip("earnings", v, "Award earnings")} label="Award earnings" />
             </li>
           )}
         </ul>

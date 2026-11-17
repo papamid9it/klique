@@ -5,7 +5,7 @@ import type { z } from "zod";
 import { DEFAULT_GIFTS, GIFT_MAX_PRICE, GIFT_MIN_PRICE, HYPE_NAIRA, TOPUP_MAX, TOPUP_MIN, giftConfigOf, giftHype, giftTargetKey, hypeForNaira, payoutDayFor, receiverShare, earningStatus, type GiftConfig, type GiftTargetType } from "@/lib/gifts";
 import type { AdminGiftsReportDTO, AdminStuckTopupDTO, GiftDTO, GiftEarningsDTO, GiftReceivedDTO, GiftSentDTO, GiftSummaryDTO, GiftWalletDTO, HypeEntryDTO, PayoutDTO } from "@/lib/types";
 import { adminEmails, appUrl, paystackConfig } from "../env";
-import { webPaymentsOn } from "./payments-setting";
+import { earningsOn, webPaymentsOn } from "./payments-setting";
 import { ApiError, badRequest, conflict, forbidden, notFound } from "../http/errors";
 import { rateLimit } from "../http/rate-limit";
 import { AppSetting } from "../models/AppSetting";
@@ -473,9 +473,11 @@ export async function sendGift(viewer: IUser, input: z.infer<typeof giftSendSche
   const hype = giftHype(gift.price);
   // only people who qualify (points, months on Klique, country) earn from an award; for anyone else it still shows,
   // but its whole value is Klique's, and it isn't credited later when they do qualify
+  // earning from awards can be paused for everyone (Admin → System): then nobody earns, as if they didn't qualify
+  const paused = !(await earningsOn());
   const earning = earningStatus(receiver, config);
-  const notEarnedReason = earning.eligible ? null : `receiver not eligible: ${[earning.missing.points && "points", earning.missing.months && "account age", earning.missing.country && "country"].filter(Boolean).join(", ")}`;
-  const toReceiver = earning.eligible ? receiverShare(gift.price, config.receiverPercent) : 0;
+  const notEarnedReason = paused ? "earning from awards is paused" : earning.eligible ? null : `receiver not eligible: ${[earning.missing.points && "points", earning.missing.months && "account age", earning.missing.country && "country"].filter(Boolean).join(", ")}`;
+  const toReceiver = earning.eligible && !paused ? receiverShare(gift.price, config.receiverPercent) : 0;
   let row: IGiftSend;
   try {
     row = (
@@ -590,6 +592,7 @@ async function payoutsOf(userId: Types.ObjectId): Promise<PayoutDTO[]> {
 /** Settings → Earnings: what your gifts earned, what's on hold, available, asked for and paid, and the history. */
 export async function getEarnings(viewer: IUser, before?: string): Promise<GiftEarningsDTO> {
   const config = await getGiftConfig();
+  const paused = !(await earningsOn());
   const now = new Date();
   const rejected = await Payout.find({ kind: "gifts", requestedById: viewer._id, status: "rejected" }).distinct("_id");
   const [agg] = await GiftSend.aggregate<{ earned: number; onHold: number; available: number; claimed: number }>([
@@ -615,6 +618,7 @@ export async function getEarnings(viewer: IUser, before?: string): Promise<GiftE
   const waiting = payouts.find((p) => p.status === "requested") ?? null;
   const available = agg?.available ?? 0;
   return {
+    paused,
     receiverPercent: config.receiverPercent,
     holdDays: config.holdDays,
     minPayout: config.minPayout,
@@ -625,7 +629,7 @@ export async function getEarnings(viewer: IUser, before?: string): Promise<GiftE
     history: await receivedDtos(rows.slice(0, PAGE), false),
     hasMore: rows.length > PAGE,
     bank: bank ? { bankName: bank.bankName, accountName: bank.accountName, bankCode: bank.bankCode, accountNumber: mask(bank.accountNumber) } : null,
-    canRequest: !waiting && available >= config.minPayout && config.earnCountries.includes((me?.country ?? "").toUpperCase()),
+    canRequest: !paused && (!waiting && available >= config.minPayout && config.earnCountries.includes((me?.country ?? "").toUpperCase())),
     earning: me ? earningStatus(me, config, now) : earningStatus({ points: 0, createdAt: now, country: "" }, config, now),
   };
 }
@@ -644,6 +648,7 @@ export async function giftsSent(viewer: IUser, before?: string): Promise<{ items
  */
 export async function requestGiftPayout(viewer: IUser, input: z.infer<typeof payoutRequestSchema>): Promise<GiftEarningsDTO> {
   rateLimit(`gift-payout:${sid(viewer._id)}`, 5, DAY_MS);
+  if (!(await earningsOn())) throw forbidden("Payouts from awards are paused for now. What you've earned is kept.");
   if (await Payout.exists({ kind: "gifts", requestedById: viewer._id, status: "requested" })) throw conflict("There's already a payout waiting. You can ask again once it's paid.");
   const config = await getGiftConfig();
   const me = await User.findById(viewer._id).select("payoutBank country").lean<Pick<IUser, "payoutBank" | "country">>();

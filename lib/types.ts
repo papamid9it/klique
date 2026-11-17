@@ -1029,6 +1029,8 @@ export type PayProvider = "paystack" | "opay" | "flutterwave";
 export interface PaymentsSettingDTO {
   providers: { id: PayProvider; label: string; on: boolean; connected: boolean }[];
   donations: boolean;
+  /** recipients earn from awards (and can ask for payouts) */
+  earnings: boolean;
   /** the ones people can pay with right now (on and connected) */
   live: PayProvider[];
 }
@@ -2130,6 +2132,8 @@ export interface GiftSentDTO extends GiftReceivedDTO {
 
 /** Settings → Earnings. */
 export interface GiftEarningsDTO {
+  /** earning from awards is paused for everyone (Admin): nothing new is earned and payouts can't be asked for */
+  paused?: boolean;
   receiverPercent: number;
   holdDays: number;
   minPayout: number;

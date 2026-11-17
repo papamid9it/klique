@@ -112,7 +112,7 @@ export default function TermsPage() {
 
       <Section n={9} title="Plans and payments">
         <p>
-          Lite and Pro are optional monthly plans that <strong>renew monthly until you cancel</strong>. You can cancel any time in Settings → Plan &amp; points and keep the plan until the end of the month you paid for. Plan limits can change. Hype has ended, and leftover Hype was turned into days of Lite. The full details, with donations, contributions, refunds and payouts, are in our{" "}
+          Lite and Pro are optional monthly plans. In the phone app you buy 30 days at a time through Apple or Google; on the website, when card payments are available there, a plan <strong>renews monthly until you cancel</strong> (cancel any time in Settings → Plan &amp; points and keep it until the end of the month you paid for). Plan limits can change. Hype is bought to send awards and can&apos;t be refunded or cashed out. The full details, with refunds, are in our{" "}
           <Link href="/terms/payments" className="font-medium text-accent-text underline">
             Payment terms
           </Link>

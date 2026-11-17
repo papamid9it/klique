@@ -13,7 +13,7 @@ export const AdminService = {
   overview: (days = 30) => api.get<Envelope<AdminOverviewDTO>>("/api/admin/overview", { days }),
   system: () => api.get<Envelope<SystemStatusDTO>>("/api/admin/system"),
   payments: () => api.get<Envelope<PaymentsSettingDTO>>("/api/admin/payments"),
-  setPayments: (patch: Partial<Record<PayProvider | "donations", boolean>>) => api.put<Envelope<PaymentsSettingDTO>>("/api/admin/payments", patch),
+  setPayments: (patch: Partial<Record<PayProvider | "donations" | "earnings", boolean>>) => api.put<Envelope<PaymentsSettingDTO>>("/api/admin/payments", patch),
   reels: () => api.get<Envelope<{ on: boolean; recentVideos: number }>>("/api/admin/reels"),
   setReels: (on: boolean) => api.put<Envelope<{ on: boolean; recentVideos: number }>>("/api/admin/reels", { on }),
   audit: (params: { page?: number; q?: string; action?: string }) => api.get<Envelope<Paginated<AuditEntryDTO>>>("/api/admin/audit", params),
