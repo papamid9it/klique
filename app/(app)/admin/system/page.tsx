@@ -45,15 +45,32 @@ function PaymentsSwitch() {
             : "Off: people buy Lite, Pro and Hype in the phone app (Google Play and Apple). Payments already made are still confirmed."}
         </p>
         <ul className="divide-y divide-line">
-          {(data?.providers ?? []).map((p) => (
+          {(data?.providers ?? []).map((p) => {
+            const active = live.includes(p.id);
+            const hookMissing = p.connected && p.missing.length > 0;
+            return (
             <li key={p.id} className="flex items-center justify-between gap-4 px-4 py-3">
               <div className="min-w-0">
-                <p className="text-sm font-semibold">{p.label}</p>
-                <p className="text-xs text-ink-muted">{p.connected ? "Connected" : p.id === "paystack" ? "Not connected: set PAYSTACK_SECRET_KEY in Vercel" : "Not connected yet: Klique needs its code and your merchant keys"}</p>
+                <p className="flex flex-wrap items-center gap-2 text-sm font-semibold">
+                  {p.label}
+                  {active && <Badge tone="good">{live[0] === p.id && live.length > 1 ? "Active · first choice" : "Active"}</Badge>}
+                  {p.on && !p.connected && <Badge tone="bad">On, but not connected</Badge>}
+                  {p.connected && p.test && <Badge tone="neutral">Test keys</Badge>}
+                </p>
+                <p className="text-xs text-ink-muted">
+                  {!p.connected
+                    ? `Not connected: set ${p.missing.filter((k) => k !== "FLUTTERWAVE_WEBHOOK_HASH").join(", ")} in Vercel, then redeploy`
+                    : hookMissing
+                      ? `Connected (from Vercel). Set ${p.missing.join(", ")} too, so payments still confirm when someone closes the tab`
+                      : p.on
+                        ? "Connected (from Vercel)"
+                        : "Connected (from Vercel). Off: not offered at checkout"}
+                </p>
               </div>
               <SwitchButton on={p.on} disabled={!p.connected && !p.on} busy={busy === p.id} onChange={(v) => void flip(p.id, v, p.label)} label={`Take payments with ${p.label}`} />
             </li>
-          ))}
+            );
+          })}
           {data && (
             <li className="flex items-center justify-between gap-4 px-4 py-3">
               <div className="min-w-0">

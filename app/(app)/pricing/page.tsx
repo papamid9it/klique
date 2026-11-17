@@ -1,5 +1,6 @@
 "use client";
 
+import { usePayWith } from "@/components/domain/payments/PayWith";
 import { ANDROID_APP_URL } from "@/lib/constants";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -25,7 +26,7 @@ const BLURB: Record<PlanId, string> = {
   pro: "For hosts and regulars who bring people together.",
 };
 const FAQ: { q: string; a: string }[] = [
-  { q: "How do I pay?", a: "By card through Paystack. It renews monthly until you cancel. We don't refund part of a month; see our Payment terms (/terms/payments)." },
+  { q: "How do I pay?", a: "In the Klique app, through Apple or Google: 30 days at a time. On the website, by card through Paystack (renews monthly until you cancel), or Flutterwave or OPay (30 days at a time) when they're offered. We don't refund part of a month; see our Payment terms (/terms/payments)." },
   { q: "Can I cancel any time?", a: "Yes, in Settings → Plan & points. It won't renew, and you keep your plan until the end of the month you paid for. Then you're back on Free." },
   { q: "What happens to my kliques and photos if I go back to Free?", a: "Nothing is deleted. Kliques you're in carry on; you just can't start or join more than Free allows. Your photos and videos all stay on your profile; you just can't add or replace any until you're within Free's slots." },
   { q: "Can I switch from Lite to Pro?", a: "Yes. Get Pro and it starts a new month straight away; Lite stops renewing." },
@@ -75,13 +76,15 @@ export default function PricingPage() {
   const plans = useApi(() => SubscriptionService.plans(), [], { key: "plans" });
   const mine = useApi(status === "authed" ? () => SubscriptionService.mine() : null, [status], { key: "my-plan" });
   const [busy, setBusy] = useState<PaidPlan | null>(null);
+  const payWith = usePayWith();
+  const monthly = !payWith.provider || payWith.provider === "paystack";
   const current: PlanId | null = mine.data ? mine.data.plan : null;
 
   async function get(plan: PaidPlan) {
     if (!requireAuth()) return;
     setBusy(plan);
     try {
-      window.location.assign((await SubscriptionService.checkout(plan)).data.authorizationUrl);
+      window.location.assign((await SubscriptionService.checkout(plan, payWith.provider)).data.authorizationUrl);
     } catch (e) {
       toast(errorMessage(e), "error");
       setBusy(null);
@@ -165,8 +168,18 @@ export default function PricingPage() {
           );
         })}
       </section>
+      {plans.data?.canBuy && payWith.picker && <div className="mt-4 flex justify-center">{payWith.picker}</div>}
       <p className="mt-4 text-center text-xs text-ink-muted">
-        Lite and Pro are paid by card through Paystack and <strong className="text-ink">renew monthly until you cancel</strong>. Cancel any time in Settings → Plan &amp; points. No refunds for part of a month. See our <Link href="/terms/payments#plans" className="font-medium text-accent-text underline">Payment terms</Link>.
+        {monthly ? (
+          <>
+            Lite and Pro are paid by card through Paystack and <strong className="text-ink">renew monthly until you cancel</strong>. Cancel any time in Settings → Plan &amp; points.
+          </>
+        ) : (
+          <>
+            Paid on {payWith.provider === "opay" ? "OPay" : "Flutterwave"}: <strong className="text-ink">30 days, doesn&apos;t renew by itself</strong>. Buying again adds 30 more.
+          </>
+        )}{" "}
+        No refunds for part of a month. See our <Link href="/terms/payments#plans" className="font-medium text-accent-text underline">Payment terms</Link>.
       </p>
       {mine.data?.siteAdmin && <p className="mt-3 text-center text-xs text-ink-muted">You&apos;re a site admin: everything is included, free.</p>}
 

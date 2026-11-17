@@ -1,7 +1,7 @@
 import type { PayProvider, PaymentsSettingDTO } from "@/lib/types";
 import { AppSetting } from "../models/AppSetting";
 import { ApiError } from "../http/errors";
-import { paystackConfig } from "../env";
+import { flutterwaveConfig, opayConfig, paystackConfig } from "../env";
 
 /*
  * Paying on the website, switched in Admin → System (no deploy): which payment companies are on (Paystack, OPay,
@@ -16,10 +16,11 @@ const OFF: Saved = { paystack: false, opay: false, flutterwave: false, donations
 
 export const PROVIDER_LABEL: Record<PayProvider, string> = { paystack: "Paystack", opay: "OPay", flutterwave: "Flutterwave" };
 
-/** Connected: Klique has the code for it and its keys are set. OPay and Flutterwave aren't built yet. */
+/** Connected: its keys are set in the environment (.env / Vercel). Only then can it be switched on. */
 export function providerConnected(p: PayProvider): boolean {
   if (p === "paystack") return !!paystackConfig();
-  return false;
+  if (p === "flutterwave") return !!flutterwaveConfig();
+  return !!opayConfig();
 }
 
 // read on nearly every page that sells something: kept for half a minute per server (a change shows within that)
@@ -39,12 +40,18 @@ export async function liveProviders(): Promise<PayProvider[]> {
   return (Object.keys(PROVIDER_LABEL) as PayProvider[]).filter((p) => s[p] && providerConnected(p));
 }
 
-/**
- * Can a new payment start on the website? For now the checkout code is Paystack's, so it's Paystack being live. When
- * OPay or Flutterwave are connected, their checkouts plug in here too (and people choose between those that are on).
- */
+/** Can a new payment start on the website: at least one company is on and connected. */
 export async function webPaymentsOn(): Promise<boolean> {
-  return (await liveProviders()).includes("paystack");
+  return (await liveProviders()).length > 0;
+}
+
+/** The company a payment goes through: the one they picked, if it's live; else the first live one. */
+export async function pickProvider(asked?: PayProvider | null): Promise<PayProvider> {
+  const live = await liveProviders();
+  if (!live.length) throw new ApiError(400, "Paying on the website isn't available right now. You can buy in the Klique app.");
+  if (asked && live.includes(asked)) return asked;
+  if (asked) throw new ApiError(400, `${PROVIDER_LABEL[asked]} isn't available right now. Pick another way to pay.`);
+  return live[0];
 }
 
 /** Donations to communities and their payouts: their own switch, and only with web payments working. */
@@ -62,10 +69,23 @@ export async function earningsOn(): Promise<boolean> {
 }
 
 /** For Admin → System. */
+/** Names (never values) of the settings a company still needs in Vercel, and whether its keys are test keys. */
+const NEEDS: Record<PayProvider, string[]> = {
+  paystack: ["PAYSTACK_SECRET_KEY"],
+  flutterwave: ["FLUTTERWAVE_SECRET_KEY", "FLUTTERWAVE_WEBHOOK_HASH"],
+  opay: ["OPAY_MERCHANT_ID", "OPAY_PUBLIC_KEY", "OPAY_SECRET_KEY"],
+};
+function envState(p: PayProvider): { missing: string[]; test: boolean } {
+  const missing = NEEDS[p].filter((k) => !process.env[k]?.trim());
+  const key = process.env[NEEDS[p][0] === "OPAY_MERCHANT_ID" ? "OPAY_SECRET_KEY" : NEEDS[p][0]]?.trim() ?? "";
+  const test = p === "paystack" ? key.startsWith("sk_test") : p === "flutterwave" ? key.includes("_TEST") : /sandbox|testapi/i.test(process.env.OPAY_API_URL ?? "") || /test/i.test(key.slice(0, 12));
+  return { missing, test: !!key && test };
+}
+
 export async function paymentsSetting(): Promise<PaymentsSettingDTO> {
   const s = await saved();
   return {
-    providers: (Object.keys(PROVIDER_LABEL) as PayProvider[]).map((id) => ({ id, label: PROVIDER_LABEL[id], on: s[id], connected: providerConnected(id) })),
+    providers: (Object.keys(PROVIDER_LABEL) as PayProvider[]).map((id) => ({ id, label: PROVIDER_LABEL[id], on: s[id], connected: providerConnected(id), ...envState(id) })),
     donations: s.donations,
     earnings: s.earnings,
     live: await liveProviders(),

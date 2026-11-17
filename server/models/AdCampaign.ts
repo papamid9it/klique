@@ -41,7 +41,9 @@ export interface IAdCampaign {
   paymentRef: string | null;
   /** the Paystack checkout for paymentRef, reused if they press Pay again */
   paymentUrl: string | null;
-  paymentMethod: "paystack" | "manual" | "apple" | "google" | null;
+  paymentMethod: "paystack" | "flutterwave" | "opay" | "manual" | "apple" | "google" | null;
+  /** the company paymentRef's checkout is with (unset: Paystack) */
+  paymentProvider?: "paystack" | "flutterwave" | "opay" | null;
   paidAt: Date | null;
   /** the running ad, once paid */
   adId: Types.ObjectId | null;
@@ -79,7 +81,8 @@ const AdCampaignSchema = new Schema<IAdCampaign>(
     reviewedAt: { type: Date, default: null },
     paymentRef: { type: String, default: null },
     paymentUrl: { type: String, default: null },
-    paymentMethod: { type: String, enum: ["paystack", "manual", "apple", "google", null], default: null },
+    paymentMethod: { type: String, enum: ["paystack", "flutterwave", "opay", "manual", "apple", "google", null], default: null },
+    paymentProvider: { type: String, enum: ["paystack", "flutterwave", "opay", null], default: null },
     paidAt: { type: Date, default: null },
     adId: { type: Schema.Types.ObjectId, ref: "Ad", default: null },
     startsAt: { type: Date, default: null },

@@ -4,9 +4,10 @@ import { Types } from "mongoose";
 import type { z } from "zod";
 import { AD_PLACEMENTS, MAX_AD_INTERESTS, adPrice, adStoreProductId, adStoreTier, pricingOf, type AdPlacement, type AdPricing } from "@/lib/ads";
 import { parseScope, scopeLabel } from "@/lib/places";
-import type { AdCampaignDTO, AdCampaignPhase } from "@/lib/types";
+import type { AdCampaignDTO, AdCampaignPhase, PayProvider } from "@/lib/types";
 import { adminEmails, appUrl, paystackConfig } from "../env";
-import { webPaymentsOn } from "./payments-setting";
+import { pickProvider, providerConnected, webPaymentsOn } from "./payments-setting";
+import { checkCharge, startCharge } from "./pay";
 import { ApiError, badRequest, conflict, forbidden, notFound } from "../http/errors";
 import { rateLimit } from "../http/rate-limit";
 import { Ad, type IAd } from "../models/Ad";
@@ -276,23 +277,30 @@ export async function cancelCampaign(viewer: IUser, id: string): Promise<AdCampa
 
 /* ------------------------------ paying ------------------------------ */
 
-/** Approved ads only: create a Paystack checkout. The browser sends them to `authorizationUrl`. */
-export async function payCampaign(viewer: IUser, id: string): Promise<{ authorizationUrl: string; reference: string }> {
+/** Approved ads only: create a checkout (Paystack, Flutterwave or OPay). The browser sends them to `authorizationUrl`. */
+export async function payCampaign(viewer: IUser, id: string, asked?: PayProvider | null): Promise<{ authorizationUrl: string; reference: string }> {
   const c = await myCampaign(viewer, id);
   if (c.status !== "approved") throw conflict(c.status === "paid" ? "This ad is already paid for." : "You can pay once an admin has approved your ad.");
   if (!(await webPaymentsOn())) throw badRequest("Card payments aren't set up yet. An admin will tell you how to pay by transfer.");
-  // Paying again (they closed the checkout, or came back later): Paystack won't open a second checkout with the
-  // same reference, so check the first one went through, and if not send them back to that same checkout.
+  const provider = await pickProvider(asked);
+  // Paying again (they closed the checkout, or came back later): check the first one didn't go through after all,
+  // and if they're using the same company, send them back to that same checkout (Paystack won't open a second one).
   if (c.paymentRef && c.paymentUrl) {
-    const prev = await paystack<{ status: string; amount: number; currency: string; paid_at?: string }>(`/transaction/verify/${encodeURIComponent(c.paymentRef)}`).catch(() => null);
+    const was = c.paymentProvider ?? "paystack";
+    const prev = providerConnected(was) ? await checkCharge(was, c.paymentRef).catch(() => null) : null;
     if (prev?.status === "success") {
       await fulfilCampaign(c.paymentRef, prev);
       throw conflict("This ad is already paid for. It's starting now.");
     }
-    return { authorizationUrl: c.paymentUrl, reference: c.paymentRef };
+    if (was === provider) return { authorizationUrl: c.paymentUrl, reference: c.paymentRef };
   }
   const reference = `kad_${randomBytes(9).toString("hex")}`;
-  await AdCampaign.updateOne({ _id: c._id }, { $set: { paymentRef: reference } });
+  await AdCampaign.updateOne({ _id: c._id }, { $set: { paymentRef: reference, paymentProvider: provider, paymentUrl: null } });
+  if (provider !== "paystack") {
+    const url = await startCharge(provider, { reference, amountNaira: c.amount, email: viewer.email, name: viewer.displayName, title: `Ad: ${c.title}`.slice(0, 80) });
+    await AdCampaign.updateOne({ _id: c._id }, { $set: { paymentUrl: url } });
+    return { authorizationUrl: url, reference };
+  }
   const data = await paystack<{ authorization_url: string }>("/transaction/initialize", {
     method: "POST",
     body: {
@@ -309,7 +317,7 @@ export async function payCampaign(viewer: IUser, id: string): Promise<{ authoriz
 }
 
 /** Turn a paid ad request into a running ad. Safe to call any number of times. */
-async function startRun(c: IAdCampaign, method: "paystack" | "manual" | "apple" | "google", paidAt = new Date()): Promise<void> {
+async function startRun(c: IAdCampaign, method: PayProvider | "manual" | "apple" | "google", paidAt = new Date()): Promise<void> {
   const claimed = await AdCampaign.findOneAndUpdate({ _id: c._id, status: "approved" }, { $set: { status: "paid", paymentMethod: method, paidAt } }, { returnDocument: "after" }).lean<IAdCampaign>();
   if (!claimed) return; // already started (the webhook and the redirect arriving together)
   const now = Date.now();
@@ -359,7 +367,7 @@ export async function fulfilCampaign(reference: string, paid: { status: string; 
     console.warn("[ads] amount mismatch", reference, paid.amount, c.amount * 100);
     return;
   }
-  await startRun(c, "paystack", paid.paid_at ? new Date(paid.paid_at) : new Date());
+  await startRun(c, c.paymentProvider ?? "paystack", paid.paid_at ? new Date(paid.paid_at) : new Date());
 }
 
 /** They came back from Paystack: confirm with Paystack directly (never trust the redirect alone). */
@@ -367,10 +375,16 @@ export async function verifyCampaignPayment(viewer: IUser, reference: string): P
   const c = await AdCampaign.findOne({ paymentRef: reference }).lean<IAdCampaign>();
   if (!c || sid(c.userId) !== sid(viewer._id)) throw notFound("We couldn't find that payment.");
   if (c.status === "approved") {
-    const data = await paystack<{ status: string; amount: number; currency: string; paid_at?: string }>(`/transaction/verify/${encodeURIComponent(reference)}`);
-    await fulfilCampaign(reference, data);
+    await fulfilCampaign(reference, await checkCharge(c.paymentProvider ?? "paystack", reference));
   }
   return getMyCampaign(viewer, sid(c._id));
+}
+
+/** A webhook from Flutterwave or OPay named this ad's checkout: check with that company and start the ad if it's paid. */
+export async function settleCampaign(reference: string): Promise<void> {
+  const c = await AdCampaign.findOne({ paymentRef: reference }).select("status paymentProvider").lean<Pick<IAdCampaign, "status" | "paymentProvider">>();
+  if (!c || c.status !== "approved" || !providerConnected(c.paymentProvider ?? "paystack")) return;
+  await fulfilCampaign(reference, await checkCharge(c.paymentProvider ?? "paystack", reference));
 }
 
 /**

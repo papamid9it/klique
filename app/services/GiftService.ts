@@ -1,6 +1,6 @@
 import ApiClient from "@/app/ApiCore";
 import type { GiftConfig, GiftTargetType } from "@/lib/gifts";
-import type { AdminGiftsReportDTO, AdminStuckTopupDTO, Envelope, GiftDTO, GiftEarningsDTO, GiftSentDTO, GiftSummaryDTO, GiftTrayDTO, GiftWalletDTO } from "@/lib/types";
+import type { AdminGiftsReportDTO, AdminStuckTopupDTO, Envelope, GiftDTO, GiftEarningsDTO, GiftSentDTO, GiftSummaryDTO, GiftTrayDTO, GiftWalletDTO, PayProvider } from "@/lib/types";
 
 const api = new ApiClient();
 
@@ -10,7 +10,7 @@ export const GiftService = {
   send: (input: { giftId: string; target: { type: GiftTargetType; id: string }; anonymous: boolean; clientKey: string }) => api.post<Envelope<{ balance: number; summary: GiftSummaryDTO }>>("/api/gifts/send", input),
   summaries: (keys: string[]) => api.get<Envelope<Record<string, GiftSummaryDTO>>>("/api/gifts/summary", { targets: keys.join(",") }),
   wallet: (before?: string) => api.get<Envelope<GiftWalletDTO>>("/api/me/hype", before ? { before } : undefined),
-  topup: (amount: number) => api.post<Envelope<{ authorizationUrl: string; reference: string }>>("/api/me/hype/topup", { amount }),
+  topup: (amount: number, provider?: PayProvider) => api.post<Envelope<{ authorizationUrl: string; reference: string }>>("/api/me/hype/topup", { amount, provider }),
   verify: (reference: string) => api.post<Envelope<{ paid: boolean; hype: number; balance: number }>>("/api/me/hype/verify", { reference }),
   earnings: (before?: string) => api.get<Envelope<GiftEarningsDTO>>("/api/me/earnings", before ? { before } : undefined),
   requestPayout: (input: { useSaved?: boolean; bankCode?: string; bankName?: string; accountNumber?: string; accountName?: string }) => api.post<Envelope<GiftEarningsDTO>>("/api/me/earnings/payout", input),

@@ -761,7 +761,10 @@ export const planConfigSchema = z.object({
 /** your profile photos and videos, in order (the plan decides how many: profile-media.service) */
 export const profileEventsQuery = z.object({ kind: z.enum(["going", "hosting"]) });
 export const profileMediaSchema = z.object({ items: z.array(z.object({ kind: z.enum(["image", "video"]), url: mediaUrl, poster: z.union([mediaUrl, z.null()]).default(null) })).max(24, "Up to 24") });
-export const planCheckoutSchema = z.object({ plan: z.enum(["lite", "pro"]) });
+/** which payment company a website checkout goes through (one of those switched on in Admin; left out: the first) */
+export const payProviderField = z.enum(["paystack", "flutterwave", "opay"]).optional();
+export const payWithSchema = z.object({ provider: payProviderField });
+export const planCheckoutSchema = z.object({ plan: z.enum(["lite", "pro"]), provider: payProviderField });
 export const planVerifySchema = z.object({ reference: z.string().trim().regex(/^ksb_[a-f0-9]{18}$/) });
 /** Admin: give someone days of a plan */
 export const planGrantSchema = z.object({ who: z.string().trim().min(1).max(60), plan: z.enum(["lite", "pro"]), days: z.number().int().min(1).max(366) });
@@ -992,7 +995,7 @@ export const giftSendSchema = z.object({
   /** a random id per send: the same send twice makes one gift */
   clientKey: z.string().regex(/^[A-Za-z0-9_-]{8,64}$/),
 });
-export const giftTopupSchema = z.object({ amount: z.number().int().min(1).max(10_000_000) });
+export const giftTopupSchema = z.object({ amount: z.number().int().min(1).max(10_000_000), provider: payProviderField });
 export const giftStoreTopupSchema = z.discriminatedUnion("platform", [
   z.object({ platform: z.literal("apple"), transactionId: z.string().trim().min(1).max(100) }),
   z.object({ platform: z.literal("google"), productId: z.string().trim().regex(/^hype_\d{1,7}$/), purchaseToken: z.string().trim().min(1).max(4000) }),

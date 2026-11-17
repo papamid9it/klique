@@ -5,7 +5,8 @@ import type { z } from "zod";
 import { DEFAULT_GIFTS, GIFT_MAX_PRICE, GIFT_MIN_PRICE, HYPE_NAIRA, TOPUP_MAX, TOPUP_MIN, giftConfigOf, giftHype, giftTargetKey, hypeForNaira, payoutDayFor, receiverShare, earningStatus, type GiftConfig, type GiftTargetType } from "@/lib/gifts";
 import type { AdminGiftsReportDTO, AdminStuckTopupDTO, GiftDTO, GiftEarningsDTO, GiftReceivedDTO, GiftSentDTO, GiftSummaryDTO, GiftWalletDTO, HypeEntryDTO, PayoutDTO } from "@/lib/types";
 import { adminEmails, appUrl, paystackConfig } from "../env";
-import { earningsOn, webPaymentsOn } from "./payments-setting";
+import { earningsOn, pickProvider, providerConnected, webPaymentsOn } from "./payments-setting";
+import { checkCharge, startCharge } from "./pay";
 import { ApiError, badRequest, conflict, forbidden, notFound } from "../http/errors";
 import { rateLimit } from "../http/rate-limit";
 import { AppSetting } from "../models/AppSetting";
@@ -196,8 +197,14 @@ export async function startTopup(viewer: IUser, input: z.infer<typeof giftTopupS
   if (amount % HYPE_NAIRA) throw new ApiError(422, `Use a multiple of ₦${HYPE_NAIRA} (1 Hype is ₦${HYPE_NAIRA}).`, { errors: { amount: "Multiple of 10" } });
   const reference = `khy_${randomBytes(9).toString("hex")}`;
   const pack = config.webPacks.includes(amount) ? `web_${amount}` : "custom";
-  await HypeTopup.create({ userId: viewer._id, platform: "web", hype: hypeForNaira(amount), amount, storeFee: 0, pack, reference });
+  // the company they picked (of those switched on), or the first one on
+  const provider = await pickProvider(input.provider);
+  await HypeTopup.create({ userId: viewer._id, platform: "web", hype: hypeForNaira(amount), amount, storeFee: 0, pack, reference, provider });
   const back = `${appUrl()}/settings?tab=hype&hype_ref=${reference}`;
+  if (provider !== "paystack") {
+    const url = await startCharge(provider, { reference, amountNaira: amount, email: viewer.email, name: viewer.displayName, title: `${hypeForNaira(amount).toLocaleString("en-NG")} Hype` });
+    return { authorizationUrl: url, reference };
+  }
   const data = await paystack<{ authorization_url: string }>("/transaction/initialize", {
     method: "POST",
     body: { email: viewer.email, amount: amount * 100, currency: "NGN", reference, callback_url: back, metadata: { purpose: "gift-hype", hype: hypeForNaira(amount), cancel_action: back } },
@@ -260,8 +267,9 @@ export async function fulfilTopup(reference: string, paid: { status: string; amo
 export async function verifyTopup(viewer: IUser, reference: string): Promise<{ paid: boolean; hype: number; balance: number }> {
   const t = await HypeTopup.findOne({ reference, userId: viewer._id }).lean<IHypeTopup>();
   if (!t) throw notFound("We couldn't find that payment.");
-  if (t.status !== "paid" && paystackConfig()) {
-    const data = await paystack<{ status: string; amount: number; currency: string }>(`/transaction/verify/${encodeURIComponent(reference)}`);
+  if (t.status !== "paid" && providerConnected(t.provider ?? "paystack")) {
+    // asked of the company that took it (never the redirect alone)
+    const data = await checkCharge(t.provider ?? "paystack", reference);
     await fulfilTopup(reference, data);
   }
   const after = await HypeTopup.findById(t._id).select("status").lean<Pick<IHypeTopup, "status">>();
@@ -320,8 +328,8 @@ export async function retryStuckTopups(): Promise<{ checked: number; credited: n
       if (kind === "uncredited") {
         if (await repairTopup(row)) credited++;
       } else if (row.platform === "web") {
-        if (!paystackConfig()) continue;
-        const data = await paystack<{ status: string; amount: number; currency: string }>(`/transaction/verify/${encodeURIComponent(row.reference)}`).catch(() => null);
+        if (!providerConnected(row.provider ?? "paystack")) continue;
+        const data = await checkCharge(row.provider ?? "paystack", row.reference).catch(() => null);
         if (data && (await fulfilTopup(row.reference, data))) credited++;
       } else if (await credit(row)) credited++;
     } catch (e) {
@@ -788,3 +796,10 @@ export async function adminGiftsCsv(kind: "purchases" | "sends", r: Range): Prom
   return ["date,from,from_handle,anonymous,to,to_handle,award,price_naira,receiver_naira,klique_naira,target,community", ...rep.sends.map((g) => [g.createdAt, g.from.displayName, g.from.handle, g.anonymous, g.to.displayName, g.to.handle, g.gift.name, g.price, g.receiverAmount, g.kliqueAmount, `${g.target.type}:${g.target.id}`, g.community?.name ?? ""].map(esc).join(","))].join("\n");
 }
 
+
+/** A webhook from Flutterwave or OPay named this top-up: check with that company and add the Hype if it's paid. */
+export async function settleTopup(reference: string): Promise<boolean> {
+  const t = await HypeTopup.findOne({ reference }).lean<IHypeTopup>();
+  if (!t || t.status === "paid" || t.platform !== "web" || !providerConnected(t.provider ?? "paystack")) return false;
+  return fulfilTopup(reference, await checkCharge(t.provider ?? "paystack", reference));
+}

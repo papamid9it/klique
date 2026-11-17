@@ -715,7 +715,7 @@ export interface SubscriptionDTO {
   /** "active" renews; "non_renewing" was cancelled (lasts to `until`); "attention": a renewal failed */
   status: "active" | "non_renewing" | "attention" | "ended" | null;
   /** paid on Paystack, or free time (leftover Hype, an admin's gift) */
-  source: "paystack" | "hype" | "grant" | "store" | null;
+  source: "paystack" | "hype" | "grant" | "store" | "flutterwave" | "opay" | null;
   /** it renews by itself next month (so it can be cancelled) */
   renews: boolean;
   /** site admins have everything free */
@@ -1027,7 +1027,8 @@ export interface ChannelGroupDTO {
 /** A payment company the website can take payments with (Admin → System). */
 export type PayProvider = "paystack" | "opay" | "flutterwave";
 export interface PaymentsSettingDTO {
-  providers: { id: PayProvider; label: string; on: boolean; connected: boolean }[];
+  /** `missing`: names of settings not set in Vercel yet (FLUTTERWAVE_WEBHOOK_HASH is optional); `test`: test keys, no real money */
+  providers: { id: PayProvider; label: string; on: boolean; connected: boolean; missing: string[]; test: boolean }[];
   donations: boolean;
   /** recipients earn from awards (and can ask for payouts) */
   earnings: boolean;
@@ -1038,6 +1039,8 @@ export interface PaymentsSettingDTO {
 export interface PaymentsPublicDTO {
   web: boolean;
   donations: boolean;
+  /** the companies people can pay with right now (switched on in Admin and set up), in that order; the first is the default */
+  providers: { id: PayProvider; label: string }[];
 }
 
 /** where a channel, category or board moves to among its neighbours */
@@ -1939,7 +1942,7 @@ export interface AdCampaignDTO {
   amount: number;
   currency: string;
   reviewNote: string;
-  paymentMethod: "paystack" | "manual" | "apple" | "google" | null;
+  paymentMethod: "paystack" | "flutterwave" | "opay" | "manual" | "apple" | "google" | null;
   paidAt: ISODate | null;
   startsAt: ISODate | null;
   endsAt: ISODate | null;

@@ -19,7 +19,9 @@ import { AD_PLACEMENTS, AD_REACHES } from "@/lib/ads";
 import { formatPrice } from "@/lib/format";
 import { useApi, useNow } from "@/lib/hooks/useApi";
 import { softNavigate } from "@/lib/nav";
-import type { AdCampaignDTO, AdCampaignPhase } from "@/lib/types";
+import { usePayments } from "@/lib/hooks/usePayments";
+import type { AdCampaignDTO, AdCampaignPhase, PayProvider } from "@/lib/types";
+import { usePayWith } from "@/components/domain/payments/PayWith";
 import { PhaseBadge, phaseLine, placementLabel } from "./CampaignParts";
 
 export type AdsTab = "overview" | "ads" | "billing" | "help" | "create";
@@ -152,19 +154,26 @@ function useAdActions() {
   const toast = useToast();
   const { setData } = useMyAds();
   const [paying, setPaying] = useState<string | null>(null);
+  // the company to pay with (their last choice, or the first switched on); the menu offers each when there are several
+  const { provider } = usePayWith();
+  const providers = usePayments()?.providers ?? [];
   const [cancelling, setCancelling] = useState<AdCampaignDTO | null>(null);
 
-  async function pay(c: AdCampaignDTO) {
+  async function pay(c: AdCampaignDTO, using: PayProvider | undefined = provider) {
     setPaying(c.id);
     try {
-      window.location.href = (await CampaignService.pay(c.id)).data.authorizationUrl;
+      window.location.href = (await CampaignService.pay(c.id, using)).data.authorizationUrl;
     } catch (e) {
       toast(errorMessage(e), "error");
       setPaying(null);
     }
   }
   const menu = (c: AdCampaignDTO): MenuEntry[] => [
-    ...(c.phase === "approved" && c.canPayOnline ? ([{ label: `Pay ${formatPrice(c.amount, c.currency)}`, icon: "ticket", onSelect: () => void pay(c) }] as MenuEntry[]) : []),
+    ...(c.phase === "approved" && c.canPayOnline
+      ? providers.length > 1
+        ? providers.map((p): MenuEntry => ({ label: `Pay ${formatPrice(c.amount, c.currency)} with ${p.label}`, icon: "ticket", onSelect: () => void pay(c, p.id) }))
+        : ([{ label: `Pay ${formatPrice(c.amount, c.currency)}`, icon: "ticket", onSelect: () => void pay(c) }] as MenuEntry[])
+      : []),
     ...(["pending", "changes", "rejected", "approved"].includes(c.phase) ? ([{ label: c.phase === "pending" ? "Edit" : "Change and resend", icon: "edit", onSelect: () => router.push(`/ads/new?edit=${c.id}`) }] as MenuEntry[]) : []),
     { label: "Run it again", icon: "copy", onSelect: () => router.push(`/ads/new?again=${c.id}`) },
     ...(["pending", "changes", "approved"].includes(c.phase) ? ([{ type: "sep" }, { label: "Cancel ad", icon: "x", danger: true, onSelect: () => setCancelling(c) }] as MenuEntry[]) : []),

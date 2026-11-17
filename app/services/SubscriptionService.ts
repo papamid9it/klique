@@ -1,6 +1,6 @@
 import ApiClient from "@/app/ApiCore";
 import type { PlanConfig } from "@/lib/plans";
-import type { Envelope, SubscriptionDTO } from "@/lib/types";
+import type { Envelope, PayProvider, SubscriptionDTO } from "@/lib/types";
 
 const api = new ApiClient();
 
@@ -9,7 +9,7 @@ export const SubscriptionService = {
   mine: () => api.get<Envelope<SubscriptionDTO>>("/api/me/subscription"),
   /** the plans on offer, for anyone (the pricing page) */
   plans: () => api.get<Envelope<{ config: PlanConfig; canBuy: boolean }>>("/api/plans"),
-  checkout: (plan: "lite" | "pro") => api.post<Envelope<{ authorizationUrl: string; reference: string }>>("/api/me/subscription/checkout", { plan }),
+  checkout: (plan: "lite" | "pro", provider?: PayProvider) => api.post<Envelope<{ authorizationUrl: string; reference: string }>>("/api/me/subscription/checkout", { plan, provider }),
   verify: (reference: string) => api.post<Envelope<{ paid: boolean; subscription: SubscriptionDTO }>>("/api/me/subscription/verify", { reference }),
   cancel: () => api.post<Envelope<SubscriptionDTO>>("/api/me/subscription/cancel"),
 

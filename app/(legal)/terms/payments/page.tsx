@@ -16,7 +16,7 @@ export default function PaymentTermsPage() {
       updated="17 November 2026"
       intro={
         <p>
-          These terms cover what you can buy on klique: the Lite and Pro plans and Hype. They add to our <Link href="/terms" className="font-medium text-accent-text underline">Terms of Service</Link>. In the phone app, payments are handled by Apple or Google; on the website, when card payments are available there, by Paystack. klique never sees or keeps your card details.
+          These terms cover what you can buy on klique: the Lite and Pro plans and Hype. They add to our <Link href="/terms" className="font-medium text-accent-text underline">Terms of Service</Link>. In the phone app, payments are handled by Apple or Google; on the website, when card payments are available there, by Paystack, Flutterwave or OPay (you choose which at checkout when there&apos;s more than one). klique never sees or keeps your card details.
         </p>
       }
     >
@@ -27,7 +27,7 @@ export default function PaymentTermsPage() {
             <strong>In the phone app</strong>, a plan is bought 30 days at a time through Apple or Google and doesn&apos;t renew by itself. Buying the same plan again adds 30 days to the time you have left. Refunds for these purchases are handled by Apple or Google under their own rules.
           </li>
           <li>
-            <strong>On the website</strong> (when card payments are available there): <strong>your plan renews monthly until you cancel.</strong> When you subscribe, Paystack saves your card and charges the same amount again every month. Each payment gives you another month (30 days).
+            <strong>On the website</strong> (when card payments are available there): <strong>your plan renews monthly until you cancel.</strong> When you subscribe, Paystack saves your card and charges the same amount again every month. Each payment gives you another month (30 days). <strong>Paid with Flutterwave or OPay</strong>, a plan lasts 30 days and doesn&apos;t renew by itself; buying it again adds another 30 days, and a Paystack plan that was renewing is stopped so you aren&apos;t charged twice.
           </li>
           <li>
             <strong>Cancelling a website plan:</strong> go to Settings → Plan &amp; points → Cancel subscription at any time. Nothing more is charged. You keep the plan until the end of the month you&apos;ve paid for, then you move to Free. Turning off the subscription from a Paystack email does the same.

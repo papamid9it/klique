@@ -83,6 +83,8 @@ export interface IHypeTopup {
   pack: string;
   /** Paystack reference, or "apple:<id>" / "google:<order id>": unique, so one payment credits once */
   reference: string;
+  /** a website top-up: the company that took it (unset: Paystack, as before there was a choice) */
+  provider?: "paystack" | "flutterwave" | "opay";
   status: "pending" | "paid";
   /** a store sandbox purchase (only accepted with STORE_IAP_ALLOW_TEST=1) */
   test: boolean;
@@ -101,6 +103,7 @@ const HypeTopupSchema = new Schema<IHypeTopup>(
     storeFee: { type: Number, default: 0 },
     pack: { type: String, default: "custom", maxlength: 40 },
     reference: { type: String, required: true, unique: true },
+    provider: { type: String, enum: ["paystack", "flutterwave", "opay"], default: undefined },
     status: { type: String, enum: ["pending", "paid"], default: "pending" },
     test: { type: Boolean, default: false },
     paidAt: { type: Date, default: null },

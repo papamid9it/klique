@@ -146,6 +146,28 @@ export function paystackConfig(): { secretKey: string; baseUrl: string } | null 
   return { secretKey, baseUrl: (process.env.PAYSTACK_API_URL?.trim() || "https://api.paystack.co").replace(/\/$/, "") };
 }
 
+/**
+ * Flutterwave (v3 Standard checkout), connected when FLUTTERWAVE_SECRET_KEY is set. FLUTTERWAVE_WEBHOOK_HASH is the
+ * "secret hash" typed in Flutterwave's dashboard (Settings → Webhooks); its webhooks are refused without it.
+ */
+export function flutterwaveConfig(): { secretKey: string; webhookHash: string | null; baseUrl: string } | null {
+  const secretKey = process.env.FLUTTERWAVE_SECRET_KEY?.trim();
+  if (!secretKey) return null;
+  return { secretKey, webhookHash: process.env.FLUTTERWAVE_WEBHOOK_HASH?.trim() || null, baseUrl: (process.env.FLUTTERWAVE_API_URL?.trim() || "https://api.flutterwave.com").replace(/\/$/, "") };
+}
+
+/**
+ * OPay Cashier, connected when OPAY_MERCHANT_ID, OPAY_PUBLIC_KEY and OPAY_SECRET_KEY are all set. OPAY_API_URL is
+ * OPay's server (their docs name more than one; the live one by default, or the sandbox while testing).
+ */
+export function opayConfig(): { merchantId: string; publicKey: string; secretKey: string; baseUrl: string } | null {
+  const merchantId = process.env.OPAY_MERCHANT_ID?.trim();
+  const publicKey = process.env.OPAY_PUBLIC_KEY?.trim();
+  const secretKey = process.env.OPAY_SECRET_KEY?.trim();
+  if (!merchantId || !publicKey || !secretKey) return null;
+  return { merchantId, publicKey, secretKey, baseUrl: (process.env.OPAY_API_URL?.trim() || "https://liveapi.opaycheckout.com").replace(/\/$/, "") };
+}
+
 /** Promotion pricing: naira per day for a city; wider reach multiplies it. */
 export const promotionPricePerDay = (): number => {
   const n = Number(process.env.PROMOTION_PRICE_PER_DAY);

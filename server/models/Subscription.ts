@@ -16,7 +16,7 @@ export interface ISubscription {
   userId: Types.ObjectId;
   plan: "lite" | "pro";
   status: SubscriptionStatus;
-  source: "paystack" | "hype" | "grant" | "store";
+  source: "paystack" | "hype" | "grant" | "store" | "flutterwave" | "opay";
   currentPeriodEnd: Date;
   /** naira a month, when they signed up */
   amount: number;
@@ -33,7 +33,7 @@ const SubscriptionSchema = new Schema<ISubscription>(
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true, unique: true },
     plan: { type: String, enum: ["lite", "pro"], required: true },
     status: { type: String, enum: ["active", "non_renewing", "attention", "ended"], default: "active" },
-    source: { type: String, enum: ["paystack", "hype", "grant", "store"], default: "paystack" },
+    source: { type: String, enum: ["paystack", "hype", "grant", "store", "flutterwave", "opay"], default: "paystack" },
     currentPeriodEnd: { type: Date, required: true },
     amount: { type: Number, default: 0 },
     paystack: {
@@ -62,6 +62,8 @@ export interface ISubscriptionCheckout {
   plan: "lite" | "pro";
   amount: number;
   reference: string;
+  /** the company that took it (unset: Paystack, which renews monthly; the others sell 30 days at a time) */
+  provider?: "paystack" | "flutterwave" | "opay";
   status: "pending" | "paid";
   paidAt: Date | null;
   createdAt: Date;
@@ -73,6 +75,7 @@ const CheckoutSchema = new Schema<ISubscriptionCheckout>(
     plan: { type: String, enum: ["lite", "pro"], required: true },
     amount: { type: Number, required: true },
     reference: { type: String, required: true, unique: true },
+    provider: { type: String, enum: ["paystack", "flutterwave", "opay"], default: undefined },
     status: { type: String, enum: ["pending", "paid"], default: "pending" },
     paidAt: { type: Date, default: null },
   },

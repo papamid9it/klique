@@ -17,6 +17,7 @@ import { formatDateLong } from "@/lib/format";
 import { useApi } from "@/lib/hooks/useApi";
 import { PLAN_NAMES, planPerks, type PaidPlan, type PlanId } from "@/lib/plans";
 import type { SubscriptionDTO } from "@/lib/types";
+import { usePayWith } from "@/components/domain/payments/PayWith";
 import { PointsCard } from "./PointsCard";
 
 const ORDER: PlanId[] = ["free", "lite", "pro"];
@@ -71,6 +72,9 @@ export function PlanTab() {
   const toast = useToast();
   const { data, loading, error, reload, setData } = useApi(() => SubscriptionService.mine(), [], { key: "my-plan" });
   const [busy, setBusy] = useState<string | null>(null);
+  const payWith = usePayWith();
+  // Paystack renews monthly; Flutterwave and OPay are 30 days at a time
+  const monthly = !payWith.provider || payWith.provider === "paystack";
   const [cancelling, setCancelling] = useState(false);
 
   const checked = useRef<string | null>(null);
@@ -91,7 +95,7 @@ export function PlanTab() {
   async function upgrade(plan: PaidPlan) {
     setBusy(plan);
     try {
-      const res = await SubscriptionService.checkout(plan);
+      const res = await SubscriptionService.checkout(plan, payWith.provider);
       window.location.assign(res.data.authorizationUrl);
     } catch (e) {
       toast(errorMessage(e), "error");
@@ -149,6 +153,7 @@ export function PlanTab() {
         )}
       </section>
 
+      {!s.siteAdmin && s.canBuy && payWith.picker}
       {!s.siteAdmin && (
         <section aria-label="Plans" className="grid gap-4 md:grid-cols-3">
           {ORDER.map((p) => {
@@ -186,7 +191,7 @@ export function PlanTab() {
                 )}
                 {paid && current && !s.renews && s.status !== "attention" && s.canBuy && (
                   <Button className="mt-5 w-full" loading={busy === p} disabled={!s.canBuy} onClick={() => void upgrade(p as PaidPlan)}>
-                    Subscribe monthly
+                    {monthly ? "Subscribe monthly" : "Add 30 days"}
                   </Button>
                 )}
               </article>
@@ -196,7 +201,16 @@ export function PlanTab() {
       )}
       {!s.siteAdmin && (
         <p className="text-xs text-ink-muted">
-          Paid by card on Paystack. <strong className="text-ink">Renews monthly until you cancel.</strong> Cancel any time here; you keep the plan until the end of the month you paid for. No refunds for part of a month. Moving to another plan starts a new month on it and stops the old one renewing. See our <Link href="/terms/payments#plans" className="font-medium text-accent-text underline">Payment terms</Link>.
+          {monthly ? (
+            <>
+              Paid by card on Paystack. <strong className="text-ink">Renews monthly until you cancel.</strong> Cancel any time here; you keep the plan until the end of the month you paid for. No refunds for part of a month. Moving to another plan starts a new month on it and stops the old one renewing.
+            </>
+          ) : (
+            <>
+              Paid on {payWith.provider === "opay" ? "OPay" : "Flutterwave"}. <strong className="text-ink">30 days, doesn&apos;t renew by itself.</strong> Buying again adds another 30 days. A Paystack plan that renews is stopped so you aren&apos;t charged twice. No refunds for part of a month.
+            </>
+          )}{" "}
+          See our <Link href="/terms/payments#plans" className="font-medium text-accent-text underline">Payment terms</Link>.
         </p>
       )}
 

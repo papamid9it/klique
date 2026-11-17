@@ -3,9 +3,10 @@ import { randomBytes } from "node:crypto";
 import type { Types } from "mongoose";
 import type { z } from "zod";
 import { PLAN_NAMES, PLAN_STORE_PRODUCTS, activePlan, planAfterPurchase, planConfigOf, planFromStoreProduct, type PaidPlan, type PlanConfig, type PlanId } from "@/lib/plans";
-import type { SubscriptionDTO } from "@/lib/types";
+import type { PayProvider, SubscriptionDTO } from "@/lib/types";
 import { appUrl } from "../env";
-import { webPaymentsOn } from "./payments-setting";
+import { pickProvider, providerConnected, webPaymentsOn } from "./payments-setting";
+import { checkCharge, startCharge } from "./pay";
 import { ApiError, badRequest, notFound } from "../http/errors";
 import { rateLimit } from "../http/rate-limit";
 import { AppSetting } from "../models/AppSetting";
@@ -145,9 +146,13 @@ async function rememberPlanCode(code: string, plan: PaidPlan) {
 
 /* ------------------------------ checkout ------------------------------ */
 
-/** Start paying for Lite or Pro: a Paystack checkout the browser goes to. */
-export async function startCheckout(viewer: IUser, plan: PaidPlan): Promise<{ authorizationUrl: string; reference: string }> {
+/**
+ * Start paying for Lite or Pro: a checkout page the browser goes to. Through Paystack it renews every month;
+ * through Flutterwave or OPay it's 30 days that don't renew by themselves (like buying it in the phone app).
+ */
+export async function startCheckout(viewer: IUser, plan: PaidPlan, asked?: PayProvider | null): Promise<{ authorizationUrl: string; reference: string }> {
   if (!(await webPaymentsOn())) throw badRequest("Get Lite or Pro in the Klique app for now.");
+  const provider = await pickProvider(asked);
   if (isSiteAdmin(viewer)) throw badRequest("Site admins have every plan free.");
   const current = planOf(viewer);
   const row = await Subscription.findOne({ userId: viewer._id }).lean<ISubscription>();
@@ -155,6 +160,12 @@ export async function startCheckout(viewer: IUser, plan: PaidPlan): Promise<{ au
   rateLimit(`sub-checkout:${sid(viewer._id)}`, 15, 60 * 60_000);
   const config = await getPlanConfig();
   const amount = config.prices[plan];
+  if (provider !== "paystack") {
+    const reference = `ksb_${randomBytes(9).toString("hex")}`;
+    await SubscriptionCheckout.create({ userId: viewer._id, plan, amount, reference, provider });
+    const url = await startCharge(provider, { reference, amountNaira: amount, email: viewer.email, name: viewer.displayName, title: `Klique ${PLAN_NAMES[plan]} for 30 days` });
+    return { authorizationUrl: url, reference };
+  }
   const planCode = await paystackPlanCode(plan, amount);
   await rememberPlanCode(planCode, plan);
   const reference = `ksb_${randomBytes(9).toString("hex")}`;
@@ -180,6 +191,18 @@ export async function fulfilCheckout(reference: string, paid: Paid) {
   const claimed = await SubscriptionCheckout.findOneAndUpdate({ _id: c._id, status: "pending" }, { $set: { status: "paid", paidAt: new Date() } }).lean();
   if (!claimed) return;
   const before = await Subscription.findOne({ userId: c.userId }).lean<ISubscription>();
+  // Flutterwave or OPay: 30 days added on, nothing renews (a Paystack one that did is stopped, so they aren't charged twice)
+  if (c.provider && c.provider !== "paystack") {
+    const me = await User.findById(c.userId).select("plan planUntil").lean<Pick<IUser, "plan" | "planUntil">>();
+    const next = planAfterPurchase({ plan: me?.plan ?? "free", until: me?.planUntil ?? null }, c.plan, new Date());
+    await User.updateOne({ _id: c.userId }, { $set: { plan: next.plan, planUntil: next.until } });
+    await Subscription.updateOne({ userId: c.userId }, { $set: { plan: next.plan, status: "non_renewing", source: c.provider, currentPeriodEnd: next.until, amount: c.amount, cancelledAt: null } }, { upsert: true });
+    if (before?.source === "paystack" && before.paystack?.subscriptionCode && before.paystack.emailToken && (before.status === "active" || before.status === "attention")) {
+      await paystack("/subscription/disable", { method: "POST", body: { code: before.paystack.subscriptionCode, token: before.paystack.emailToken } }).catch((e) => console.warn("[plans] couldn't stop the old subscription:", (e as Error).message));
+    }
+    notify([c.userId], { title: `You're on ${PLAN_NAMES[next.plan]}`, body: "Thanks! It lasts 30 days and doesn't renew by itself.", data: { href: "/settings?tab=plan" } }, { category: "points", ref: `plan:${reference}` });
+    return;
+  }
   const paidAt = paid.paid_at ? new Date(paid.paid_at) : new Date();
   const until = new Date(+paidAt + MONTH_MS + GRACE_MS);
   await User.updateOne({ _id: c.userId }, { $set: { plan: c.plan, planUntil: until } });
@@ -202,10 +225,17 @@ export async function fulfilCheckout(reference: string, paid: Paid) {
 export async function verifyCheckout(viewer: IUser, reference: string): Promise<{ paid: boolean; subscription: SubscriptionDTO }> {
   const c = await SubscriptionCheckout.findOne({ reference }).lean<ISubscriptionCheckout>();
   if (!c || sid(c.userId) !== sid(viewer._id)) throw notFound("We couldn't find that payment.");
-  if (c.status === "pending") await fulfilCheckout(reference, await paystack<Paid>(`/transaction/verify/${encodeURIComponent(reference)}`));
+  if (c.status === "pending") await fulfilCheckout(reference, c.provider && c.provider !== "paystack" ? await checkCharge(c.provider, reference) : await paystack<Paid>(`/transaction/verify/${encodeURIComponent(reference)}`));
   const now = await SubscriptionCheckout.findById(c._id).select("status").lean<Pick<ISubscriptionCheckout, "status">>();
   const me = (await User.findById(viewer._id).lean<IUser>()) ?? viewer;
   return { paid: now?.status === "paid", subscription: await mySubscription(me) };
+}
+
+/** A webhook from Flutterwave or OPay named this checkout: check with that company and turn the plan on if it's paid. */
+export async function settleCheckout(reference: string): Promise<void> {
+  const c = await SubscriptionCheckout.findOne({ reference }).select("status provider").lean<Pick<ISubscriptionCheckout, "status" | "provider">>();
+  if (!c || c.status !== "pending" || !c.provider || c.provider === "paystack" || !providerConnected(c.provider)) return;
+  await fulfilCheckout(reference, await checkCharge(c.provider, reference));
 }
 
 /* ------------------------------ bought in the phone app ------------------------------ */

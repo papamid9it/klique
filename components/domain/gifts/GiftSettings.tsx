@@ -3,6 +3,7 @@ import { ANDROID_APP_URL } from "@/lib/constants";
 
 import { Icon } from "@/components/ui/Icon";
 import { useEffect, useState } from "react";
+import { usePayNames, usePayWith } from "@/components/domain/payments/PayWith";
 import { errorMessage, isApiError } from "@/app/ApiCore";
 import { GiftService } from "@/app/services/GiftService";
 import { MoneyService } from "@/app/services/MoneyService";
@@ -41,6 +42,8 @@ export function HypeTab() {
   const [amount, setAmount] = useState("");
   const [pick, setPick] = useState<number | null>(null);
   const [busy, setBusy] = useState<number | null>(null);
+  const payWith = usePayWith();
+  const payNames = usePayNames();
 
   // back from Paystack: check the payment and show the new balance
   useEffect(() => {
@@ -60,7 +63,7 @@ export function HypeTab() {
   async function buy(n: number) {
     setBusy(n);
     try {
-      const res = await GiftService.topup(n);
+      const res = await GiftService.topup(n, payWith.provider);
       window.location.href = res.data.authorizationUrl;
     } catch (e) {
       toast(errorMessage(e), "error");
@@ -129,11 +132,12 @@ export function HypeTab() {
         <div className="w-48">
           <TextField label="Or any amount (₦)" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/\D/g, ""))} placeholder="2500" />
         </div>
+        {data.canBuyWeb && payWith.picker}
         <Button type="button" variant="primary" className="w-full" disabled={!data.canBuyWeb || !buyNaira || busy !== null} loading={busy !== null} onClick={() => buyNaira && void buy(buyNaira)}>
           {buyNaira ? `Get ${hype(hypeForNaira(buyNaira))} · ${naira(buyNaira)}` : "Pick a pack"}
         </Button>
         <p className="text-xs text-ink-muted">
-          Any amount from {naira(data.customMin)} to {naira(data.customMax)}, in steps of ₦{HYPE_NAIRA}. Paid securely with Paystack. Hype can&apos;t be refunded or cashed out. See the{" "}
+          Any amount from {naira(data.customMin)} to {naira(data.customMax)}, in steps of ₦{HYPE_NAIRA}. Paid securely with {payNames}. Hype can&apos;t be refunded or cashed out. See the{" "}
           <a href="/terms/payments#gifts" className="underline">
             payment terms
           </a>
