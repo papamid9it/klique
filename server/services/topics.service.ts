@@ -172,6 +172,11 @@ export async function listTopics(viewer: IUser | null, space: Space, access: Spa
     match.$or = [{ title: rx }, { body: rx }, { tags: q.q.toLowerCase() }];
   }
   if (q.tag) match.tags = q.tag;
+  // "Following": only the posts you follow (signed out: none)
+  if (q.following) {
+    const ids = viewer ? (await TopicFollow.find({ userId: viewer._id }).select("topicId").lean<{ topicId: Types.ObjectId }[]>()).map((x) => x.topicId) : [];
+    match._id = { $in: ids };
+  }
   const skip = (q.page - 1) * PAGE;
   let rows: ITopic[];
   if (q.sort === "hot") {

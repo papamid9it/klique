@@ -239,6 +239,8 @@ export const topicListQuery = pageQuery.extend({
   board: z.preprocess(blankToUndef, z.string().trim().max(40).optional()),
   q: z.preprocess(blankToUndef, z.string().trim().max(60).optional()),
   tag: z.preprocess(blankToUndef, z.string().trim().toLowerCase().max(LIMITS.topicTag).optional()),
+  /** only the posts you follow (yours are followed for you) */
+  following: z.preprocess((v) => v === "true" || v === "1" || v === true, z.boolean()).optional(),
 });
 /** http(s) links, or the bundled sample files under /mock/ */
 const mediaUrl = z.string().trim().max(2000).refine((v) => /^https?:\/\//i.test(v) || /^\/mock\/[\w.-]+$/.test(v), "Use a full link (https://…)");
