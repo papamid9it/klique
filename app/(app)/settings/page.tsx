@@ -193,6 +193,17 @@ function ProfileForm({ me, onDraft }: { me: UserMe; onDraft?: (d: ProfileDraft) 
 
   return (
     <form onSubmit={save} className="space-y-5">
+      {/* your card and saving at the top, then your pictures, then the rest */}
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        <button type="button" onClick={() => card.openFull(me.handle)} className="mr-auto text-sm font-medium text-accent-text underline underline-offset-2">
+          View my profile card
+        </button>
+        <Button type="submit" variant="primary" loading={busy} disabled={!dirty || (interestsChanged && tooFew)}>
+          {dirty ? "Save profile" : "Saved"}
+        </Button>
+      </div>
+      <ImageField kind="avatar" shape="round" label="Profile picture" value={avatarUrl} onChange={setAvatarUrl} error={fieldErrors.avatarUrl} fallback={<Avatar name={displayName || me.displayName} size={80} />} reposition={{ aspect: 1, round: true }} hint="After uploading, drag it to choose what shows in the circle. Leave empty to use your initials." />
+      {!PROFILE_DESIGNS_ENABLED && <ImageField kind="photo" label="Banner" value={bannerUrl} onChange={setBannerUrl} reposition={{ aspect: 4 }} hint="The wide picture across the top of your profile. Drag it to choose what shows." />}
       <TextField label="Display name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} maxLength={LIMITS.displayName} required error={fieldErrors.displayName} />
       <TextField label="Handle" value={`@${me.handle}`} readOnly hint="Your handle can't be changed." />
       <TextArea label="Bio" value={bio} onChange={(e) => setBio(e.target.value)} maxLength={LIMITS.bio} counter={LIMITS.bio} error={fieldErrors.bio} hint="A line or two about what you're into." />
@@ -203,8 +214,6 @@ function ProfileForm({ me, onDraft }: { me: UserMe; onDraft?: (d: ProfileDraft) 
         <option value="man">Man</option>
       </SelectField>
       <PlaceFields value={place} onChange={(p) => { setPlace(p); }} neighborhood={neighborhood} onNeighborhood={setNeighborhood} errors={fieldErrors} />
-      <ImageField kind="avatar" shape="round" label="Profile picture" value={avatarUrl} onChange={setAvatarUrl} error={fieldErrors.avatarUrl} fallback={<Avatar name={displayName || me.displayName} size={80} />} reposition={{ aspect: 1, round: true }} hint="After uploading, drag it to choose what shows in the circle. Leave empty to use your initials." />
-      {!PROFILE_DESIGNS_ENABLED && <ImageField kind="photo" label="Banner" value={bannerUrl} onChange={setBannerUrl} reposition={{ aspect: 4 }} hint="The wide picture across the top of your profile. Drag it to choose what shows." />}
       <p className="text-[13px] text-ink-muted">
         Photos and videos on your profile are in{" "}
         <a href="/settings#gallery" className="font-medium text-accent-text underline">
@@ -251,12 +260,9 @@ function ProfileForm({ me, onDraft }: { me: UserMe; onDraft?: (d: ProfileDraft) 
         </p>
       )}
       <div className="flex items-center gap-3">
-        <Button type="submit" variant="primary" loading={busy} disabled={interestsChanged && tooFew}>
-          Save profile
+        <Button type="submit" variant="primary" loading={busy} disabled={!dirty || (interestsChanged && tooFew)}>
+          {dirty ? "Save profile" : "Saved"}
         </Button>
-        <button type="button" onClick={() => card.openFull(me.handle)} className="text-sm font-medium text-accent-text underline underline-offset-2">
-          View my profile card
-        </button>
       </div>
     </form>
   );
@@ -539,7 +545,8 @@ const aboutOf = (me: UserMe): ProfileDraft => ({ displayName: me.displayName, bi
 /** The little profile card beside the Profile and Profile style forms, updating as you edit. */
 function ProfilePreview({ me, draft }: { me: UserMe; draft: PreviewDraft }) {
   return (
-    <aside aria-label="Preview" className="lg:sticky lg:top-14 lg:self-start">
+    // on a phone or a narrow window it comes first, above the form (beside it on a wide screen)
+    <aside aria-label="Preview" className="order-first lg:sticky lg:top-14 lg:order-none lg:self-start">
       <p className="eyebrow mb-2">Preview</p>
       {/* always moving, like your profile popout (globals.css kq-live; still for Animations off / data saver) */}
       <div className="kq-live relative overflow-hidden rounded-card border border-line bg-surface shadow-lg" style={themeStyle(themeOf(draft.profileTheme))}>

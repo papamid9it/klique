@@ -133,6 +133,7 @@ export function AutoModPanel({ slug }: { slug: string }) {
         <SettingsBlock title="Spam and scam links">
           <Switch checked={cfg.links.on} onChange={(v) => set("links", { ...cfg.links, on: v })} label="Check links" />
           <div className="mt-3 space-y-3">
+            <Switch checked={cfg.links.blockAll} onChange={(v) => set("links", { ...cfg.links, blockAll: v })} label="Block all links" hint="Nobody can post a link. Owners, admins and the roles you skip below still can." />
             <Switch checked={cfg.links.scamFilter} onChange={(v) => set("links", { ...cfg.links, scamFilter: v })} label="Catch common scams" hint={`"Free crypto / airdrop", "double your money", IP-grabber and fake login links.`} />
             <TextArea label="Blocked sites" value={blockList} onChange={(e) => setBlockList(e.target.value)} rows={3} placeholder={"example.com\nbit.ly"} hint="One per line. Links to these sites (and their subdomains) are caught." />
             <SelectField label="Links from new members" value={cfg.links.newMemberMinutes} onChange={(e) => set("links", { ...cfg.links, newMemberMinutes: Number(e.target.value) })} hint="Stop any link from people who only just joined.">

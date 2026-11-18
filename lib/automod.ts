@@ -19,7 +19,7 @@ export interface AutoModConfig {
   alertChannelId: string | null;
   exemptRoleIds: string[];
   exemptChannelIds: string[];
-  links: { on: boolean; scamFilter: boolean; blockList: string[]; newMemberMinutes: number; action: AutoModAction };
+  links: { on: boolean; scamFilter: boolean; /** no links at all (owners, admins and skipped roles still can) */ blockAll: boolean; blockList: string[]; newMemberMinutes: number; action: AutoModAction };
   words: { on: boolean; list: string[]; action: AutoModAction };
   mentions: { on: boolean; max: number; action: AutoModAction };
   flood: { on: boolean; repeats: number; action: AutoModAction };
@@ -33,7 +33,7 @@ export const DEFAULT_AUTOMOD: AutoModConfig = {
   alertChannelId: null,
   exemptRoleIds: [],
   exemptChannelIds: [],
-  links: { on: true, scamFilter: true, blockList: [], newMemberMinutes: 0, action: act(true, true) },
+  links: { on: true, scamFilter: true, blockAll: false, blockList: [], newMemberMinutes: 0, action: act(true, true) },
   words: { on: false, list: [], action: act(true, false) },
   mentions: { on: true, max: 8, action: act(true, true, 600) },
   flood: { on: true, repeats: 4, action: act(true, false, 300) },
@@ -61,7 +61,7 @@ export function automodOf(v: unknown): AutoModConfig {
     alertChannelId: typeof o.alertChannelId === "string" && /^[a-f0-9]{24}$/i.test(o.alertChannelId) ? o.alertChannelId : null,
     exemptRoleIds: strs(o.exemptRoleIds, 50, 24).filter((x) => /^[a-f0-9]{24}$/.test(x)),
     exemptChannelIds: strs(o.exemptChannelIds, 100, 24).filter((x) => /^[a-f0-9]{24}$/.test(x)),
-    links: { on: bool(sec("links").on, d.links.on), scamFilter: bool(sec("links").scamFilter, d.links.scamFilter), blockList: strs(sec("links").blockList, 200, 100).map((x) => x.replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/.*$/, "")), newMemberMinutes: int(sec("links").newMemberMinutes, 0, 60 * 24 * 30, d.links.newMemberMinutes), action: action(sec("links").action, d.links.action) },
+    links: { on: bool(sec("links").on, d.links.on), scamFilter: bool(sec("links").scamFilter, d.links.scamFilter), blockAll: bool(sec("links").blockAll, d.links.blockAll), blockList: strs(sec("links").blockList, 200, 100).map((x) => x.replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/.*$/, "")), newMemberMinutes: int(sec("links").newMemberMinutes, 0, 60 * 24 * 30, d.links.newMemberMinutes), action: action(sec("links").action, d.links.action) },
     words: { on: bool(sec("words").on, d.words.on), list: strs(sec("words").list, 500, 60), action: action(sec("words").action, d.words.action) },
     mentions: { on: bool(sec("mentions").on, d.mentions.on), max: int(sec("mentions").max, 2, 50, d.mentions.max), action: action(sec("mentions").action, d.mentions.action) },
     flood: { on: bool(sec("flood").on, d.flood.on), repeats: int(sec("flood").repeats, 2, 20, d.flood.repeats), action: action(sec("flood").action, d.flood.action) },

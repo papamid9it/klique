@@ -21,11 +21,12 @@ import { notify } from "./push.service";
  * a timeout. Every hit goes in the moderation log. Owners, admins, site admins, exempt roles and channels are skipped.
  */
 
-const RULE_LABEL = { scam: "Suspicious link", blocked: "Blocked link", newMember: "Link from a new member", words: "Blocked word", mentions: "Too many mentions", flood: "Repeated messages" } as const;
+const RULE_LABEL = { scam: "Suspicious link", anyLink: "Link (links are off)", blocked: "Blocked link", newMember: "Link from a new member", words: "Blocked word", mentions: "Too many mentions", flood: "Repeated messages" } as const;
 type Rule = keyof typeof RULE_LABEL;
 
 const BLOCK_MESSAGE: Record<Rule, string> = {
   scam: "AutoMod stopped this: it looks like a scam link.",
+  anyLink: "AutoMod stopped this: links aren't allowed in this community.",
   blocked: "AutoMod stopped this: links to that site aren't allowed here.",
   newMember: "AutoMod stopped this: new members can't post links here yet.",
   words: "AutoMod stopped this: it has a word this community doesn't allow.",
@@ -39,6 +40,8 @@ async function firstHit(cfg: AutoModConfig, communityId: Types.ObjectId, viewer:
     if (cfg.links.scamFilter && looksLikeScam(text)) return { rule: "scam", action: cfg.links.action };
     const hosts = linksIn(text);
     if (hosts.length) {
+      // links switched off altogether: any link at all
+      if (cfg.links.blockAll) return { rule: "anyLink", action: cfg.links.action };
       if (cfg.links.blockList.length && hosts.some((h) => cfg.links.blockList.some((d) => h === d || h.endsWith(`.${d}`)))) return { rule: "blocked", action: cfg.links.action };
       if (cfg.links.newMemberMinutes > 0) {
         const m = await Membership.findOne({ userId: viewer._id, communityId, subcommunityId: null }).select("createdAt").lean<Pick<IMembership, "createdAt">>();
