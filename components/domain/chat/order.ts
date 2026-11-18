@@ -9,8 +9,12 @@ export function orderChannels(data: ChannelsDTO) {
   return sections;
 }
 
-/** The channel a community opens on: #general, else the first one in the list. */
+/** The channel a community opens on: its main chat room (set by its admins), else #general, else the first one to talk in. */
 export function defaultChannel(data: ChannelsDTO): ChannelDTO | null {
-  const all = orderChannels(data).flatMap((s) => s.channels);
-  return all.find((c) => c.slug === "general") ?? all[0] ?? null;
+  return mainRoom(orderChannels(data).flatMap((s) => s.channels), data.mainChannel);
+}
+
+/** From channels in list order: the main chat room if set, else #general, else the first text channel, else the first. */
+export function mainRoom(list: ChannelDTO[], main?: string | null): ChannelDTO | null {
+  return (main ? list.find((c) => c.slug === main) : undefined) ?? list.find((c) => c.slug === "general") ?? list.find((c) => c.type === "text") ?? list[0] ?? null;
 }

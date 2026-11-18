@@ -33,6 +33,8 @@ export interface ICommunity {
    * channels ("Channels") as the first section and then each category. Unset or 0: at the top.
    */
   boardsAt?: number;
+  /** the chat room "Chat" opens on (null: #general, else the first text channel) */
+  mainChannelId?: Types.ObjectId | null;
   /** no kliques in the community itself (policies/features); unset = on, except Klique HQ (official) */
   kliquesOff?: boolean;
   /** made by Klique, can't be deleted. The default "Klique" community (slug "klique") is the official one */
@@ -110,6 +112,7 @@ const CommunitySchema = new Schema<ICommunity>(
     feedPolicy: { type: String, enum: ["admins", "members", "off"], default: "off" },
     boardsOff: { type: Boolean, default: undefined },
     boardsAt: { type: Number, default: undefined, min: 0, max: 1000 },
+    mainChannelId: { type: Schema.Types.ObjectId, ref: "Channel", default: null },
     kliquesOff: { type: Boolean, default: undefined },
     minPointsJoin: { type: Number, default: 0, min: 0, max: 1_000_000 },
     minPointsPost: { type: Number, default: 0, min: 0, max: 1_000_000 },

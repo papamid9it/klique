@@ -151,6 +151,8 @@ export const communityUpdateSchema = z.object({
   kliquesOn: z.boolean().optional(),
   /** move the Boards section up, down, to the top or the bottom of the channel list */
   moveBoards: z.enum(["top", "up", "down", "bottom"]).optional(),
+  /** the main chat room, by its slug (null: back to the default, #general) */
+  mainChannel: z.string().trim().min(1).max(60).nullable().optional(),
   minPointsJoin: minPoints,
   minPointsPost: minPoints,
   memberEvents: z.boolean().optional(),

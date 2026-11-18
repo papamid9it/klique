@@ -276,8 +276,18 @@ export async function updateCommunity(viewer: IUser, slug: string, patch: z.infe
   // the Boards section among the channel list's sections (the loose channels, then each category)
   if (patch.moveBoards) set.boardsAt = await movedBoardsAt(space.community, patch.moveBoards);
 
+  // the main chat room: a text or announcement channel of the community itself (not a group's, not a thread)
+  if (patch.mainChannel !== undefined) {
+    if (patch.mainChannel === null) set.mainChannelId = null;
+    else {
+      const ch = await Channel.findOne({ communityId: space.community._id, subcommunityId: null, slug: patch.mainChannel, threadOf: null, type: { $in: ["text", "announcement"] } }).select("_id").lean<{ _id: Types.ObjectId }>();
+      if (!ch) throw new ApiError(422, "Pick one of this community's chat rooms.");
+      set.mainChannelId = ch._id;
+    }
+  }
+
   await Community.updateOne({ _id: space.community._id }, set);
-  if (set.boardsAt !== undefined) emitChannel(space.community._id, space.community._id); // open channel lists follow
+  if (set.boardsAt !== undefined || set.mainChannelId !== undefined) emitChannel(space.community._id, space.community._id); // open channel lists follow
   if (set.coverImage !== undefined && space.community.coverImage && !sameFile(space.community.coverImage, set.coverImage)) deleteUploads([space.community.coverImage]);
 
   // Events hosted directly in this community inherit its privacy — keep them in sync.

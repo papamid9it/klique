@@ -1,5 +1,6 @@
 "use client";
 
+import { mainRoom } from "@/components/domain/chat/order";
 import { HeaderIcons } from "@/components/layout/HeaderIcons";
 import { AgeGate } from "@/components/domain/space/AgeGate";
 import { placeLabel } from "@/lib/places";
@@ -200,7 +201,7 @@ function CommunityWorkspace({ slug }: { slug: string }) {
   const [voice, setVoice] = useState<VoiceSnapshot | null>(null);
   const activeBoard = boards.find((b) => b.slug === sp.get("b")) ?? boards[0] ?? null;
   const requestedChannel = sp.get("c");
-  const activeChannel: ChannelDTO | null = view || crewOpen ? null : (pool.find((x) => x.slug === requestedChannel) ?? pool.find((x) => x.slug === "general") ?? pool[0] ?? null);
+  const activeChannel: ChannelDTO | null = view || crewOpen ? null : (pool.find((x) => x.slug === requestedChannel) ?? mainRoom(pool, gSlug ? null : channels.data?.mainChannel));
 
   const markReadLocally = useCallback(
     (channelSlug: string) => {

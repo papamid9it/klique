@@ -1054,6 +1054,8 @@ export interface ChannelsDTO {
    * first, then each category in order). 0: at the top. Clamp it to the sections there are.
    */
   boardsAt?: number;
+  /** the main chat room's slug, set by the community (null: none set; use #general, else the first text channel) */
+  mainChannel?: string | null;
   /** only in a community's own list: the groups you're in (a group's own list has none) */
   groups: ChannelGroupDTO[];
 }

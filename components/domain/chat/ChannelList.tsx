@@ -347,6 +347,15 @@ export function ChannelList({
             },
           ] as MenuEntry[])
         : []),
+      // owners and admins: the room the community's Chat opens on
+      ...(manage && !sub && ch.type !== "voice"
+        ? ([
+            { type: "sep" },
+            data.mainChannel === ch.slug
+              ? { label: "Stop being the main chat room", icon: "x", onSelect: () => void act(CommunityService.update(c.slug, { mainChannel: null }), onChanged) }
+              : { label: "Make main chat room", icon: "home", onSelect: () => void act(CommunityService.update(c.slug, { mainChannel: ch.slug }), onChanged) },
+          ] as MenuEntry[])
+        : []),
       ...(canEdit
         ? ([
             { type: "sep" },

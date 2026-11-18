@@ -60,7 +60,7 @@ export const CommunityService = {
   sidebars: (slugs: string[]) => api.get<Envelope<Record<string, SidebarDTO | null>>>("/api/me/sidebars", { slugs: slugs.join(",") }),
   get: (slug: string) => api.get<Envelope<CommunityDTO>>(`/api/communities/${slug}`, undefined, { ttl: 15 }),
   create: (input: CommunityInput) => api.post<Envelope<CommunityDTO>>("/api/communities", input),
-  update: (slug: string, patch: Partial<CommunityInput> & { moveBoards?: Move }) => api.patch<Envelope<CommunityDTO>>(`/api/communities/${slug}`, patch),
+  update: (slug: string, patch: Partial<CommunityInput> & { moveBoards?: Move; mainChannel?: string | null }) => api.patch<Envelope<CommunityDTO>>(`/api/communities/${slug}`, patch),
   /** the owner's dashboard: members and growth, what's waiting for approval, this week (owners and admins) */
   dashboard: (slug: string) => api.get<Envelope<CommunityDashboardDTO>>(`/api/communities/${slug}/dashboard`),
   growth: (slug: string) => api.get<Envelope<GrowthStatsDTO>>(`/api/communities/${slug}/growth`),

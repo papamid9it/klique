@@ -289,7 +289,9 @@ export async function listChannels(viewer: IUser | null, space: Space, access: S
     }
   }
 
-  return { categories: categories.map(toCategory), channels: visible.map((c) => toChannel(c, ctx)), groups, ...(space.sub ? {} : { boardsAt: space.community.boardsAt ?? 0 }) };
+  // the room "Chat" opens on, if it's set and you can see it
+  const mainChannel = space.sub ? undefined : (visible.find((c) => space.community.mainChannelId && sid(c._id) === sid(space.community.mainChannelId))?.slug ?? null);
+  return { categories: categories.map(toCategory), channels: visible.map((c) => toChannel(c, ctx)), groups, ...(space.sub ? {} : { boardsAt: space.community.boardsAt ?? 0, mainChannel }) };
 }
 
 async function guestCounts(channels: IChannel[]): Promise<Map<string, number>> {
