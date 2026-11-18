@@ -174,7 +174,8 @@ export async function getProfile(viewer: IUser | null, handle: string): Promise<
   ]);
 
   return {
-    profile: { ...toProfile(user), media: await shownMedia(user) },
+    // your own profile: the status you picked (others see it only while you're around)
+    profile: { ...toProfile(user), ...(isSelf ? { presence: user.presence ?? "online" } : {}), media: await shownMedia(user) },
     isSelf,
     visible: true,
     communities,

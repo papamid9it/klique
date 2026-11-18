@@ -14,6 +14,7 @@ import type {
   Paginated,
   PostDTO,
   Role,
+  MembersPage,
 } from "@/lib/types";
 import { ApiError, badRequest, conflict, forbidden, notFound } from "../http/errors";
 import { ChannelMember } from "../models/Channel";
@@ -40,7 +41,7 @@ import {
   type SpaceAccess,
   canSeeMembers,
 } from "../policies/access";
-import { loadBriefs, toPosts } from "../serializers";
+import { loadBriefs, ONLINE_WINDOW_MS, toPosts } from "../serializers";
 import { escapeRegex, newInviteCode, recountMembers, sid } from "./helpers";
 import { rateLimit } from "../http/rate-limit";
 import { notify } from "./push.service";
@@ -274,18 +275,28 @@ export async function listMembers(
   access: SpaceAccess,
   page: number,
   q?: string,
-): Promise<Paginated<MemberDTO>> {
+  filter?: "online" | "admins" | "new",
+): Promise<MembersPage> {
   // A community's member list is for its owner, admins and moderators (canSeeMembers); a group's (small and
   // private) for its members. Site admins see both.
   if (space.sub ? !access.isMember && !access.canModerate : !canSeeMembers(access)) throw forbidden(space.sub ? "Join to see who's in here." : "Only the community's admins can see its member list.");
 
   const size = 24;
   const base: Record<string, unknown> = { ...spaceFilter(space), status: "active" as const };
+  // who's here now: heard from in the last few minutes, and not Invisible (the same rule as the green dot)
+  const onlineIds = async () => (await User.find({ lastSeenAt: { $gte: new Date(Date.now() - ONLINE_WINDOW_MS) }, presence: { $ne: "invisible" } }).select("_id").limit(5000).lean<{ _id: Types.ObjectId }[]>()).map((u) => u._id);
+  const [online, total] = page === 1
+    ? await Promise.all([onlineIds().then((ids) => Membership.countDocuments({ ...spaceFilter(space), status: "active", userId: { $in: ids } })), Membership.countDocuments({ ...spaceFilter(space), status: "active" })])
+    : [undefined, undefined];
+  if (filter === "online") base.userId = { $in: await onlineIds() };
+  if (filter === "new") base.createdAt = { $gte: new Date(Date.now() - 14 * 86_400_000) };
   // Name search: match display name or handle, then keep only those people's memberships.
   if (q) {
     const rx = new RegExp(escapeRegex(q.replace(/^@/, "")), "i");
     const ids = await User.find({ $or: [{ displayName: rx }, { handle: rx }] }).select("_id").limit(1000).lean<{ _id: Types.ObjectId }[]>();
-    base.userId = { $in: ids.map((u) => u._id) };
+    // with Online too: only the people who are both
+    const within = base.userId ? new Set(((base.userId as { $in: Types.ObjectId[] }).$in).map(String)) : null;
+    base.userId = { $in: ids.map((u) => u._id).filter((id) => !within || within.has(String(id))) };
   }
   const [managers, rows] = await Promise.all([
     page === 1
@@ -293,11 +304,14 @@ export async function listMembers(
           .sort({ role: 1, createdAt: 1 }) // "admin" < "owner" alphabetically; fixed below
           .lean<IMembership[]>()
       : [],
-    Membership.find({ ...base, role: "member" })
-      .sort({ createdAt: 1 })
-      .skip((page - 1) * size)
-      .limit(size + 1)
-      .lean<IMembership[]>(),
+    filter === "admins"
+      ? ([] as IMembership[])
+      : Membership.find({ ...base, role: "member" })
+          // New: the newest first
+          .sort({ createdAt: filter === "new" ? -1 : 1 })
+          .skip((page - 1) * size)
+          .limit(size + 1)
+          .lean<IMembership[]>(),
   ]);
 
   const hasMore = rows.length > size;
@@ -332,7 +346,7 @@ export async function listMembers(
       },
     ];
   });
-  return { items, page, hasMore };
+  return { items, page, hasMore, ...(total !== undefined ? { total, online } : {}) };
 }
 
 async function targetMembership(space: Space, userId: string): Promise<IMembership> {

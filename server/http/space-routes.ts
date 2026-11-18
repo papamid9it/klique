@@ -54,9 +54,9 @@ export const leave = withApi<Base, "required">({ auth: "required" }, async ({ pa
 });
 
 export const members = withApi<Base, "required">({ auth: "required" }, async ({ req, params, viewer }) => {
-  const { page, q } = readQuery(req, pageOnly);
+  const { page, q, filter } = readQuery(req, pageOnly);
   const { space, access } = await resolveSpaceFor(viewer, params.slug, params.subSlug);
-  return listMembers(viewer, space, access, page, q);
+  return listMembers(viewer, space, access, page, q, filter);
 });
 
 type WithUser = Base & { userId: string };

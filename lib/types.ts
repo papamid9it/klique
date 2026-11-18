@@ -23,6 +23,12 @@ export interface Paginated<T> {
   hasMore: boolean;
 }
 
+/** A page of members; the first also says how many there are and how many are online now. */
+export interface MembersPage extends Paginated<MemberDTO> {
+  total?: number;
+  online?: number;
+}
+
 /* ------------------------------ people ------------------------------ */
 
 /** A community role's emoji and name, shown on someone's picture inside that community. */

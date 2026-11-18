@@ -232,6 +232,8 @@ export const postCreateSchema = z.object({
 
 export const memberListQuery = pageQuery.extend({
   q: z.preprocess(blankToUndef, z.string().trim().max(60).optional()),
+  /** online now, owners and admins only, or joined in the last two weeks (newest first) */
+  filter: z.preprocess(blankToUndef, z.enum(["online", "admins", "new"]).optional()),
 });
 
 /* -------------------------------- topics ---------------------------- */

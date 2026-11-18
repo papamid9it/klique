@@ -40,11 +40,13 @@ function Board({ slug, communityName, isMember, board, openId }: { slug: string;
   const [sort, setSort] = useState<TopicSort>("active");
   const [q, setQ] = useState("");
   const [tag, setTag] = useState<string | null>(null);
+  // All posts, or only the ones you follow (yours are followed for you), as in the phone app
+  const [following, setFollowing] = useState(false);
   const dq = useDebounced(q.trim(), 350);
   const [creating, setCreating] = useState(false);
-  const { items, loading, loadingMore, error, hasMore, loadMore, reload, setItems } = usePaged<TopicDTO>((page) => TopicService.list(slug, { board: board.slug, sort, q: dq || undefined, tag: tag ?? undefined, page }), [slug, board.slug, sort, dq, tag], {
+  const { items, loading, loadingMore, error, hasMore, loadMore, reload, setItems } = usePaged<TopicDTO>((page) => TopicService.list(slug, { board: board.slug, sort, q: dq || undefined, tag: tag ?? undefined, following: following || undefined, page }), [slug, board.slug, sort, dq, tag, following], {
     keepPrevious: true,
-    key: `topics:${slug}:${board.slug}:${sort}:${dq}:${tag ?? ""}`,
+    key: `topics:${slug}:${board.slug}:${sort}:${dq}:${tag ?? ""}:${following ? "f" : ""}`,
   });
   // someone else replies to a post on this board: refresh, so in "Active" it moves up
   useRealtimeEvent(() => void reload(), { filter: (e) => sort === "active" && e.type === "topic" && items.some((x) => x.id === e.topicId), debounceMs: 1500 });
@@ -72,6 +74,15 @@ function Board({ slug, communityName, isMember, board, openId }: { slug: string;
         {board.description && <p className="text-sm text-ink-muted">{board.description}</p>}
         {board.postPolicy === "admins" && <p className="eyebrow mt-1">Only owners and admins post here</p>}
       </div>
+      {isMember && (
+        <div role="tablist" aria-label="Which posts" className="flex border-b border-line">
+          {[{ on: false, label: "All posts" }, { on: true, label: "Following" }].map((x) => (
+            <button key={x.label} type="button" role="tab" aria-selected={following === x.on} onClick={() => setFollowing(x.on)} className={cx("-mb-px h-10 flex-1 border-b-2 text-sm font-semibold transition sm:flex-none sm:px-6", following === x.on ? "border-ink text-ink" : "border-transparent text-ink-muted hover:text-ink")}>
+              {x.label}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <div role="tablist" aria-label="Sort posts" className="inline-flex rounded-full border border-line bg-surface p-0.5">
           {SORTS.map((s) => (
@@ -108,6 +119,8 @@ function Board({ slug, communityName, isMember, board, openId }: { slug: string;
         <RowSkeleton rows={4} />
       ) : error ? (
         <ErrorState message={error} onRetry={() => void reload()} />
+      ) : items.length === 0 && following && !dq && !tag ? (
+        <EmptyState icon="topics" title="You’re not following any posts here">Follow a post to keep it here and hear about new replies. Your own posts show here too.</EmptyState>
       ) : items.length === 0 ? (
         <EmptyState icon="topics" title={dq || tag ? "No posts match" : `Nothing in ${board.name} yet`} action={board.canPost && !dq && !tag ? <Button variant="primary" onClick={() => setCreating(true)}>Write the first post</Button> : undefined}>
           {dq || tag ? "Try different words, or another tag." : `Posts are for longer conversations in ${communityName}: each one gets its own chat for replies.`}

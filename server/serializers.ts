@@ -111,6 +111,9 @@ export const toProfile = (u: IUser): UserProfile => ({
 
 export const toMe = (u: IUser, unreadMessages = 0, unreadNotifications = 0): UserMe => ({
   ...toProfile(u),
+  // your own status is the one you picked: the "away for a while, so offline" rule is only for how others see you
+  // (on opening the app the server hasn't heard from you yet, and you'd see yourself as Invisible)
+  presence: u.presence ?? "online",
   email: u.email,
   emailVerified: !!u.emailVerifiedAt,
   onboarded: !!u.onboardedAt,

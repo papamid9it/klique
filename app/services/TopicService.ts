@@ -16,7 +16,7 @@ export interface TopicInput {
 
 /** A community's boards: posts (Discord forum style) with upvotes, tags, follows and a chat of replies. Same service for web, mobile and desktop. */
 export const TopicService = {
-  list: (slug: string, params: { board?: string; sort?: TopicSort; q?: string; tag?: string; page?: number } = {}) => api.get<Envelope<Paginated<TopicDTO>>>(base(slug), { ...params }),
+  list: (slug: string, params: { board?: string; sort?: TopicSort; q?: string; tag?: string; following?: boolean; page?: number } = {}) => api.get<Envelope<Paginated<TopicDTO>>>(base(slug), { ...params }),
   boards: (slug: string) => api.get<Envelope<BoardDTO[]>>(`/api/communities/${slug}/boards`, undefined, { ttl: 30 }),
   createBoard: (slug: string, input: { name: string; description?: string; postPolicy?: "members" | "admins" }) => api.post<Envelope<BoardDTO>>(`/api/communities/${slug}/boards`, input),
   updateBoard: (slug: string, boardId: string, patch: { name?: string; description?: string; rules?: string; postPolicy?: "members" | "admins" }) => api.patch<Envelope<BoardDTO>>(`/api/communities/${slug}/boards/${boardId}`, patch),
