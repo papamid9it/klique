@@ -474,7 +474,9 @@ function Composer({
   const [emoji, setEmoji] = useState(false);
   // slash commands from the community's bots (loaded once someone starts with "/")
   const wantsCommands = !!emojiCommunity && isMember && text.startsWith("/");
-  const commands = useApi(wantsCommands ? () => new ApiClient().get<Envelope<{ botId: string; bot: string; avatarUrl: string | null; name: string; description: string; options: { name: string; description: string; required: boolean }[] }[]>>(`/api/communities/${emojiCommunity}/commands`) : null, [wantsCommands, emojiCommunity], { key: `commands:${emojiCommunity ?? ""}` });
+  const allCommands = useApi(wantsCommands ? () => new ApiClient().get<Envelope<{ botId: string; bot: string; avatarUrl: string | null; name: string; description: string; options: { name: string; description: string; required: boolean }[]; channelIds?: string[] }[]>>(`/api/communities/${emojiCommunity}/commands`) : null, [wantsCommands, emojiCommunity], { key: `commands:${emojiCommunity ?? ""}` });
+  // the ones the community allows in this channel (the server checks again when it's used)
+  const commands = { data: allCommands.data?.filter((c) => !c.channelIds?.length || c.channelIds.includes(channel.id)) };
   // put a custom emoji in at the cursor
   const insertEmoji = (t: string) => {
     const el = area.current;

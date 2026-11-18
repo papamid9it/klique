@@ -15,7 +15,9 @@ import { EmptyState, ErrorState } from "@/components/ui/States";
 import { relativeStamp } from "@/lib/format";
 import { READ_MESSAGES } from "@/lib/roles";
 import { useApi, useNow } from "@/lib/hooks/useApi";
-import type { Envelope, UserBrief } from "@/lib/types";
+import type { BotCommandRuleDTO, Envelope, UserBrief } from "@/lib/types";
+import { cx } from "@/components/ui/cx";
+import { useRoles } from "./RolesPanel";
 import { ConfirmModal } from "./parts";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 
@@ -142,7 +144,7 @@ export function WebhooksPanel({ slug }: { slug: string }) {
         )}
       </SettingsBlock>
 
-      <BotsBlock slug={slug} />
+      <BotsBlock slug={slug} channels={data.channels} />
 
       <SettingsBlock title="How to use it">
         <p className="mb-2 text-sm text-ink-muted">Send a POST request with JSON to the webhook&apos;s link. Only <code>content</code> is needed (up to 2000 characters). Up to 30 messages a minute.</p>
@@ -227,10 +229,12 @@ export function WebhooksPanel({ slug }: { slug: string }) {
 }
 
 /** The community's bots (added with their invite links), each removable. */
-function BotsBlock({ slug }: { slug: string }) {
+function BotsBlock({ slug, channels }: { slug: string; channels: Hooks["channels"] }) {
   const toast = useToast();
-  const { data, reload } = useApi(() => api.get<Envelope<{ id: string; name: string; description: string; avatarUrl: string | null; user: UserBrief | null; commands: { name: string }[]; readMessages: boolean }[]>>(`/api/communities/${slug}/bots`), [slug], { key: `bots:${slug}` });
+  const { data, reload } = useApi(() => api.get<Envelope<{ id: string; name: string; description: string; avatarUrl: string | null; user: UserBrief | null; commands: { name: string; description?: string }[]; readMessages: boolean; rules: BotCommandRuleDTO[] }[]>>(`/api/communities/${slug}/bots`), [slug], { key: `bots:${slug}` });
   const [removing, setRemoving] = useState<{ id: string; name: string } | null>(null);
+  const [ruling, setRuling] = useState<string | null>(null);
+  const ruled = data?.find((b) => b.id === ruling) ?? null;
   const [saving, setSaving] = useState<string | null>(null);
   const setReads = async (id: string, readMessages: boolean) => {
     setSaving(id);
@@ -261,6 +265,11 @@ function BotsBlock({ slug }: { slug: string }) {
                 <div className="mt-2 max-w-sm">
                   <Switch checked={b.readMessages} onChange={(v) => void setReads(b.id, v)} status={saving === b.id ? "saving" : undefined} label="Can read messages" hint={READ_MESSAGES.hint} />
                 </div>
+                {b.commands.length > 0 && (
+                  <button type="button" onClick={() => setRuling(b.id)} className="mt-2 text-sm font-medium text-accent-text underline underline-offset-2">
+                    Who can use its commands{b.rules.some((r) => r.who !== "everyone" || r.channelIds.length || r.cooldownSec) ? " (limited)" : " (everyone)"}
+                  </button>
+                )}
               </div>
               <Button size="sm" variant="ghost" onClick={() => setRemoving({ id: b.id, name: b.name })}>
                 Remove
@@ -269,6 +278,7 @@ function BotsBlock({ slug }: { slug: string }) {
           ))}
         </ul>
       )}
+      {ruled && <CommandRules slug={slug} bot={ruled} channels={channels} onClose={() => setRuling(null)} onSaved={() => void reload()} />}
       <ConfirmModal
         open={!!removing}
         onClose={() => setRemoving(null)}
@@ -283,6 +293,68 @@ function BotsBlock({ slug }: { slug: string }) {
         }}
       />
     </SettingsBlock>
+  );
+}
+
+const COOLDOWN_CHOICES: [number, string][] = [[0, "No wait"], [10, "10 seconds"], [30, "30 seconds"], [60, "1 minute"], [300, "5 minutes"], [600, "10 minutes"], [3600, "1 hour"]];
+
+/** For each of a bot's commands: who may use it, in which channels, and how often. Everyone, everywhere, no wait unless set. */
+function CommandRules({ slug, bot, channels, onClose, onSaved }: { slug: string; bot: { id: string; name: string; commands: { name: string; description?: string }[]; rules: BotCommandRuleDTO[] }; channels: Hooks["channels"]; onClose: () => void; onSaved: () => void }) {
+  const toast = useToast();
+  const roles = useRoles(slug).data?.items ?? [];
+  const [rules, setRules] = useState<BotCommandRuleDTO[]>(() => bot.commands.map((c) => bot.rules.find((r) => r.command === c.name) ?? { command: c.name, who: "everyone", roleIds: [], channelIds: [], cooldownSec: 0 }));
+  const [busy, setBusy] = useState(false);
+  const set = (i: number, patch: Partial<BotCommandRuleDTO>) => setRules((list) => list.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  const flip = (list: string[], id: string) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
+  const chip = (on: boolean) => cx("h-8 rounded-control border px-3 text-[13px] font-medium transition", on ? "border-ink bg-ink text-canvas" : "border-line bg-surface hover:bg-raised");
+  async function save() {
+    if (rules.some((r) => r.who === "roles" && !r.roleIds.length)) return toast("Pick at least one role, or choose Everyone.", "error");
+    setBusy(true);
+    try {
+      await api.patch(`/api/communities/${slug}/bots/${bot.id}`, { rules });
+      toast("Saved", "success");
+      onSaved();
+      onClose();
+    } catch (e) {
+      toast(errorMessage(e), "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Modal open onClose={onClose} title={`Who can use ${bot.name}`} description="By default everyone who can post in a channel can use every command. The owner, admins and moderators can always use them and never wait." size="lg">
+      <div className="space-y-5">
+        {rules.map((r, i) => (
+          <section key={r.command} className="space-y-3 rounded-card border border-line p-4">
+            <p className="font-mono text-sm font-semibold">/{r.command}<span className="ml-2 font-sans font-normal text-ink-muted">{bot.commands[i]?.description}</span></p>
+            <SelectField label="Who can use it" value={r.who} onChange={(e) => set(i, { who: e.target.value as BotCommandRuleDTO["who"] })}>
+              <option value="everyone">Everyone</option>
+              <option value="mods">Owner, admins and moderators</option>
+              <option value="roles">People with certain roles</option>
+            </SelectField>
+            {r.who === "roles" && (
+              <div className="flex flex-wrap gap-1.5">
+                {roles.length ? roles.map((ro) => <button key={ro.id} type="button" aria-pressed={r.roleIds.includes(ro.id)} onClick={() => set(i, { roleIds: flip(r.roleIds, ro.id) })} className={chip(r.roleIds.includes(ro.id))}>{ro.name}</button>) : <p className="text-sm text-ink-muted">No roles yet. Make some in Roles.</p>}
+              </div>
+            )}
+            <div>
+              <p className="text-[13px] font-medium">Where</p>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                <button type="button" aria-pressed={!r.channelIds.length} onClick={() => set(i, { channelIds: [] })} className={chip(!r.channelIds.length)}>Every channel</button>
+                {channels.map((ch) => <button key={ch.id} type="button" aria-pressed={r.channelIds.includes(ch.id)} onClick={() => set(i, { channelIds: flip(r.channelIds, ch.id) })} className={chip(r.channelIds.includes(ch.id))}>#{ch.name}</button>)}
+              </div>
+            </div>
+            <SelectField label="Each person can use it once every" value={r.cooldownSec} onChange={(e) => set(i, { cooldownSec: Number(e.target.value) })} hint="Stops one person filling a channel with the bot's answers.">
+              {COOLDOWN_CHOICES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </SelectField>
+          </section>
+        ))}
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button variant="primary" loading={busy} onClick={() => void save()}>Save</Button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 

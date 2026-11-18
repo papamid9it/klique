@@ -5,12 +5,12 @@ import { request as httpsRequest } from "node:https";
 import { Types } from "mongoose";
 import { z } from "zod";
 import { ALL_PERMISSIONS, isBotPermission, isPermission, READ_MESSAGES } from "@/lib/roles";
-import type { UserBrief } from "@/lib/types";
+import type { BotCommandRuleDTO, UserBrief } from "@/lib/types";
 import { appUrl } from "../env";
 import { assertPublicHttpUrl, safeLookup } from "../net-guard";
 import { ApiError, badRequest, forbidden, notFound } from "../http/errors";
 import { CARD_LIMITS } from "@/lib/cards";
-import { rateLimit } from "../http/rate-limit";
+import { rateLimit, rateLimitShared } from "../http/rate-limit";
 import { BotApp, type BotCommand, type IBotApp } from "../models/BotApp";
 import { Channel, ChannelMember, type IChannel } from "../models/Channel";
 import { Community, type ICommunity } from "../models/Community";
@@ -252,12 +252,56 @@ export async function uninstallBot(viewer: IUser, slug: string, id: string) {
   return { removed: true };
 }
 
-/** A community's bots (for its settings). */
-export async function communityBots(viewer: IUser, slug: string): Promise<(BotDTO & { readMessages: boolean })[]> {
+/* ------------------------------ who may use a command ------------------------------ */
+
+export const COOLDOWNS = [0, 10, 30, 60, 300, 600, 3600] as const;
+const cooldownLabel = (s: number) => (s < 60 ? `${s} seconds` : s < 3600 ? `${s / 60} ${s === 60 ? "minute" : "minutes"}` : "hour");
+export const botRulesSchema = z.array(
+  z.object({
+    command: commandName,
+    who: z.enum(["everyone", "mods", "roles"]),
+    roleIds: z.array(z.string().regex(/^[a-f0-9]{24}$/i)).max(50).default([]),
+    channelIds: z.array(z.string().regex(/^[a-f0-9]{24}$/i)).max(100).default([]),
+    cooldownSec: z.number().int().refine((n) => (COOLDOWNS as readonly number[]).includes(n), "Pick one of the cooldowns"),
+  }),
+).max(100);
+
+/** a command's rule here (nothing saved: everyone, every channel, no wait) */
+function ruleFor(c: ICommunity, botId: Types.ObjectId | string, command: string): BotCommandRuleDTO {
+  const r = (c.botRules ?? []).find((x) => sid(x.botId) === sid(botId) && x.command === command);
+  return r ? { command, who: r.who, roleIds: r.roleIds.map(sid), channelIds: r.channelIds.map(sid), cooldownSec: r.cooldownSec } : { command, who: "everyone", roleIds: [], channelIds: [], cooldownSec: 0 };
+}
+/** owners, admins, moderators (and site admins): they pass every rule and never wait */
+const isStaff = (viewer: IUser, access: SpaceAccess) => access.role === "owner" || access.role === "admin" || access.canModerate || isSiteAdmin(viewer) || !!access.perms?.some((p) => p === "deleteMessages" || p === "timeout" || p === "kick" || p === "ban");
+/** may this person use it at all (whatever the channel)? */
+const mayUse = (rule: BotCommandRuleDTO, viewer: IUser, access: SpaceAccess) => rule.who === "everyone" || isStaff(viewer, access) || (rule.who === "roles" && (access.roleIds ?? []).some((id) => rule.roleIds.includes(id)));
+/** who pressed or typed, as the bot sees it: their place in the community, so a bot can make its own checks too */
+const memberInfo = (viewer: IUser, access: SpaceAccess) => ({ role: access.role ?? "member", staff: isStaff(viewer, access), roleIds: access.roleIds ?? [] });
+
+/** Save who may use a bot's commands, where, and how often. Commands left out go back to everyone. */
+export async function setBotRules(viewer: IUser, slug: string, id: string, rules: z.infer<typeof botRulesSchema>): Promise<{ rules: BotCommandRuleDTO[] }> {
+  const { space, access } = await resolveSpaceFor(viewer, slug);
+  if (access.role !== "owner" && !isSiteAdmin(viewer) && !access.perms?.includes("manageWebhooks")) throw forbidden("Only the community's owner can change this.");
+  if (!Types.ObjectId.isValid(id) || !(space.community.bots ?? []).some((b) => sid(b) === id)) throw notFound("That bot isn't in this community.");
+  const app = await BotApp.findById(id).select("commands name").lean<Pick<IBotApp, "commands" | "name">>();
+  if (!app) throw notFound("We couldn't find that bot.");
+  const names = new Set(app.commands.map((c) => c.name));
+  // only real commands, and only what differs from "everyone, everywhere, no wait"
+  const keep = rules.filter((r) => names.has(r.command) && (r.who !== "everyone" || r.channelIds.length || r.cooldownSec));
+  const others = (space.community.botRules ?? []).filter((r) => sid(r.botId) !== id);
+  const mine = keep.map((r) => ({ botId: new Types.ObjectId(id), command: r.command, who: r.who, roleIds: r.who === "roles" ? r.roleIds.map((x) => new Types.ObjectId(x)) : [], channelIds: r.channelIds.map((x) => new Types.ObjectId(x)), cooldownSec: r.cooldownSec }));
+  await Community.updateOne({ _id: space.community._id }, { $set: { botRules: [...others, ...mine] } });
+  void ModAction.create({ communityId: space.community._id, actorId: viewer._id, action: "bot.add", targetType: "member", targetId: null, label: `${app.name}: who can use its commands changed`, authorId: null }).catch(() => {});
+  const next = { ...space.community, botRules: [...others, ...mine] } as ICommunity;
+  return { rules: app.commands.map((c) => ruleFor(next, id, c.name)) };
+}
+
+/** A community's bots (for its settings), each with its commands' rules. */
+export async function communityBots(viewer: IUser, slug: string): Promise<(BotDTO & { readMessages: boolean; rules: BotCommandRuleDTO[] })[]> {
   const { space } = await resolveSpaceFor(viewer, slug);
   const [rows, roles] = await Promise.all([BotApp.find({ _id: { $in: space.community.bots ?? [] } }).lean<IBotApp[]>(), CommunityRole.find({ communityId: space.community._id, botAppId: { $ne: null } }).select("botAppId readMessagesSince").lean<ICommunityRole[]>()]);
   const reading = new Set(roles.filter((r) => r.readMessagesSince).map((r) => sid(r.botAppId!)));
-  return Promise.all(rows.map(async (r) => ({ ...(await toDto(r, false)), readMessages: reading.has(sid(r._id)) })));
+  return Promise.all(rows.map(async (r) => ({ ...(await toDto(r, false)), readMessages: reading.has(sid(r._id)), rules: r.commands.map((c) => ruleFor(space.community, r._id, c.name)) })));
 }
 
 /** Let a bot read messages from now on, or stop it. Allowing it again never opens up what was said in between. */
@@ -443,7 +487,13 @@ export async function commandsHere(viewer: IUser, slug: string) {
   const { space, access } = await resolveSpaceFor(viewer, slug);
   if (!access.isMember) return [];
   const apps = await BotApp.find({ _id: { $in: space.community.bots ?? [] }, disabledAt: null }).lean<IBotApp[]>();
-  return apps.flatMap((a) => a.commands.map((c) => ({ botId: sid(a._id), bot: a.name, avatarUrl: a.avatarUrl, ...c })));
+  // only the ones this person may use; `channelIds` (empty: anywhere) so the list can leave out the rest in a channel
+  return apps.flatMap((a) =>
+    a.commands.flatMap((c) => {
+      const rule = ruleFor(space.community, a._id, c.name);
+      return mayUse(rule, viewer, access) ? [{ botId: sid(a._id), bot: a.name, avatarUrl: a.avatarUrl, ...c, channelIds: rule.channelIds }] : [];
+    }),
+  );
 }
 
 export const interactionSchema = z.object({ botId: z.string().regex(/^[a-f0-9]{24}$/i), command: commandName, options: z.record(z.string(), z.string().max(500)).default({}), text: z.string().max(2000).default("") });
@@ -463,9 +513,21 @@ export async function runCommand(viewer: IUser, slug: string, channelSlug: strin
   if (!cmd) throw notFound(`/${input.command} isn't one of ${app.name}'s commands.`);
   const missing = cmd.options.filter((o) => o.required && !input.options[o.name]?.trim()).map((o) => o.name);
   if (missing.length) throw badRequest(`/${cmd.name} needs ${missing.join(", ")}.`);
+  // the community's rules for this command: who, where, how often
+  const rule = ruleFor(space.community, app._id, cmd.name);
+  if (!mayUse(rule, viewer, access)) throw forbidden(rule.who === "mods" ? `Only the owner, admins and moderators can use /${cmd.name} here.` : `You need a certain role to use /${cmd.name} here.`);
+  if (rule.channelIds.length && !rule.channelIds.includes(sid(channel._id))) throw forbidden(`/${cmd.name} can't be used in #${channel.name}.`);
+  if (rule.cooldownSec && !isStaff(viewer, access)) {
+    try {
+      await rateLimitShared(`cmd-cool:${sid(space.community._id)}:${sid(app._id)}:${cmd.name}:${sid(viewer._id)}`, 1, rule.cooldownSec * 1000);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 429) throw new ApiError(429, `You can use /${cmd.name} once every ${cooldownLabel(rule.cooldownSec)}.`);
+      throw e;
+    }
+  }
   rateLimit(`slash:${sid(viewer._id)}`, 20, 60_000);
   const user = (await loadBriefs([viewer._id])).get(sid(viewer._id));
-  const reply = (await deliver(app, "interaction", { community: { id: sid(space.community._id), slug: space.community.slug, name: space.community.name }, channel: { id: sid(channel._id), slug: channel.slug, name: channel.name }, user, command: cmd.name, options: input.options, text: input.text })) as { content?: unknown } | null;
+  const reply = (await deliver(app, "interaction", { community: { id: sid(space.community._id), slug: space.community.slug, name: space.community.name }, channel: { id: sid(channel._id), slug: channel.slug, name: channel.name }, user, member: memberInfo(viewer, access), command: cmd.name, options: input.options, text: input.text })) as { content?: unknown } | null;
   const said = botMessageSchema.safeParse(reply);
   if (said.success) {
     const bot = await User.findById(app.userId).lean<IUser>();
@@ -499,7 +561,7 @@ export async function pressCardButton(viewer: IUser, slug: string, channelSlug: 
   if (!app.endpoint) return { notice: `${app.name} isn't listening right now.` };
   rateLimit(`card-button:${sid(viewer._id)}`, 30, 60_000);
   const user = (await loadBriefs([viewer._id])).get(sid(viewer._id));
-  const reply = await deliver(app, "button", { community: { id: sid(space.community._id), slug: space.community.slug, name: space.community.name }, channel: { id: sid(channel._id), slug: channel.slug, name: channel.name }, user, message: { id: sid(message._id) }, button: { id: button.id, label: button.label } });
+  const reply = await deliver(app, "button", { community: { id: sid(space.community._id), slug: space.community.slug, name: space.community.name }, channel: { id: sid(channel._id), slug: channel.slug, name: channel.name }, user, member: memberInfo(viewer, access), message: { id: sid(message._id) }, button: { id: button.id, label: button.label } });
   if (reply === null) return { notice: `${app.name} didn't answer. Try again in a moment.` };
 
   const answer = buttonAnswer.safeParse(reply);

@@ -2185,3 +2185,15 @@ export interface AdminGiftsReportDTO {
   sends: { id: Id; from: UserBrief; to: UserBrief; anonymous: boolean; gift: { name: string; emoji: string }; price: number; receiverAmount: number; kliqueAmount: number; target: { type: "post" | "comment" | "topic" | "reply"; id: Id }; community: { slug: string; name: string } | null; createdAt: ISODate }[];
   split: { giftValue: number; count: number; klique: number; receivers: number; receiversPaid: number; receiversRequested: number; receiversOwed: number };
 }
+
+/** Who may use one of a bot's commands in a community, where, and how often (lib: community settings → Bots). */
+export interface BotCommandRuleDTO {
+  command: string;
+  /** everyone who can post there; the owner, admins and moderators; or people with these roles */
+  who: "everyone" | "mods" | "roles";
+  roleIds: string[];
+  /** only in these channels (empty: every channel) */
+  channelIds: string[];
+  /** each person can use it once in this many seconds (0: no wait; owners, admins and moderators never wait) */
+  cooldownSec: number;
+}

@@ -60,6 +60,8 @@ export interface ICommunity {
   raidMode?: "pause" | "approval" | null;
   /** bots added to it (BotApp ids), for sending them events */
   bots?: Types.ObjectId[];
+  /** per bot command: who may use it, in which channels, and how often (none saved: everyone, everywhere, no wait) */
+  botRules?: { botId: Types.ObjectId; command: string; who: "everyone" | "mods" | "roles"; roleIds: Types.ObjectId[]; channelIds: Types.ObjectId[]; cooldownSec: number }[];
   /**
    * The welcome screen, shown once to each new member: a message, rules (which they may have to accept before
    * posting), roles they can pick themselves, up to 5 channels to start in, and an optional greeting posted in a
@@ -127,6 +129,10 @@ const CommunitySchema = new Schema<ICommunity>(
     raidUntil: { type: Date, default: null },
     raidMode: { type: String, enum: ["pause", "approval", null], default: null },
     bots: { type: [Schema.Types.ObjectId], default: [] },
+    botRules: {
+      type: [new Schema({ botId: { type: Schema.Types.ObjectId, required: true }, command: { type: String, required: true, maxlength: 32 }, who: { type: String, enum: ["everyone", "mods", "roles"], default: "everyone" }, roleIds: { type: [Schema.Types.ObjectId], default: [] }, channelIds: { type: [Schema.Types.ObjectId], default: [] }, cooldownSec: { type: Number, default: 0, min: 0, max: 86_400 } }, { _id: false })],
+      default: [],
+    },
     welcome: {
       type: new Schema(
         {
