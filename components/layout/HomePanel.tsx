@@ -48,11 +48,7 @@ export function HomePanel() {
           {/* the main menu stays one click away, as a row of icons; the page's own sections go under it */}
           <nav aria-label="Main" className="shrink-0 px-5 pb-3">
             <ul className="flex items-center justify-between gap-1 rounded-card border border-line bg-surface p-1">
-              {[
-                ...HOME_NAV,
-                { href: "/messages", label: "Messages", icon: "message" as const, match: (p: string) => p.startsWith("/messages"), authed: true },
-                { href: "/notifications", label: "Notifications", icon: "bell" as const, match: (p: string) => p.startsWith("/notifications"), authed: true },
-              ]
+              {HOME_NAV
                 .filter((n) => !n.authed || status === "authed")
                 .map((n) => {
                   const on = n.match(pathname);
