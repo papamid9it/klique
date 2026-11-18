@@ -44,10 +44,35 @@ export function HomePanel() {
         <Logo height={54} />
       </div>
       {own ? (
-        // the page's own sections scroll between the logo and your account
-        <div className={SCROLL}>
-          <PanelSlot />
-        </div>
+        <>
+          {/* the main menu stays one click away, as a row of icons; the page's own sections go under it */}
+          <nav aria-label="Main" className="shrink-0 px-5 pb-3">
+            <ul className="flex items-center justify-between gap-1 rounded-card border border-line bg-surface p-1">
+              {[
+                ...HOME_NAV,
+                { href: "/messages", label: "Messages", icon: "message" as const, match: (p: string) => p.startsWith("/messages"), authed: true },
+                { href: "/notifications", label: "Notifications", icon: "bell" as const, match: (p: string) => p.startsWith("/notifications"), authed: true },
+              ]
+                .filter((n) => !n.authed || status === "authed")
+                .map((n) => {
+                  const on = n.match(pathname);
+                  const unread = n.href === "/messages" ? user?.unreadMessages : n.href === "/notifications" ? user?.unreadNotifications : undefined;
+                  return (
+                    <li key={n.href} className="flex-1">
+                      <Link href={n.href} aria-current={on ? "page" : undefined} aria-label={unread ? `${n.label}, ${unread} unread` : n.label} title={n.label} className={cx("relative flex h-10 items-center justify-center rounded-control transition", on ? "bg-raised text-ink" : "text-ink-muted hover:bg-raised/60 hover:text-ink")}>
+                        <Icon name={n.icon} size={18} />
+                        {!!unread && <span aria-hidden="true" className="absolute top-1 right-1.5 min-w-4 rounded-full bg-accent px-1 text-center text-[10px] leading-4 font-bold text-accent-ink">{unread > 9 ? "9+" : unread}</span>}
+                      </Link>
+                    </li>
+                  );
+                })}
+            </ul>
+          </nav>
+          {/* the page's own sections scroll between the menu and your account */}
+          <div className={SCROLL}>
+            <PanelSlot />
+          </div>
+        </>
       ) : (
         <>
           <div className="shrink-0 space-y-6 px-5 pb-5">

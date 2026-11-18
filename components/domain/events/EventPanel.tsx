@@ -91,7 +91,7 @@ export function EventPanel({ event, people: firstPeople, nextCursor, friends = [
   const c = community.data;
 
   return (
-    <PagePanel label="Event">
+    <PagePanel label="Event" back="/events">
       <ul>
         <li>
           <PanelItem href="/events" icon="calendar">

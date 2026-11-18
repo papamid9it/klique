@@ -3,13 +3,16 @@
 import Link from "next/link";
 import { createContext, useContext, useEffect, useId, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { useRouter } from "next/navigation";
 import { Icon, type IconName } from "@/components/ui/Icon";
+import { goBack } from "@/lib/nav";
 import { cx } from "@/components/ui/cx";
 
 /**
  * A page's own left panel. The home panel (HomePanel) keeps the logo and your account card and leaves a slot in
  * between; pages with their own sections (Communities, Saved, Notifications, Events) fill it with <PagePanel>,
- * always starting with Home. On phones and tablets there's no panel, so those pages show the same choices in the
+ * under a row of the main menu's icons (HomePanel). A page inside a section (one event) passes `back` for a real
+ * Back. On phones and tablets there's no panel, so those pages show the same choices in the
  * page itself.
  */
 const SlotCtx = createContext<{ el: HTMLElement | null; setEl: (el: HTMLElement | null) => void } | null>(null);
@@ -28,18 +31,21 @@ export function PanelSlot({ className }: { className?: string }) {
 /** Pages that bring their own panel (HomePanel leaves out its main nav, search and place for these). */
 export const hasPagePanel = (p: string) => p === "/kliques" || p === "/search" || p === "/communities" || p.startsWith("/saved") || p.startsWith("/notifications") || p === "/events" || /^\/events\/(?!new$)[^/]+$/.test(p);
 
-export function PagePanel({ label, children }: { label: string; children: ReactNode }) {
+export function PagePanel({ label, back, children }: { label: string; /** a page inside a section: Back to the previous page in Klique, else here */ back?: string; children: ReactNode }) {
   const el = useContext(SlotCtx)?.el;
+  const router = useRouter();
   if (!el) return null;
   return createPortal(
     <nav aria-label={label} className="space-y-5">
-      <ul>
-        <li>
-          <PanelItem href="/" icon="home">
-            Home
-          </PanelItem>
-        </li>
-      </ul>
+      {back && (
+        <ul>
+          <li>
+            <PanelItem icon="arrow-left" onClick={() => goBack(router, back)}>
+              Back
+            </PanelItem>
+          </li>
+        </ul>
+      )}
       {children}
     </nav>,
     el,
