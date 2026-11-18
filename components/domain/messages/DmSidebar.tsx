@@ -2,7 +2,7 @@
 
 import { useAppEvent } from "@/lib/appEvents";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { FriendService } from "@/app/services/FriendService";
 import { MessageService } from "@/app/services/MessageService";
@@ -72,7 +72,8 @@ export function DmSidebar({ onNavigate }: { onNavigate?: () => void }) {
 
   const activeId = /^\/messages\/([a-f0-9]{24})/.exec(pathname)?.[1] ?? null;
   const onFriends = pathname.startsWith("/messages/friends");
-  const tab = typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("tab");
+  // the Friends tab in the address (?tab=pending…): followed as it changes, so the highlight moves on the first click
+  const tab = useSearchParams().get("tab");
 
   const rows = useMemo(() => {
     const list = inbox.data ?? [];
