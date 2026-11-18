@@ -115,6 +115,16 @@ function RadioCards<T extends string>({ name, value, options, onChange, disabled
 
 type ProfileDraft = { displayName: string; bio: string; avatarUrl: string; place: Place; neighborhood: string };
 
+/** A section of the profile form: a card with a small heading. */
+function FormCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="rounded-card border border-line bg-surface p-5">
+      <h3 className="eyebrow mb-4">{title}</h3>
+      <div className="space-y-5">{children}</div>
+    </section>
+  );
+}
+
 function ProfileForm({ me, onDraft }: { me: UserMe; onDraft?: (d: ProfileDraft) => void }) {
   const confirm = useConfirm();
   const categories = useCategories();
@@ -192,40 +202,50 @@ function ProfileForm({ me, onDraft }: { me: UserMe; onDraft?: (d: ProfileDraft) 
   }
 
   return (
-    <form onSubmit={save} className="space-y-5">
-      {/* your card and saving at the top, then your pictures, then the rest */}
-      <div className="flex flex-wrap items-center justify-end gap-3">
-        <button type="button" onClick={() => card.openFull(me.handle)} className="mr-auto text-sm font-medium text-accent-text underline underline-offset-2">
-          View my profile card
-        </button>
+    <form onSubmit={save} className="space-y-4">
+      {/* the page's title, with View profile and Save at the top right (part of the page: it scrolls away with it) */}
+      <div className="flex flex-wrap items-center gap-3">
+        <h2 className="mr-auto text-xl font-bold tracking-[-0.02em]">Profile</h2>
+        <Button type="button" variant="secondary" onClick={() => card.openFull(me.handle)}>
+          View profile
+        </Button>
         <Button type="submit" variant="primary" loading={busy} disabled={!dirty || (interestsChanged && tooFew)}>
-          {dirty ? "Save profile" : "Saved"}
+          {dirty ? "Save" : "Saved"}
         </Button>
       </div>
-      <ImageField kind="avatar" shape="round" label="Profile picture" value={avatarUrl} onChange={setAvatarUrl} error={fieldErrors.avatarUrl} fallback={<Avatar name={displayName || me.displayName} size={80} />} reposition={{ aspect: 1, round: true }} hint="After uploading, drag it to choose what shows in the circle. Leave empty to use your initials." />
-      {!PROFILE_DESIGNS_ENABLED && <ImageField kind="photo" label="Banner" value={bannerUrl} onChange={setBannerUrl} reposition={{ aspect: 4 }} hint="The wide picture across the top of your profile. Drag it to choose what shows." />}
-      <TextField label="Display name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} maxLength={LIMITS.displayName} required error={fieldErrors.displayName} />
-      <TextField label="Handle" value={`@${me.handle}`} readOnly hint="Your handle can't be changed." />
-      <TextArea label="Bio" value={bio} onChange={(e) => setBio(e.target.value)} maxLength={LIMITS.bio} counter={LIMITS.bio} error={fieldErrors.bio} hint="A line or two about what you're into." />
-      <TextField label="Pronouns (optional)" value={pronouns} onChange={(e) => setPronouns(e.target.value)} maxLength={LIMITS.pronouns} error={fieldErrors.pronouns} placeholder="e.g. she/her" hint="Shown after your name on your profile." />
-      <SelectField label="Gender (optional)" value={gender} disabled={genderLocked} onChange={(e) => setGender(e.target.value as UserMe["gender"])} hint={genderLocked ? "Set, and can't be changed here. Contact Klique support if it needs correcting. Never shown on your profile." : "You can only set this once. Never shown on your profile. Only used for kliques and communities for women or men."}>
-        <option value="unspecified">Prefer not to say</option>
-        <option value="woman">Woman</option>
-        <option value="man">Man</option>
-      </SelectField>
-      <PlaceFields value={place} onChange={(p) => { setPlace(p); }} neighborhood={neighborhood} onNeighborhood={setNeighborhood} errors={fieldErrors} />
-      <p className="text-[13px] text-ink-muted">
-        Photos and videos on your profile are in{" "}
-        <a href="/settings#gallery" className="font-medium text-accent-text underline">
-          Gallery
-        </a>
-        .
-      </p>
+      <FormCard title="Pictures">
+        <ImageField kind="avatar" shape="round" label="Profile picture" value={avatarUrl} onChange={setAvatarUrl} error={fieldErrors.avatarUrl} fallback={<Avatar name={displayName || me.displayName} size={80} />} reposition={{ aspect: 1, round: true }} hint="After uploading, drag it to choose what shows in the circle. Leave empty to use your initials." />
+        {!PROFILE_DESIGNS_ENABLED && <ImageField kind="photo" label="Banner" value={bannerUrl} onChange={setBannerUrl} reposition={{ aspect: 4 }} hint="The wide picture across the top of your profile. Drag it to choose what shows." />}
+        <p className="text-[13px] text-ink-muted">
+          Photos and videos on your profile are in{" "}
+          <a href="/settings#gallery" className="font-medium text-accent-text underline">
+            Gallery
+          </a>
+          .
+        </p>
+      </FormCard>
+      <FormCard title="About you">
+        <div className="grid gap-5 sm:grid-cols-2">
+          <TextField label="Display name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} maxLength={LIMITS.displayName} required error={fieldErrors.displayName} />
+          <TextField label="Handle" value={`@${me.handle}`} readOnly hint="Your handle can't be changed." />
+        </div>
+        <TextArea label="Bio" value={bio} onChange={(e) => setBio(e.target.value)} maxLength={LIMITS.bio} counter={LIMITS.bio} error={fieldErrors.bio} hint="A line or two about what you're into." />
+        <div className="grid gap-5 sm:grid-cols-2">
+          <TextField label="Pronouns (optional)" value={pronouns} onChange={(e) => setPronouns(e.target.value)} maxLength={LIMITS.pronouns} error={fieldErrors.pronouns} placeholder="e.g. she/her" hint="Shown after your name on your profile." />
+          <SelectField label="Gender (optional)" value={gender} disabled={genderLocked} onChange={(e) => setGender(e.target.value as UserMe["gender"])} hint={genderLocked ? "Set, and can't be changed here. Contact Klique support if it needs correcting. Never shown on your profile." : "You can only set this once. Never shown on your profile. Only used for kliques and communities for women or men."}>
+            <option value="unspecified">Prefer not to say</option>
+            <option value="woman">Woman</option>
+            <option value="man">Man</option>
+          </SelectField>
+        </div>
+        <PlaceFields value={place} onChange={(p) => { setPlace(p); }} neighborhood={neighborhood} onNeighborhood={setNeighborhood} errors={fieldErrors} />
+      </FormCard>
 
-      <fieldset>
-        <legend className="text-[13px] font-medium">
-          Interests <span className="text-ink-muted">({interests.length}/{LIMITS.maxInterests}) · pick at least {LIMITS.minInterests}</span>
-        </legend>
+      <fieldset className="rounded-card border border-line bg-surface p-5">
+        <legend className="sr-only">Interests</legend>
+        <p className="eyebrow">
+          Interests <span className="normal-case tracking-normal text-ink-muted">({interests.length}/{LIMITS.maxInterests}) · pick at least {LIMITS.minInterests}</span>
+        </p>
         {tooFew && (
           <p className="mt-1 text-xs font-medium text-danger">
             Pick {LIMITS.minInterests - interests.length} more {LIMITS.minInterests - interests.length === 1 ? "interest" : "interests"}, so we can show you the right communities and events.
@@ -261,7 +281,7 @@ function ProfileForm({ me, onDraft }: { me: UserMe; onDraft?: (d: ProfileDraft) 
       )}
       <div className="flex items-center gap-3">
         <Button type="submit" variant="primary" loading={busy} disabled={!dirty || (interestsChanged && tooFew)}>
-          {dirty ? "Save profile" : "Saved"}
+          {dirty ? "Save" : "Saved"}
         </Button>
       </div>
     </form>
