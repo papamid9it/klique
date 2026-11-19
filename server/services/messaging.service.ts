@@ -330,7 +330,11 @@ export async function sendMessage(viewer: IUser, id: string, input: string | { b
       ...(pendingRequest ? {} : { $inc: Object.fromEntries(others.map((p) => [`unread.${sid(p)}`, 1])) }),
     },
   );
-  emitDm([viewer._id, ...others], convo._id);
+  const row = msg.toObject() as IMessage;
+  const replies = await replyRefs([row]);
+  const sent = toMessage(row, viewer._id, [], row.replyToId ? (replies.get(sid(row.replyToId)) ?? null) : null);
+  // the message itself rides along, so the other side's open chat shows it at once (no reload first)
+  emitDm([viewer._id, ...others], convo._id, convo.group ? { ...sent, sender: toBrief(viewer) } : sent);
   // a request (someone who isn't your friend writing first): it waits in Requests, and you hear about it once, as a
   // decision to make (the Friends setting), not as a chat buzz
   if (convo.group) {
@@ -339,9 +343,7 @@ export async function sendMessage(viewer: IUser, id: string, input: string | { b
     notify(others.filter((p) => !blockers.has(sid(p))), { title: convo.group.name, body: `${viewer.displayName}: ${preview}`, data: { type: "dm", conversationId: sid(convo._id) } }, { actorId: viewer._id, category: "messages", ref: `dm:${sid(convo._id)}` });
   } else if (!pendingRequest) notify([otherId], { title: viewer.displayName, body: preview, data: { type: "dm", conversationId: sid(convo._id) } }, { actorId: viewer._id, category: "messages", ref: `dm:${sid(convo._id)}` });
   else notify([otherId], { title: `${viewer.displayName} wants to message you`, body: preview, data: { type: "dm", conversationId: sid(convo._id) } }, { actorId: viewer._id, category: "friends", groupKey: "msg-req", many: (n) => `${n} new message requests`, ref: `dm:${sid(convo._id)}` });
-  const row = msg.toObject() as IMessage;
-  const replies = await replyRefs([row]);
-  return toMessage(row, viewer._id, [], row.replyToId ? (replies.get(sid(row.replyToId)) ?? null) : null);
+  return sent;
 }
 
 export { toBrief };

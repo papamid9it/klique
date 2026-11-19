@@ -1,7 +1,7 @@
 import * as Ably from "ably";
 import { after } from "next/server";
 import type { Types } from "mongoose";
-import type { RealtimeEvent, RealtimeTokenDTO } from "@/lib/types";
+import type { RealtimeEvent, RealtimeTokenDTO, MessageDTO } from "@/lib/types";
 import { ApiError } from "../http/errors";
 import { ablyKey } from "../env";
 import { Membership } from "../models/Membership";
@@ -52,10 +52,10 @@ export const emitRemoved = (communityId: Types.ObjectId | string | null | undefi
 export const emitTopic = (communityId: Types.ObjectId | string, topicId: Types.ObjectId | string) =>
   publish([rtChannel.community(communityId)], { type: "topic", communityId: String(communityId), topicId: String(topicId) });
 
-export const emitDm = (participants: (Types.ObjectId | string)[], conversationId: Types.ObjectId | string) =>
+export const emitDm = (participants: (Types.ObjectId | string)[], conversationId: Types.ObjectId | string, message?: MessageDTO) =>
   publish(
     participants.map((p) => rtChannel.user(p)),
-    { type: "dm", conversationId: String(conversationId) },
+    { type: "dm", conversationId: String(conversationId), ...(message ? { message } : {}) },
   );
 
 const MAX_COMMUNITIES = 100;

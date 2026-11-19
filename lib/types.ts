@@ -1508,7 +1508,7 @@ export interface UploadedFileDTO {
  */
 export type RealtimeEvent =
   | { type: "channel"; communityId: Id; channelId: Id }
-  | { type: "dm"; conversationId: Id }
+  | { type: "dm"; conversationId: Id; /** a new message, carried along so open chats show it at once (`mine`: work it out from senderId) */ message?: MessageDTO }
   | { type: "topic"; communityId: Id; topicId: Id }
   /** something was sent to you (see lib/notifications); `ref` says what changed ("crew:<id>"…) so open pages refresh */
   | { type: "notify"; category: string; ref: string | null; inbox: boolean; /** what to show, for people who get pushes for this: the desktop app shows it itself, having no browser push */ alert?: { title: string; body: string; href: string } }
