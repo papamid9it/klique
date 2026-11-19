@@ -616,6 +616,8 @@ export const adminUserUpdateSchema = z
 export const adminDraftsQuery = z.object({ status: z.enum(["pending", "approved", "rejected"]).default("pending") });
 
 export const adminImportSchema = z.object({ url: z.string().trim().min(1, "Paste a link").max(1000) });
+/** a flyer to read (already uploaded), with the post's link and caption if there are */
+export const adminFlyerSchema = z.object({ imageUrl: z.string().trim().url().max(1000), link: z.string().trim().max(1000).optional(), note: z.string().max(4000).optional() });
 
 /** Settings → Show explicit content: on needs the agreement (users.service setExplicit) */
 export const explicitSettingSchema = z.object({ on: z.boolean(), agree: z.boolean().optional() });

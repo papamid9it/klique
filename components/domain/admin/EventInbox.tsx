@@ -33,7 +33,50 @@ function toLocalInput(iso: string | null): string {
 }
 const fromLocalInput = (v: string) => (v ? new Date(v).toISOString() : null);
 const dateInput = (d: Date) => d.toISOString().slice(0, 10);
-const providerLabel: Record<DraftDTO["provider"], string> = { page: "Web page", ical: "Calendar", rss: "Feed", ticketmaster: "Ticketmaster", eventbrite: "Eventbrite", link: "Link" };
+const providerLabel: Record<DraftDTO["provider"], string> = { page: "Web page", ical: "Calendar", rss: "Feed", ticketmaster: "Ticketmaster", eventbrite: "Eventbrite", link: "Link", ai: "Found by AI" };
+
+/* ------------------------------ a flyer ------------------------------ */
+
+/**
+ * Drop a flyer: a screenshot of an Instagram or WhatsApp post, or the flyer itself, with the post's link and
+ * caption if you have them. The AI reads it and the event lands in the review queue with the flyer as its cover.
+ */
+function FlyerDrop({ onAdded }: { onAdded: () => void }) {
+  const toast = useToast();
+  const [image, setImage] = useState("");
+  const [link, setLink] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function read() {
+    setBusy(true);
+    try {
+      const { data } = await AdminService.importFlyer({ imageUrl: image, link: link.trim() || undefined, note: note.trim() || undefined });
+      toast(data.added ? `${data.added} ${data.added === 1 ? "event" : "events"} added to review` : "Already in the inbox", data.added ? "success" : "default");
+      setImage("");
+      setLink("");
+      setNote("");
+      onAdded();
+    } catch (e) {
+      toast(errorMessage(e), "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <section aria-labelledby="flyer-title" className="space-y-3 rounded-card border border-line bg-surface p-4">
+      <div>
+        <h2 id="flyer-title" className="text-base font-semibold">Drop a flyer</h2>
+        <p className="mt-1 text-sm text-ink-muted">A flyer or a screenshot of an Instagram or WhatsApp post. The AI reads the date, place and price; you check it before it&apos;s posted.</p>
+      </div>
+      <ImageField kind="photo" label="Flyer" value={image} onChange={setImage} />
+      <TextField label="Link to the post (optional)" type="url" inputMode="url" value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://www.instagram.com/p/…" hint="Kept as where it came from." />
+      <TextArea label="Caption (optional)" value={note} onChange={(e) => setNote(e.target.value)} maxLength={4000} placeholder="Paste the post's caption: it often has the venue and ticket price." />
+      <Button variant="primary" onClick={() => void read()} disabled={!image} loading={busy}>
+        <Icon name="image" size={14} /> Read flyer
+      </Button>
+    </section>
+  );
+}
 
 /* --------------------------- running a search --------------------------- */
 
@@ -748,6 +791,7 @@ export function EventInbox({ pending, onChanged }: { pending: number | null; onC
     <div className="space-y-5">
       <FinderSearch busy={busy} onRun={runner.start} onSaved={() => setSearchesVersion((v) => v + 1)} />
       {runner.run && <RunProgress run={runner.run} onClose={runner.clear} />}
+      <FlyerDrop onAdded={refresh} />
       <section className="space-y-4">
         <Segmented
           label="Draft status"

@@ -28,7 +28,7 @@ export interface IEventDraft {
   currency: string;
   coverImage: string | null;
   /** where it came from: an event page, a calendar, a feed, or an official API */
-  provider: "page" | "ical" | "rss" | "ticketmaster" | "eventbrite" | "link";
+  provider: "page" | "ical" | "rss" | "ticketmaster" | "eventbrite" | "link" | "ai";
   /** the picture the source shows; only used as the cover when the source allows reuse (official APIs) */
   sourceImage: string | null;
   imageReusable: boolean;
@@ -63,7 +63,7 @@ const EventDraftSchema = new Schema<IEventDraft>(
     price: { type: Number, default: null, min: 0 },
     currency: { type: String, default: "NGN" },
     coverImage: { type: String, default: null },
-    provider: { type: String, enum: ["page", "ical", "rss", "ticketmaster", "eventbrite", "link"], default: "page" },
+    provider: { type: String, enum: ["page", "ical", "rss", "ticketmaster", "eventbrite", "link", "ai"], default: "page" },
     sourceImage: { type: String, default: null, maxlength: 1000 },
     imageReusable: { type: Boolean, default: false },
     timezone: { type: String, default: "" },
@@ -120,7 +120,7 @@ export interface IFinderQuery {
   urls: string[];
 }
 
-export type FinderTaskKind = "ticketmaster" | "eventbrite" | "source" | "url" | "follow";
+export type FinderTaskKind = "ticketmaster" | "eventbrite" | "source" | "url" | "follow" | "ai_search";
 export interface IFinderTask {
   kind: FinderTaskKind;
   /** a URL, a source id, or an organiser id */
@@ -172,7 +172,7 @@ const QuerySchema = new Schema<IFinderQuery>(
 
 const TaskSchema = new Schema<IFinderTask>(
   {
-    kind: { type: String, enum: ["ticketmaster", "eventbrite", "source", "url", "follow"], required: true },
+    kind: { type: String, enum: ["ticketmaster", "eventbrite", "source", "url", "follow", "ai_search"], required: true },
     target: { type: String, required: true, maxlength: 1000 },
     label: { type: String, default: "", maxlength: 200 },
     status: { type: String, enum: ["pending", "running", "done", "failed"], default: "pending" },

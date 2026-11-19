@@ -34,6 +34,8 @@ export const AdminService = {
   drafts: (status: DraftStatus) => api.get<Envelope<DraftDTO[]>>("/api/admin/drafts", { status }),
   /** read one link (and the event pages it lists): returns a finder job to step through */
   importLink: (url: string) => api.post<Envelope<FinderRunDTO>>("/api/admin/drafts", { url }),
+  /** a flyer (already uploaded): the AI reads it into drafts */
+  importFlyer: (input: { imageUrl: string; link?: string; note?: string }) => api.post<Envelope<{ added: number; duplicates: number; drafts: DraftDTO[] }>>("/api/admin/drafts/flyer", input),
   bulkDrafts: (ids: string[], action: "approve" | "reject", where: { communitySlug?: string; subSlug?: string } = {}) => api.post<Envelope<DraftBulkResult>>("/api/admin/drafts/bulk", { ids, action, ...where }),
   /* event finder: a search is a job, worked a step at a time by the page */
   startSearch: (q: FinderQueryDTO) => api.post<Envelope<FinderRunDTO>>("/api/admin/finder/runs", q),

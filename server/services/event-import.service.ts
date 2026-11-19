@@ -12,7 +12,10 @@ import { eventCreateSchema } from "../validators/schemas";
 import { createEvent } from "./events.service";
 import { assertScrapable } from "./finder/http";
 import { eventbriteOrgId } from "./finder/providers";
-import { createRun, cronFinder, stepRun } from "./finder/run";
+import { categoryGuesser, createRun, cronFinder, dedupeKeyOf, stepRun } from "./finder/run";
+import { aiOn, readFlyerWithAi } from "./finder/ai";
+import { ApiError } from "../http/errors";
+import { getCityEntry } from "@/lib/places";
 
 /**
  * The event finder (Admin → Event finder). A search becomes a job (see finder/run.ts) that reads official
@@ -75,6 +78,57 @@ export async function startSearch(admin: IUser, q: Omit<FinderQueryDTO, "from" |
 export async function importFromUrl(admin: IUser, rawUrl: string): Promise<FinderRunDTO> {
   const from = new Date();
   return startSearch(admin, { country: "", region: "", city: "", interests: [], from: from.toISOString(), to: new Date(+from + 365 * DAY).toISOString(), includeSources: false, urls: [rawUrl] });
+}
+
+/**
+ * A flyer an admin dropped in (a screenshot of an Instagram post, a WhatsApp flyer…), with the post's link and
+ * caption if they have them: the AI reads it and each event it announces lands in the inbox as a draft, with the
+ * flyer as its cover. Nothing goes live until it's approved.
+ */
+export async function importFromFlyer(admin: IUser, input: { imageUrl: string; link?: string; note?: string }): Promise<{ added: number; duplicates: number; drafts: DraftDTO[] }> {
+  void admin;
+  if (!aiOn()) throw new ApiError(503, "Reading flyers needs ANTHROPIC_API_KEY in the site's settings.");
+  const link = input.link?.trim() ? assertPublicHttpUrl(input.link.trim()).toString() : null;
+  const found = await readFlyerWithAi({ imageUrl: input.imageUrl, link, note: input.note ?? "" });
+  if (!found.length) throw new ApiError(422, "Couldn't find an event with a date on that flyer. Add the caption, or put it in by hand.");
+  const guess = await categoryGuesser();
+  const drafts: DraftDTO[] = [];
+  let duplicates = 0;
+  for (const [i, c] of found.entries()) {
+    const key = dedupeKeyOf(c);
+    const sourceUrl = i ? `${c.sourceUrl}#${i + 1}` : c.sourceUrl;
+    if (await EventDraft.exists({ $or: [{ sourceUrl }, { dedupeKey: key }] })) {
+      duplicates++;
+      continue;
+    }
+    const d = await EventDraft.create({
+      status: "pending",
+      sourceUrl,
+      sourceName: c.sourceName,
+      title: c.title,
+      description: c.description,
+      interest: guess(c.categoryText) ?? "music",
+      organizerName: c.organizerName,
+      country: c.country,
+      region: c.region || getCityEntry(c.country, c.city)?.region || "",
+      city: c.city,
+      venue: c.venue,
+      online: c.online,
+      startsAt: c.startsAt,
+      endsAt: c.endsAt,
+      price: c.price,
+      currency: c.currency,
+      // the admin brought this picture in themselves: it's the cover
+      coverImage: input.imageUrl,
+      sourceImage: input.imageUrl,
+      imageReusable: true,
+      provider: "ai",
+      timezone: c.timezone,
+      dedupeKey: key,
+    });
+    drafts.push(toDto(d.toObject()));
+  }
+  return { added: drafts.length, duplicates, drafts };
 }
 
 /** Work on a job for a few seconds (one source at a time) and say where it is. */

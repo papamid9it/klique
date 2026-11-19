@@ -121,6 +121,8 @@ export const cronSecret = (): string | null => process.env.CRON_SECRET?.trim() |
 /** Optional: Ticketmaster Discovery API key (developer.ticketmaster.com). Without it the finder skips Ticketmaster. */
 export const ticketmasterKey = (): string | null => process.env.TICKETMASTER_API_KEY?.trim() || null;
 /** Optional: Eventbrite private token (eventbrite.com/platform). Needed to read organisers' events from Eventbrite's API. */
+/** Claude, for the event finder (reading pages and flyers, searching the web); none: those parts are off */
+export const anthropicKey = (): string | null => process.env.ANTHROPIC_API_KEY?.trim() || null;
 export const eventbriteToken = (): string | null => process.env.EVENTBRITE_TOKEN?.trim() || null;
 
 /** Site admins: these emails can open /admin, review reports and post public events. */

@@ -8,6 +8,7 @@ import { getCategories } from "../categories.service";
 import { assertScrapable, politeFetch } from "./http";
 import { cityInText, feedLinks, fromIcs, fromSchemaOrg, isEvent, itemListLinks, jsonLd, looksLikeFeed, looksLikeIcs, microdata, siteNameOf, type Candidate } from "./parse";
 import { eventbriteOrgId, eventbriteOrganizer, ticketmaster } from "./providers";
+import { aiOn, readPageWithAi, searchEventsWithAi } from "./ai";
 
 /**
  * The finder's job runner. "Find events" only records a job (a FinderRun with one task per source); the work
@@ -20,7 +21,7 @@ const MAX_TASKS = 60;
 const MAX_FOLLOW = 15;
 const MAX_ADDED = 150;
 /** a task stuck "running" this long (a request that died) is tried again */
-const STALE_MS = 2 * 60_000;
+const STALE_MS = 3 * 60_000;
 
 /* ------------------------------ categories ------------------------------ */
 
@@ -40,7 +41,7 @@ const KEYWORDS: Record<string, RegExp> = {
 };
 
 /** The admin's category this looks like: their keywords first, then the category's own name in the text. */
-async function categoryGuesser() {
+export async function categoryGuesser() {
   const cats = (await getCategories()).filter((c) => !c.hidden);
   return (text: string): string | null => {
     for (const c of cats) if (KEYWORDS[c.id]?.test(text)) return c.id;
@@ -107,6 +108,8 @@ export async function createRun(query: IFinderQuery, createdBy: Types.ObjectId |
   const tasks: Partial<IFinderTask>[] = [];
   // Ticketmaster needs a country to search in (a pasted link or the nightly page check has none)
   if (ticketmasterKey() && query.country) tasks.push({ kind: "ticketmaster", target: query.city || query.region || query.country, label: "Ticketmaster" });
+  // the AI goes looking on the web too (a search for a place: not a pasted link or the nightly page check)
+  if (aiOn() && query.country && !query.urls.length) tasks.push({ kind: "ai_search", target: query.city || query.region || query.country, label: "AI web search" });
   const addLink = (url: string, label: string, kind: "source" | "url", target = url) => {
     const org = eventbriteOrgId(url);
     if (org) tasks.push(eventbriteToken() ? { kind: "eventbrite", target: org, label: `Eventbrite organiser ${org}` } : { kind: "eventbrite", target: org, label: `Eventbrite organiser ${org}`, status: "failed", note: "Add EVENTBRITE_TOKEN to read Eventbrite organisers" });
@@ -144,6 +147,7 @@ async function work(run: IFinderRun, task: IFinderTask): Promise<{ events: Candi
   const q = run.query;
   if (task.kind === "ticketmaster") return { events: await ticketmaster({ ...q }, q.city ? cityName(q.country, q.city) : ""), follow: [] };
   if (task.kind === "eventbrite") return { events: await eventbriteOrganizer(task.target, q.country), follow: [] };
+  if (task.kind === "ai_search") return { events: await searchEventsWithAi(q), follow: [] };
   const source = task.kind === "source" ? await EventSource.findById(task.target).lean<IEventSource>() : null;
   const url = source?.url ?? task.target;
   assertScrapable(new URL(url));
@@ -159,6 +163,11 @@ async function work(run: IFinderRun, task: IFinderTask): Promise<{ events: Candi
     .map((c) => (task.kind === "url" || task.kind === "follow" ? { ...c, provider: c.provider } : c));
   // a listings page: read the event pages it links to (one task each), but don't crawl further from those
   const follow = !events.length && task.kind !== "follow" ? itemListLinks(objects).map((l) => new URL(l, page.url).toString()) : [];
+  // no event markup and nothing to follow: the AI reads the page (and its share picture) instead
+  if (!events.length && !follow.length && aiOn()) {
+    const image = page.body.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)/i)?.[1] ?? null;
+    return { events: await readPageWithAi({ url: page.url.toString(), html: page.body, siteName: site, image }, q.country), follow: [], source };
+  }
   return { events, follow, source };
 }
 

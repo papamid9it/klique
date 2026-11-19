@@ -1612,7 +1612,7 @@ export interface DraftDTO {
   currency: string;
   coverImage: string | null;
   /** where it was found: an event page, a calendar, a feed, or an official API */
-  provider: "page" | "ical" | "rss" | "ticketmaster" | "eventbrite" | "link";
+  provider: "page" | "ical" | "rss" | "ticketmaster" | "eventbrite" | "link" | "ai";
   /** the source's own picture (a reference: only official APIs' pictures may be used as the cover) */
   sourceImage: string | null;
   imageReusable: boolean;
@@ -1637,7 +1637,7 @@ export interface FinderQueryDTO {
 }
 
 export interface FinderTaskDTO {
-  kind: "ticketmaster" | "eventbrite" | "source" | "url" | "follow";
+  kind: "ticketmaster" | "eventbrite" | "source" | "url" | "follow" | "ai_search";
   label: string;
   status: "pending" | "running" | "done" | "failed";
   found: number;

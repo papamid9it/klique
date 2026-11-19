@@ -25,6 +25,7 @@
     "check:unfurl": "tsx scripts/check-unfurl.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.10.0",
     "ably": "^2.29.0",
     "aws4fetch": "^1.0.20",
     "bcryptjs": "^3.0.3",

@@ -7,7 +7,7 @@ import { CITIES, COUNTRIES, currencyOf, isCountryCode, regionsOf, slugify } from
  * page's layout, so it keeps working when a site is redesigned.
  */
 
-export type Provider = "page" | "ical" | "rss" | "ticketmaster" | "eventbrite";
+export type Provider = "page" | "ical" | "rss" | "ticketmaster" | "eventbrite" | "ai";
 
 export interface Candidate {
   provider: Provider;
