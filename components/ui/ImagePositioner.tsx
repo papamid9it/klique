@@ -1,5 +1,6 @@
 "use client";
 
+import { Spinner } from "./Button";
 import { useEffect, useRef, useState, type PointerEvent as RPointerEvent } from "react";
 import { cdn } from "@/lib/cdn";
 import { FOCAL_CENTER, MAX_ZOOM, focalStyle, splitFocal, withFocal, type Focal } from "@/lib/focal";
@@ -109,8 +110,14 @@ export function ImagePositioner({ open, url, aspect, round, title = "Position yo
           style={{ aspectRatio: String(aspect) }}
           className={cx("relative cursor-grab touch-none overflow-hidden border border-line bg-raised select-none active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-accent-text focus-visible:outline-none", round ? "rounded-full" : "rounded-control")}
         >
+          {/* loaded straight away (it's what the window is for), with a spinner until it's here */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img loading="lazy" src={cdn(src, { w: 1200 })} alt="" draggable={false} onLoad={(e) => setNatural({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })} style={focalStyle(f)} className="pointer-events-none size-full object-cover" />
+          <img loading="eager" fetchPriority="high" src={cdn(src, { w: 1200 })} alt="" draggable={false} onLoad={(e) => setNatural({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })} style={focalStyle(f)} className={cx("pointer-events-none size-full object-cover transition-opacity", natural ? "opacity-100" : "opacity-0")} />
+          {!natural && (
+            <span role="status" aria-label="Loading the picture" className="absolute inset-0 flex items-center justify-center text-ink-muted">
+              <Spinner size={22} />
+            </span>
+          )}
           {/* rule-of-thirds guide while positioning */}
           <span aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,transparent_33.2%,rgb(255_255_255/0.35)_33.3%,transparent_33.5%,transparent_66.5%,rgb(255_255_255/0.35)_66.6%,transparent_66.8%),linear-gradient(to_bottom,transparent_33.2%,rgb(255_255_255/0.35)_33.3%,transparent_33.5%,transparent_66.5%,rgb(255_255_255/0.35)_66.6%,transparent_66.8%)]" />
         </div>
