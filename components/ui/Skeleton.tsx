@@ -135,40 +135,41 @@ export function ConversationListSkeleton({ rows = 6 }: { rows?: number }) {
 
 /** An event page: the cover, then the details beside the going-or-not card. */
 export function EventPageSkeleton() {
+  // the event page's layout: Back, the flyer on the left, details and the Going / tickets box on the right
   return (
     <div role="status" aria-label="Loading event">
-      <Skeleton className="aspect-[16/8] w-full rounded-card" />
-      <div className="mt-6 grid gap-8 lg:grid-cols-[1fr_20rem]">
-        <div className="space-y-5">
-          <Skeleton className="h-6 w-28 rounded-full" />
-          <div className="space-y-2.5">
-            <Skeleton className="h-8 w-4/5 rounded-[8px]" />
-            <Skeleton className="h-8 w-1/2 rounded-[8px]" />
-          </div>
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="flex gap-3">
-              <Skeleton className="size-5 shrink-0 rounded-[6px]" />
-              <div className="flex-1 space-y-1.5">
-                <Line className={widths[i]} />
-                <Line className={cx("h-2.5 opacity-70", widths[i + 2])} />
-              </div>
+      <Skeleton className="mb-4 h-9 w-24 rounded-full" />
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] lg:items-start">
+        <Skeleton className="aspect-[4/5] w-full rounded-card" />
+        <div className="min-w-0 space-y-6">
+          <div className="space-y-3">
+            <Skeleton className="h-6 w-32 rounded-full" />
+            <div className="space-y-2.5">
+              <Skeleton className="h-8 w-4/5 rounded-[8px]" />
+              <Skeleton className="h-8 w-1/2 rounded-[8px]" />
             </div>
-          ))}
-          <div className="space-y-2.5 pt-3">
+          </div>
+          <div className="space-y-3">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="flex gap-3">
+                <Skeleton className="size-5 shrink-0 rounded-[6px]" />
+                <div className="flex-1 space-y-1.5">
+                  <Line className={widths[i]} />
+                  <Line className={cx("h-2.5 opacity-70", widths[i + 2])} />
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="max-w-md space-y-3 rounded-card border border-line bg-surface p-4">
+            <Skeleton className="h-11 w-full rounded-control" />
+            <Skeleton className="h-11 w-full rounded-control opacity-70" />
+            <Skeleton className="h-11 w-full rounded-control opacity-50" />
+          </div>
+          <div className="space-y-2.5">
             <Line className="h-4 w-20" />
             <Line className="w-full" />
             <Line className="w-11/12" />
             <Line className="w-3/5" />
-          </div>
-        </div>
-        <div className="space-y-3 self-start rounded-card border border-line bg-surface p-4">
-          <Skeleton className="h-11 w-full rounded-full" />
-          <Skeleton className="h-9 w-full rounded-full opacity-70" />
-          <div className="flex items-center gap-2 pt-1">
-            {[0, 1, 2].map((i) => (
-              <Skeleton key={i} className="size-7 rounded-full" />
-            ))}
-            <Line className="w-20" />
           </div>
         </div>
       </div>
