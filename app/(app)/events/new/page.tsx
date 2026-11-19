@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/Button";
 import { SelectField, TextArea, TextField } from "@/components/ui/Field";
 import { Icon } from "@/components/ui/Icon";
 import { LIMITS, isInterestId, type InterestId } from "@/lib/constants";
-import { CURRENCIES, formatDateShort, formatPrice } from "@/lib/format";
+import { CURRENCIES, formatDateShort, eventPrice } from "@/lib/format";
 import { useApi, useDebounced } from "@/lib/hooks/useApi";
 import { isHttpLink, normalizeLink } from "@/lib/links";
 import { wallToIso } from "@/lib/timezones";
@@ -63,7 +63,10 @@ function NewEventForm() {
   const [date, setDate] = useState("");
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
-  const [price, setPrice] = useState("0");
+  // an event over several days: the day it ends (empty: the same day it starts)
+  const [endDate, setEndDate] = useState("");
+  // empty: not known yet (shown as "Price TBC"); 0: free
+  const [price, setPrice] = useState("");
   const [capacity, setCapacity] = useState("");
   const [cover, setCover] = useState("");
   const [chipIn, setChipIn] = useState<ContributionDraft>(() => contributionDraftOf(null));
@@ -98,7 +101,7 @@ function NewEventForm() {
   const pickedSub = subs.find((s) => s.slug === subSlug);
   const privateSpace = pickedCommunity?.privacy === "private" || !!pickedSub;
 
-  const priceNum = Math.max(0, Math.round(Number(price) || 0));
+  const priceNum = price.trim() === "" ? null : Math.max(0, Math.round(Number(price) || 0));
   const cur = currency ?? currencyOf(place.country);
   // the times are typed in the place's zone (Lagos for Nigeria)
   const { zone, choices: zoneChoices, setZone } = usePlaceZone(place);
@@ -112,11 +115,19 @@ function NewEventForm() {
     if (!date) next.date = "Pick a date.";
     if (!start) next.startsAt = "Pick a start time.";
     const from = toIso(date, start, zone);
-    const to = end ? toIso(date, end, zone) : null;
-    if (to && from && to <= from) next.endsAt = "End time must be after the start.";
+    const to = endIso();
+    if (to && from && to <= from) next.endsAt = endDate && endDate !== date ? "The end has to be after the start." : "End time must be after the start.";
     const joinLink = online ? normalizeLink(onlineUrl) : "";
     if (joinLink && !isHttpLink(joinLink)) next.onlineUrl = "Enter a valid link, like https://meet.google.com/abc-defg-hij";
     return next;
+  }
+
+  /** when it ends: the end time on the end day (or the start day); a later end day alone means the end of that day */
+  function endIso(): string | null {
+    const day = endDate || date;
+    if (end) return toIso(day, end, zone);
+    if (endDate && endDate !== date) return toIso(endDate, "23:59", zone);
+    return null;
   }
 
   function goNext() {
@@ -134,7 +145,7 @@ function NewEventForm() {
     if (!requireAuth()) return;
     const next: Record<string, string> = firstPageProblems();
     const startsAt = toIso(date, start, zone);
-    const endsAt = end ? toIso(date, end, zone) : null;
+    const endsAt = endIso();
     const tickets = normalizeLink(ticketUrl);
     const joinLink = online ? normalizeLink(onlineUrl) : "";
     if (tickets && !isHttpLink(tickets)) next.ticketUrl = "Enter a valid link, like https://tix.africa/your-event";
@@ -261,10 +272,11 @@ function NewEventForm() {
       <PlaceFields value={place} onChange={setPlace} neighborhood={neighborhood} onNeighborhood={setNeighborhood} errors={errors} />
       <TextField label={online ? "Where to join" : "Venue"} value={venue} onChange={(e) => setVenue(e.target.value)} maxLength={LIMITS.venue} error={errors.venue} placeholder={online ? "Zoom, Google Meet, a Discord server…" : "Name of the spot"} />
       {online && <TextField label="Join link (optional)" type="url" inputMode="url" value={onlineUrl} onChange={(e) => setOnlineUrl(e.target.value)} onBlur={() => setOnlineUrl((v) => normalizeLink(v))} error={errors.onlineUrl} placeholder="https://meet.google.com/…" hint="Shows as a Join online button on the event." />}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <TextField label="Date" type="date" value={date} onChange={(e) => setDate(e.target.value)} error={errors.date} />
-        <TextField label="Starts" type="time" value={start} onChange={(e) => setStart(e.target.value)} error={errors.startsAt} />
-        <TextField label="Ends (optional)" type="time" value={end} onChange={(e) => setEnd(e.target.value)} error={errors.endsAt} />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <TextField label="Starts on" type="date" value={date} onChange={(e) => setDate(e.target.value)} error={errors.date} />
+        <TextField label="Starts at" type="time" value={start} onChange={(e) => setStart(e.target.value)} error={errors.startsAt} />
+        <TextField label="Ends on (optional)" type="date" min={date || undefined} value={endDate} onChange={(e) => setEndDate(e.target.value)} hint="Only for an event over more than one day." />
+        <TextField label="Ends at (optional)" type="time" value={end} onChange={(e) => setEnd(e.target.value)} error={errors.endsAt} />
       </div>
       <ZoneField zone={zone} choices={zoneChoices} onChange={setZone} />
       </>
@@ -277,7 +289,7 @@ function NewEventForm() {
           <p className="eyebrow">{online ? "Online" : place.city || "Event"} · {toIso(date, start, zone) ? formatDateShort(toIso(date, start, zone)!, zone) : ""}</p>
           <h2 className="text-xl font-semibold tracking-[-0.02em]">{title.trim()}</h2>
           <p className="text-sm text-ink-muted">{venue.trim()}{neighborhood ? ` · ${neighborhood}` : ""}</p>
-          <p className="text-sm font-semibold">{formatPrice(priceNum, cur)}</p>
+          <p className="text-sm font-semibold">{eventPrice(priceNum, cur)}</p>
           {description.trim() && <p className="line-clamp-3 pt-1 text-sm whitespace-pre-wrap text-ink-muted">{description.trim()}</p>}
         </div>
       </section>
@@ -288,7 +300,7 @@ function NewEventForm() {
               <option key={c} value={c}>{c}</option>
             ))}
           </SelectField>
-          <TextField label="Price" type="number" inputMode="numeric" min={0} step={1} value={price} onChange={(e) => setPrice(e.target.value)} error={errors.priceNaira} hint={`Shown as: ${formatPrice(priceNum, cur)}. Use 0 for free.`} />
+          <TextField label="Price" type="number" inputMode="numeric" min={0} step={1} value={price} onChange={(e) => setPrice(e.target.value)} error={errors.priceNaira} placeholder="Not sure yet? Leave it empty" hint={`Shown as: ${eventPrice(priceNum, cur)}. Leave it empty if you don't know yet; 0 means free.`} />
         </div>
         <TextField label="Capacity (optional)" type="number" inputMode="numeric" min={1} value={capacity} onChange={(e) => setCapacity(e.target.value)} error={errors.capacity} hint="Leave empty for unlimited spots." />
       </div>

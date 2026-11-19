@@ -373,7 +373,7 @@ export async function toEvents(events: IEvent[], viewer: IUser | null): Promise<
       startsAt: e.startsAt.toISOString(),
       timeZone: e.timeZone || DEFAULT_ZONE,
       endsAt: e.endsAt ? e.endsAt.toISOString() : null,
-      priceNaira: e.priceNaira,
+      priceNaira: e.priceNaira ?? null,
       currency: e.currency ?? "NGN",
       capacity: e.capacity,
       coverImage: e.coverImage,

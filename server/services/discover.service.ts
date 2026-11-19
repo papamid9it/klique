@@ -1,6 +1,6 @@
 import { communityRankStage } from "./communities.service";
 import type { InterestId } from "@/lib/constants";
-import { EVENT_FALLBACK_MS } from "@/lib/event-time";
+import { notOverFilter } from "@/lib/event-time";
 import { parseScope, scopeFilter, scopeFromPlace, scopeToString } from "@/lib/places";
 import { visibleCategories } from "@/lib/constants";
 import { dateRangeFor, startOfLagosDay } from "@/lib/dates";
@@ -23,7 +23,6 @@ import { matchScore, searchFilter } from "./search-terms";
 import type { z } from "zod";
 import type { searchQuery } from "../validators/schemas";
 
-const LINGER_MS = EVENT_FALLBACK_MS;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** How many upcoming events Home can draw on, besides the rows it always has. */
@@ -34,7 +33,6 @@ export async function discover(viewer: IUser | null, whereParam?: string): Promi
   const scope = parseScope(whereParam) ?? (viewer ? scopeFromPlace(viewer, "city") : parseScope("world")!);
   const place = scopeFilter(scope);
   const mine = new Set<string>(viewer?.interests ?? []);
-  const from = new Date(Date.now() - LINGER_MS);
   // four independent lookups, side by side (one round trip instead of four)
   const [visibility, joinedRows, goingRows, klique] = await Promise.all([
     eventVisibilityFilter(viewer),
@@ -45,7 +43,8 @@ export async function discover(viewer: IUser | null, whereParam?: string): Promi
 
   const now = new Date();
   const today = startOfLagosDay(now);
-  const live = { cancelled: false, startsAt: { $gte: from } };
+  // not over yet: an event over several days stays on until its end
+  const live = { cancelled: false, ...notOverFilter() };
   const joinedIds = joinedRows.map((m) => m.communityId);
   const goingIds = goingRows.map((r) => r.eventId);
 
@@ -96,7 +95,7 @@ export async function discover(viewer: IUser | null, whereParam?: string): Promi
   const soon = soonMixed;
   const weekendRows = pick(soon, (e) => e.startsAt >= weekend.from && (!weekend.to || e.startsAt < weekend.to));
   const fromCommunityRows = pick(communityRows, () => true);
-  const freeRows = pick(soon, (e) => !e.priceNaira);
+  const freeRows = pick(soon, (e) => e.priceNaira === 0);
   const onlineRows = pick(soon, (e) => e.online);
 
   // One serializer pass for everything on the page.

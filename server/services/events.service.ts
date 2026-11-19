@@ -1,6 +1,6 @@
 import { searchFilter } from "./search-terms";
 import { Types, type QueryFilter } from "mongoose";
-import { EVENT_FALLBACK_MS, eventEnded } from "@/lib/event-time";
+import { EVENT_FALLBACK_MS, eventEnded, notOverFilter } from "@/lib/event-time";
 import { assertCanHostInSpace, assertCanHostPublic, canHostInSpace, isSiteAdmin } from "../policies/hosting";
 import { deleteUploads } from "./media.service";
 import { sameFile } from "@/lib/focal";
@@ -76,17 +76,19 @@ export async function listEvents(viewer: IUser | null, q: ListQuery): Promise<Pa
   // time window
   const recent = new Date(now.getTime() - LINGER_MS);
   if (q.past) {
-    and.push({ startsAt: { $lt: recent } });
+    // over: started a while ago, and (an event over several days) its end has passed too
+    and.push({ startsAt: { $lt: recent } }, { $or: [{ endsAt: null }, { endsAt: { $lt: now } }] });
   } else if (q.day) {
-    // One calendar day (Lagos time), still hiding what has already finished.
+    // One calendar day (Lagos time), still hiding what has already finished; an event over several days shows on each of them
     const start = startOfLagosDay(new Date(`${q.day}T12:00:00+01:00`));
     const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
-    and.push({ startsAt: { $gte: start > recent ? start : recent, $lt: end } });
+    const from = start > recent ? start : recent;
+    and.push({ $or: [{ startsAt: { $gte: from, $lt: end } }, { startsAt: { $lt: end }, endsAt: { $gte: start > now ? start : now } }] });
   } else if (q.date !== "any") {
     const { from, to } = dateRangeFor(q.date as DateFilter, now);
     and.push({ startsAt: to ? { $gte: from, $lt: to } : { $gte: from } });
   } else {
-    and.push({ startsAt: { $gte: recent } });
+    and.push(notOverFilter(+now) as QueryFilter<IEvent>);
   }
 
   const where = parseScope(q.where);
@@ -182,7 +184,7 @@ export async function eventsOverview(viewer: IUser | null, q: z.infer<typeof eve
   const base: QueryFilter<IEvent>[] = [
     await eventVisibilityFilter(viewer),
     { cancelled: false },
-    { startsAt: { $gte: new Date(now.getTime() - LINGER_MS) } },
+    notOverFilter(+now) as QueryFilter<IEvent>,
     scopeFilter(scope) as QueryFilter<IEvent>,
   ];
   if (q.interest) base.push({ interest: q.interest });
@@ -681,7 +683,8 @@ export async function upcomingRsvpEventsOf(viewer: IUser | null, userId: Types.O
   const rows = await Event.find({
     $and: [
       await eventVisibilityFilter(viewer),
-      { _id: { $in: rsvps.map((r) => r.eventId) }, cancelled: false, startsAt: { $gte: new Date(Date.now() - LINGER_MS) } },
+      { _id: { $in: rsvps.map((r) => r.eventId) }, cancelled: false },
+      notOverFilter() as QueryFilter<IEvent>,
     ],
   })
     .sort({ startsAt: 1 })

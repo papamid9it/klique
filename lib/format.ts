@@ -77,6 +77,12 @@ export function formatPrice(amount: number | null | undefined, currency = "NGN")
 /** Currencies offered when hosting. The country's own comes first. */
 export const CURRENCIES = ["NGN", "GHS", "KES", "ZAR", "XOF", "EGP", "UGX", "TZS", "RWF", "MAD", "GBP", "EUR", "USD", "CAD", "AED"];
 
+/** An event's price: "Free" (0), "Price TBC" (not known yet: null), or the amount. */
+export function eventPrice(amount: number | null | undefined, currency = "NGN"): string {
+  if (amount === null || amount === undefined) return "Price TBC";
+  return formatPrice(amount, currency);
+}
+
 export function isFree(amount: number | null | undefined) {
   return !amount || amount <= 0;
 }

@@ -23,7 +23,8 @@ export interface IEventDraft {
   online: boolean;
   startsAt: Date | null;
   endsAt: Date | null;
-  price: number;
+  /** null: the source didn't say (not free) */
+  price: number | null;
   currency: string;
   coverImage: string | null;
   /** where it came from: an event page, a calendar, a feed, or an official API */
@@ -59,7 +60,7 @@ const EventDraftSchema = new Schema<IEventDraft>(
     online: { type: Boolean, default: false },
     startsAt: { type: Date, default: null },
     endsAt: { type: Date, default: null },
-    price: { type: Number, default: 0, min: 0 },
+    price: { type: Number, default: null, min: 0 },
     currency: { type: String, default: "NGN" },
     coverImage: { type: String, default: null },
     provider: { type: String, enum: ["page", "ical", "rss", "ticketmaster", "eventbrite", "link"], default: "page" },

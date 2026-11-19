@@ -403,7 +403,7 @@ function DraftEditor({ draft, target, onClose, onDone }: { draft: DraftDTO; targ
     place: { country: draft.country, region: draft.region, city: draft.city } as Place,
     startsAt: toLocalInput(draft.startsAt),
     endsAt: toLocalInput(draft.endsAt),
-    price: String(draft.price ?? 0),
+    price: draft.price === null || draft.price === undefined ? "" : String(draft.price),
     currency: draft.currency,
     coverImage: draft.coverImage ?? "",
   }));
@@ -423,7 +423,8 @@ function DraftEditor({ draft, target, onClose, onDone }: { draft: DraftDTO; targ
     city: f.place.city,
     startsAt: fromLocalInput(f.startsAt),
     endsAt: fromLocalInput(f.endsAt),
-    price: Number(f.price) || 0,
+    // empty: the source didn't say (not free)
+    price: f.price.trim() === "" ? null : Number(f.price) || 0,
     currency: f.currency,
     coverImage: f.coverImage.trim() || null,
   });
@@ -480,7 +481,7 @@ function DraftEditor({ draft, target, onClose, onDone }: { draft: DraftDTO; targ
         <PlaceFields value={f.place} onChange={(p) => set("place", p)} />
         <TextField label="Venue" value={f.venue} onChange={(e) => set("venue", e.target.value)} maxLength={200} />
         <div className="grid gap-4 sm:grid-cols-2">
-          <TextField label="Price (0 = free)" type="number" min={0} value={f.price} onChange={(e) => set("price", e.target.value)} />
+          <TextField label="Price (empty = not known, 0 = free)" type="number" min={0} value={f.price} onChange={(e) => set("price", e.target.value)} />
           <SelectField label="Currency" value={f.currency} onChange={(e) => set("currency", e.target.value)}>
             {[...new Set([f.currency, ...CURRENCIES])].map((c) => (
               <option key={c}>{c}</option>

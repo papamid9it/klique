@@ -23,7 +23,9 @@ export function DateChip({ iso, zone }: { iso: string; /** the event's own zone 
   );
 }
 
-export function PriceTag({ amount, currency, className }: { amount: number; currency?: string; className?: string }) {
+export function PriceTag({ amount, currency, className }: { amount: number | null; currency?: string; className?: string }) {
+  // not known yet: no tag (it isn't free)
+  if (amount === null) return null;
   return (
     <span data-pill="" className={cx("inline-flex items-center rounded-full px-2.5 py-1 font-mono text-[11px] font-medium shadow-sm", isFree(amount) ? "bg-accent text-accent-ink" : "bg-accent2 text-accent2-ink", className)}>
       {isFree(amount) ? "FREE" : formatPrice(amount, currency)}

@@ -145,7 +145,8 @@ function cleanPatch(p: DraftPatch): Partial<IEventDraft> {
   if (p.online !== undefined) set.online = !!p.online;
   if (p.startsAt !== undefined) set.startsAt = p.startsAt ? new Date(p.startsAt) : null;
   if (p.endsAt !== undefined) set.endsAt = p.endsAt ? new Date(p.endsAt) : null;
-  if (p.price !== undefined && Number.isFinite(p.price) && p.price >= 0) set.price = Math.round(p.price);
+  if (p.price === null) set.price = null;
+  else if (p.price !== undefined && Number.isFinite(p.price) && p.price >= 0) set.price = Math.round(p.price);
   if (p.currency !== undefined && /^[A-Z]{3}$/.test(p.currency.toUpperCase())) set.currency = p.currency.toUpperCase();
   if (p.coverImage !== undefined) set.coverImage = p.coverImage || null;
   return set;

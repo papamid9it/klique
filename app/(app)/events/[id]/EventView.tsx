@@ -1,5 +1,6 @@
 "use client";
 
+import { useMediaViewer } from "@/components/providers/MediaViewerProvider";
 import { ContributeCard, ContributionFields, ContributionsPanel, contributionDraftOf, contributionInput, type ContributionDraft } from "@/components/domain/money/Contribute";
 import { usePaymentReturn } from "@/components/domain/money/Donate";
 import { ReviewBar } from "@/components/domain/events/ReviewBar";
@@ -34,7 +35,7 @@ import { usePlaceZone, YourTime, ZoneField } from "@/components/domain/places/Zo
 import { isoToWall, wallToIso, zoneFitsCountry, zoneForPlace } from "@/lib/timezones";
 import { LIMITS, isInterestId, type InterestId } from "@/lib/constants";
 import { currencyOf, placeLabel, type Place } from "@/lib/places";
-import { CURRENCIES, formatDateLong, formatDateShort, formatPrice, formatTime } from "@/lib/format";
+import { CURRENCIES, formatDateLong, formatDateShort, formatTime, eventPrice } from "@/lib/format";
 import { useApi, useNow } from "@/lib/hooks/useApi";
 import { useEventActions } from "@/lib/hooks/useEventActions";
 import { domainOf, isHttpLink, normalizeLink } from "@/lib/links";
@@ -70,7 +71,9 @@ function EditModal({ event, open, onClose, onSaved }: { event: EventDTO; open: b
   const [date, setDate] = useState(s.date);
   const [start, setStart] = useState(s.time);
   const [end, setEnd] = useState(en?.time ?? "");
-  const [price, setPrice] = useState(String(event.priceNaira));
+  // over several days: the day it ends (empty: the same day it starts)
+  const [endDate, setEndDate] = useState(en && en.date !== s.date ? en.date : "");
+  const [price, setPrice] = useState(event.priceNaira === null ? "" : String(event.priceNaira));
   const [capacity, setCapacity] = useState(event.capacity ? String(event.capacity) : "");
   const [cover, setCover] = useState(event.coverImage ?? "");
   const [chipIn, setChipIn] = useState<ContributionDraft>(() => contributionDraftOf(event.contribution));
@@ -125,9 +128,10 @@ function EditModal({ event, open, onClose, onSaved }: { event: EventDTO; open: b
         currency,
         venue: venue.trim(),
         startsAt: toIso(date, start, zone),
-        endsAt: end ? toIso(date, end, zone) : null,
+        endsAt: end ? toIso(endDate || date, end, zone) : endDate && endDate !== date ? toIso(endDate, "23:59", zone) : null,
         timeZone: zone,
-        priceNaira: Math.max(0, Math.round(Number(price) || 0)),
+        // empty: not known yet; 0: free
+        priceNaira: price.trim() === "" ? null : Math.max(0, Math.round(Number(price) || 0)),
         capacity: cap,
         coverImage: cover.trim() || null,
       });
@@ -162,10 +166,11 @@ function EditModal({ event, open, onClose, onSaved }: { event: EventDTO; open: b
         <PlaceFields value={place} onChange={setPlace} neighborhood={neighborhood} onNeighborhood={setNeighborhood} errors={errors} />
         <TextField label={online ? "Where to join" : "Venue"} value={venue} onChange={(e) => setVenue(e.target.value)} maxLength={LIMITS.venue} error={errors.venue} />
         {online && <TextField label="Join link (optional)" type="url" inputMode="url" value={onlineUrl} onChange={(e) => setOnlineUrl(e.target.value)} onBlur={() => setOnlineUrl((v) => normalizeLink(v))} error={errors.onlineUrl} placeholder="https://meet.google.com/…" hint="Shows as a Join online button." />}
-        <div className="grid gap-4 sm:grid-cols-3">
-          <TextField label="Date" type="date" value={date} onChange={(e) => setDate(e.target.value)} error={errors.date} />
-          <TextField label="Starts" type="time" value={start} onChange={(e) => setStart(e.target.value)} error={errors.startsAt} />
-          <TextField label="Ends" type="time" value={end} onChange={(e) => setEnd(e.target.value)} error={errors.endsAt} />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <TextField label="Starts on" type="date" value={date} onChange={(e) => setDate(e.target.value)} error={errors.date} />
+          <TextField label="Starts at" type="time" value={start} onChange={(e) => setStart(e.target.value)} error={errors.startsAt} />
+          <TextField label="Ends on (optional)" type="date" min={date || undefined} value={endDate} onChange={(e) => setEndDate(e.target.value)} hint="Only for an event over more than one day." />
+          <TextField label="Ends at" type="time" value={end} onChange={(e) => setEnd(e.target.value)} error={errors.endsAt} />
         </div>
         <ZoneField zone={zone} choices={zoneChoices} onChange={setZone} />
         <div className="grid gap-4 sm:grid-cols-2">
@@ -175,7 +180,7 @@ function EditModal({ event, open, onClose, onSaved }: { event: EventDTO; open: b
                 <option key={c} value={c}>{c}</option>
               ))}
             </SelectField>
-            <TextField label="Price" type="number" min={0} value={price} onChange={(e) => setPrice(e.target.value)} error={errors.priceNaira} hint={`Shown as: ${formatPrice(Number(price) || 0, currency)}`} />
+            <TextField label="Price" type="number" min={0} value={price} onChange={(e) => setPrice(e.target.value)} error={errors.priceNaira} placeholder="Not sure yet? Leave it empty" hint={`Shown as: ${eventPrice(price.trim() === "" ? null : Number(price) || 0, currency)}. Empty: not known yet; 0: free.`} />
           </div>
           <TextField label="Capacity" type="number" min={1} value={capacity} onChange={(e) => setCapacity(e.target.value)} error={errors.capacity} hint="Empty = unlimited" />
         </div>
@@ -241,6 +246,7 @@ function HostMenu({ event, onEdit, onCancel, onDelete }: { event: EventDTO; onEd
 function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDTO) => void }) {
   const router = useRouter();
   const toast = useToast();
+  const viewMedia = useMediaViewer();
   const { busy, rsvp, cancelRsvp, toggleSave } = useEventActions(event, onChange);
   const { requireAuth: requireJoinAuth } = useAuth();
   const [joining, setJoining] = useState(false);
@@ -332,6 +338,10 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
         <Icon name="arrow-left" size={15} /> Back
       </button>
       <Cover src={eventPhoto(event.id, event.coverImage)} seed={event.id} interest={event.interest} className="aspect-[16/8] w-full rounded-card border border-line">
+        {/* the whole picture, full screen (flyers have the details in them) */}
+        {event.coverImage && (
+          <button type="button" aria-label="View the picture full screen" onClick={() => viewMedia([event.coverImage!.split("#")[0]])} className="absolute inset-0 cursor-zoom-in" />
+        )}
         <div className="absolute top-4 left-4">
           <DateChip iso={event.startsAt} zone={event.timeZone} />
         </div>
@@ -368,11 +378,21 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
             <div className="flex gap-3">
               <dt className="mt-0.5 text-ink-muted"><Icon name="clock" /><span className="sr-only">When</span></dt>
               <dd>
-                <span className="font-medium">{formatDateLong(event.startsAt, event.timeZone)}</span>
-                <span className="block text-ink-muted">
-                  {formatTime(event.startsAt, event.timeZone)}
-                  {event.endsAt ? ` – ${formatTime(event.endsAt, event.timeZone)}` : ""}
-                </span>
+                {event.endsAt && isoToWall(event.endsAt, event.timeZone).date !== isoToWall(event.startsAt, event.timeZone).date ? (
+                  // over several days: both days, and when it starts and ends
+                  <>
+                    <span className="font-medium">{formatDateLong(event.startsAt, event.timeZone)} – {formatDateLong(event.endsAt, event.timeZone)}</span>
+                    <span className="block text-ink-muted">Starts {formatTime(event.startsAt, event.timeZone)} · ends {formatTime(event.endsAt, event.timeZone)}</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="font-medium">{formatDateLong(event.startsAt, event.timeZone)}</span>
+                    <span className="block text-ink-muted">
+                      {formatTime(event.startsAt, event.timeZone)}
+                      {event.endsAt ? ` – ${formatTime(event.endsAt, event.timeZone)}` : ""}
+                    </span>
+                  </>
+                )}
                 <YourTime iso={event.startsAt} zone={event.timeZone} />
               </dd>
             </div>
@@ -387,7 +407,7 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
             </div>
             <div className="flex gap-3">
               <dt className="mt-0.5 text-ink-muted"><Icon name="ticket" /><span className="sr-only">Price</span></dt>
-              <dd className="font-medium">{formatPrice(event.priceNaira, event.currency)}</dd>
+              <dd className="font-medium">{eventPrice(event.priceNaira, event.currency)}</dd>
             </div>
           </dl>
 

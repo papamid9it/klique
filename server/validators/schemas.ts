@@ -353,7 +353,8 @@ const eventFields = {
   venue: text(LIMITS.venue, 2),
   startsAt: isoDate,
   endsAt: isoDate.optional().nullable(),
-  priceNaira: z.number().int().min(0).max(100_000_000).default(0),
+  // null (or left out): not known yet; 0: free
+  priceNaira: z.number().int().min(0).max(100_000_000).nullable().default(null),
   /** ISO 4217 code; defaults to the country's currency */
   currency: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/).optional(),
   online: z.boolean().default(false),
@@ -387,7 +388,7 @@ export const eventUpdateSchema = z.object({
   venue: eventFields.venue.optional(),
   startsAt: isoDate.optional(),
   endsAt: isoDate.optional().nullable(),
-  priceNaira: z.number().int().min(0).max(100_000_000).optional(),
+  priceNaira: z.number().int().min(0).max(100_000_000).nullable().optional(),
   currency: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/).optional(),
   online: z.boolean().optional(),
   /** the zone the times were typed in (IANA); the server keeps it only if it fits the place */
@@ -666,7 +667,7 @@ export const adminDraftPatchSchema = z.object({
   online: z.boolean().optional(),
   startsAt: draftDate,
   endsAt: draftDate,
-  price: z.number().min(0).max(100_000_000).optional(),
+  price: z.number().min(0).max(100_000_000).nullable().optional(),
   currency: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/).optional(),
   coverImage: z.union([httpUrl, z.literal(""), z.null()]).optional(),
   ...draftTarget,

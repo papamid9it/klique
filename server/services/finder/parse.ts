@@ -27,7 +27,8 @@ export interface Candidate {
   endsAt: Date | null;
   /** the IANA zone the times were given in (shown to the reviewer) */
   timezone: string;
-  price: number;
+  /** null: the page didn't say */
+  price: number | null;
   currency: string;
   /** the source's picture */
   image: string | null;
@@ -272,7 +273,7 @@ export function fromSchemaOrg(o: Json, pageUrl: URL, siteName: string, fallbackC
     startsAt,
     endsAt: endsAt && endsAt > startsAt ? endsAt : null,
     timezone: tz,
-    price: prices.length ? Math.round(Math.min(...prices)) : 0,
+    price: prices.length ? Math.round(Math.min(...prices)) : null,
     currency: /^[A-Z]{3}$/.test(currency) ? currency : currencyOf(country),
     image: /^https?:\/\//.test(image) ? image.slice(0, 1000) : null,
     imageReusable: false,
@@ -331,7 +332,8 @@ export function fromIcs(body: string, feedUrl: URL, country: string): Candidate[
           startsAt: start,
           endsAt: end && end > start ? end : null,
           timezone: calTz,
-          price: 0,
+          // a calendar never says the price
+          price: null,
           currency: currencyOf(country),
           image: null,
           imageReusable: false,

@@ -549,8 +549,8 @@ export interface EventDTO {
   timeZone: string;
   /** its community has kliques on: false hides "Find a klique" / its kliques (policies/features) */
   kliquesOn: boolean;
-  /** price in major units of `currency` (field name is historical) */
-  priceNaira: number;
+  /** price in major units of `currency` (field name is historical); 0 free, null not known yet */
+  priceNaira: number | null;
   currency: string;
   capacity: number | null;
   coverImage: string | null;
@@ -1584,7 +1584,8 @@ export interface DraftDTO {
   online: boolean;
   startsAt: ISODate | null;
   endsAt: ISODate | null;
-  price: number;
+  /** null: the source didn't say (not the same as free) */
+  price: number | null;
   currency: string;
   coverImage: string | null;
   /** where it was found: an event page, a calendar, a feed, or an official API */

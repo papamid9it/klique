@@ -25,7 +25,7 @@ export interface ShareInfo {
 }
 
 /** "NGN 2,000" / "Free": the share-card font has no ₦ (or other currency) glyphs, so codes it is. */
-const priceForCard = (amount: number, currency: string) => (isFree(amount) ? "Free" : `${currency} ${amount.toLocaleString("en-US")}`);
+const priceForCard = (amount: number | null, currency: string) => (amount === null ? "Price TBC" : isFree(amount) ? "Free" : `${currency} ${amount.toLocaleString("en-US")}`);
 
 export async function eventShare(id: string): Promise<ShareInfo | null> {
   await connectDb();

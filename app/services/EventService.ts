@@ -43,7 +43,7 @@ export interface EventInput {
   endsAt?: string | null;
   /** the zone startsAt/endsAt were typed in (IANA) */
   timeZone?: string;
-  priceNaira?: number;
+  priceNaira?: number | null;
   currency?: string;
   capacity?: number | null;
   coverImage?: string | null;
