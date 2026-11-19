@@ -1,4 +1,5 @@
 import { joinKlique } from "./klique.service";
+import { unreadNotificationCount } from "./notifications.service";
 import type { z } from "zod";
 import { ApiError } from "../http/errors";
 import { dummyHash, hashPassword, verifyPassword } from "../auth/password";
@@ -63,7 +64,7 @@ export async function login(input: z.infer<typeof loginSchema>): Promise<AuthRes
 
   return {
     _id: String(user._id),
-    user: toMe(user, await unreadTotal(user._id)),
+    user: toMe(user, await unreadTotal(user._id), await unreadNotificationCount(user._id)),
     token: await signSession(String(user._id), user.tokenVersion),
   };
 }

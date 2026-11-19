@@ -167,7 +167,14 @@ export function PostComments({ post, onCount, pinned, top, focus }: { post: Feed
   const slug = post.community.slug;
   const { data, loading, setData } = useApi(() => FeedService.comments(slug, post.id), [slug, post.id]);
   const list = useMemo(() => data ?? [], [data]);
-  const all = useMemo(() => threads(list), [list]);
+  // your comments on their way: shown at once, sent behind (a failed one waits for "Not sent · Resend")
+  type Outgoing = { c: FeedCommentDTO; input: Draft & { parentId?: string; clientKey: string }; state: "sending" | "failed" };
+  const [outbox, setOutbox] = useState<Outgoing[]>([]);
+  const all = useMemo(() => {
+    const have = new Set(list.map((x) => x.id));
+    return threads([...list, ...outbox.map((o) => o.c).filter((c) => !have.has(c.id))]);
+  }, [list, outbox]);
+  const stateOf = (id: string) => outbox.find((o) => o.c.id === id)?.state;
   const [editing, setEditing] = useState<string | null>(null);
   // how many replies each thread shows (none until opened)
   const [shown, setShown] = useState<Map<string, number>>(new Map());
@@ -214,29 +221,32 @@ export function PostComments({ post, onCount, pinned, top, focus }: { post: Feed
     if (replyTo && !v.startsWith(`@${replyTo.handle}`)) setReplyTo(null);
   };
 
-  const sending = useRef(false);
   const commentKey = useRef(newClientKey());
-  async function add(draft: Draft): Promise<boolean> {
-    if (!requireAuth() || sending.current) return false;
-    sending.current = true;
-    const to = replyTo && draft.body.startsWith(`@${replyTo.handle}`) ? replyTo : null;
+  async function deliver(tempId: string, input: Outgoing["input"]) {
+    setOutbox((o) => o.map((x) => (x.c.id === tempId ? { ...x, state: "sending" } : x)));
     try {
-      // the same id until it goes through: a repeat of this send makes one comment
-      const res = await FeedService.comment(slug, post.id, { ...draft, parentId: to?.id, clientKey: commentKey.current });
-      commentKey.current = newClientKey();
+      // the same key on a resend: it's never posted twice
+      const res = await FeedService.comment(slug, post.id, input);
       setData((d) => [...(d ?? []).filter((x) => x.id !== res.data.id), res.data]);
+      setOutbox((o) => o.filter((x) => x.c.id !== tempId));
       onCount(post.commentCount + 1);
-      setReplyTo(null);
-      // your reply shows in its thread, opened all the way
-      if (to) show(to.root, Number.MAX_SAFE_INTEGER);
-      setFlash(res.data.id);
-      return true;
     } catch (e) {
+      setOutbox((o) => o.map((x) => (x.c.id === tempId ? { ...x, state: "failed" } : x)));
       toast(errorMessage(e), "error");
-      return false;
-    } finally {
-      sending.current = false;
     }
+  }
+  async function add(draft: Draft): Promise<boolean> {
+    if (!requireAuth() || !user) return false;
+    const to = replyTo && draft.body.startsWith(`@${replyTo.handle}`) ? replyTo : null;
+    const input = { ...draft, parentId: to?.id, clientKey: commentKey.current };
+    commentKey.current = newClientKey();
+    const temp: FeedCommentDTO = { id: `local-${input.clientKey}`, postId: post.id, parentId: to?.id ?? null, body: draft.body, sticker: draft.sticker ?? null, stickerUrl: draft.stickerUrl ?? null, deleted: false, createdAt: new Date().toISOString(), editedAt: null, author: user, reactions: [], canDelete: false, canEdit: false };
+    setOutbox((o) => [...o, { c: temp, input, state: "sending" }]);
+    setReplyTo(null);
+    // your reply shows in its thread, opened all the way
+    if (to) show(to.root, Number.MAX_SAFE_INTEGER);
+    void deliver(temp.id, input);
+    return true;
   }
 
   /** Your comment's new text: shown at once (with "edited"), saved behind; the old text comes back if that fails. */
@@ -306,9 +316,15 @@ export function PostComments({ post, onCount, pinned, top, focus }: { post: Feed
             )}
           </>
         )}
-        {!c.deleted && <ReactionBar reactions={c.reactions} canReact={canWrite && !!user} onToggle={(k) => void react(c, k)} className="mt-1" />}
+        {stateOf(c.id) === "sending" && <p className="mt-1 text-[12.5px] text-ink-muted">Sending…</p>}
+        {stateOf(c.id) === "failed" && (
+          <button type="button" onClick={() => { const o = outbox.find((x) => x.c.id === c.id); if (o) void deliver(c.id, o.input); }} className="mt-1 text-[12.5px] font-semibold text-danger hover:underline">
+            Not sent · Resend
+          </button>
+        )}
+        {!c.deleted && !stateOf(c.id) && <ReactionBar reactions={c.reactions} canReact={canWrite && !!user} onToggle={(k) => void react(c, k)} className="mt-1" />}
         {/* Instagram's line under the comment: when · Reply · react */}
-        <div className="mt-1 flex items-center gap-1 text-[12.5px] font-semibold text-ink-muted">
+        {!stateOf(c.id) && <div className="mt-1 flex items-center gap-1 text-[12.5px] font-semibold text-ink-muted">
           <time dateTime={c.createdAt} className="pr-1 font-normal">
             {now ? relativeStamp(c.createdAt, now) : ""}
           </time>
@@ -329,7 +345,7 @@ export function PostComments({ post, onCount, pinned, top, focus }: { post: Feed
               <Icon name="trash" size={13} /> Delete
             </button>
           )}
-        </div>
+        </div>}
       </div>
     </li>
   );

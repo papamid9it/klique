@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
+import { unreadNotificationCount } from "./notifications.service";
 import type { z } from "zod";
 import { appUrl } from "../env";
 import { passwordChangedMail, resetPasswordMail, verifyEmailMail } from "../emails";
@@ -121,7 +122,7 @@ export async function changePassword(viewer: IUser, input: z.infer<typeof change
   if (!updated) throw new ApiError(401, "Please sign in again.");
   queueMail(passwordChangedMail(updated.email, updated.displayName));
   // Other devices are signed out by the version bump; this one gets a fresh token.
-  return { user: toMe(updated, await unreadTotal(updated._id)), token: await signSession(String(updated._id), updated.tokenVersion) };
+  return { user: toMe(updated, await unreadTotal(updated._id), await unreadNotificationCount(updated._id)), token: await signSession(String(updated._id), updated.tokenVersion) };
 }
 
 /* ------------------------- mobile app sign-in codes ------------------------ */
@@ -140,7 +141,7 @@ export async function issueAppCode(userId: IUser["_id"], challenge: string): Pro
 export async function googleSession(idToken: string): Promise<AuthResult> {
   const { signInWithIdToken } = await import("./google.service");
   const { user } = await signInWithIdToken(idToken);
-  return { user: toMe(user, await unreadTotal(user._id)), token: await signSession(String(user._id), user.tokenVersion) };
+  return { user: toMe(user, await unreadTotal(user._id), await unreadNotificationCount(user._id)), token: await signSession(String(user._id), user.tokenVersion) };
 }
 
 export async function exchangeAppCode(code: string, verifier: string): Promise<AuthResult> {
@@ -149,5 +150,5 @@ export async function exchangeAppCode(code: string, verifier: string): Promise<A
   const user = await User.findById(row.userId).lean<IUser>();
   if (!user) throw badLink();
   assertNotSuspended(user);
-  return { user: toMe(user, await unreadTotal(user._id)), token: await signSession(String(user._id), user.tokenVersion) };
+  return { user: toMe(user, await unreadTotal(user._id), await unreadNotificationCount(user._id)), token: await signSession(String(user._id), user.tokenVersion) };
 }

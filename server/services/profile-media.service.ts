@@ -1,4 +1,6 @@
 import "server-only";
+import { unreadTotal } from "./messaging.service";
+import { unreadNotificationCount } from "./notifications.service";
 import type { TopicMediaDTO, UserMe } from "@/lib/types";
 import { PLAN_NAMES } from "@/lib/plans";
 import { badRequest, forbidden } from "../http/errors";
@@ -55,7 +57,9 @@ export async function setProfileMedia(viewer: IUser, items: Item[]): Promise<Use
   // files that are no longer used (replaced or removed) go from storage
   const kept = new Set(next.flatMap((m) => [m.url, m.poster]).filter(Boolean));
   deleteUploads(before.flatMap((m) => [m.url, m.poster]).filter((u): u is string => !!u && !kept.has(u)));
-  return toMe(me!);
+  // the unread counts too: a 0 here would hide the app's message and bell badges until the next refresh
+  const [dms, bell] = await Promise.all([unreadTotal(viewer._id), unreadNotificationCount(viewer._id)]);
+  return toMe(me!, dms, bell);
 }
 
 /** A site admin takes one item off someone's profile (and out of storage). */
