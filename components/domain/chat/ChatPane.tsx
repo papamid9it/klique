@@ -71,6 +71,7 @@ export function ChatPane({
   gate,
   onRead,
   intro,
+  fromTop = false,
   placeholder,
   closedNote,
   focus,
@@ -92,6 +93,8 @@ export function ChatPane({
   onRead: () => void;
   /** replaces the "Welcome to #channel" start of the conversation */
   /** `count`: the replies loaded so far, for a live count right after someone replies */
+  /** opens at the top (a board post: its pictures and words first, the replies under them), not at the latest reply */
+  fromTop?: boolean;
   intro?: (empty: boolean, count: number) => ReactNode;
   /** composer hint (default "Message #channel") */
   placeholder?: string;
@@ -132,7 +135,7 @@ export function ChatPane({
 
   const scroller = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLUListElement>(null);
-  const atBottom = useRef(true);
+  const atBottom = useRef(!fromTop);
   const restore = useRef<{ h: number; t: number } | null>(null);
   const prevLast = useRef<string | null>(null);
   const [unseen, setUnseen] = useState(0);
@@ -195,13 +198,17 @@ export function ChatPane({
     const added = idx >= 0 ? items.length - 1 - idx : 1;
     const mine = !!last && !!user && last.author.id === user.id;
     prevLast.current = lastId;
-    if (first || atBottom.current || mine) {
+    if (first && fromTop && !focus) {
+      // a board post: start at the post itself
+      el.scrollTop = 0;
+      setUnseen(0);
+    } else if (first || atBottom.current || mine) {
       el.scrollTop = el.scrollHeight;
       setUnseen(0);
     } else {
       setUnseen((n) => n + added);
     }
-  }, [items, user]);
+  }, [items, user, fromTop, focus]);
 
   // Link previews and images load after the text: stay glued to the bottom if that's where you were.
   useEffect(() => {

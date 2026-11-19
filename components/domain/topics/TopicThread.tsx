@@ -191,6 +191,7 @@ export function TopicSide({ onClose, bare, full }: { onClose: () => void; bare?:
         </div>
       ) : (
         <ChatPane focus={focus}
+          fromTop
           gifts
           key={data.thread.id}
           space={{ slug }}
