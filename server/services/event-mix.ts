@@ -34,3 +34,8 @@ export function mixEvents<T extends { id: string }>(list: T[], weightOf: (item: 
   if (mixed[0].id === before[0].id) [mixed[0], mixed[1]] = [mixed[1], mixed[0]];
   return mixed;
 }
+
+/** This person's order that doesn't change over time (the same events always come in the same order for them). */
+export function mixEventsSteady<T extends { id: string }>(list: T[], weightOf: (item: T) => number, who: string): T[] {
+  return shuffleBy(list, weightOf, who);
+}

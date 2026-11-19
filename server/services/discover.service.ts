@@ -18,7 +18,7 @@ import { hiddenUserIds } from "./blocks";
 import { listCommunities } from "./communities.service";
 import { listEvents } from "./events.service";
 import { kliqueId } from "./klique-id";
-import { mixEvents } from "./event-mix";
+import { mixEvents, mixEventsSteady } from "./event-mix";
 import { matchScore, searchFilter } from "./search-terms";
 import type { z } from "zod";
 import type { searchQuery } from "../validators/schemas";
@@ -136,12 +136,12 @@ export async function discover(viewer: IUser | null, whereParam?: string): Promi
   const isMine = (d: EventDTO) => d.viewer.isHost || !!d.viewer.rsvp;
   const mixedForYou = mixEvents([...dtos.values()].filter((d) => !d.isPast), weight, `${who}:for-you`, nowMs);
   const eventsForYou = [...mixedForYou.filter((d) => !isMine(d)), ...mixedForYou.filter(isMine)];
-  // the phone's Home, ready to show as it is: the slider at the top, and the events further down (the ones not in the
-  // slider first, then the slider's again in another mix, never its own order). The app shows these as sent, so how
-  // Home is arranged can change here without an app update.
+  // the phone's Home, ready to show as it is. The slider changes every few minutes (eventsForYou); the events further
+  // down keep the same order for this person (only new events join), so the page under the slider stays put. Theirs
+  // and the ones they're going to come last there too. The app shows these as sent, so Home can change here alone.
   const homeSlider = eventsForYou.slice(0, HOME_SLIDER);
-  const again = mixEvents(homeSlider, () => 1, `${who}:below`, nowMs);
-  const homeBelow = [...eventsForYou.slice(HOME_SLIDER), ...(again.length > 1 && again.every((e, i) => e.id === homeSlider[i].id) ? [...again.slice(1), again[0]] : again)];
+  const steady = mixEventsSteady([...dtos.values()].filter((d) => !d.isPast), weight, `${who}:below`);
+  const homeBelow = [...steady.filter((d) => !isMine(d)), ...steady.filter(isMine)];
 
   return {
     where: scopeToString(scope),
