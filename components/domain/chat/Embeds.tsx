@@ -7,58 +7,12 @@ import { useAuth } from "@/components/providers/AuthProvider";
 import { Icon } from "@/components/ui/Icon";
 import { useNearScreen } from "@/lib/hooks/useNearScreen";
 import type { LinkPreviewDTO } from "@/lib/types";
+import { classifyUrl, linksIn, previewAspect } from "@/lib/embed-links";
 
 /* --------------------------- classification --------------------------- */
 
-type Kind =
-  | { type: "youtube"; id: string }
-  | { type: "vimeo"; id: string }
-  | { type: "video"; src: string }
-  | { type: "image"; src: string }
-  | { type: "link" };
-
-const YT_ID = /^[\w-]{11}$/;
-
-export function classifyUrl(raw: string): Kind {
-  let u: URL;
-  try {
-    u = new URL(raw);
-  } catch {
-    return { type: "link" };
-  }
-  if (u.protocol !== "http:" && u.protocol !== "https:") return { type: "link" };
-  const host = u.hostname.replace(/^(www|m|music)\./, "").toLowerCase();
-  if (host === "youtube.com" || host === "youtube-nocookie.com") {
-    const v = u.searchParams.get("v");
-    if (v && YT_ID.test(v)) return { type: "youtube", id: v };
-    const m = u.pathname.match(/^\/(?:shorts|embed|live|v)\/([\w-]{11})/);
-    if (m) return { type: "youtube", id: m[1] };
-  }
-  if (host === "youtu.be") {
-    const id = u.pathname.slice(1, 12);
-    if (YT_ID.test(id)) return { type: "youtube", id };
-  }
-  if (host === "vimeo.com" || host === "player.vimeo.com") {
-    const m = u.pathname.match(/\/(\d{5,12})(?:\/|$)/);
-    if (m) return { type: "vimeo", id: m[1] };
-  }
-  if (/\.(mp4|webm|m4v|mov|ogv)$/i.test(u.pathname)) return { type: "video", src: u.toString() };
-  if (/\.(png|jpe?g|gif|webp|avif)$/i.test(u.pathname)) return { type: "image", src: u.toString() };
-  return { type: "link" };
-}
-
-const URL_RX = /https?:\/\/[^\s<]+/g;
-
-/** Up to `max` distinct links in a message (trailing punctuation trimmed). */
-export function linksIn(body: string, max = 3): string[] {
-  const out: string[] = [];
-  for (const m of body.matchAll(URL_RX)) {
-    const url = m[0].replace(/[.,!?;:)\]]+$/, "");
-    if (!out.includes(url)) out.push(url);
-    if (out.length >= max) break;
-  }
-  return out;
-}
+// shared with the server, which fetches link previews when a message is sent (lib/embed-links)
+export { classifyUrl, linksIn } from "@/lib/embed-links";
 
 /* ------------------------------- preview ------------------------------ */
 
@@ -127,46 +81,58 @@ function PlayableVideo({ provider, thumb, src, href, title }: { provider: string
   );
 }
 
-function LinkCard({ url, enabled, near }: { url: string; enabled: boolean; near: boolean }) {
-  const data = usePreview(url, enabled);
-  if (!data) return null;
+/** A link's card, drawn from its preview. The picture keeps its frame (its own shape, or 1.91:1) before it loads, so nothing moves. */
+function PreviewCard({ url, data, near }: { url: string; data: LinkPreviewDTO; near: boolean }) {
   return (
     <div className="max-w-md overflow-hidden rounded-card border border-line border-l-[3px] border-l-accent bg-surface p-3">
-      <p className="text-[11px] font-semibold tracking-wide text-ink-muted uppercase">{data.siteName}</p>
+      <p className="truncate text-[11px] font-semibold tracking-wide text-ink-muted uppercase">{data.siteName}</p>
       {data.title && (
-        <a href={url} target="_blank" rel="noopener noreferrer nofollow ugc" className="mt-1 block text-[15px] leading-snug font-semibold text-accent-text hover:underline">
+        <a href={url} target="_blank" rel="noopener noreferrer nofollow ugc" className="mt-1 line-clamp-2 block text-[15px] leading-snug font-semibold text-accent-text hover:underline">
           {data.title}
         </a>
       )}
       {data.description && <p className="mt-1 line-clamp-3 text-[13px] leading-relaxed text-ink-muted">{data.description}</p>}
       {data.videoUrl ? (
-        <video controls preload={near && !isDataSaver() ? "metadata" : "none"} poster={data.image ?? undefined} className="mt-2 max-h-72 w-full rounded-control bg-black">
+        <video controls preload={near && !isDataSaver() ? "metadata" : "none"} poster={data.image ?? undefined} className="mt-2 aspect-video w-full max-w-full rounded-control bg-black">
           <source src={data.videoUrl} />
         </video>
       ) : (
         data.image && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={data.image} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" className="mt-2 max-h-64 w-full rounded-control object-cover" />
+          <a href={url} target="_blank" rel="noopener noreferrer nofollow ugc" tabIndex={-1} aria-hidden="true" className="mt-2 block w-full max-w-full overflow-hidden rounded-control bg-raised" style={{ aspectRatio: previewAspect(data.imageWidth, data.imageHeight), maxHeight: "16rem" }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={data.image} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" className="size-full object-cover" />
+          </a>
         )
       )}
     </div>
   );
 }
 
+/** Older messages (sent before previews were saved with them): fetched here, as before. */
+function LinkCard({ url, enabled, near }: { url: string; enabled: boolean; near: boolean }) {
+  const data = usePreview(url, enabled);
+  return data ? <PreviewCard url={url} data={data} near={near} /> : null;
+}
+
 /** Wraps each embed so nothing is fetched (previews, video data) until the message scrolls near the screen. */
-function Embed({ url, signedIn }: { url: string; signedIn: boolean }) {
+function Embed({ url, signedIn, saved }: { url: string; signedIn: boolean; saved: Saved }) {
   const box = useRef<HTMLDivElement>(null);
   const near = useNearScreen(box);
   return (
     <div ref={box}>
-      <EmbedBody url={url} signedIn={signedIn} near={near} />
+      <EmbedBody url={url} signedIn={signedIn} near={near} saved={saved} />
     </div>
   );
 }
 
-function EmbedBody({ url, signedIn, near }: { url: string; signedIn: boolean; near: boolean }) {
+/** What the server saved with the message: its previews by link, still coming ("pending"), or nothing (an older message). */
+type Saved = { kind: "saved"; byUrl: Map<string, LinkPreviewDTO> } | { kind: "pending" } | { kind: "none" };
+
+function EmbedBody({ url, signedIn, near, saved }: { url: string; signedIn: boolean; near: boolean; saved: Saved }) {
   const kind = useMemo(() => classifyUrl(url), [url]);
-  const vimeo = usePreview(url, kind.type === "vimeo" && signedIn && near);
+  const own = saved.kind === "saved" ? (saved.byUrl.get(url) ?? null) : null;
+  const fetched = usePreview(url, kind.type === "vimeo" && saved.kind === "none" && signedIn && near);
+  const vimeo = own ?? fetched;
   switch (kind.type) {
     case "youtube":
       return <PlayableVideo provider="YouTube" thumb={`https://i.ytimg.com/vi/${kind.id}/hqdefault.jpg`} src={`https://www.youtube-nocookie.com/embed/${kind.id}?autoplay=1&rel=0`} href={url} />;
@@ -186,19 +152,23 @@ function EmbedBody({ url, signedIn, near }: { url: string; signedIn: boolean; ne
         </a>
       );
     default:
+      // saved with the message: drawn straight away; still coming: nothing yet (it arrives in a moment); an older message: fetched
+      if (saved.kind === "saved") return own ? <PreviewCard url={url} data={own} near={near} /> : null;
+      if (saved.kind === "pending") return null;
       return <LinkCard url={url} enabled={signedIn && near} near={near} />;
   }
 }
 
 /** Rich previews under a message: video players, images and OpenGraph cards for its links. */
-export function Embeds({ body }: { body: string }) {
+export function Embeds({ body, embeds, pending }: { body: string; /** previews saved with the message (community chat) */ embeds?: LinkPreviewDTO[]; pending?: boolean }) {
   const { user } = useAuth();
   const links = useMemo(() => linksIn(body), [body]);
+  const saved = useMemo<Saved>(() => (embeds ? { kind: "saved", byUrl: new Map(embeds.map((e) => [e.url, e])) } : pending ? { kind: "pending" } : { kind: "none" }), [embeds, pending]);
   if (!links.length) return null;
   return (
     <div className="mt-2 space-y-2">
       {links.map((u) => (
-        <Embed key={u} url={u} signedIn={!!user} />
+        <Embed key={u} url={u} signedIn={!!user} saved={saved} />
       ))}
     </div>
   );

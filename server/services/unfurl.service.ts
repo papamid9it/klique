@@ -65,6 +65,8 @@ export function parseOpenGraph(html: string, pageUrl: URL): Omit<LinkPreviewDTO,
     title: (meta.get("og:title") ?? meta.get("twitter:title") ?? (titleTag ? decode(titleTag) : "")).slice(0, 300),
     description: (meta.get("og:description") ?? meta.get("twitter:description") ?? meta.get("description") ?? "").slice(0, 500),
     image: httpOnly(meta.get("og:image:secure_url") ?? meta.get("og:image") ?? meta.get("twitter:image") ?? meta.get("twitter:image:src"), pageUrl),
+    imageWidth: Number(meta.get("og:image:width")) > 0 ? Math.round(Number(meta.get("og:image:width"))) : null,
+    imageHeight: Number(meta.get("og:image:height")) > 0 ? Math.round(Number(meta.get("og:image:height"))) : null,
     videoUrl: isFile ? video : null,
   };
 }
@@ -123,7 +125,7 @@ function fetchHtml(start: URL, redirects = 0): Promise<{ html: string; url: URL 
 
 /* ------------------------------ service ----------------------------- */
 
-const toDto = (url: string, p: ILinkPreview): LinkPreviewDTO => ({ url, siteName: p.siteName, title: p.title, description: p.description, image: p.image, videoUrl: p.videoUrl });
+const toDto = (url: string, p: ILinkPreview): LinkPreviewDTO => ({ url, siteName: p.siteName, title: p.title, description: p.description, image: p.image, imageWidth: p.imageWidth ?? null, imageHeight: p.imageHeight ?? null, videoUrl: p.videoUrl });
 
 /**
  * OpenGraph preview for a pasted link. Signed-in users only (this fetches the open internet on their
@@ -137,6 +139,21 @@ export async function unfurl(viewer: IUser, rawUrl: string): Promise<LinkPreview
   } catch (e) {
     throw badRequest(e instanceof UnsafeUrlError ? e.message : "That link can't be previewed.");
   }
+  return previewOfUrl(url);
+}
+
+/** The server's own lookup (a message's links when it's sent): the same cache and checks, no per-person limit. */
+export async function previewFor(rawUrl: string): Promise<LinkPreviewDTO | null> {
+  let url: URL;
+  try {
+    url = assertPublicHttpUrl(rawUrl);
+  } catch {
+    return null;
+  }
+  return previewOfUrl(url);
+}
+
+async function previewOfUrl(url: URL): Promise<LinkPreviewDTO | null> {
   url.hash = "";
   const key = url.toString();
   const urlHash = createHash("sha256").update(key).digest("hex");

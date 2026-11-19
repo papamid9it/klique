@@ -269,7 +269,7 @@ export const Message = memo(function Message({
                 )}
                 <ChatImages images={m.images} mine={mine} />
                 {!!m.cards?.length && <Cards cards={m.cards} onPress={onCardPress ? (id) => onCardPress(m, id) : undefined} />}
-                {!m.pending && <Embeds body={m.body} />}
+                {!m.pending && <Embeds body={m.body} embeds={m.embeds} pending={m.embedsPending} />}
               </>
             )}
             {!m.pending && (

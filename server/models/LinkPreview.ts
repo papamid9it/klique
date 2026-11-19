@@ -9,6 +9,8 @@ export interface ILinkPreview {
   title: string;
   description: string;
   image: string | null;
+  imageWidth?: number | null;
+  imageHeight?: number | null;
   /** direct video file (mp4/webm) advertised by the page */
   videoUrl: string | null;
   fetchedAt: Date;
@@ -22,6 +24,8 @@ const LinkPreviewSchema = new Schema<ILinkPreview>({
   title: { type: String, default: "", maxlength: 300 },
   description: { type: String, default: "", maxlength: 500 },
   image: { type: String, default: null },
+  imageWidth: { type: Number, default: null },
+  imageHeight: { type: Number, default: null },
   videoUrl: { type: String, default: null },
   // Entries expire on their own: a day for hits, failures are retried sooner (see the service).
   fetchedAt: { type: Date, default: Date.now, expires: 60 * 60 * 24 },

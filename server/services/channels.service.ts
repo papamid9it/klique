@@ -1,3 +1,7 @@
+import type { LinkPreviewDTO } from "@/lib/types";
+import { after } from "next/server";
+import { previewLinks } from "@/lib/embed-links";
+import { previewFor } from "./unfurl.service";
 import { VOICE_ENABLED, slowModeLabel } from "@/lib/constants";
 import { moveAmong } from "./reorder";
 import { isSiteAdmin } from "../policies/hosting";
@@ -584,6 +588,23 @@ export async function mentionable(viewer: IUser, space: Space, access: SpaceAcce
 
 type ListQuery = z.infer<typeof chatListQuery>;
 
+/**
+ * Link previews, like Discord: fetched once by the server just after a message is sent (not by every reader's
+ * device), saved on the message with each picture's size, then everyone's chat is told to update. Readers get them
+ * with the message from then on, so nothing loads in afterwards and pushes the chat around.
+ */
+function fetchEmbedsLater(messageId: Types.ObjectId, body: string, channel: Pick<IChannel, "_id" | "communityId">) {
+  const links = previewLinks(body);
+  if (!links.length) return;
+  after(async () => {
+    // keyed by the link exactly as written in the message, which is what the apps look it up by
+    const found = (await Promise.all(links.map((u) => previewFor(u).then((p) => (p ? { ...p, url: u } : null), () => null)))).filter((p): p is LinkPreviewDTO => !!p);
+    // only if the text still has these links (an edit meanwhile fetches its own)
+    const res = await ChannelMessage.updateOne({ _id: messageId, body, deletedAt: null }, { $set: { embeds: found }, $unset: { embedsPending: 1 } });
+    if (res.modifiedCount) emitChannel(channel.communityId, channel._id);
+  });
+}
+
 async function toMessages(rows: IChannelMessage[], viewer: IUser | null, access: SpaceAccess, space: Space): Promise<ChannelMessageDTO[]> {
   const [authors, mentionMap, reactionMap] = await Promise.all([
     loadBriefs(rows.map((r) => r.authorId)),
@@ -638,6 +659,9 @@ async function toMessages(rows: IChannelMessage[], viewer: IUser | null, access:
         pollId: r.deletedAt || !r.pollId ? null : sid(r.pollId),
         ...(bot ? { bot: true } : {}),
         ...(r.cards?.length && !r.deletedAt ? { cards: r.cards } : {}),
+        // link previews: saved with the message (drawn at their size), or on their way
+        ...(r.embeds && !r.deletedAt ? { embeds: r.embeds } : {}),
+        ...(r.embedsPending && !r.deletedAt ? { embedsPending: true } : {}),
         ...(r.thread && !r.deletedAt ? { thread: { slug: r.thread.slug, name: r.thread.name, count: r.thread.count ?? 0, lastAt: r.thread.lastAt?.toISOString() ?? null, lastBy: r.thread.lastBy ?? null } } : {}),
         ...(!bot && standing.get(sid(r.authorId))?.color ? { color: standing.get(sid(r.authorId))!.color } : {}),
         ...(!bot && standing.get(sid(r.authorId))?.badge ? { roleBadge: standing.get(sid(r.authorId))!.badge! } : {}),
@@ -711,7 +735,8 @@ export async function postMessage(viewer: IUser, space: Space, access: SpaceAcce
   const poll = input.poll ? await createPoll(viewer, { scope: "channel", targetId: channel._id, communityId: channel.communityId }, input.poll) : null;
   const doc = poll
     ? await ChannelMessage.create({ channelId: channel._id, communityId: channel.communityId, authorId: viewer._id, body: "", images: [], pollId: poll._id, replyToId: replyTarget?._id ?? null, mentions: [] })
-    : await ChannelMessage.create({ channelId: channel._id, communityId: channel.communityId, authorId: viewer._id, body, sticker: sticker ?? null, stickerUrl, images, replyToId: replyTarget?._id ?? null, mentions, massMention, ...(input.cards?.length ? { cards: input.cards } : {}) });
+    : await ChannelMessage.create({ channelId: channel._id, communityId: channel.communityId, authorId: viewer._id, body, sticker: sticker ?? null, stickerUrl, images, replyToId: replyTarget?._id ?? null, mentions, massMention, ...(input.cards?.length ? { cards: input.cards } : {}), ...(previewLinks(body).length ? { embedsPending: true } : {}) });
+  if (!poll) fetchEmbedsLater(doc._id, body, channel);
   noteStickerUse(viewer._id, stickerUrl);
   await Promise.all([
     Channel.updateOne({ _id: channel._id }, { lastMessageId: doc._id, lastMessageAt: doc.createdAt }),
@@ -760,7 +785,8 @@ export async function postWebhookMessage(hook: { _id: Types.ObjectId; name: stri
     if (massWanted === "here") for (const id of massIds) if (!mentions.some((m) => sid(m) === sid(id))) mentions.push(id);
   }
   const shown = { id: hook._id, name: (name || hook.name).slice(0, 80), avatarUrl: avatarUrl ?? hook.avatarUrl ?? null };
-  const doc = await ChannelMessage.create({ channelId: channel._id, communityId: channel.communityId, authorId: owner._id, body, images: [], mentions, massMention, webhook: shown, ...(cards?.length ? { cards } : {}) });
+  const doc = await ChannelMessage.create({ channelId: channel._id, communityId: channel.communityId, authorId: owner._id, body, images: [], mentions, massMention, webhook: shown, ...(cards?.length ? { cards } : {}) , ...(previewLinks(body).length ? { embedsPending: true } : {}) });
+  fetchEmbedsLater(doc._id, body, channel);
   await Channel.updateOne({ _id: channel._id }, { lastMessageId: doc._id, lastMessageAt: doc.createdAt });
   emitChannel(channel.communityId, channel._id);
   const targets = await notMuted([...new Map([...mentions, ...massIds].map((id) => [sid(id), id])).values()], channel);
@@ -921,9 +947,13 @@ export async function editMessage(viewer: IUser, space: Space, access: SpaceAcce
   const next = (await normalizeEmoji(viewer, channel.communityId, body)).trim();
   const mentions = await resolveMentions(viewer, channel, next);
   const editedAt = next === msg.body ? msg.editedAt : new Date();
-  await ChannelMessage.updateOne({ _id: msg._id }, { $set: { body: next, mentions, editedAt, ...(cards !== undefined ? { cards } : {}) } });
+  // new text, new links: their previews are fetched again (the old ones stay until then if the links didn't change)
+  const relink = next !== msg.body && previewLinks(next).join(" ") !== previewLinks(msg.body).join(" ");
+  const embedSet = relink ? (previewLinks(next).length ? { embedsPending: true } : { embeds: [] as LinkPreviewDTO[] }) : {};
+  await ChannelMessage.updateOne({ _id: msg._id }, { $set: { body: next, mentions, editedAt, ...(cards !== undefined ? { cards } : {}), ...embedSet } });
+  if (relink) fetchEmbedsLater(msg._id, next, channel);
   emitChannel(channel.communityId, channel._id);
-  return (await toMessages([{ ...msg, body: next, mentions, editedAt, cards: nextCards }], viewer, access, space))[0];
+  return (await toMessages([{ ...msg, body: next, mentions, editedAt, cards: nextCards, ...embedSet }], viewer, access, space))[0];
 }
 
 /**

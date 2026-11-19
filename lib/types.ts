@@ -1128,6 +1128,9 @@ export interface LinkPreviewDTO {
   title: string;
   description: string;
   image: string | null;
+  /** the picture's size when the page gives it: the card keeps that much room before it loads */
+  imageWidth?: number | null;
+  imageHeight?: number | null;
   videoUrl: string | null;
 }
 
@@ -1165,6 +1168,10 @@ export interface ChannelMessageDTO {
   /** posted by a channel webhook (a bot): `author` is its name and picture, with no profile behind it */
   bot?: boolean;
   /** cards a bot or webhook posted (the message may have no text then) */
+  /** link previews, fetched by the server when it was sent (drawn at their size, no fetching or jumping) */
+  embeds?: LinkPreviewDTO[];
+  /** its link previews are still being fetched: they arrive in a moment (draw nothing for them yet) */
+  embedsPending?: boolean;
   cards?: MessageCard[];
   /** the author's name colour here (their highest coloured role) */
   color?: string | null;
