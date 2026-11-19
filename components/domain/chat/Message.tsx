@@ -190,9 +190,17 @@ export const Message = memo(function Message({
             </ProfileTrigger>
           )
         ) : (
-          <span className="invisible block pt-1 text-center font-mono text-[10px] text-ink-muted group-hover:visible" aria-hidden="true">
-            {formatClock(m.createdAt).replace(/ (AM|PM)/, "")}
-          </span>
+          m.pending ? (
+            // still on its way: a small clock (like WhatsApp), always showing
+            <span className="flex justify-center pt-1.5 text-ink-muted" title="Sending">
+              <Icon name="clock" size={12} />
+              <span className="sr-only">Sending</span>
+            </span>
+          ) : (
+            <span className="invisible block pt-1 text-center font-mono text-[10px] text-ink-muted group-hover:visible" aria-hidden="true">
+              {formatClock(m.createdAt).replace(/ (AM|PM)/, "")}
+            </span>
+          )
         )}
       </div>
       <div className="min-w-0 flex-1 pb-0.5">
@@ -214,6 +222,12 @@ export const Message = memo(function Message({
             <time dateTime={m.createdAt} className="font-mono text-[11px] text-ink-muted">
               {formatClock(m.createdAt)}
             </time>
+            {m.pending && (
+              <span className="self-center text-ink-muted" title="Sending">
+                <Icon name="clock" size={12} />
+                <span className="sr-only">Sending</span>
+              </span>
+            )}
             {m.pinned && (
               <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-accent-text" title="Pinned">
                 <Icon name="pushpin" size={11} /> Pinned

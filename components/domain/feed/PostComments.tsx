@@ -316,7 +316,12 @@ export function PostComments({ post, onCount, pinned, top, focus }: { post: Feed
             )}
           </>
         )}
-        {stateOf(c.id) === "sending" && <p className="mt-1 text-[12.5px] text-ink-muted">Sending…</p>}
+        {stateOf(c.id) === "sending" && (
+          <span className="mt-1 inline-flex text-ink-muted" title="Sending">
+            <Icon name="clock" size={12} />
+            <span className="sr-only">Sending</span>
+          </span>
+        )}
         {stateOf(c.id) === "failed" && (
           <button type="button" onClick={() => { const o = outbox.find((x) => x.c.id === c.id); if (o) void deliver(c.id, o.input); }} className="mt-1 text-[12.5px] font-semibold text-danger hover:underline">
             Not sent · Resend
