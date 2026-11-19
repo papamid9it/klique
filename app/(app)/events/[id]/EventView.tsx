@@ -12,7 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import { errorMessage, isApiError } from "@/app/ApiCore";
 import { SpaceService } from "@/app/services/SpaceService";
 import { EventService } from "@/app/services/EventService";
-import { DateChip, PriceTag } from "@/components/domain/EventCard";
+import { DateChip } from "@/components/domain/EventCard";
 import { PersonRow } from "@/components/domain/PersonRow";
 import { ReportDialog } from "@/components/domain/ReportDialog";
 import { ShareButton } from "@/components/domain/ShareButton";
@@ -337,20 +337,23 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
       >
         <Icon name="arrow-left" size={15} /> Back
       </button>
-      <Cover src={eventPhoto(event.id, event.coverImage)} seed={event.id} interest={event.interest} className="aspect-[16/8] w-full rounded-card border border-line">
-        {/* the whole picture, full screen (flyers have the details in them) */}
-        {event.coverImage && (
-          <button type="button" aria-label="View the picture full screen" onClick={() => viewMedia([event.coverImage!.split("#")[0]])} className="absolute inset-0 cursor-zoom-in" />
-        )}
-        <div className="absolute top-4 left-4">
-          <DateChip iso={event.startsAt} zone={event.timeZone} />
+      {/* design A: the flyer at its own shape on the left (never stretched or cropped), everything else on the right */}
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] lg:items-start">
+        <div className="lg:sticky lg:top-6">
+          {event.coverImage ? (
+            <button type="button" aria-label="View the picture full screen" onClick={() => viewMedia([event.coverImage!.split("#")[0]])} className="block w-full cursor-zoom-in overflow-hidden rounded-card border border-line bg-raised">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={eventPhoto(event.id, event.coverImage).split("#")[0]} alt={`Flyer for ${event.title}`} className="mx-auto block h-auto max-h-[36rem] w-full object-contain" />
+            </button>
+          ) : (
+            <Cover src={eventPhoto(event.id, event.coverImage)} seed={event.id} interest={event.interest} className="aspect-[4/5] w-full rounded-card border border-line">
+              <div className="absolute top-4 left-4">
+                <DateChip iso={event.startsAt} zone={event.timeZone} />
+              </div>
+            </Cover>
+          )}
         </div>
-        <div className="absolute top-4 right-4">
-          <PriceTag amount={event.priceNaira} currency={event.currency} />
-        </div>
-      </Cover>
 
-      <div className="mt-6 grid gap-8 lg:grid-cols-[1fr_20rem]">
         <div className="min-w-0 space-y-6">
           <ReviewBar event={event} onChange={onChange} onEdit={() => setEditing(true)} />
           <header>
@@ -411,43 +414,7 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
             </div>
           </dl>
 
-          {(event.community || event.subcommunity) && (
-            <p className="flex flex-wrap items-center gap-x-2 text-sm text-ink-muted">
-              <Icon name={event.community?.privacy === "private" ? "lock" : "users"} size={15} />
-              {event.community && (
-                <Link href={`/communities/${event.community.slug}`} className="font-medium text-accent-text hover:underline">
-                  {event.community.name}
-                </Link>
-              )}
-              {event.community && event.subcommunity && <span aria-hidden="true">/</span>}
-              {event.subcommunity && event.community && (
-                <Link href={`/communities/${event.community.slug}/groups/${event.subcommunity.slug}`} className="font-medium text-accent-text hover:underline">
-                  {event.subcommunity.name}
-                </Link>
-              )}
-              {event.audience !== "public" && <span>· Members only</span>}
-            </p>
-          )}
-
-          {event.description && (
-            <section id="about" aria-label="About this event" className="scroll-mt-6">
-              <h2 className="mb-2 text-base font-semibold">About</h2>
-              <p className="leading-relaxed whitespace-pre-line text-ink">{event.description}</p>
-            </section>
-          )}
-
-          <section className="kq-calm" aria-label="Hosted by">
-            <h2 className="mb-2 text-base font-semibold">Hosted by</h2>
-            <PersonRow user={event.host} />
-          </section>
-
-
-          {event.contribution && event.viewer.canManageMoney && <ContributionsPanel event={event} />}
-          {/* events outside any community have a crews page; the rest keep theirs in their community's Crews view */}
-          {!event.isPast && !cancelled && !event.community && <EventCrewsRow event={event} />}
-        </div>
-
-        <aside className="space-y-3 lg:sticky lg:top-6 lg:self-start">
+        <aside aria-label="Going and tickets" className="max-w-md space-y-3">
           <ContributeCard event={event} />
           <div className="space-y-3 rounded-card border border-line bg-surface p-4">
             {isHost ? (
@@ -583,6 +550,43 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
             )}
           </div>
         </aside>
+
+          {(event.community || event.subcommunity) && (
+            <p className="flex flex-wrap items-center gap-x-2 text-sm text-ink-muted">
+              <Icon name={event.community?.privacy === "private" ? "lock" : "users"} size={15} />
+              {event.community && (
+                <Link href={`/communities/${event.community.slug}`} className="font-medium text-accent-text hover:underline">
+                  {event.community.name}
+                </Link>
+              )}
+              {event.community && event.subcommunity && <span aria-hidden="true">/</span>}
+              {event.subcommunity && event.community && (
+                <Link href={`/communities/${event.community.slug}/groups/${event.subcommunity.slug}`} className="font-medium text-accent-text hover:underline">
+                  {event.subcommunity.name}
+                </Link>
+              )}
+              {event.audience !== "public" && <span>· Members only</span>}
+            </p>
+          )}
+
+          {event.description && (
+            <section id="about" aria-label="About this event" className="scroll-mt-6">
+              <h2 className="mb-2 text-base font-semibold">About</h2>
+              <p className="leading-relaxed whitespace-pre-line text-ink">{event.description}</p>
+            </section>
+          )}
+
+          <section className="kq-calm" aria-label="Hosted by">
+            <h2 className="mb-2 text-base font-semibold">Hosted by</h2>
+            <PersonRow user={event.host} />
+          </section>
+
+
+          {event.contribution && event.viewer.canManageMoney && <ContributionsPanel event={event} />}
+          {/* events outside any community have a crews page; the rest keep theirs in their community's Crews view */}
+          {!event.isPast && !cancelled && !event.community && <EventCrewsRow event={event} />}
+        </div>
+
       </div>
 
       {checkingIn && <WhoCame eventId={event.id} onClose={() => setCheckingIn(false)} />}
