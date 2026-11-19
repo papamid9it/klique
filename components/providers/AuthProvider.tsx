@@ -66,6 +66,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (status === "authed") void NotificationService.refresh();
   }, [status]);
 
+  // a push that came while you were looking at klique (no pop-up, see public/sw.js): the badges catch up
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
+    const onMessage = (e: MessageEvent) => {
+      if ((e.data as { type?: string } | null)?.type === "klique-push") void refresh();
+    };
+    navigator.serviceWorker.addEventListener("message", onMessage);
+    return () => navigator.serviceWorker.removeEventListener("message", onMessage);
+  }, [refresh]);
+
   // Keep the unread-message badge fresh.
   useEffect(() => {
     if (status !== "authed") return;

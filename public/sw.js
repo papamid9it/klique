@@ -12,14 +12,24 @@ self.addEventListener("push", (event) => {
   }
   const title = data.title || "klique.";
   event.waitUntil(
-    self.registration.showNotification(title, {
-      body: data.body || "",
-      icon: "/app-icon/192",
-      badge: "/app-icon/192",
-      tag: data.tag || undefined,
-      renotify: !!data.tag,
-      data: { url: data.url || "/" },
-    }),
+    (async () => {
+      // someone is looking at a klique tab right now (on screen and focused): no pop-up, like WhatsApp Web. The page
+      // already shows it live; it's told so it can update its badges. A tab in the background still gets the pop-up.
+      const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      const watching = windows.filter((w) => new URL(w.url).origin === self.location.origin && w.visibilityState === "visible" && w.focused);
+      if (watching.length) {
+        for (const w of watching) w.postMessage({ type: "klique-push", url: data.url || "/" });
+        return;
+      }
+      await self.registration.showNotification(title, {
+        body: data.body || "",
+        icon: "/app-icon/192",
+        badge: "/app-icon/192",
+        tag: data.tag || undefined,
+        renotify: !!data.tag,
+        data: { url: data.url || "/" },
+      });
+    })(),
   );
 });
 
