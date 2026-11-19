@@ -53,9 +53,13 @@ function CasualHome() {
   // an RSVP shows wherever that event appears
   const patchEvent = (e: EventDTO) => {
     const swap = (list: EventDTO[]) => list.map((x) => (x.id === e.id ? e : x));
-    setData((d): DiscoverDTO | null => (d ? { ...d, eventsForYou: swap(d.eventsForYou), featured: d.featured?.id === e.id ? e : d.featured, eventsNearYou: swap(d.eventsNearYou), fromCommunities: swap(d.fromCommunities), thisWeekend: swap(d.thisWeekend), free: swap(d.free), online: swap(d.online), yourPlans: swap(d.yourPlans) } : d));
+    setData((d): DiscoverDTO | null => (d ? { ...d, eventsForYou: swap(d.eventsForYou), featured: d.featured?.id === e.id ? e : d.featured, eventsNearYou: swap(d.eventsNearYou), fromCommunities: swap(d.fromCommunities), thisWeekend: swap(d.thisWeekend), free: swap(d.free), online: swap(d.online), yourPlans: swap(d.yourPlans), ...(d.homeSlider ? { homeSlider: swap(d.homeSlider) } : {}), ...(d.homeBelow ? { homeBelow: swap(d.homeBelow) } : {}) } : d));
   };
   const events = rankEvents(data, user?.interests ?? []);
+  // as in the app: the row at the top is a new mix every 10 minutes; the events between posts stay the same for you
+  // (the server sends both: homeSlider and homeBelow)
+  const topEvents = data?.homeSlider ?? events;
+  const moreEvents = data?.homeBelow ?? (events.length > TOP_EVENTS + 2 ? events.slice(TOP_EVENTS) : events);
   // kliques you could join, best for you first: the first few in their own row, the rest between posts
   const kliques = useApi(user ? () => CrewService.forYou({ limit: 30 }) : null, [user?.id, where], { key: `kliques-for-you:${user?.id ?? ""}:${where}`, wait: !ready });
   const [dismissed, setDismissed] = useState<string[]>([]);
@@ -111,11 +115,11 @@ function CasualHome() {
         <h1 className="display pt-1 text-[clamp(2.25rem,5vw,3.25rem)] leading-[1.08]">Find your klique.</h1>
       </header>
 
-      {error && !data ? <ErrorState message={error} onRetry={reload} /> : <EventsRow events={events} loading={loading} onEvent={patchEvent} />}
+      {error && !data ? <ErrorState message={error} onRetry={reload} /> : <EventsRow events={topEvents} loading={loading} onEvent={patchEvent} />}
 
 
       <div className="mx-auto max-w-[730px]">
-        <HomeFeed refreshRef={feedRefresh} onNewer={setNewer} moreEvents={events.length > TOP_EVENTS + 2 ? events.slice(TOP_EVENTS) : events} fillersLoading={loading || kliques.loading} kliques={forYou} onDismissKlique={dismiss} communities={data?.suggestedCommunities ?? []} onEvent={patchEvent} onCommunity={patchCommunity} />
+        <HomeFeed refreshRef={feedRefresh} onNewer={setNewer} moreEvents={moreEvents} eventsInOrder={!!data?.homeBelow} fillersLoading={loading || kliques.loading} kliques={forYou} onDismissKlique={dismiss} communities={data?.suggestedCommunities ?? []} onEvent={patchEvent} onCommunity={patchCommunity} />
         <BackToTop hidden={newer.length > 0} />
       </div>
     </div>

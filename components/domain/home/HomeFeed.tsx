@@ -268,8 +268,15 @@ export function KliquesRow({ kliques, onDismiss }: { kliques: CrewCardDTO[]; onD
   );
 }
 
-/** A new mix each visit, the same while scrolling and coming Back. */
-const FEED_SEED = newFeedSeed();
+/** Signed out: a new mix each visit, the same while scrolling and coming Back. */
+const GUEST_SEED = newFeedSeed();
+/** Signed in: the same mix for you every visit (as in the app), so the feed doesn't reshuffle on each reload. */
+const steadySeed = (id: string | undefined) => {
+  if (!id) return GUEST_SEED;
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 16777619);
+  return Math.abs(h);
+};
 
 /**
  * Posts from your communities, best first (pictures and videos rank higher), with now and then a trending post
@@ -279,6 +286,7 @@ const FEED_SEED = newFeedSeed();
  */
 export function HomeFeed({
   moreEvents,
+  eventsInOrder = false,
   fillersLoading,
   kliques = [],
   communities,
@@ -289,6 +297,8 @@ export function HomeFeed({
   onNewer,
 }: {
   moreEvents: EventDTO[];
+  /** the server already put moreEvents in order for this person (homeBelow): keep it */
+  eventsInOrder?: boolean;
   /** the events and kliques are still loading */
   fillersLoading: boolean;
   kliques?: CrewCardDTO[];
@@ -301,7 +311,7 @@ export function HomeFeed({
   /** who posted since the newest post on screen (checked every minute while the tab is open; empty: nothing new) */
   onNewer?: (authors: UserBrief[]) => void;
 }) {
-  const { status, requireAuth } = useAuth();
+  const { status, requireAuth, user } = useAuth();
   const authed = status === "authed";
   const { items, hasMore, error, load, setItems, sentinel, anchor } = useInfiniteFeed<HomeFeedItem>(
     "home-feed",
@@ -385,7 +395,7 @@ export function HomeFeed({
     );
   }
 
-  const { slots, rows } = mixFeed(items.length, kliques, moreEvents, ads.length, FEED_SEED, [COMMUNITIES_AT]);
+  const { slots, rows } = mixFeed(items.length, kliques, moreEvents, ads.length, steadySeed(user?.id), [COMMUNITIES_AT], eventsInOrder);
   return (
     <section ref={anchor} aria-labelledby="feed-h" className="space-y-5">
       <h2 id="feed-h" className="text-lg font-semibold tracking-tight">
