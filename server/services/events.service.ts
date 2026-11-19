@@ -44,6 +44,7 @@ import { purgeCrews, syncCrewExpiry } from "./crews.service";
 import { ensureKlique, isKlique } from "./klique.service";
 import { Membership } from "../models/Membership";
 import { logModDelete } from "./admin-audit";
+import { emitRemoved } from "./realtime";
 
 /** Events stay "upcoming" until 3 hours after they start (when no end time is set). */
 /** events stay listed until they're over: up to this long after they start when there's no end time */
@@ -523,6 +524,7 @@ export async function deleteEvent(viewer: IUser, id: string) {
   // people going hear that it's gone (unless it was already cancelled, and they were told then)
   const going = event.cancelled || +event.startsAt < Date.now() ? [] : await Rsvp.find({ eventId: event._id, status: "going", userId: { $ne: viewer._id } }).select("userId").lean<{ userId: Types.ObjectId }[]>();
   await purgeEvent(event);
+  emitRemoved(event.communityId, "event", event._id);
   if (going.length) notify(going.map((g) => g.userId), { title: "Event removed", body: `${event.title} was taken down, so it's off.`, data: { href: "/events" } }, { category: "events", ref: `event:${sid(event._id)}` });
   if (sid(event.hostId) !== sid(viewer._id)) await logModDelete(viewer, { communityId: event.communityId, authorId: event.hostId }, "event", event._id, `Event: ${event.title}`);
   return { deleted: true };

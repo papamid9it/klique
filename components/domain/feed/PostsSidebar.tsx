@@ -11,7 +11,7 @@ import { Cover } from "@/components/ui/Cover";
 import { Icon } from "@/components/ui/Icon";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { UserName } from "@/components/ui/UserName";
-import { compactCount, formatDateShort, formatTime } from "@/lib/format";
+import { compactCount, formatDateShort, formatTime, membersText } from "@/lib/format";
 import { useApi } from "@/lib/hooks/useApi";
 import type { CommunityCardDTO, CommunityDTO } from "@/lib/types";
 
@@ -34,7 +34,7 @@ export function PostsSidebar({ c, onCommunity }: { c: CommunityDTO; onCommunity:
           </span>
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-[15px] font-semibold tracking-[-0.01em]">{c.name}</h2>
-            {c.memberCount !== null && <p className="font-mono text-[11.5px] text-ink-muted">{compactCount(c.memberCount)} members</p>}
+            {c.memberCount !== null && <p className="font-mono text-[11.5px] text-ink-muted">{membersText(c.memberCount)}</p>}
           </div>
           {!c.viewer.isMember && <JoinButton community={c} onChange={onCommunity} />}
         </div>

@@ -16,7 +16,7 @@ import { loadBriefs } from "../serializers";
 import type { commentCreateSchema, commentUpdateSchema, topicCreateSchema, topicListQuery, topicUpdateSchema } from "../validators/schemas";
 import { ensureBoards, resolveBoard, canPostIn } from "./boards.service";
 import { LIMITS, TRENDING_MIN_COMMENTS } from "@/lib/constants";
-import { emitTopic } from "./realtime";
+import { emitRemoved, emitTopic } from "./realtime";
 import { hiddenUserIds } from "./blocks";
 import { escapeRegex, sid, topicFileUrls } from "./helpers";
 import type { IUser } from "../models/User";
@@ -347,6 +347,7 @@ export async function deleteTopic(viewer: IUser, space: Space, access: SpaceAcce
   }
   await Promise.all([TopicComment.deleteMany({ topicId: t._id }), TopicLike.deleteMany({ topicId: t._id }), TopicFollow.deleteMany({ topicId: t._id }), deleteTopicThread(t._id), Topic.deleteOne({ _id: t._id })]);
   deleteUploads(topicFileUrls(t));
+  emitRemoved(t.communityId, "topic", t._id);
   if (sid(t.authorId) !== sid(viewer._id)) await logModDelete(viewer, { communityId: t.communityId, authorId: t.authorId }, "topic", t._id, `Board post in ${space.community.name}: ${t.title.slice(0, 80)}`);
   return { deleted: true };
 }

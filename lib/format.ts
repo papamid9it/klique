@@ -134,6 +134,20 @@ export function formatEyebrowDate(input: string | Date, zone?: string | null): s
   return `${p.weekday}, ${p.month} ${p.day}`.toUpperCase();
 }
 
+/**
+ * Small numbers stay out of sight while Klique is new: a community under 10 members or an event under 5 going
+ * says "New" instead of "3 members" / "1 going". The real numbers still show to owners, hosts and staff where
+ * they manage things (member lists, who's going).
+ */
+export const SHOW_MEMBERS_FROM = 10;
+export const SHOW_GOING_FROM = 5;
+export const membersShown = (n: number) => n >= SHOW_MEMBERS_FROM;
+export const goingShown = (n: number) => n >= SHOW_GOING_FROM;
+/** "1.2k members", or "New" */
+export const membersText = (n: number) => (membersShown(n) ? `${compactCount(n)} ${n === 1 ? "member" : "members"}` : "New");
+/** "24 going", or "New" */
+export const goingText = (n: number) => (goingShown(n) ? `${compactCount(n)} going` : "New");
+
 /** 1k, 1.2k, 125k, 1m, 1.3m, 123m, 1b. Rounds up to the next unit rather than say "1000k". */
 export function compactCount(n: number): string {
   if (n < 1000) return String(n);

@@ -269,6 +269,13 @@ async function dropParentOnlyGroups(communityId: Types.ObjectId, userIds: Types.
 /* Members & roles                                                     */
 /* ------------------------------------------------------------------ */
 
+/** Roles in this community that can moderate (remove, ban, time out, delete, or run channels, roles or events); not bots' own roles. */
+async function staffRoleIds(space: Space): Promise<Types.ObjectId[]> {
+  const { CommunityRole } = await import("../models/CommunityRole");
+  const rows = await CommunityRole.find({ communityId: space.community._id, botAppId: null, permissions: { $in: ["kick", "ban", "timeout", "deleteMessages", "manageChannels", "manageRoles", "manageEvents", "viewModLog"] } }).select("_id").lean<{ _id: Types.ObjectId }[]>();
+  return rows.map((r) => r._id);
+}
+
 export async function listMembers(
   viewer: IUser,
   space: Space,
@@ -285,8 +292,11 @@ export async function listMembers(
   const base: Record<string, unknown> = { ...spaceFilter(space), status: "active" as const };
   // who's here now: heard from in the last few minutes, and not Invisible (the same rule as the green dot)
   const onlineIds = async () => (await User.find({ lastSeenAt: { $gte: new Date(Date.now() - ONLINE_WINDOW_MS) }, presence: { $ne: "invisible" } }).select("_id").limit(5000).lean<{ _id: Types.ObjectId }[]>()).map((u) => u._id);
+  // the owner can hide who's online (a new community looks empty otherwise): no count, no Online filter
+  const onlineHidden = !!space.community.onlineHidden;
+  if (onlineHidden && filter === "online") filter = undefined;
   const [online, total] = page === 1
-    ? await Promise.all([onlineIds().then((ids) => Membership.countDocuments({ ...spaceFilter(space), status: "active", userId: { $in: ids } })), Membership.countDocuments({ ...spaceFilter(space), status: "active" })])
+    ? await Promise.all([onlineHidden ? undefined : onlineIds().then((ids) => Membership.countDocuments({ ...spaceFilter(space), status: "active", userId: { $in: ids } })), Membership.countDocuments({ ...spaceFilter(space), status: "active" })])
     : [undefined, undefined];
   if (filter === "online") base.userId = { $in: await onlineIds() };
   if (filter === "new") base.createdAt = { $gte: new Date(Date.now() - 14 * 86_400_000) };
@@ -305,7 +315,8 @@ export async function listMembers(
           .lean<IMembership[]>()
       : [],
     filter === "admins"
-      ? ([] as IMembership[])
+      ? // the owner and admins come above; then members whose roles let them moderate (a "Moderator" role and the like)
+        staffRoleIds(space).then((ids) => (ids.length ? Membership.find({ ...base, role: "member", roleIds: { $in: ids } }).sort({ createdAt: 1 }).skip((page - 1) * size).limit(size + 1).lean<IMembership[]>() : []))
       : Membership.find({ ...base, role: "member" })
           // New: the newest first
           .sort({ createdAt: filter === "new" ? -1 : 1 })
@@ -346,7 +357,7 @@ export async function listMembers(
       },
     ];
   });
-  return { items, page, hasMore, ...(total !== undefined ? { total, online } : {}) };
+  return { items, page, hasMore, ...(total !== undefined ? { total, online } : {}), ...(onlineHidden ? { onlineHidden: true } : {}) };
 }
 
 async function targetMembership(space: Space, userId: string): Promise<IMembership> {

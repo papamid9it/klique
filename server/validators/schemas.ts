@@ -158,6 +158,8 @@ export const communityUpdateSchema = z.object({
   memberEvents: z.boolean().optional(),
   /** members may use @everyone / @here (owners and admins always can) */
   membersMassMention: z.boolean().optional(),
+  /** the member list shows how many are online (owner only) */
+  showOnline: z.boolean().optional(),
   coverImage: clearableUrl,
   adult: z.boolean().optional(),
   explicit: z.boolean().optional(),

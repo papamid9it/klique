@@ -18,7 +18,7 @@ import { RowSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { communityNews, rankMyCommunities } from "@/lib/constants";
 import { eventPhoto } from "@/lib/fake";
-import { compactCount, formatDateShort, relativeStamp } from "@/lib/format";
+import { formatDateShort, relativeStamp, goingText, membersText } from "@/lib/format";
 import { useApi } from "@/lib/hooks/useApi";
 import type { InterestId } from "@/lib/constants";
 import type { CommunityCardDTO, EventDTO } from "@/lib/types";
@@ -41,7 +41,7 @@ function EventTile({ e, big }: { e: EventDTO; big?: boolean }) {
         <span className="hidden truncate font-mono text-[11px] tracking-[.08em] text-[#f5c542] uppercase lg:block">{when}</span>
         <span className={big ? "block text-2xl font-bold leading-tight" : "block truncate text-[15px] font-bold leading-5"}>{e.title}</span>
         <span className="block truncate text-sm text-white/90 lg:hidden">{big && e.community ? `${when} · ${e.community.name}` : when}</span>
-        <span className="hidden truncate text-xs text-white/80 lg:block">{e.goingCount} going{big && e.community ? ` · ${e.community.name}` : ""}</span>
+        <span className="hidden truncate text-xs text-white/80 lg:block">{goingText(e.goingCount)}{big && e.community ? ` · ${e.community.name}` : ""}</span>
       </span>
     </Link>
   );
@@ -134,7 +134,7 @@ export function CommunitiesHome() {
                   <Cover src={c.coverImage} seed={c.id} interest={c.interest} className="size-11 shrink-0 rounded-control" />
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-semibold">{c.name}</span>
-                    <span className="block truncate text-xs text-ink-muted">{c.memberCount != null ? `${compactCount(c.memberCount)} ${c.memberCount === 1 ? "member" : "members"}` : "Public"}</span>
+                    <span className="block truncate text-xs text-ink-muted">{c.memberCount != null ? membersText(c.memberCount) : "Public"}</span>
                   </span>
                 </Link>
                 {/* big screens: join right here */}

@@ -14,7 +14,7 @@ import { Cover } from "@/components/ui/Cover";
 import { cx } from "@/components/ui/cx";
 import { communityNews } from "@/lib/constants";
 import { eventPhoto } from "@/lib/fake";
-import { compactCount, dateChip, formatDateShort, formatTime, relativeStamp } from "@/lib/format";
+import { compactCount, dateChip, formatDateShort, formatTime, relativeStamp, goingText, membersShown } from "@/lib/format";
 import { useNow } from "@/lib/hooks/useApi";
 import { useHomeKliques } from "./useHomeKliques";
 import type { CommunityCardDTO, EventDTO, MyCommunityDTO } from "@/lib/types";
@@ -122,7 +122,7 @@ export function CityPoster({
             <div className="pointer-events-none absolute inset-x-6 bottom-6 flex flex-wrap items-end gap-x-6 gap-y-4 text-white">
               <div className="min-w-0 flex-[1_1_320px]">
                 <h2 className="line-clamp-2 font-display text-[clamp(30px,3.2vw,48px)] leading-[.92] font-black tracking-[-0.02em] uppercase">{top.title}</h2>
-                <p className="mt-2 truncate text-sm text-white/80">{[!top.online && top.venue, top.community?.name, `${top.goingCount} going`].filter(Boolean).join(" · ")}</p>
+                <p className="mt-2 truncate text-sm text-white/80">{[!top.online && top.venue, top.community?.name, goingText(top.goingCount)].filter(Boolean).join(" · ")}</p>
               </div>
               {top.viewer.rsvp === "going" ? (
                 <Link href={`/events/${top.id}`} className="pointer-events-auto inline-flex h-11 shrink-0 items-center rounded-control border border-white/70 px-5 text-sm font-bold text-white">
@@ -155,7 +155,7 @@ export function CityPoster({
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-[15px] font-semibold group-hover:underline">{e.title}</span>
                         <span className="block truncate text-[13px] text-ink-muted">
-                          {d.weekday} {formatTime(e.startsAt, e.timeZone)} · {e.goingCount} going
+                          {d.weekday} {formatTime(e.startsAt, e.timeZone)} · {goingText(e.goingCount)}
                         </span>
                       </span>
                       <Cover src={eventPhoto(e.id, e.coverImage)} seed={e.id} interest={e.interest} className="size-14 shrink-0 !rounded-control" />
@@ -213,7 +213,7 @@ export function CityPoster({
                   <Link href={`/communities/${c.slug}`} className="min-w-0 flex-1 truncate text-sm font-semibold hover:underline">
                     {c.name}
                   </Link>
-                  {c.memberCount != null && <span className="shrink-0 text-[13px] text-ink-muted tabular-nums">{compactCount(c.memberCount)}</span>}
+                  {c.memberCount != null && <span className="shrink-0 text-[13px] text-ink-muted tabular-nums">{membersShown(c.memberCount) ? compactCount(c.memberCount) : "New"}</span>}
                   {/* the usual join rules (public, request, points), drawn as a square outlined button */}
                   <span className="shrink-0 [&_button]:!h-8 [&_button]:!rounded-control [&_button]:!border [&_button]:!border-ink [&_button]:!bg-transparent [&_button]:!px-3 [&_button]:!text-[13px] [&_button]:!font-semibold [&_button]:!text-ink [&_button]:!shadow-none [&_span[role=img]]:!rounded-none">
                     <JoinButton community={joined[c.id] ?? c} onChange={(n) => setJoined((j) => ({ ...j, [c.id]: n }))} />

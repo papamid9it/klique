@@ -1,15 +1,7 @@
 import ApiClient from "@/app/ApiCore";
 import { emitAppEvent } from "@/lib/appEvents";
 import type { GroupPower } from "@/lib/roles";
-import type {
-  Envelope,
-  InviteDTO,
-  JoinResult,
-  MemberDTO,
-  MembershipRequestDTO,
-  Paginated,
-  PostDTO,
-  Role, ScreeningDTO } from "@/lib/types";
+import type { Envelope, InviteDTO, JoinResult, MembershipRequestDTO, Paginated, PostDTO, Role, ScreeningDTO, MembersPage } from "@/lib/types";
 
 const api = new ApiClient();
 
@@ -37,8 +29,9 @@ export const SpaceService = {
   leave: (slug: string, subSlug?: string) =>
     api.post<Envelope<{ left: boolean; cancelledRequest: boolean }>>(`${base(slug, subSlug)}/leave`).then(changed),
 
-  members: (slug: string, subSlug?: string, page = 1, q?: string) =>
-    api.get<Envelope<Paginated<MemberDTO>>>(`${base(slug, subSlug)}/members`, { page, q }),
+  /** `filter`: online now, the owner, admins and moderators, or people who joined in the last two weeks */
+  members: (slug: string, subSlug?: string, page = 1, q?: string, filter?: "online" | "admins" | "new") =>
+    api.get<Envelope<MembersPage>>(`${base(slug, subSlug)}/members`, { page, q, filter }),
   changeRole: (slug: string, userId: string, role: Exclude<Role, "owner">, subSlug?: string) =>
     api.patch<Envelope<{ userId: string; role: Role }>>(`${base(slug, subSlug)}/members/${userId}`, { role }),
   /** Stop someone writing in Posts and on Boards (seconds: how long, null: until it's lifted, 0: lift it). */

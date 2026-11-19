@@ -8,7 +8,7 @@ import { eventPhoto } from "@/lib/fake";
 import { Icon } from "@/components/ui/Icon";
 import { cx } from "@/components/ui/cx";
 import { getInterest } from "@/lib/constants";
-import { dateChip, formatTime } from "@/lib/format";
+import { dateChip, formatTime, goingShown } from "@/lib/format";
 import { useEventActions } from "@/lib/hooks/useEventActions";
 import { flag, placeShort } from "@/lib/places";
 import type { EventDTO } from "@/lib/types";
@@ -52,7 +52,7 @@ export function EventRow({ event, onChange }: { event: EventDTO; onChange: (e: E
       </div>
       <div className="hidden shrink-0 flex-col items-end gap-1.5 md:flex">
         <PriceTag amount={event.priceNaira} currency={event.currency} />
-        <span className="inline-flex items-center gap-1 font-mono text-[11px] text-ink-muted"><Icon name="users" size={12} /> {event.goingCount}</span>
+        <span className="inline-flex items-center gap-1 font-mono text-[11px] text-ink-muted"><Icon name="users" size={12} /> {goingShown(event.goingCount) ? event.goingCount : "New"}</span>
       </div>
       {event.viewer.isHost || event.isPast || (event.isFull && !going) ? (
         <Button size="sm" href={`/events/${event.id}`}>{event.review ? "View" : event.viewer.isHost ? "Hosting" : event.isPast ? "View" : "Full"}</Button>

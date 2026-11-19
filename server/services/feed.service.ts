@@ -9,6 +9,7 @@ import { rateLimit } from "../http/rate-limit";
 import { after } from "next/server";
 import { AppSetting } from "../models/AppSetting";
 import { FeedSeen } from "../models/FeedSeen";
+import { emitRemoved } from "./realtime";
 import { Community, type ICommunity } from "../models/Community";
 import { FeedComment, FeedPost, FeedVote, type IFeedComment, type IFeedPost } from "../models/FeedPost";
 import { Membership, type IMembership } from "../models/Membership";
@@ -307,6 +308,7 @@ export async function deletePost(viewer: IUser, space: Space, access: SpaceAcces
   const comments = await FeedComment.find({ postId: p._id }).select("_id").lean<{ _id: Types.ObjectId }[]>();
   await Promise.all([purgeReactions("feedComment", comments.map((c) => c._id)), FeedComment.deleteMany({ postId: p._id }), FeedVote.deleteMany({ postId: p._id }), FeedPost.deleteOne({ _id: p._id })]);
   deleteUploads(fileUrls(p));
+  emitRemoved(p.communityId, "post", p._id);
   if (sid(p.authorId) !== sid(viewer._id)) await logModDelete(viewer, { communityId: p.communityId, authorId: p.authorId }, "feedPost", p._id, `Post in ${space.community.name}: ${(p.title || p.caption).slice(0, 80)}`);
   return { deleted: true };
 }

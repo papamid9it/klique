@@ -44,6 +44,11 @@ export function publish(channels: string[], event: RealtimeEvent) {
 export const emitChannel = (communityId: Types.ObjectId | string, channelId: Types.ObjectId | string) =>
   publish([rtChannel.community(communityId)], { type: "channel", communityId: String(communityId), channelId: String(channelId) });
 
+/** Something was deleted: everyone in its community with a list open drops it (no community: nothing to tell). */
+export const emitRemoved = (communityId: Types.ObjectId | string | null | undefined, what: "post" | "topic" | "event" | "klique", id: Types.ObjectId | string) => {
+  if (communityId) publish([rtChannel.community(communityId)], { type: "removed", what, id: String(id) });
+};
+
 export const emitTopic = (communityId: Types.ObjectId | string, topicId: Types.ObjectId | string) =>
   publish([rtChannel.community(communityId)], { type: "topic", communityId: String(communityId), topicId: String(topicId) });
 

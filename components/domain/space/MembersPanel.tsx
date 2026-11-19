@@ -13,7 +13,8 @@ import { Icon, type IconName } from "@/components/ui/Icon";
 import { ProfileTrigger } from "@/components/providers/ProfileCardProvider";
 import { RowSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/States";
-import { useDebounced, useNow, usePaged } from "@/lib/hooks/useApi";
+import { useApi, useDebounced, useNow, usePaged } from "@/lib/hooks/useApi";
+import { cx } from "@/components/ui/cx";
 import { useSteps } from "@/lib/hooks/useSteps";
 import type { MemberDTO, Role } from "@/lib/types";
 import { ConfirmModal, RoleBadge } from "./parts";
@@ -42,7 +43,11 @@ export function MembersPanel({ slug, subSlug, group }: { slug: string; subSlug?:
   const toast = useToast();
   const [q, setQ] = useState("");
   const dq = useDebounced(q.trim());
-  const { items, loading, loadingMore, error, hasMore, loadMore, reload, setItems } = usePaged<MemberDTO>((p) => SpaceService.members(slug, subSlug, p, dq || undefined), [slug, subSlug, dq], { keepPrevious: true, key: `members:${slug}:${subSlug ?? ""}:${dq}` });
+  // All, or who's online now, the owner, admins and moderators, or people who joined in the last two weeks (as in the app)
+  const [filter, setFilter] = useState<"online" | "admins" | "new" | null>(null);
+  const { items, loading, loadingMore, error, hasMore, loadMore, reload, setItems } = usePaged<MemberDTO>((p) => SpaceService.members(slug, subSlug, p, dq || undefined, filter ?? undefined), [slug, subSlug, dq, filter], { keepPrevious: true, key: `members:${slug}:${subSlug ?? ""}:${dq}:${filter ?? ""}` });
+  // how many in all, and online now (sent with the first page of "All")
+  const counts = useApi(() => SpaceService.members(slug, subSlug, 1), [slug, subSlug], { key: `members-counts:${slug}:${subSlug ?? ""}` }).data;
   const [removing, setRemoving] = useState<{ m: MemberDTO; ban: boolean } | null>(null);
   const [reporting, setReporting] = useState<MemberDTO | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -126,11 +131,26 @@ export function MembersPanel({ slug, subSlug, group }: { slug: string; subSlug?:
   const steps = useSteps(items.length, hasMore, loadingMore, loadMore, `${slug}:${subSlug ?? ""}:${dq}`);
 
   const search = (
-    <label className="relative mb-4 block">
+    <>
+    {counts?.total !== undefined && (
+      <p className="mb-2 text-sm text-ink-muted">
+        {counts.total.toLocaleString("en-NG")} {counts.total === 1 ? "person" : "people"}
+        {counts.online ? ` · ${counts.online.toLocaleString("en-NG")} online` : ""}
+      </p>
+    )}
+    <label className="relative mb-3 block">
       <span className="sr-only">Search members by name</span>
       <Icon name="search" size={15} className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-ink-muted" />
       <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search members by name or @handle" className="h-10 w-full rounded-full border border-line bg-surface pr-3 pl-10 text-sm text-ink placeholder:text-ink-muted/70 focus:border-accent-text focus:outline-none" />
     </label>
+    <div role="radiogroup" aria-label="Show" className="mb-4 flex flex-wrap gap-2">
+      {([[null, "All"], ["online", "Online"], ["admins", "Admins"], ["new", "New"]] as const).filter(([id]) => !(id === "online" && counts?.onlineHidden)).map(([id, label]) => (
+        <button key={label} type="button" role="radio" aria-checked={filter === id} onClick={() => setFilter(id)} className={cx("h-8 rounded-control border px-3.5 text-sm font-semibold transition", filter === id ? "border-ink bg-ink text-canvas" : "border-line bg-surface text-ink hover:bg-raised")}>
+          {label}
+        </button>
+      ))}
+    </div>
+    </>
   );
 
   if (loading && items.length === 0) return <div>{addBar}{search}<RowSkeleton /></div>;

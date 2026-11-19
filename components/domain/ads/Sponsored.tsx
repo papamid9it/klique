@@ -8,7 +8,7 @@ import { usePlace } from "@/components/providers/PlaceProvider";
 import { cx } from "@/components/ui/cx";
 import { Cover } from "@/components/ui/Cover";
 import { Icon } from "@/components/ui/Icon";
-import { formatDateShort } from "@/lib/format";
+import { formatDateShort, membersText } from "@/lib/format";
 import { useApi } from "@/lib/hooks/useApi";
 import { placeShort } from "@/lib/places";
 import type { AdDTO, AdSlot } from "@/lib/types";
@@ -215,7 +215,7 @@ export function SponsoredCommunity({ ad }: { ad: AdDTO }) {
         </h3>
         {ad.body && <p className="mt-1 line-clamp-2 text-[13px] text-ink-muted">{ad.body}</p>}
         <div className="mt-3.5 flex items-center justify-between border-t border-line pt-3">
-          <span className="font-mono text-[11px] text-ink-muted">{c.memberCount.toLocaleString("en-NG")} members</span>
+          <span className="font-mono text-[11px] text-ink-muted">{membersText(c.memberCount)}</span>
           <AdLink ad={ad} className="inline-flex h-8 items-center gap-1 rounded-full bg-ink px-3.5 text-[13px] font-semibold text-canvas hover:opacity-90">
             {ad.ctaLabel}
           </AdLink>

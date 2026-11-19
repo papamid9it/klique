@@ -1,5 +1,6 @@
 "use client";
 
+import { SetupChecklist } from "@/components/domain/space/SetupChecklist";
 import { SupportButtons } from "@/components/domain/money/Donate";
 import { KLIQUE_SLUG, LIMITS } from "@/lib/constants";
 import { SoftLink } from "@/components/ui/SoftLink";
@@ -648,6 +649,8 @@ export function ChannelList({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-2 py-3">
+        {/* a new community's owner: the first steps (the server sends them only to the owner, for two weeks) */}
+        {c.setup && <SetupChecklist c={c} onGo={go} onInvite={inviteCommunity} />}
         {/* the community's donation buttons, when it has any */}
         {/* no money in a community with explicit content */}
         {!c.locked && !c.explicit && (

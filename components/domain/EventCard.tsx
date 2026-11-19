@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { cx } from "@/components/ui/cx";
 import { getInterest } from "@/lib/constants";
-import { dateChip, formatDateShort, formatPrice, isFree } from "@/lib/format";
+import { dateChip, formatDateShort, formatPrice, isFree, goingText } from "@/lib/format";
 import { flag, placeShort } from "@/lib/places";
 import { useEventActions } from "@/lib/hooks/useEventActions";
 import type { EventDTO } from "@/lib/types";
@@ -80,7 +80,7 @@ export function EventCard({ event, onChange }: { event: EventDTO; onChange: (e: 
 
         <div className="mt-auto flex items-center justify-between gap-3 border-t border-line pt-3.5" style={{ marginTop: "1rem" }}>
           <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-ink-muted">
-            <Icon name="users" size={13} /> {event.goingCount} going
+            <Icon name="users" size={13} /> {goingText(event.goingCount)}
           </span>
           <div className="flex items-center gap-1.5">
             {/* a community's event you're not in yet (seen on its page): joining comes first, so no save / RSVP here */}

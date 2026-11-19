@@ -7,7 +7,7 @@ import { cx } from "@/components/ui/cx";
 import { SCENE_DOT } from "@/components/layout/nav";
 import { Icon } from "@/components/ui/Icon";
 import { getInterest } from "@/lib/constants";
-import { compactCount } from "@/lib/format";
+import { membersText } from "@/lib/format";
 import type { CommunityCardDTO } from "@/lib/types";
 import { JoinButton } from "./JoinButton";
 import { VerifiedCheck } from "@/components/ui/VerifiedCheck";
@@ -27,7 +27,7 @@ export function InterestTile({ interest, size = 44, className }: { interest: Com
 
 export function MemberCount({ community }: { community: Pick<CommunityCardDTO, "memberCount" | "locked" | "privacy"> }) {
   if (community.memberCount === null) return <>Private</>;
-  return <>{compactCount(community.memberCount)} members</>;
+  return <>{membersText(community.memberCount)}</>;
 }
 
 /** Compact list row: tile · name · "SKATE · 342 MEMBERS" · join. Owns its join state. */

@@ -23,10 +23,24 @@ export interface Paginated<T> {
   hasMore: boolean;
 }
 
+/** A new community's first steps (for its owner): each says whether it's done. */
+export interface CommunitySetupDTO {
+  /** a description of 30+ characters */
+  about: boolean;
+  /** the owner wrote in a chat room or Posts */
+  welcome: boolean;
+  /** at least five people besides the owner */
+  invited: boolean;
+  /** an event in the community */
+  event: boolean;
+}
+
 /** A page of members; the first also says how many there are and how many are online now. */
 export interface MembersPage extends Paginated<MemberDTO> {
   total?: number;
   online?: number;
+  /** the owner hid who's online: no count, no Online filter */
+  onlineHidden?: boolean;
 }
 
 /* ------------------------------ people ------------------------------ */
@@ -289,6 +303,10 @@ export interface CommunityDTO extends CommunityCardDTO {
   memberEvents: boolean;
   /** members may use @everyone / @here (owners and admins always can) */
   membersMassMention?: boolean;
+  /** the member list shows how many are online (the owner can hide it) */
+  showOnline?: boolean;
+  /** the owner's "get started" checklist, for the first two weeks (absent for everyone else) */
+  setup?: CommunitySetupDTO;
   /** you've muted @everyone and @here in this community */
   suppressEveryone?: boolean;
   /** the viewer is a member who can send an event in for the owner or an admin to approve */
@@ -1494,7 +1512,9 @@ export type RealtimeEvent =
   /** the connection came back after a gap: refetch whatever is on screen */
   | { type: "resync" }
   /** someone started (`on`) or stopped typing in a chat (`where`: see TypingDTO) */
-  | { type: "typing"; where: string; user: { id: Id; name: string }; on: boolean };
+  | { type: "typing"; where: string; user: { id: Id; name: string }; on: boolean }
+  /** something was deleted (a post, board post, event or klique): open lists drop it at once */
+  | { type: "removed"; what: "post" | "topic" | "event" | "klique"; id: Id };
 
 /** A chat to type in: a community or group channel, a DM conversation, or a crew's chat. */
 export type TypingTarget = { kind: "channel"; slug: string; sub?: string | null; channel: string } | { kind: "dm"; id: Id } | { kind: "crew"; id: Id };

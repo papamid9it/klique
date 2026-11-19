@@ -255,6 +255,10 @@ export async function updateCommunity(viewer: IUser, slug: string, patch: z.infe
   if (patch.kliquesOn !== undefined) set.kliquesOff = !patch.kliquesOn;
   if (patch.memberEvents !== undefined) set.memberEvents = patch.memberEvents;
   if (patch.membersMassMention !== undefined) set.membersMassMention = patch.membersMassMention;
+  if (patch.showOnline !== undefined) {
+    if (access.role !== "owner") throw forbidden("Only the owner can change whether the member list shows who's online.");
+    set.onlineHidden = !patch.showOnline;
+  }
   // 18+ and explicit: checked against what the community will be after this change
   if (patch.adult !== undefined || patch.explicit !== undefined || patch.privacy !== undefined) {
     const next = { privacy: patch.privacy ?? space.community.privacy, adult: patch.adult ?? !!space.community.adult, explicit: patch.explicit ?? !!space.community.explicit };

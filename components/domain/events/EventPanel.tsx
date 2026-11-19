@@ -19,7 +19,7 @@ import { usePlace } from "@/components/providers/PlaceProvider";
 import { Avatar } from "@/components/ui/Avatar";
 import { Cover } from "@/components/ui/Cover";
 import { Icon } from "@/components/ui/Icon";
-import { compactCount, dateChip } from "@/lib/format";
+import { compactCount, dateChip, membersText, goingShown } from "@/lib/format";
 import { useApi } from "@/lib/hooks/useApi";
 import type { EventDTO, UserBrief, AttendeesDTO } from "@/lib/types";
 
@@ -108,7 +108,7 @@ export function EventPanel({ event, people: firstPeople, nextCursor, friends = [
             </span>
             <span className="min-w-0">
               <span className="block truncate text-[14px] font-semibold hover:underline">{event.community.name}</span>
-              <span className="block font-mono text-[11px] text-ink-muted">{c?.memberCount != null ? `${compactCount(c.memberCount)} members` : event.community.privacy === "private" ? "Private" : " "}</span>
+              <span className="block font-mono text-[11px] text-ink-muted">{c?.memberCount != null ? membersText(c.memberCount) : event.community.privacy === "private" ? "Private" : " "}</span>
             </span>
           </Link>
           {c && !event.community.official && (
@@ -129,7 +129,7 @@ export function EventPanel({ event, people: firstPeople, nextCursor, friends = [
                 <Avatar key={p.id} name={p.displayName} src={p.avatarUrl} size={20} className="ring-2 ring-canvas" />
               ))}
             </span>
-            <span className="font-mono text-[11px]">{compactCount(event.goingCount)}</span>
+            {goingShown(event.goingCount) && <span className="font-mono text-[11px]">{compactCount(event.goingCount)}</span>}
           </button>
         </li>
         {!event.online && event.kliquesOn && (

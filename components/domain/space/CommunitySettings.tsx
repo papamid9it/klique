@@ -62,6 +62,7 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
   const feedSave = useAutoSave<GroupPolicy>();
   const eventsSave = useAutoSave<boolean>();
   const massSave = useAutoSave<boolean>();
+  const onlineSave = useAutoSave<boolean>();
   const boardsSave = useAutoSave<boolean>();
   const kliquesSave = useAutoSave<boolean>();
   const privacySave = useAutoSave<boolean>();
@@ -79,6 +80,7 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
   const setMemberEvents = (next: boolean) => eventsSave.run(() => saveTo({ memberEvents: next }, next ? "Members can suggest events" : "Only owners and admins post events now"), next);
   const setBoards = (next: boolean) => boardsSave.run(() => saveTo({ boardsOn: next }, next ? "Board turned on" : "Board turned off"), next);
   const setKliques = (next: boolean) => kliquesSave.run(() => saveTo({ kliquesOn: next }, next ? "Kliques turned on" : "Kliques turned off"), next);
+  const setOnline = (next: boolean) => onlineSave.run(() => saveTo({ showOnline: next }, next ? "The member list shows who's online" : "Who's online is hidden"), next);
   const setMass = (next: boolean) => massSave.run(() => saveTo({ membersMassMention: next }, next ? "Members can mention everyone" : "Only owners and admins can mention everyone"), next);
   const setPrivacy = (next: boolean) => privacySave.run(() => saveTo({ privacy: next ? "private" : "public" }, next ? "Community is now private" : "Community is now public"), next);
 
@@ -230,7 +232,18 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
       {active === "donations" && !c.official && donationsOn && <DonationsSettings slug={c.slug} />}
       {active === "payouts" && !c.official && donationsOn && <PayoutsSettings slug={c.slug} />}
 
-      {active === "members" && <MembersPanel slug={c.slug} />}
+      {active === "members" && isOwner && (
+        <SettingsBlock title="Who's online" intro="While the community is new, few people may be online at once. You can hide the online count until it grows.">
+          <Switch
+            checked={onlineSave.pending ?? c.showOnline !== false}
+            status={onlineSave.status}
+            onChange={(v) => void setOnline(v)}
+            label="Show who's online"
+            hint="On: the member list shows how many are online and has an Online filter. Only you, your admins and moderators see the member list."
+          />
+        </SettingsBlock>
+      )}
+      {active === "members" && <MembersPanel key={String(c.showOnline !== false)} slug={c.slug} />}
       {active === "modlog" && <ModLogPanel slug={c.slug} />}
       {active === "roles" && <RolesPanel slug={c.slug} />}
       {active === "automod" && <AutoModPanel slug={c.slug} />}

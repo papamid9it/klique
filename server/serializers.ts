@@ -11,6 +11,7 @@ import { isKlique } from "./services/klique-id";
 import type {
   CommunityCardDTO,
   CommunityDTO,
+  CommunitySetupDTO,
   EventDTO,
   PostDTO,
   SubcommunityDTO,
@@ -21,10 +22,11 @@ import type {
 } from "@/lib/types";
 import { Community, type ICommunity } from "./models/Community";
 import { Crew } from "./models/Crew";
-import type { IEvent } from "./models/Event";
+import { Event, type IEvent } from "./models/Event";
+import { FeedPost } from "./models/FeedPost";
 import { Membership, type IMembership } from "./models/Membership";
 import { MembershipRequest } from "./models/MembershipRequest";
-import type { IPost } from "./models/Post";
+import { Post, type IPost } from "./models/Post";
 import { Rsvp, SavedEvent } from "./models/Rsvp";
 import { Subcommunity, type ISubcommunity } from "./models/Subcommunity";
 import { User, type IUser } from "./models/User";
@@ -216,15 +218,33 @@ export function communityCard(c: ICommunity, access: SpaceAccess): CommunityCard
   };
 }
 
+/** how long a new community's owner sees the "get started" checklist */
+const SETUP_DAYS = 14;
+
+/**
+ * The owner's first-steps checklist for a new community: a description people can read, a first message or post,
+ * five people besides them, and a first event. Only for the owner, only in the first two weeks.
+ */
+async function setupOf(c: ICommunity, access: SpaceAccess): Promise<CommunitySetupDTO | null> {
+  if (access.role !== "owner" || c.official || Date.now() - +c.createdAt > SETUP_DAYS * 86_400_000) return null;
+  const [chat, post, event] = await Promise.all([
+    Post.exists({ communityId: c._id, authorId: c.ownerId }),
+    FeedPost.exists({ communityId: c._id, authorId: c.ownerId }),
+    Event.exists({ communityId: c._id }),
+  ]);
+  return { about: (c.description ?? "").trim().length >= 30, welcome: !!(chat || post), invited: (c.memberCount ?? 0) >= 6, event: !!event };
+}
+
 export async function toCommunityDetail(
   c: ICommunity,
   access: SpaceAccess,
   extra: { subcommunityCount: number | null; upcomingEventCount: number | null; inviteCode?: string },
 ): Promise<CommunityDTO> {
   const card = communityCard(c, access);
-  const owner = card.locked ? null : (await loadBriefs([c.ownerId])).get(sid(c.ownerId)) ?? null;
+  const [owner, setup] = await Promise.all([card.locked ? null : loadBriefs([c.ownerId]).then((m) => m.get(sid(c.ownerId)) ?? null), setupOf(c, access)]);
   return {
     ...card,
+    ...(setup ? { setup } : {}),
     createdAt: c.createdAt.toISOString(),
     ageGate: access.adultGate ?? null,
     groupPolicy: c.groupPolicy ?? "admins",
@@ -238,6 +258,7 @@ export async function toCommunityDetail(
     canHostEvents: isKlique(c) ? access.role === "owner" : canHostInSpace(access),
     memberEvents: c.memberEvents !== false,
     membersMassMention: !!c.membersMassMention,
+    showOnline: !c.onlineHidden,
     canSubmitEvents: !isKlique(c) && !canHostInSpace(access) && access.isMember && !access.banned && c.memberEvents !== false,
     owner,
     subcommunityCount: card.locked ? null : extra.subcommunityCount,

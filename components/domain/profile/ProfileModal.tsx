@@ -17,7 +17,7 @@ import { Icon } from "@/components/ui/Icon";
 import { Modal } from "@/components/ui/Modal";
 import { ProfileSkeleton } from "@/components/ui/Skeleton";
 import { getInterest, hiddenProfileText } from "@/lib/constants";
-import { compactCount, dateChip } from "@/lib/format";
+import { dateChip, membersText } from "@/lib/format";
 import { useApi } from "@/lib/hooks/useApi";
 import { VerifiedCheck } from "@/components/ui/VerifiedCheck";
 import type { CommunityCardDTO, EventDTO, UserBrief, UserProfile } from "@/lib/types";
@@ -58,7 +58,7 @@ function CommunityListRow({ c, onNavigate }: { c: CommunityCardDTO; onNavigate: 
           {c.privacy === "private" && <Icon name="lock" size={12} className="shrink-0 text-ink-muted" />}
         </span>
         <span className="eyebrow mt-0.5 block truncate">
-          {getInterest(c.interest).short} · {c.memberCount === null ? "Private" : `${compactCount(c.memberCount)} members`}
+          {getInterest(c.interest).short} · {c.memberCount === null ? "Private" : membersText(c.memberCount)}
         </span>
       </span>
       <Icon name="chevron-right" size={15} className="shrink-0 text-ink-muted" />

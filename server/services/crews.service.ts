@@ -38,7 +38,7 @@ import { deleteUploads } from "./media.service";
 import { mentionBriefs } from "./mentions";
 import { awardPointsLater } from "./points.service";
 import { notify, notifyNow } from "./push.service";
-import { publish, rtChannel } from "./realtime";
+import { emitRemoved, publish, rtChannel } from "./realtime";
 import { purgeReactions, summarizeReactions, toggleReaction } from "./reactions";
 import { previewOf, toReplyRef } from "./replies";
 import { assertStickerUrl, noteStickerUse } from "./stickers.service";
@@ -956,6 +956,7 @@ const offData = (crew: Pick<ICrew, "eventId">): Record<string, string> => (crew.
 export async function deleteCrew(viewer: IUser, crewId: string) {
   const { crew } = await hostCrew(viewer, crewId);
   if (sid(crew.hostId) !== sid(viewer._id)) await logModDelete(viewer, { communityId: crew.communityId, authorId: crew.hostId }, "klique", crew._id, `Klique: ${crew.title}`);
+  emitRemoved(crew.communityId, "klique", crew._id);
   const members = await CrewMember.find({ crewId: crew._id, userId: { $ne: viewer._id } }).select("userId").lean<{ userId: Types.ObjectId }[]>();
   await pingCrew(crew._id);
   await purgeCrews({ _id: crew._id });

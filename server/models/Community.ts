@@ -53,6 +53,8 @@ export interface ICommunity {
    * this is on (off by default). Without it the words still send, they just don't ping anyone.
    */
   membersMassMention?: boolean;
+  /** the owner hid how many are online (the count and the Online filter on the member list) */
+  onlineHidden?: boolean;
   /** AutoMod settings (lib/automod AutoModConfig; read through automodOf, which fills in defaults) */
   automod?: unknown;
   /** raid protection tripped: until then joining is paused, or goes through approval (`raidMode`) */
@@ -125,6 +127,7 @@ const CommunitySchema = new Schema<ICommunity>(
     verificationRequest: { type: { status: String, requestedAt: Date, note: String, _id: false }, default: null },
     ownerIcon: { type: String, default: null, maxlength: 16 },
     membersMassMention: { type: Boolean, default: false },
+    onlineHidden: { type: Boolean, default: undefined },
     automod: { type: Schema.Types.Mixed, default: null },
     raidUntil: { type: Date, default: null },
     raidMode: { type: String, enum: ["pause", "approval", null], default: null },

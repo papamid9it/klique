@@ -46,6 +46,8 @@ export interface CommunityInput {
   memberEvents?: boolean;
   /** members may use @everyone / @here */
   membersMassMention?: boolean;
+  /** the member list shows how many are online (owner only) */
+  showOnline?: boolean;
   coverImage?: string | null;
 }
 
