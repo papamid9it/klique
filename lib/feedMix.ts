@@ -47,14 +47,15 @@ export const newFeedSeed = () => Math.floor(Math.random() * 2 ** 31);
 const PLANNED_POSTS = 1000;
 
 /** Where every card and row goes, in post order. `avoid`: post numbers that already have something after them. */
-export function mixFeed(posts: number, kliques: CrewCardDTO[], events: EventDTO[], ads: number, seed: number, avoid: number[] = []) {
+/** `eventsInOrder`: the events come already arranged (the server's Home lists): use them as they are, not shuffled. */
+export function mixFeed(posts: number, kliques: CrewCardDTO[], events: EventDTO[], ads: number, seed: number, avoid: number[] = [], eventsInOrder = false) {
   const slots = new Map<number, FeedSlot>();
   const rows = new Map<number, CrewCardDTO[]>();
   const random = randomFrom(seed);
   const mixed = shuffled(kliques, seed);
   // half the kliques for rows and half for single cards, so each gets some and none shows twice
   const rowPool = mixed.filter((_, i) => i % 2 === 1);
-  const pool = { klique: mixed.filter((_, i) => i % 2 === 0), event: shuffled(events, seed) };
+  const pool = { klique: mixed.filter((_, i) => i % 2 === 0), event: eventsInOrder ? [...events] : shuffled(events, seed) };
   const rowAt: number[] = [];
   for (let n = KLIQUES_ROW_AT; n <= PLANNED_POSTS && rowPool.length; n += KLIQUES_ROW_EVERY) {
     let at = n;

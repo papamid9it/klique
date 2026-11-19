@@ -27,6 +27,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** How many upcoming events Home can draw on, besides the rows it always has. */
 const HOME_EVENTS = 40;
+/** how many events lead the phone's Home (its slider) */
+const HOME_SLIDER = 5;
 
 export async function discover(viewer: IUser | null, whereParam?: string): Promise<DiscoverDTO> {
   // No place chosen: look in the viewer's own city (everywhere when signed out).
@@ -134,10 +136,18 @@ export async function discover(viewer: IUser | null, whereParam?: string): Promi
   const isMine = (d: EventDTO) => d.viewer.isHost || !!d.viewer.rsvp;
   const mixedForYou = mixEvents([...dtos.values()].filter((d) => !d.isPast), weight, `${who}:for-you`, nowMs);
   const eventsForYou = [...mixedForYou.filter((d) => !isMine(d)), ...mixedForYou.filter(isMine)];
+  // the phone's Home, ready to show as it is: the slider at the top, and the events further down (the ones not in the
+  // slider first, then the slider's again in another mix, never its own order). The app shows these as sent, so how
+  // Home is arranged can change here without an app update.
+  const homeSlider = eventsForYou.slice(0, HOME_SLIDER);
+  const again = mixEvents(homeSlider, () => 1, `${who}:below`, nowMs);
+  const homeBelow = [...eventsForYou.slice(HOME_SLIDER), ...(again.length > 1 && again.every((e, i) => e.id === homeSlider[i].id) ? [...again.slice(1), again[0]] : again)];
 
   return {
     where: scopeToString(scope),
     eventsForYou,
+    homeSlider,
+    homeBelow,
     featured,
     eventsNearYou,
     newCommunities,

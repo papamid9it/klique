@@ -806,6 +806,9 @@ export interface AttendeesDTO {
 export interface DiscoverDTO {
   /** every event on this page in one mixed order, different per person and over time: Home shows them in this order */
   eventsForYou: EventDTO[];
+  /** the phone's Home as the server arranges it: the slider's events, and the events further down (in that order) */
+  homeSlider?: EventDTO[];
+  homeBelow?: EventDTO[];
   /** the scope that was used, e.g. "city:NG:lagos" */
   where: string;
   featured: EventDTO | null;
