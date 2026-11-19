@@ -15,7 +15,7 @@ const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n
  * the slider to zoom. The frame has the shape the picture is shown in (a circle for profile pictures, a wide strip
  * for banners), and what you see here is exactly what everyone sees. Saves the position on the link (lib/focal).
  */
-export function ImagePositioner({ open, url, aspect, round, title = "Position your picture", onClose, onSave }: { open: boolean; url: string; aspect: number; round?: boolean; title?: string; onClose: () => void; onSave: (url: string) => void }) {
+export function ImagePositioner({ open, url, aspect, round, title = "Position your picture", description = "Drag to choose what shows. Pinch, scroll or use the slider to zoom.", onClose, onSave }: { open: boolean; url: string; aspect: number; round?: boolean; title?: string; description?: string; onClose: () => void; onSave: (url: string) => void }) {
   const { src, focal: initial } = splitFocal(url);
   const [f, setF] = useState<Focal>(initial);
   const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
@@ -87,7 +87,7 @@ export function ImagePositioner({ open, url, aspect, round, title = "Position yo
   const nudge = (dx: number, dy: number) => setF((p) => ({ ...p, x: clamp(p.x + dx, 0, 100), y: clamp(p.y + dy, 0, 100) }));
 
   return (
-    <Modal open={open} onClose={onClose} title={title} description="Drag to choose what shows. Pinch, scroll or use the slider to zoom." size="md">
+    <Modal open={open} onClose={onClose} title={title} description={description} size="md">
       <div className={cx("mx-auto", round ? "w-64 max-w-full" : "w-full")}>
         <div
           ref={frame}

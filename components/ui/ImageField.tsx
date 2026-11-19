@@ -38,7 +38,8 @@ export function ImageField({
   /** shown in the preview box when there is no picture (an avatar with initials, an art cover…) */
   fallback?: React.ReactNode;
   /** let people choose what part shows (drag and zoom) in a frame of this shape, after uploading and any time later */
-  reposition?: { aspect: number; round?: boolean };
+  /** `title` / `description`: the positioning window's own words (e.g. an event's flyer: it picks what cards show) */
+  reposition?: { aspect: number; round?: boolean; title?: string; description?: string };
   /** a picture must stay: it can be replaced but not removed */
   required?: boolean;
 }) {
@@ -134,7 +135,8 @@ export function ImageField({
           url={positioning}
           aspect={reposition.aspect}
           round={reposition.round}
-          title={`Position your ${label.toLowerCase().replace(/ \(optional\)$/, "")}`}
+          title={reposition.title ?? `Position your ${label.toLowerCase().replace(/ \(optional\)$/, "")}`}
+          description={reposition.description}
           onClose={() => setPositioning(null)}
           onSave={(u) => {
             onChange(u);

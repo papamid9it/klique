@@ -186,7 +186,7 @@ function EditModal({ event, open, onClose, onSaved }: { event: EventDTO; open: b
         </div>
         <TextField label="Ticket link (optional)" type="url" inputMode="url" value={ticketUrl} onChange={(e) => setTicketUrl(e.target.value)} onBlur={() => setTicketUrl((v) => normalizeLink(v))} error={errors.ticketUrl} placeholder="https://tix.africa/…" hint="Shows as a button on the event. People see where it goes before they leave Klique." />
         <TextField label="Button name (optional)" value={ticketLabel} onChange={(e) => setTicketLabel(e.target.value)} maxLength={LIMITS.ticketLabel} error={errors.ticketLabel} placeholder="Get tickets" hint="Like See more, Buy tickets or Main site. Empty shows Get tickets." />
-        <ImageField kind="photo" label="Cover image" value={cover} onChange={setCover} error={errors.coverImage} reposition={{ aspect: 16 / 9 }} />
+        <ImageField kind="photo" label="Flyer or cover picture" value={cover} onChange={setCover} error={errors.coverImage} reposition={{ aspect: 16 / 9, title: "Choose what shows on event cards", description: "The event page shows your whole flyer. Lists and Home show a wide strip of it: drag to pick which part, and pinch, scroll or use the slider to zoom." }} hint="The event page shows all of it. Use Reposition to pick what event cards show." />
         {event.community && !event.community.official && <ContributionFields value={chipIn} onChange={setChipIn} error={errors.contribution} />}
         {formError && (
           <p role="alert" className="text-sm font-medium text-danger">
@@ -341,9 +341,12 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
       <div className="grid gap-8 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] lg:items-start">
         <div className="lg:sticky lg:top-6">
           {event.coverImage ? (
-            <button type="button" aria-label="View the picture full screen" onClick={() => viewMedia([event.coverImage!.split("#")[0]])} className="block w-full cursor-zoom-in overflow-hidden rounded-card border border-line bg-raised">
+            <button type="button" aria-label="View the picture full screen" onClick={() => viewMedia([event.coverImage!.split("#")[0]])} className="relative block w-full cursor-zoom-in overflow-hidden rounded-card border border-line bg-raised">
+              {/* where the flyer doesn't fill the box: a soft blur of itself behind it, not grey bars */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={eventPhoto(event.id, event.coverImage).split("#")[0]} alt={`Flyer for ${event.title}`} className="mx-auto block h-auto max-h-[36rem] w-full object-contain" />
+              <img src={eventPhoto(event.id, event.coverImage).split("#")[0]} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full scale-110 object-cover opacity-60 blur-2xl" />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={eventPhoto(event.id, event.coverImage).split("#")[0]} alt={`Flyer for ${event.title}`} className="relative mx-auto block h-auto max-h-[36rem] w-full object-contain" />
             </button>
           ) : (
             <Cover src={eventPhoto(event.id, event.coverImage)} seed={event.id} interest={event.interest} className="aspect-[4/5] w-full rounded-card border border-line">
@@ -385,7 +388,7 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
                   // over several days: both days, and when it starts and ends
                   <>
                     <span className="font-medium">{formatDateLong(event.startsAt, event.timeZone)} – {formatDateLong(event.endsAt, event.timeZone)}</span>
-                    <span className="block text-ink-muted">Starts {formatTime(event.startsAt, event.timeZone)} · ends {formatTime(event.endsAt, event.timeZone)}</span>
+                    <span className="block text-ink-muted">Starts {formatTime(event.startsAt, event.timeZone)}{isoToWall(event.endsAt, event.timeZone).time === "23:59" ? "" : ` · ends ${formatTime(event.endsAt, event.timeZone)}`}</span>
                   </>
                 ) : (
                   <>

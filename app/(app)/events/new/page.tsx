@@ -250,7 +250,7 @@ function NewEventForm() {
       <p className="eyebrow">Step {step} of 2 · {step === 1 ? "the event" : "preview and publish"}</p>
       {step === 1 ? (
       <>
-      <ImageField kind="photo" label="Cover image (optional)" value={cover} onChange={setCover} reposition={{ aspect: 16 / 9 }} error={errors.coverImage} hint="A wide picture works best. We'll use artwork if you skip it." />
+      <ImageField kind="photo" label="Flyer or cover picture (optional)" value={cover} onChange={setCover} reposition={{ aspect: 16 / 9, title: "Choose what shows on event cards", description: "The event page shows your whole flyer. Lists and Home show a wide strip of it: drag to pick which part, and pinch, scroll or use the slider to zoom." }} error={errors.coverImage} hint="Your flyer or poster, any shape: the event page shows all of it. Event cards show a wide strip; use Reposition to pick which part. We'll use artwork if you skip it." />
       <TextField label="Title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={LIMITS.eventTitle} error={errors.title} placeholder="Sunday sunset skate" />
       <TextArea label="Description" value={description} onChange={(e) => setDescription(e.target.value)} maxLength={LIMITS.eventDescription} counter={LIMITS.eventDescription} error={errors.description} hint="What should people expect? What should they bring?" />
       <div className="grid gap-4 sm:grid-cols-2">
