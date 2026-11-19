@@ -6,7 +6,9 @@ import type { FeedCommentDTO, FeedPostDTO, FeedSidebarDTO, HomeFeedItem, Paginat
 import type { ReactionKind } from "@/lib/reactions";
 import { ApiError, badRequest, forbidden, notFound } from "../http/errors";
 import { rateLimit } from "../http/rate-limit";
+import { after } from "next/server";
 import { AppSetting } from "../models/AppSetting";
+import { FeedSeen } from "../models/FeedSeen";
 import { Community, type ICommunity } from "../models/Community";
 import { FeedComment, FeedPost, FeedVote, type IFeedComment, type IFeedPost } from "../models/FeedPost";
 import { Membership, type IMembership } from "../models/Membership";
@@ -477,7 +479,9 @@ async function fullPosts(rows: Pick<IFeedPost, "_id">[]): Promise<IFeedPost[]> {
 /** Verified communities' posts (checked by hand by the Klique team) rank this much higher in your feed, and more among suggestions and reels. */
 const VERIFIED_LIFT = 1.5;
 const VERIFIED_SUGGEST_LIFT = 2.5;
-type RankedCommunity = { _id: Types.ObjectId; verified?: boolean; official?: boolean };
+type RankedCommunity = { _id: Types.ObjectId; verified?: boolean; official?: boolean; interest?: string };
+/** communities about something this person is into */
+const interestsOf = (list: RankedCommunity[], viewer: IUser) => new Set(list.filter((c) => c.interest && (viewer.interests ?? []).includes(c.interest as never)).map((c) => sid(c._id)));
 const verifiedSet = (list: RankedCommunity[]) => new Set(list.filter((c) => c.verified || c.official).map((c) => sid(c._id)));
 const liftedRank = (p: IFeedPost, now: number, verified: Set<string>, lift = VERIFIED_LIFT) => rank(p, now) * (verified.has(sid(p.communityId)) ? lift : 1);
 
@@ -509,6 +513,53 @@ function spaceOutText(ranked: IFeedPost[]): IFeedPost[] {
     }
   }
   return [...out, ...waiting];
+}
+
+/**
+ * Variety: never more than two in a row from the same community or the same person, so one busy community (or one
+ * keen poster) can't fill the screen. Ones that would make a third wait for the next gap. Deterministic.
+ */
+function spreadOut(ranked: IFeedPost[]): IFeedPost[] {
+  const out: IFeedPost[] = [];
+  const waiting: IFeedPost[] = [];
+  const third = (p: IFeedPost) => {
+    const [a, b] = [out[out.length - 1], out[out.length - 2]];
+    if (!a || !b) return false;
+    const c = sid(p.communityId);
+    const u = sid(p.authorId);
+    return (sid(a.communityId) === c && sid(b.communityId) === c) || (sid(a.authorId) === u && sid(b.authorId) === u);
+  };
+  for (const p of ranked) {
+    // something held back that fits now goes first
+    const i = waiting.findIndex((w) => !third(w));
+    if (i >= 0) out.push(...waiting.splice(i, 1));
+    if (third(p)) waiting.push(p);
+    else out.push(p);
+  }
+  return [...out, ...waiting];
+}
+
+/** shown before (on an earlier visit): this far down, so what's new comes first */
+const SEEN_SINK = 0.25;
+/** your interests: this much higher */
+const INTEREST_LIFT = 1.2;
+
+/** What Home or Reels showed this person before this visit began (`before`), for the last week. */
+async function seenBefore(userId: Types.ObjectId, where: "home" | "reels", before: number): Promise<Set<string>> {
+  const rows = await FeedSeen.find({ userId, where, at: { $lt: new Date(before) } }).select("postId").limit(5000).lean<{ postId: Types.ObjectId }[]>();
+  return new Set(rows.map((r) => sid(r.postId)));
+}
+
+/** Note what this page showed (after the answer has gone, never in its way). */
+function noteSeen(userId: Types.ObjectId, where: "home" | "reels", postIds: Types.ObjectId[]) {
+  if (!postIds.length) return;
+  const at = new Date();
+  const write = () => FeedSeen.bulkWrite(postIds.map((postId) => ({ updateOne: { filter: { userId, where, postId }, update: { $setOnInsert: { userId, where, postId, at } }, upsert: true } })), { ordered: false }).then(() => undefined, () => undefined);
+  try {
+    after(write);
+  } catch {
+    void write();
+  }
 }
 
 /** after how many of your own posts a suggested one comes in */
@@ -563,17 +614,20 @@ export async function reelsFeed(viewer: IUser, page: number, at?: number, start?
   const mine = await Membership.find({ userId: viewer._id, subcommunityId: null, status: "active" }).select("communityId").lean<Pick<IMembership, "communityId">[]>();
   const mineIds = mine.map((m) => m.communityId);
   const [communities, hidden] = await Promise.all([
-    Community.find(reelCommunities(mineIds)).sort({ verified: -1, official: -1 }).select("_id verified official").limit(800).lean<RankedCommunity[]>(),
+    Community.find(reelCommunities(mineIds)).sort({ verified: -1, official: -1 }).select("_id verified official interest").limit(800).lean<RankedCommunity[]>(),
     hiddenUserIds(viewer._id),
   ]);
   const now = at && at <= Date.now() && at > Date.now() - 24 * HOUR ? at : Date.now();
   const rows = await FeedPost.find({ communityId: { $in: communities.map((c) => c._id) }, "media.0": { $exists: true }, explicit: { $ne: true }, hiddenAt: null, createdAt: { $gte: new Date(now - 90 * 24 * HOUR), $lte: new Date(now) }, ...(hidden.length ? { authorId: { $nin: hidden } } : {}) }).select(RANK_FIELDS).sort({ createdAt: -1 }).limit(500).lean<IFeedPost[]>();
   const yours = new Set(mineIds.map(sid));
   const lifted = verifiedSet(communities);
-  const score = (p: IFeedPost) => liftedRank(p, now, lifted, VERIFIED_SUGGEST_LIFT) + (yours.has(sid(p.communityId)) ? 1 : 0);
+  // already shown on an earlier visit: further down; your interests: a little higher
+  const seen = await seenBefore(viewer._id, "reels", now);
+  const liked = interestsOf(communities, viewer);
+  const score = (p: IFeedPost) => (liftedRank(p, now, lifted, VERIFIED_SUGGEST_LIFT) + (yours.has(sid(p.communityId)) ? 1 : 0)) * (seen.has(sid(p._id)) ? SEEN_SINK : 1) * (liked.has(sid(p.communityId)) ? INTEREST_LIFT : 1);
   const byScore = (a: IFeedPost, b: IFeedPost) => score(b) - score(a) || (sid(b._id) > sid(a._id) ? 1 : -1);
-  const videos = rows.filter((p) => p.media.some((m) => m.kind === "video")).sort(byScore);
-  const photos = rows.filter((p) => !p.media.some((m) => m.kind === "video")).sort(byScore);
+  const videos = spreadOut(rows.filter((p) => p.media.some((m) => m.kind === "video")).sort(byScore));
+  const photos = spreadOut(rows.filter((p) => !p.media.some((m) => m.kind === "video")).sort(byScore));
   // three videos, then a photo; whichever runs out, the other carries on
   const mixed: IFeedPost[] = [];
   for (let v = 0, ph = 0; v < videos.length || ph < photos.length; ) {
@@ -585,6 +639,7 @@ export async function reelsFeed(viewer: IUser, page: number, at?: number, start?
   const tapped = startRow && (await Community.exists({ _id: startRow.communityId, explicit: { $ne: true }, $or: [{ _id: { $in: mineIds } }, { privacy: "public", adult: { $ne: true } }] })) ? startRow : null;
   const ordered = tapped ? [tapped, ...mixed.filter((p) => sid(p._id) !== sid(tapped._id))] : mixed;
   const slice = await fullPosts(ordered.slice((page - 1) * PAGE, page * PAGE));
+  noteSeen(viewer._id, "reels", slice.map((p) => p._id));
   return { items: await toPosts(slice, viewer), page, hasMore: ordered.length > page * PAGE, at: now };
 }
 
@@ -593,12 +648,13 @@ export async function homeFeed(viewer: IUser, page: number, at?: number): Promis
   const mineIds = mine.map((m) => m.communityId);
   const [open, hidden, elsewhere] = await Promise.all([
     // 18+ communities' posts stay inside them
-    Community.find({ _id: { $in: mineIds }, feedPolicy: { $in: ["admins", "members"] }, adult: { $ne: true } }).select("_id verified official").lean<RankedCommunity[]>(),
+    Community.find({ _id: { $in: mineIds }, feedPolicy: { $in: ["admins", "members"] }, adult: { $ne: true } }).select("_id verified official interest").lean<RankedCommunity[]>(),
     hiddenUserIds(viewer._id),
     // verified ones first, so a long list never leaves them out
-    Community.find({ _id: { $nin: mineIds }, privacy: "public", feedPolicy: { $in: ["admins", "members"] }, $or: [{ minPointsJoin: { $exists: false } }, { minPointsJoin: { $lte: viewer.points ?? 0 } }] }).sort({ verified: -1, official: -1 }).select("_id verified official").limit(500).lean<RankedCommunity[]>(),
+    Community.find({ _id: { $nin: mineIds }, privacy: "public", feedPolicy: { $in: ["admins", "members"] }, $or: [{ minPointsJoin: { $exists: false } }, { minPointsJoin: { $lte: viewer.points ?? 0 } }] }).sort({ verified: -1, official: -1 }).select("_id verified official interest").limit(500).lean<RankedCommunity[]>(),
   ]);
   const lifted = verifiedSet([...open, ...elsewhere]);
+  const liked = interestsOf([...open, ...elsewhere], viewer);
   // later pages rank as of page 1 and leave out what was posted since, so the pages line up
   const now = at && at <= Date.now() && at > Date.now() - 24 * HOUR ? at : Date.now();
   const notHidden = { hiddenAt: null, ...(hidden.length ? { authorId: { $nin: hidden } } : {}) };
@@ -608,20 +664,25 @@ export async function homeFeed(viewer: IUser, page: number, at?: number): Promis
   ]);
   // ties broken by id, so every page sees the same order and pages never overlap
   const idOrder = (a: IFeedPost, b: IFeedPost) => (sid(b._id) > sid(a._id) ? 1 : sid(b._id) < sid(a._id) ? -1 : 0);
-  pool.sort((a, b) => liftedRank(b, now, lifted) - liftedRank(a, now, lifted) || idOrder(a, b));
+  // shown on an earlier visit: further down (what's new comes first); your interests: a little higher
+  const seen = await seenBefore(viewer._id, "home", now);
+  const adjust = (p: IFeedPost) => (seen.has(sid(p._id)) ? SEEN_SINK : 1) * (liked.has(sid(p.communityId)) ? INTEREST_LIFT : 1);
+  const homeRank = (p: IFeedPost, lift?: number) => liftedRank(p, now, lifted, lift) * adjust(p);
+  pool.sort((a, b) => homeRank(b) - homeRank(a) || idOrder(a, b));
   // what's taking off, pictures and video first
-  suggestions.sort((a, b) => Number(b.media.length > 0) - Number(a.media.length > 0) || liftedRank(b, now, lifted, VERIFIED_SUGGEST_LIFT) - liftedRank(a, now, lifted, VERIFIED_SUGGEST_LIFT) || idOrder(a, b));
+  suggestions.sort((a, b) => Number(b.media.length > 0) - Number(a.media.length > 0) || homeRank(b, VERIFIED_SUGGEST_LIFT) - homeRank(a, VERIFIED_SUGGEST_LIFT) || idOrder(a, b));
 
   // yours with a suggestion after every few, then suggestions only (the same order every time, so pages line up)
   const merged: { post: IFeedPost; trending: boolean }[] = [];
   let s = 0;
-  spaceOutText(pool).forEach((p, i) => {
+  spaceOutText(spreadOut(pool)).forEach((p, i) => {
     merged.push({ post: p, trending: false });
     if ((i + 1) % SUGGEST_EVERY === 0 && s < suggestions.length) merged.push({ post: suggestions[s++], trending: true });
   });
   while (s < suggestions.length) merged.push({ post: suggestions[s++], trending: true });
 
   const slice = merged.slice((page - 1) * PAGE, page * PAGE);
+  noteSeen(viewer._id, "home", slice.map((x) => x.post._id));
   const dtos = await toPosts(await fullPosts(slice.map((x) => x.post)), viewer);
   const byId = new Map(dtos.map((d) => [d.id, d]));
   const items: HomeFeedItem[] = slice.flatMap((x) => (byId.has(sid(x.post._id)) ? [{ post: byId.get(sid(x.post._id))!, trending: x.trending }] : []));
