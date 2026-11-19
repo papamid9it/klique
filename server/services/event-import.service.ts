@@ -14,6 +14,7 @@ import { assertScrapable } from "./finder/http";
 import { eventbriteOrgId } from "./finder/providers";
 import { categoryGuesser, createRun, cronFinder, dedupeKeyOf, stepRun } from "./finder/run";
 import { aiOn, readFlyerWithAi } from "./finder/ai";
+import { instagramProfileUrl, instagramUsername } from "./finder/instagram";
 import { ApiError } from "../http/errors";
 import { getCityEntry } from "@/lib/places";
 
@@ -278,6 +279,13 @@ export async function listSources(): Promise<SourceDTO[]> {
 }
 
 export async function addSource(url: string, name: string): Promise<SourceDTO> {
+  // an Instagram account ("@name" or its profile link): read through Meta's API, not scraped
+  const ig = instagramUsername(url);
+  if (ig) {
+    const profile = instagramProfileUrl(ig);
+    const s = await EventSource.findOneAndUpdate({ url: profile }, { $setOnInsert: { url: profile, name: name.trim().slice(0, 120) || `@${ig}` } }, { upsert: true, returnDocument: "after" }).lean<IEventSource>();
+    return sourceDto(s!);
+  }
   const u = new URL(checkUrl(url));
   const s = await EventSource.findOneAndUpdate({ url: u.toString() }, { $setOnInsert: { url: u.toString(), name: name.trim().slice(0, 120) || u.hostname.replace(/^www\./, "") } }, { upsert: true, returnDocument: "after" }).lean<IEventSource>();
   return sourceDto(s!);

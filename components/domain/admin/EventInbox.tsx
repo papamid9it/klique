@@ -388,7 +388,7 @@ function Sources({ busy, onRun }: { busy: boolean; onRun: (r: FinderRunDTO) => v
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h3 className="text-[15px] font-semibold">Pages checked every night</h3>
-          <p className="mt-1 text-sm text-ink-muted">Organisers&apos; and venues&apos; listing pages, .ics calendars, RSS feeds, and Eventbrite organiser pages (needs EVENTBRITE_TOKEN). Read politely: we follow robots.txt and wait between requests.</p>
+          <p className="mt-1 text-sm text-ink-muted">Organisers&apos; and venues&apos; listing pages, .ics calendars, RSS feeds, Eventbrite organiser pages (needs EVENTBRITE_TOKEN), and Instagram business or creator accounts as @name (needs the Instagram and AI keys: their new posts are read by the AI). Read politely: we follow robots.txt and wait between requests.</p>
         </div>
         <Button size="sm" onClick={runNow} loading={working === "run"} disabled={!data?.length || busy}>
           <Icon name="clock" size={14} /> Check now
@@ -421,7 +421,7 @@ function Sources({ busy, onRun }: { busy: boolean; onRun: (r: FinderRunDTO) => v
         )}
       </div>
       <form onSubmit={add} className="mt-3 grid gap-2 sm:grid-cols-[1fr_12rem_auto] sm:items-end">
-        <TextField label="Page, calendar or feed" type="url" inputMode="url" placeholder="https://…" value={url} onChange={(e) => setUrl(e.target.value)} required />
+        <TextField label="Page, calendar, feed or @instagram" inputMode="url" placeholder="https://… or @venuename" value={url} onChange={(e) => setUrl(e.target.value)} required />
         <TextField label="Name (optional)" value={name} onChange={(e) => setName(e.target.value)} maxLength={120} />
         <Button type="submit" loading={working === "add"}>
           <Icon name="plus" size={14} /> Add

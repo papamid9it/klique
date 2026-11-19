@@ -87,6 +87,8 @@ export interface IEventSource {
   lastRunAt: Date | null;
   lastFound: number;
   lastError: string;
+  /** an Instagram account: the newest post already read (next time, only newer ones) */
+  lastPostAt?: Date | null;
   createdAt: Date;
 }
 
@@ -97,6 +99,7 @@ const EventSourceSchema = new Schema<IEventSource>(
     lastRunAt: { type: Date, default: null },
     lastFound: { type: Number, default: 0 },
     lastError: { type: String, default: "" },
+    lastPostAt: { type: Date, default: null },
   },
   { timestamps: { createdAt: true, updatedAt: false } },
 );

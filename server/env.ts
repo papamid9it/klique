@@ -121,6 +121,10 @@ export const cronSecret = (): string | null => process.env.CRON_SECRET?.trim() |
 /** Optional: Ticketmaster Discovery API key (developer.ticketmaster.com). Without it the finder skips Ticketmaster. */
 export const ticketmasterKey = (): string | null => process.env.TICKETMASTER_API_KEY?.trim() || null;
 /** Optional: Eventbrite private token (eventbrite.com/platform). Needed to read organisers' events from Eventbrite's API. */
+/** Instagram accounts to watch (Meta Graph API, Business Discovery): Klique's business account's token and id */
+export const instagramToken = (): string | null => process.env.INSTAGRAM_ACCESS_TOKEN?.trim() || null;
+export const instagramUserId = (): string | null => process.env.INSTAGRAM_USER_ID?.trim() || null;
+export const metaGraphVersion = (): string => process.env.META_GRAPH_VERSION?.trim() || "v23.0";
 /** Claude, for the event finder (reading pages and flyers, searching the web); none: those parts are off */
 export const anthropicKey = (): string | null => process.env.ANTHROPIC_API_KEY?.trim() || null;
 export const eventbriteToken = (): string | null => process.env.EVENTBRITE_TOKEN?.trim() || null;

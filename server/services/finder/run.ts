@@ -9,6 +9,7 @@ import { assertScrapable, politeFetch } from "./http";
 import { cityInText, feedLinks, fromIcs, fromSchemaOrg, isEvent, itemListLinks, jsonLd, looksLikeFeed, looksLikeIcs, microdata, siteNameOf, type Candidate } from "./parse";
 import { eventbriteOrgId, eventbriteOrganizer, ticketmaster } from "./providers";
 import { aiOn, readPageWithAi, searchEventsWithAi } from "./ai";
+import { instagramEvents, instagramUsername } from "./instagram";
 
 /**
  * The finder's job runner. "Find events" only records a job (a FinderRun with one task per source); the work
@@ -150,6 +151,8 @@ async function work(run: IFinderRun, task: IFinderTask): Promise<{ events: Candi
   if (task.kind === "ai_search") return { events: await searchEventsWithAi(q), follow: [] };
   const source = task.kind === "source" ? await EventSource.findById(task.target).lean<IEventSource>() : null;
   const url = source?.url ?? task.target;
+  // a watched Instagram account: its new posts through Meta's API, read by the AI (never scraped)
+  if (source && instagramUsername(url)) return { events: await instagramEvents(source, q.country), follow: [], source };
   assertScrapable(new URL(url));
   const page = await politeFetch(url);
   if (looksLikeIcs(page.type, page.body)) return { events: fromIcs(page.body, page.url, q.country), follow: [], source };
