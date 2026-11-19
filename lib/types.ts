@@ -25,7 +25,7 @@ export interface Paginated<T> {
 
 /** A new community's first steps (for its owner): each says whether it's done. */
 export interface CommunitySetupDTO {
-  /** a description of 30+ characters */
+  /** it has a description */
   about: boolean;
   /** the owner wrote in a chat room or Posts */
   welcome: boolean;

@@ -8,7 +8,7 @@ import { MediaFitPicker } from "./MediaFitPicker";
 import type { MediaFit } from "@/lib/constants";
 import { useApi } from "@/lib/hooks/useApi";
 import { UploadService } from "@/app/services/UploadService";
-import { MOCK_IMAGES, MOCK_VIDEOS, looksLikeVideo } from "@/components/domain/topics/TopicMedia";
+import { MOCK_IMAGES, MOCK_VIDEOS } from "@/components/domain/topics/TopicMedia";
 import { useToast } from "@/components/providers/ToastProvider";
 import { Button } from "@/components/ui/Button";
 import { TextArea, TextField } from "@/components/ui/Field";
@@ -52,7 +52,6 @@ export function PostComposer({ slug, communityName, explicitAllowed, onClose, on
   const [plainBackdrop, setPlainBackdrop] = useState(false);
   // how the picture or video sits in the post's frame (cover by default)
   const [mediaFit, setMediaFit] = useState<MediaFit>("cover");
-  const [link, setLink] = useState("");
   const [progress, setProgress] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   // one id for this "New post" box: sending it twice (double click, slow network) still makes one post
@@ -172,24 +171,6 @@ export function PostComposer({ slug, communityName, explicitAllowed, onClose, on
                 Uploading {Math.round((progress ?? 0) * 100)}%
               </span>
             )}
-          </div>
-          <div className="mt-2 flex gap-2">
-            <input type="url" value={link} onChange={(e) => setLink(e.target.value)} placeholder="Or paste a picture or video link (https://…)" aria-label="Picture or video link" className="h-9 min-w-0 flex-1 rounded-control border border-line bg-surface px-3 text-sm placeholder:text-ink-muted/70 focus:border-accent-text focus:outline-none" />
-            <Button
-              size="sm"
-              variant="secondary"
-              disabled={!/^https?:\/\//i.test(link.trim())}
-              onClick={() => {
-                const url = link.trim();
-                const isVideo = looksLikeVideo(url);
-                if ((isVideo && media.length > 0) || (!isVideo && hasVideo)) return toast("A video goes on its own, without pictures.", "error");
-                if (media.length >= LIMITS.feedMedia) return toast(`Up to ${LIMITS.feedMedia} pictures.`, "error");
-                setMedia((x) => [...x, { kind: isVideo ? "video" : "image", url, poster: null }]);
-                setLink("");
-              }}
-            >
-              Add
-            </Button>
           </div>
         </fieldset>
         ) : (

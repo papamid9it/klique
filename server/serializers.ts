@@ -26,7 +26,8 @@ import { Event, type IEvent } from "./models/Event";
 import { FeedPost } from "./models/FeedPost";
 import { Membership, type IMembership } from "./models/Membership";
 import { MembershipRequest } from "./models/MembershipRequest";
-import { Post, type IPost } from "./models/Post";
+import type { IPost } from "./models/Post";
+import { Channel, ChannelMessage } from "./models/Channel";
 import { Rsvp, SavedEvent } from "./models/Rsvp";
 import { Subcommunity, type ISubcommunity } from "./models/Subcommunity";
 import { User, type IUser } from "./models/User";
@@ -222,17 +223,19 @@ export function communityCard(c: ICommunity, access: SpaceAccess): CommunityCard
 const SETUP_DAYS = 14;
 
 /**
- * The owner's first-steps checklist for a new community: a description people can read, a first message or post,
+ * The owner's first-steps checklist for a new community: a description (any), a first message or post,
  * five people besides them, and a first event. Only for the owner, only in the first two weeks.
  */
 async function setupOf(c: ICommunity, access: SpaceAccess): Promise<CommunitySetupDTO | null> {
   if (access.role !== "owner" || c.official || Date.now() - +c.createdAt > SETUP_DAYS * 86_400_000) return null;
+  // chat: any message of theirs in one of its rooms (by room, so the {channelId, authorId} index does the work)
+  const rooms = await Channel.find({ communityId: c._id }).distinct("_id");
   const [chat, post, event] = await Promise.all([
-    Post.exists({ communityId: c._id, authorId: c.ownerId }),
+    ChannelMessage.exists({ channelId: { $in: rooms }, authorId: c.ownerId, deletedAt: null }),
     FeedPost.exists({ communityId: c._id, authorId: c.ownerId }),
     Event.exists({ communityId: c._id }),
   ]);
-  return { about: (c.description ?? "").trim().length >= 30, welcome: !!(chat || post), invited: (c.memberCount ?? 0) >= 6, event: !!event };
+  return { about: !!(c.description ?? "").trim(), welcome: !!(chat || post), invited: (c.memberCount ?? 0) >= 6, event: !!event };
 }
 
 export async function toCommunityDetail(
