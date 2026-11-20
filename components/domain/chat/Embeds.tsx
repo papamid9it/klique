@@ -85,7 +85,7 @@ function PlayableVideo({ provider, thumb, src, href, title }: { provider: string
 function PreviewCard({ url, data, near }: { url: string; data: LinkPreviewDTO; near: boolean }) {
   return (
     <div className="max-w-md overflow-hidden rounded-card border border-line border-l-[3px] border-l-accent bg-surface p-3">
-      <p className="truncate text-[11px] font-semibold tracking-wide text-ink-muted uppercase">{data.siteName}</p>
+      <p className="truncate text-[12px] font-semibold tracking-wide text-ink-muted uppercase">{data.siteName}</p>
       {data.title && (
         <a href={url} target="_blank" rel="noopener noreferrer nofollow ugc" className="mt-1 line-clamp-2 block text-[15px] leading-snug font-semibold text-accent-text hover:underline">
           {data.title}

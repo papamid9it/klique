@@ -50,7 +50,7 @@ export function HypeOverview() {
                 <Avatar name={p.user?.displayName ?? "?"} src={p.user?.avatarUrl ?? null} size={32} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-semibold">{p.user ? `@${p.user.handle}` : "Deleted account"}</span>
-                  <span className="block font-mono text-[11px] text-ink-muted">{day(p.paidAt ?? p.createdAt)}</span>
+                  <span className="block font-mono text-[12px] text-ink-muted">{day(p.paidAt ?? p.createdAt)}</span>
                 </span>
                 <span className="font-mono text-sm">{n(p.hype)} Hype</span>
                 <span className="w-20 text-right font-mono text-sm">{formatPrice(p.amount, "NGN")}</span>
@@ -253,7 +253,7 @@ export function PointsPeople({ initial }: { initial?: string }) {
                   <li key={t.id} className="flex items-center gap-3 px-4 py-2.5">
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm">{t.note}</span>
-                      <span className="block font-mono text-[11px] text-ink-muted">{day(t.createdAt)} · {t.kind} · balance {n(t.balanceAfter)}</span>
+                      <span className="block font-mono text-[12px] text-ink-muted">{day(t.createdAt)} · {t.kind} · balance {n(t.balanceAfter)}</span>
                     </span>
                     <span className={t.amount > 0 ? "font-mono text-sm font-semibold text-success" : "font-mono text-sm text-ink-muted"}>
                       {t.amount > 0 ? "+" : "−"}
@@ -276,11 +276,11 @@ export function PointsPeople({ initial }: { initial?: string }) {
               <div className="grid grid-cols-2 divide-x divide-line border-t border-line text-center">
                 <span className="px-4 py-2.5">
                   <span className="block font-mono text-lg font-semibold">{n(person.hype)}</span>
-                  <span className="text-[11px] text-ink-muted">Hype (bought)</span>
+                  <span className="text-[12px] text-ink-muted">Hype (bought)</span>
                 </span>
                 <span className="px-4 py-2.5">
                   <span className="block font-mono text-lg font-semibold">{n(person.points)}</span>
-                  <span className="text-[11px] text-ink-muted">points (earned)</span>
+                  <span className="text-[12px] text-ink-muted">points (earned)</span>
                 </span>
               </div>
               {person.unlocks.length > 0 && (

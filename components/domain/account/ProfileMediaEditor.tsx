@@ -121,7 +121,7 @@ export function ProfileMediaEditor({ me }: { me: UserMe }) {
           Gallery
         </h3>
         {c && (
-          <span className="rounded-full border border-line px-2.5 py-0.5 text-[11.5px] text-ink-muted">
+          <span className="rounded-full border border-line px-2.5 py-0.5 text-[12px] text-ink-muted">
             {used} of {slots} used · {PLAN_NAMES[p]}
           </span>
         )}
@@ -164,15 +164,15 @@ export function ProfileMediaEditor({ me }: { me: UserMe }) {
                   <button type="button" onClick={() => view(items, i)} aria-label={`View ${m.kind === "video" ? "video" : "photo"} ${i + 1} bigger`} className="group/zoom block size-full cursor-zoom-in">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img loading="lazy" src={cdn(m.kind === "video" ? (m.poster ?? m.url) : m.url, { w: 480 })} alt="" draggable={false} className="size-full object-cover" />
-                    <span aria-hidden="true" className="pointer-events-none absolute right-2 bottom-2 inline-flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-[10.5px] font-semibold text-white opacity-0 transition group-hover/zoom:opacity-100">
+                    <span aria-hidden="true" className="pointer-events-none absolute right-2 bottom-2 inline-flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-[12px] font-semibold text-white opacity-0 transition group-hover/zoom:opacity-100">
                       <Icon name="zoom-in" size={11} /> Zoom
                     </span>
                   </button>
                   <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between p-2">
                     <span className="flex gap-1">
-                      {i === 0 && <span className="rounded-full bg-black/65 px-2 py-0.5 text-[10.5px] font-semibold text-white">Main</span>}
+                      {i === 0 && <span className="rounded-full bg-black/65 px-2 py-0.5 text-[12px] font-semibold text-white">Main</span>}
                       {m.kind === "video" && (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-black/65 px-2 py-0.5 text-[10.5px] font-semibold text-white">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-black/65 px-2 py-0.5 text-[12px] font-semibold text-white">
                           <Icon name="play" size={9} /> Video
                         </span>
                       )}

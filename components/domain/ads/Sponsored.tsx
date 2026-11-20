@@ -62,7 +62,7 @@ function Label({ ad, onReport }: { ad: AdDTO; onReport: () => void }) {
         {ad.event ? "Promoted" : "Sponsored"}
         {ad.advertiser ? ` · ${ad.advertiser}` : ""}
       </p>
-      <button type="button" onClick={onReport} className="shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[10px] text-ink-muted hover:bg-raised hover:text-ink" aria-label={`Report this ad from ${ad.advertiser || "this advertiser"}`}>
+      <button type="button" onClick={onReport} className="shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[12px] text-ink-muted hover:bg-raised hover:text-ink" aria-label={`Report this ad from ${ad.advertiser || "this advertiser"}`}>
         Ad · Report
       </button>
     </div>
@@ -215,7 +215,7 @@ export function SponsoredCommunity({ ad }: { ad: AdDTO }) {
         </h3>
         {ad.body && <p className="mt-1 line-clamp-2 text-[13px] text-ink-muted">{ad.body}</p>}
         <div className="mt-3.5 flex items-center justify-between border-t border-line pt-3">
-          <span className="font-mono text-[11px] text-ink-muted">{membersText(c.memberCount)}</span>
+          <span className="font-mono text-[12px] text-ink-muted">{membersText(c.memberCount)}</span>
           <AdLink ad={ad} className="inline-flex h-8 items-center gap-1 rounded-full bg-ink px-3.5 text-[13px] font-semibold text-canvas hover:opacity-90">
             {ad.ctaLabel}
           </AdLink>

@@ -9,7 +9,7 @@ export function CountBadge({ n, mention, className, label }: { n: number; mentio
   return (
     <span
       aria-label={label ?? `${n} unread${mention ? ", including mentions of you" : ""}`}
-      className={cx("inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full px-1.5 text-[11px] leading-none font-bold tabular-nums", mention ? "bg-danger text-white" : "bg-accent text-accent-ink", className)}
+      className={cx("inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full px-1.5 text-[12px] leading-none font-bold tabular-nums", mention ? "bg-danger text-white" : "bg-accent text-accent-ink", className)}
     >
       {n > 99 ? "99+" : n}
     </span>

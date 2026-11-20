@@ -10,7 +10,7 @@ import { cx } from "@/components/ui/cx";
 import { AccountSheet } from "./AccountSheet";
 
 /** a big tap target each, icon over a short label */
-const TAB = "flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-control px-1 pt-1 text-[10.5px] leading-tight font-medium transition active:bg-raised";
+const TAB = "flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-control px-1 pt-1 text-[12px] leading-tight font-medium transition active:bg-raised";
 
 /**
  * Phones: the bottom bar. Home, Events, Kliques, Communities, and Me (your picture): Me opens the account menu as a

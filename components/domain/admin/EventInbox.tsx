@@ -405,7 +405,7 @@ function Sources({ busy, onRun }: { busy: boolean; onRun: (r: FinderRunDTO) => v
               <li key={s.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2.5">
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{s.name}</p>
-                  <a href={s.url} target="_blank" rel="noreferrer" className="block truncate font-mono text-[11px] text-ink-muted hover:underline">
+                  <a href={s.url} target="_blank" rel="noreferrer" className="block truncate font-mono text-[12px] text-ink-muted hover:underline">
                     {s.url}
                   </a>
                   <p className={`text-xs ${s.lastError ? "text-danger" : "text-ink-muted"}`}>{s.lastRunAt ? (s.lastError ? `Last check failed: ${s.lastError}` : `Checked ${relativeStamp(s.lastRunAt)} · ${s.lastFound} found`) : "Not checked yet"}</p>
@@ -591,7 +591,7 @@ function QueueRow({ d, checked, onCheck, onSaved, onOpen }: { d: DraftDTO; check
       </button>
       <div className="min-w-0">
         <input defaultValue={d.title} aria-label="Title" onBlur={(e) => e.target.value.trim() !== d.title && void save({ title: e.target.value })} className={cx(input, "font-semibold")} />
-        <p className="truncate px-2 font-mono text-[11px] text-ink-muted">
+        <p className="truncate px-2 font-mono text-[12px] text-ink-muted">
           {providerLabel[d.provider] ?? ""} ·{" "}
           <a href={d.sourceUrl} target="_blank" rel="noreferrer" className="hover:underline">
             {d.sourceName || new URL(d.sourceUrl).hostname}
@@ -608,7 +608,7 @@ function QueueRow({ d, checked, onCheck, onSaved, onOpen }: { d: DraftDTO; check
       </select>
       <div className="col-start-2 min-w-0 lg:col-start-auto">
         <input defaultValue={d.venue} aria-label="Venue" placeholder="Venue" onBlur={(e) => e.target.value !== d.venue && void save({ venue: e.target.value })} className={input} />
-        <p className="truncate px-2 text-[11px] text-ink-muted">{d.online ? "Online" : placeLabel({ country: d.country, region: d.region, city: d.city })}</p>
+        <p className="truncate px-2 text-[12px] text-ink-muted">{d.online ? "Online" : placeLabel({ country: d.country, region: d.region, city: d.city })}</p>
       </div>
       <p className="col-start-2 px-2 text-sm lg:col-start-auto">{formatPrice(d.price, d.currency)}</p>
       <Button size="sm" onClick={onOpen} className="col-start-2 justify-self-start lg:col-start-auto">
@@ -685,7 +685,7 @@ function ReviewQueue({ version, onChanged }: { version: number; onChanged: () =>
           </Button>
         </div>
       </div>
-      <div className="hidden grid-cols-[auto_3.5rem_minmax(0,2.2fr)_11.5rem_8.5rem_minmax(0,1.4fr)_6rem_auto] gap-x-3 border-b border-line px-3 py-2 text-[11px] font-semibold tracking-wide text-ink-muted uppercase lg:grid">
+      <div className="hidden grid-cols-[auto_3.5rem_minmax(0,2.2fr)_11.5rem_8.5rem_minmax(0,1.4fr)_6rem_auto] gap-x-3 border-b border-line px-3 py-2 text-[12px] font-semibold tracking-wide text-ink-muted uppercase lg:grid">
         <span className="w-4" />
         <span />
         <span className="px-2">Event</span>
@@ -732,7 +732,7 @@ function DraftRow({ d }: { d: DraftDTO }) {
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <InterestChip id={d.interest} short />
-          <span className="font-mono text-[11px] text-ink-muted">{d.sourceName}</span>
+          <span className="font-mono text-[12px] text-ink-muted">{d.sourceName}</span>
         </div>
         <h3 className="mt-1 truncate text-[15px] font-semibold">{d.title || "Untitled"}</h3>
         <p className="truncate text-sm text-ink-muted">

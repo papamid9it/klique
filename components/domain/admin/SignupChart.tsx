@@ -63,7 +63,7 @@ export function SignupChart({ data, unit = "sign-ups" }: { data: { day: string; 
             );
           })}
         </svg>
-        <span className="pointer-events-none absolute top-0 left-0 -translate-y-1/2 bg-surface pr-1 font-mono text-[10px] text-ink-muted">{niceMax}</span>
+        <span className="pointer-events-none absolute top-0 left-0 -translate-y-1/2 bg-surface pr-1 font-mono text-[12px] text-ink-muted">{niceMax}</span>
         {tip && hover !== null && (
           <div
             role="status"
@@ -75,7 +75,7 @@ export function SignupChart({ data, unit = "sign-ups" }: { data: { day: string; 
           </div>
         )}
       </div>
-      <div className="mt-2 flex justify-between font-mono text-[10px] text-ink-muted">
+      <div className="mt-2 flex justify-between font-mono text-[12px] text-ink-muted">
         <span>{fmtDay(data[0].day, { day: "numeric", month: "short" })}</span>
         <span>{fmtDay(data[Math.floor(data.length / 2)].day, { day: "numeric", month: "short" })}</span>
         <span>Today</span>

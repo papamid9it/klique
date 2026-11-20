@@ -68,8 +68,8 @@ export function PlansCard() {
   return (
       <Link href="/pricing" className="group block rounded-card border border-line bg-surface p-5 transition hover:border-ink-muted/60" aria-labelledby="rail-pro">
         <p className="eyebrow flex items-center gap-2">
-          <span className="rounded-full bg-accent px-1.5 py-px text-[10px] font-bold tracking-wide text-accent-ink">PRO</span>
-          <span className="rounded-full border border-accent-text/60 px-1.5 py-px text-[10px] font-bold tracking-wide text-accent-text">LITE</span>
+          <span className="rounded-full bg-accent px-1.5 py-px text-[12px] font-bold tracking-wide text-accent-ink">PRO</span>
+          <span className="rounded-full border border-accent-text/60 px-1.5 py-px text-[12px] font-bold tracking-wide text-accent-text">LITE</span>
         </p>
         <h2 id="rail-pro" className="mt-2.5 text-[15px] leading-snug font-semibold">
           Start more kliques, show more of you.

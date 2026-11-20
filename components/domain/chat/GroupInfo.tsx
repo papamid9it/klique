@@ -65,7 +65,7 @@ export function GroupInfo({ group: g, onNavigate }: { group: SubcommunityDTO; on
                     <Avatar name={s.user.displayName} src={s.user.avatarUrl} frame={s.user.avatarFrame} size={36} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-semibold"><UserName name={s.user.displayName} effect={s.user.nameEffect} /></span>
-                      <span className="block truncate font-mono text-[11px] text-ink-muted">@{s.user.handle}</span>
+                      <span className="block truncate font-mono text-[12px] text-ink-muted">@{s.user.handle}</span>
                     </span>
                     <RoleBadge role={s.role} />
                   </ProfileTrigger>

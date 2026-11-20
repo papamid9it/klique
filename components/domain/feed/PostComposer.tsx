@@ -244,13 +244,13 @@ function TextFields({ title, setTitle, caption, setCaption, textBg, setTextBg, c
           {style === "card" ? (
             <TextCard post={{ caption: text || "Your text here", textBg }} className="[&_p]:text-[12px]" />
           ) : (
-            <div className="max-h-44 overflow-hidden rounded-control border border-line bg-surface p-2.5 [&_h3]:text-[12px] [&_p]:text-[10.5px]">
+            <div className="max-h-44 overflow-hidden rounded-control border border-line bg-surface p-2.5 [&_h3]:text-[12px] [&_p]:text-[12px]">
               <LongPost post={{ title: title.trim() || "Your title", caption: text }} clamp />
             </div>
           )}
         </div>
         <div className="min-w-0 flex-1 space-y-2">
-          <p className="font-mono text-[11.5px] text-ink-muted">
+          <p className="font-mono text-[12px] text-ink-muted">
             {text.length}/{TEXT_CARD_MAX} · {style === "card" ? "shows as a colour card" : "shows as a text post with a title"}
           </p>
           {style === "card" && (

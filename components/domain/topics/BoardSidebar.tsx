@@ -51,11 +51,11 @@ export function BoardSidebar({ slug, communityId, board, onBoardChanged }: { slu
         {board.description && <p className="mt-1 text-sm text-ink-muted">{board.description}</p>}
         <dl className="mt-3 grid grid-cols-2 gap-2 text-[13px]">
           <div className="rounded-control bg-raised px-3 py-2">
-            <dt className="text-[11px] text-ink-muted">Topics</dt>
+            <dt className="text-[12px] text-ink-muted">Topics</dt>
             <dd className="font-mono text-base font-semibold">{board.topicCount}</dd>
           </div>
           <div className="rounded-control bg-raised px-3 py-2">
-            <dt className="text-[11px] text-ink-muted">Who can post</dt>
+            <dt className="text-[12px] text-ink-muted">Who can post</dt>
             <dd className="font-semibold">{board.postPolicy === "admins" ? "Admins" : "Members"}</dd>
           </div>
         </dl>
@@ -79,7 +79,7 @@ export function BoardSidebar({ slug, communityId, board, onBoardChanged }: { slu
                   <span className="mt-px w-4 shrink-0 font-mono text-[12px] font-semibold text-ink-muted">{i + 1}</span>
                   <span className="min-w-0 flex-1">
                     <span className="line-clamp-2 text-[13.5px] font-medium">{t.title}</span>
-                    <span className="mt-0.5 flex gap-3 font-mono text-[11px] text-ink-muted">
+                    <span className="mt-0.5 flex gap-3 font-mono text-[12px] text-ink-muted">
                       <span>♥ {t.likeCount}</span>
                       <span>💬 {t.commentCount}</span>
                     </span>
@@ -109,7 +109,7 @@ export function BoardSidebar({ slug, communityId, board, onBoardChanged }: { slu
                     <span className="block truncate text-[13.5px] font-semibold">
                       <UserName name={c.user.displayName} effect={c.user.nameEffect} />
                     </span>
-                    <span className="block font-mono text-[11px] text-ink-muted">
+                    <span className="block font-mono text-[12px] text-ink-muted">
                       {[c.topics ? `${c.topics} ${c.topics === 1 ? "topic" : "topics"}` : "", c.comments ? `${c.comments} ${c.comments === 1 ? "comment" : "comments"}` : ""].filter(Boolean).join(" · ")}
                     </span>
                   </span>
@@ -134,12 +134,12 @@ export function BoardSidebar({ slug, communityId, board, onBoardChanged }: { slu
               <li key={e.id}>
                 <Link href={`/events/${e.id}`} className="flex items-center gap-3 rounded-control px-2 py-1.5 transition hover:bg-raised">
                   <span className="flex w-11 shrink-0 flex-col items-center rounded-control bg-raised py-1 leading-none">
-                    <span className="text-[10px] font-semibold text-accent-text uppercase">{formatDateShort(e.startsAt, e.timeZone).split(" ")[2]}</span>
+                    <span className="text-[12px] font-semibold text-accent-text uppercase">{formatDateShort(e.startsAt, e.timeZone).split(" ")[2]}</span>
                     <span className="text-base font-semibold">{formatDateShort(e.startsAt, e.timeZone).split(" ")[1]}</span>
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[13.5px] font-medium">{e.title}</span>
-                    <span className="block truncate text-[11.5px] text-ink-muted">
+                    <span className="block truncate text-[12px] text-ink-muted">
                       {formatTime(e.startsAt, e.timeZone)} · {e.online ? "Online" : e.venue}
                     </span>
                   </span>
@@ -215,7 +215,7 @@ function Rules({ slug, board, canEdit, onSaved }: { slug: string; board: BoardDT
             className="w-full resize-y rounded-control border border-line bg-raised px-3 py-2 text-[13.5px] text-ink placeholder:text-ink-muted/70 focus:border-accent-text focus:outline-none"
           />
           <div className="mt-2 flex items-center justify-between gap-2">
-            <span className="font-mono text-[11px] text-ink-muted">
+            <span className="font-mono text-[12px] text-ink-muted">
               {text.length}/{LIMITS.boardRules}
             </span>
             <span className="flex gap-2">

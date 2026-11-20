@@ -318,8 +318,8 @@ function GiftTray({ target, anchor, initial, onClose, onSent }: { target: GiftTa
                 className={cx("flex flex-col items-center gap-0.5 rounded-control p-1.5 transition hover:bg-raised", picked?.id === g.id && "bg-raised ring-2 ring-accent-text")}
               >
                 <GiftArt gift={g} size={32} animate />
-                <span className="w-full truncate text-center text-[11px] font-medium">{g.name}</span>
-                <span className="font-mono text-[10.5px] text-ink-muted">{g.hype.toLocaleString("en-NG")} Hype</span>
+                <span className="w-full truncate text-center text-[12px] font-medium">{g.name}</span>
+                <span className="font-mono text-[12px] text-ink-muted">{g.hype.toLocaleString("en-NG")} Hype</span>
               </button>
             ))}
           </div>

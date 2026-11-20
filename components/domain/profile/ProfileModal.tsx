@@ -71,7 +71,7 @@ function EventListRow({ e, onNavigate }: { e: EventDTO; onNavigate: () => void }
   return (
     <Link href={`/events/${e.id}`} onClick={onNavigate} className="flex items-center gap-3.5 rounded-card border border-line bg-surface p-3 transition hover:bg-raised">
       <span className="flex size-12 shrink-0 flex-col items-center justify-center rounded-xl bg-raised leading-none">
-        <span className="eyebrow text-[9px]">{d.month}</span>
+        <span className="eyebrow text-[11px] font-semibold">{d.month}</span>
         <span className="mt-0.5 text-lg font-semibold">{d.day}</span>
       </span>
       <span className="min-w-0 flex-1">
@@ -88,7 +88,7 @@ function PersonListRow({ u, onOpen }: { u: UserBrief; onOpen: (handle: string) =
       <Avatar name={u.displayName} src={u.avatarUrl} frame={u.avatarFrame} size={44} />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-semibold"><UserName name={u.displayName} effect={u.nameEffect} /></span>
-        <span className="block truncate font-mono text-[11px] text-ink-muted">@{u.handle}</span>
+        <span className="block truncate font-mono text-[12px] text-ink-muted">@{u.handle}</span>
       </span>
       <Icon name="chevron-right" size={15} className="shrink-0 text-ink-muted" />
     </button>

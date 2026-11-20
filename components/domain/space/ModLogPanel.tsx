@@ -65,7 +65,7 @@ export function ModLogPanel({ slug }: { slug: string }) {
             </p>
             {r.targetType !== "webhook" && r.targetType !== "member" && r.targetType !== "role" && <p className="truncate text-xs text-ink-muted">{r.label}</p>}
           </div>
-          <span className="shrink-0 font-mono text-[11px] text-ink-muted">{now ? relativeStamp(r.createdAt, now) : ""}</span>
+          <span className="shrink-0 font-mono text-[12px] text-ink-muted">{now ? relativeStamp(r.createdAt, now) : ""}</span>
         </li>
       ))}
     </ul>

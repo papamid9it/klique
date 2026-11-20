@@ -61,7 +61,7 @@ export function CommunityInfo({ community: c, onJoined, onNavigate }: { communit
         ) : (
           <p className="mt-3 text-sm text-ink-muted">No description yet.</p>
         )}
-        <p className="mt-3 font-mono text-[11px] text-ink-muted">Created {new Date(c.createdAt).toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "Africa/Lagos" })}</p>
+        <p className="mt-3 font-mono text-[12px] text-ink-muted">Created {new Date(c.createdAt).toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "Africa/Lagos" })}</p>
 
         <div className="mt-4 flex flex-wrap items-center gap-2">
           {v.isMember ? (
@@ -102,7 +102,7 @@ export function CommunityInfo({ community: c, onJoined, onNavigate }: { communit
                   <Avatar name={s.user.displayName} src={s.user.avatarUrl} frame={s.user.avatarFrame} size={36} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-semibold"><UserName name={s.user.displayName} effect={s.user.nameEffect} /></span>
-                    <span className="block truncate font-mono text-[11px] text-ink-muted">@{s.user.handle}</span>
+                    <span className="block truncate font-mono text-[12px] text-ink-muted">@{s.user.handle}</span>
                   </span>
                   <RoleBadge role={s.role} />
                 </ProfileTrigger>

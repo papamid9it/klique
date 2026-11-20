@@ -35,7 +35,7 @@ export function SignInPrompt({ next, onClose }: { next: string | null; onClose: 
             <Icon name="x" size={18} />
           </button>
           <LogoArt height={46} colors={MOOD} title="Klique" />
-          <p className="mt-2 font-mono text-[10.5px] font-medium tracking-[0.3em] text-ink-muted">{TAGLINE}</p>
+          <p className="mt-2 font-mono text-[12px] font-medium tracking-[0.3em] text-ink-muted">{TAGLINE}</p>
           <h2 className="mt-6 text-lg font-semibold tracking-tight">Log in or sign up to Klique</h2>
           <p className="mt-1.5 text-sm text-ink-muted">See what your city&apos;s scenes are up to, vote, comment and join communities.</p>
           <div className="mt-6 grid w-full gap-2">

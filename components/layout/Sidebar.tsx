@@ -48,7 +48,7 @@ function SlimNav({ pathname }: { pathname: string }) {
             />
           </>
         ) : status === "anon" ? (
-          <Link href="/login" className="rounded-control bg-accent px-2.5 py-2 text-[11px] font-bold text-accent-ink">
+          <Link href="/login" className="rounded-control bg-accent px-2.5 py-2 text-[12px] font-bold text-accent-ink">
             Sign in
           </Link>
         ) : null}

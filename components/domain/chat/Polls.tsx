@@ -202,7 +202,7 @@ export function PollCard({ id }: { id: string }) {
 
   return (
     <div ref={box} className="my-1 w-full max-w-md rounded-card border border-line bg-surface p-4" role="group" aria-label={`Poll: ${poll.question}`}>
-      <p className="flex items-center gap-1.5 font-mono text-[10.5px] tracking-wide text-ink-muted uppercase">
+      <p className="flex items-center gap-1.5 font-mono text-[12px] tracking-wide text-ink-muted uppercase">
         <Icon name="topics" size={12} /> Poll{poll.multiple ? " · pick any" : ""}
         {poll.anonymous ? " · anonymous" : ""}
       </p>
@@ -229,7 +229,7 @@ export function PollCard({ id }: { id: string }) {
                 {showResults && <span className="relative font-mono text-[12px] font-semibold tabular-nums">{pct}%</span>}
               </button>
               {showResults && poll.votersVisible && a.votes > 0 && (
-                <button type="button" onClick={() => void showVoters(a.id)} className="mt-0.5 ml-1 text-[11.5px] text-ink-muted hover:text-ink hover:underline">
+                <button type="button" onClick={() => void showVoters(a.id)} className="mt-0.5 ml-1 text-[12px] text-ink-muted hover:text-ink hover:underline">
                   {a.votes} {a.votes === 1 ? "vote" : "votes"}
                 </button>
               )}
@@ -260,7 +260,7 @@ export function PollCard({ id }: { id: string }) {
                     <span className="block truncate text-[14px] font-semibold">
                       <UserName name={u.displayName} effect={u.nameEffect} />
                     </span>
-                    <span className="block truncate font-mono text-[11px] text-ink-muted">@{u.handle}</span>
+                    <span className="block truncate font-mono text-[12px] text-ink-muted">@{u.handle}</span>
                   </span>
                 </button>
               </li>

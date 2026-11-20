@@ -97,7 +97,7 @@ function Group({ id, title, summary, active, defaultOpen, children }: { id: stri
   return (
     <section>
       <button type="button" onClick={toggle} aria-expanded={open} className="flex h-9 w-full items-center gap-2 rounded-control px-2 text-left transition hover:bg-raised/60">
-        <span className="text-[11px] font-bold tracking-[0.08em] text-ink-muted uppercase">{title}</span>
+        <span className="text-[12px] font-bold tracking-[0.08em] text-ink-muted uppercase">{title}</span>
         {!open && summary && <span className="min-w-0 flex-1 truncate text-[13px] text-ink">· {summary}</span>}
         <Icon name="chevron-down" size={15} className={cx("ml-auto shrink-0 text-ink-muted transition-transform duration-200", open && "rotate-180")} />
       </button>

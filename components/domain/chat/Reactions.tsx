@@ -179,7 +179,7 @@ export function StickerView({ id, url, size = 72 }: { id?: string | null; url?: 
             onClick={quick.save}
             aria-label={quick.saved ? "Already saved to your stickers" : "Save sticker"}
             className={cx(
-              "absolute -top-2 -right-2 inline-flex h-7 items-center gap-1 rounded-full border border-line bg-surface px-2 text-[11.5px] font-semibold shadow-md transition",
+              "absolute -top-2 -right-2 inline-flex h-7 items-center gap-1 rounded-full border border-line bg-surface px-2 text-[12px] font-semibold shadow-md transition",
               "pointer-events-none opacity-0 group-hover/stk:pointer-events-auto group-hover/stk:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100",
               quick.saved ? "text-ink-muted" : "text-accent-text",
             )}
@@ -385,7 +385,7 @@ export function StickerPicker({ onPick, onClose, className }: { onPick: (s: Stic
           {saved.list.length === 0 ? (
             <p className="px-1 pt-2 text-[12.5px] leading-snug text-ink-muted">Open any picture or GIF in a chat and tap Save as sticker{uploads?.photo ? ", or upload your own with +" : ""}. They&apos;re saved to your account, so they show on all your devices.</p>
           ) : (
-            <p className="px-1 pt-2 font-mono text-[11px] text-ink-muted">
+            <p className="px-1 pt-2 font-mono text-[12px] text-ink-muted">
               {saved.list.length}/{MAX_STICKERS}
             </p>
           )}

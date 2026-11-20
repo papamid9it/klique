@@ -84,7 +84,7 @@ export function CreateChannelModal({
                   <span className="block text-xs text-ink-muted">{t.hint}</span>
                 </span>
                 {t.soon ? (
-                  <span className="shrink-0 rounded-full border border-line px-2 py-0.5 text-[11px] font-semibold text-ink-muted">Coming soon</span>
+                  <span className="shrink-0 rounded-full border border-line px-2 py-0.5 text-[12px] font-semibold text-ink-muted">Coming soon</span>
                 ) : (
                   <input type="radio" name="channel-type" checked={type === t.id} onChange={() => setType(t.id)} className="size-4 accent-[var(--accent-text)]" />
                 )}
@@ -317,7 +317,7 @@ export function ChannelSettings({
                     <span className="block text-xs text-ink-muted">{t.hint}</span>
                   </span>
                   {t.soon ? (
-                  <span className="shrink-0 rounded-full border border-line px-2 py-0.5 text-[11px] font-semibold text-ink-muted">Coming soon</span>
+                  <span className="shrink-0 rounded-full border border-line px-2 py-0.5 text-[12px] font-semibold text-ink-muted">Coming soon</span>
                 ) : (
                   <input type="radio" name="post-type" checked={type === t.id} onChange={() => setType(t.id)} className="size-4 accent-[var(--accent-text)]" />
                 )}
@@ -443,7 +443,7 @@ function GuestPicker({ space, guests, onAdd, onRemove }: { space: SpaceRef; gues
                 <button type="button" onClick={() => onAdd(u)} className="flex w-full items-center gap-2.5 rounded-control px-2 py-1.5 text-left hover:bg-raised">
                   <Avatar name={u.displayName} src={u.avatarUrl} frame={u.avatarFrame} size={26} />
                   <span className="min-w-0 flex-1 truncate text-sm font-medium">{u.displayName}</span>
-                  <span className="font-mono text-[11px] text-ink-muted">@{u.handle}</span>
+                  <span className="font-mono text-[12px] text-ink-muted">@{u.handle}</span>
                   <Icon name="plus" size={14} className="text-ink-muted" />
                 </button>
               </li>
@@ -451,7 +451,7 @@ function GuestPicker({ space, guests, onAdd, onRemove }: { space: SpaceRef; gues
           </ul>
         )}
       </div>
-      <p className="text-[11px] text-ink-muted">Only existing members can be added. Owners and admins can always see private channels.</p>
+      <p className="text-[12px] text-ink-muted">Only existing members can be added. Owners and admins can always see private channels.</p>
     </div>
   );
 }

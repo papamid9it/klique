@@ -26,7 +26,7 @@ export function GoalBar({ raised, goal, className }: { raised: number; goal: num
       <div className="h-2 overflow-hidden rounded-full bg-raised" role="progressbar" aria-valuemin={0} aria-valuemax={goal} aria-valuenow={raised} aria-label="Raised so far">
         <div className="h-full rounded-full bg-gradient-to-r from-[#e8b923] to-[#f7d774]" style={{ width: `${Math.max(2, pct)}%` }} />
       </div>
-      <p className="mt-1 flex justify-between font-mono text-[11.5px] text-ink-muted">
+      <p className="mt-1 flex justify-between font-mono text-[12px] text-ink-muted">
         <span>
           <span className="font-semibold text-ink">{naira(raised)}</span> raised
         </span>
@@ -124,7 +124,7 @@ export function DonateModal({ slug, communityName, button, onClose }: { slug: st
         <button type="button" disabled={!agree || !valid || busy} onClick={() => void pay()} className="btn-gold inline-flex h-11 w-full items-center justify-center gap-2 rounded-control text-[15px] font-bold disabled:opacity-50">
           {busy ? "Opening Paystack…" : <>Donate {valid ? naira(value) : ""}</>}
         </button>
-        <p className="text-center text-[11.5px] text-ink-muted">Paid securely by card on Paystack.</p>
+        <p className="text-center text-[12px] text-ink-muted">Paid securely by card on Paystack.</p>
       </div>
     </Modal>
   );

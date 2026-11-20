@@ -392,7 +392,7 @@ export default function ConversationPage() {
             <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-raised text-ink-muted"><Icon name="users" size={18} /></span>
             <span className="min-w-0">
               <span className="block truncate text-sm font-semibold">{other.displayName}</span>
-              <span className="block truncate text-[11px] text-ink-muted">{chatGroup.memberCount} people</span>
+              <span className="block truncate text-[12px] text-ink-muted">{chatGroup.memberCount} people</span>
             </span>
           </button>
         ) : (
@@ -400,7 +400,7 @@ export default function ConversationPage() {
           <Avatar name={other.displayName} src={other.avatarUrl} frame={other.avatarFrame} size={40} />
           <span className="min-w-0">
             <span className="block truncate text-sm font-semibold"><UserName name={other.displayName} effect={other.nameEffect} /></span>
-            <span className="block truncate font-mono text-[11px] text-ink-muted">@{other.handle}</span>
+            <span className="block truncate font-mono text-[12px] text-ink-muted">@{other.handle}</span>
           </span>
         </ProfileTrigger>
         )}
@@ -452,7 +452,7 @@ export default function ConversationPage() {
                   ) : (m.sticker || m.stickerUrl) && !m.body && !m.images?.length ? (
                     <div id={`msg-${m.id}`} className={cx("flex flex-col px-1", m.mine ? "items-end" : "items-start")}>
                       <StickerView id={m.sticker} url={m.stickerUrl} size={84} />
-                      <span className="flex items-center justify-end gap-1 font-mono text-[10px] text-ink-muted">{m.failed ? "Not sent" : formatClock(m.createdAt)}{m.pending && <Icon name="clock" size={11} aria-label="Sending" />}</span>
+                      <span className="flex items-center justify-end gap-1 font-mono text-[12px] text-ink-muted">{m.failed ? "Not sent" : formatClock(m.createdAt)}{m.pending && <Icon name="clock" size={11} aria-label="Sending" />}</span>
                     </div>
                   ) : (
                     <>
@@ -466,7 +466,7 @@ export default function ConversationPage() {
                       <Formatted text={m.body} plain={(words) => <EmojiText text={words} />} />
                       {!m.body && !m.images?.length && <span className="italic opacity-70">Sticker unavailable</span>}
                       <ChatImages images={m.images ?? []} mine={m.mine} className={m.body ? "mt-1.5" : ""} />
-                      <span className={cx("mt-0.5 flex items-baseline justify-end gap-1.5 font-mono text-[10px]", m.mine ? "text-accent-ink/70" : "text-ink-muted")}>
+                      <span className={cx("mt-0.5 flex items-baseline justify-end gap-1.5 font-mono text-[12px]", m.mine ? "text-accent-ink/70" : "text-ink-muted")}>
                         {m.editedAt && <EditedTag at={m.editedAt} />}
                         {m.failed ? "Not sent" : formatClock(m.createdAt)}
                         {m.pending && <Icon name="clock" size={11} aria-label="Sending" />}

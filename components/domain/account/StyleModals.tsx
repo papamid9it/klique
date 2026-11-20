@@ -135,11 +135,11 @@ function Footer({ access, onCancel, onSave, onUnlock, onTry, busy, disabled }: {
 function TileTag({ a }: { a: Access }) {
   if (!a || a.price === 0) return null;
   return a.locked ? (
-    <span className="absolute top-1.5 right-1.5 inline-flex items-center gap-0.5 rounded-full bg-ink/80 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-canvas">
+    <span className="absolute top-1.5 right-1.5 inline-flex items-center gap-0.5 rounded-full bg-ink/80 px-1.5 py-0.5 font-mono text-[12px] font-semibold text-canvas">
       <Icon name="lock" size={10} /> {a.price}
     </span>
   ) : (
-    <span className="absolute top-1.5 right-1.5 rounded-full bg-success/15 px-1.5 py-0.5 text-[10px] font-semibold text-success">Yours</span>
+    <span className="absolute top-1.5 right-1.5 rounded-full bg-success/15 px-1.5 py-0.5 text-[12px] font-semibold text-success">Yours</span>
   );
 }
 
@@ -191,7 +191,7 @@ function PickModal({ title, options, current, saved, lookWith, accessOf, onSave,
               <button key={o.value || "none"} type="button" role="radio" aria-checked={pick === o.value} onClick={() => setPick(o.value)} className={cx("relative flex min-h-24 flex-col items-center justify-center gap-1.5 rounded-control border px-2 py-3 text-center transition", pick === o.value ? "border-accent bg-accent/10" : "border-line bg-raised/40 hover:bg-raised")}>
                 <TileTag a={o.key ? accessOf(o.key) : null} />
                 <span className="flex max-w-full flex-col items-center">{o.tile}</span>
-                <span className="text-[11px] font-medium text-ink-muted">{o.label}</span>
+                <span className="text-[12px] font-medium text-ink-muted">{o.label}</span>
               </button>
             ))}
           </div>
@@ -306,7 +306,7 @@ export function EffectModal({ look, saved, accessOf, onSave, onUnlock, onTry, on
             <div className="grid grid-cols-3 gap-2 sm:grid-cols-4" role="radiogroup" aria-label="Profile effect">
               <button type="button" role="radio" aria-checked={!pick} onClick={() => setPick("")} className={cx("relative flex min-h-24 flex-col items-center justify-center gap-1.5 rounded-control border px-2 py-3 text-center transition", !pick ? "border-accent bg-accent/10" : "border-line bg-raised/40 hover:bg-raised")}>
                 <Avatar name={look.name} src={look.avatarUrl} size={52} />
-                <span className="text-[11px] font-medium text-ink-muted">None</span>
+                <span className="text-[12px] font-medium text-ink-muted">None</span>
               </button>
               {list.map((e) => (
                 <button
@@ -327,7 +327,7 @@ export function EffectModal({ look, saved, accessOf, onSave, onUnlock, onTry, on
                     <Avatar name={look.name} src={look.avatarUrl} size={34} />
                     <ProfileEffect spec={e} paused={hover !== e.id} />
                   </span>
-                  <span className="max-w-full truncate text-[11px] font-medium text-ink-muted">{e.name}</span>
+                  <span className="max-w-full truncate text-[12px] font-medium text-ink-muted">{e.name}</span>
                 </button>
               ))}
             </div>

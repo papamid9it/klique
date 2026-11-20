@@ -26,7 +26,7 @@ export function AdminMediaRemove({ userId, media, onRemoved }: { userId: string;
   const [busy, setBusy] = useState<string | null>(null);
   if (!user?.isAdmin || user.id === userId || !media.length) return null;
   return (
-    <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-ink-muted">
+    <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[12px] text-ink-muted">
       <span>Admin:</span>
       {media.map((m, i) => (
         <button

@@ -123,7 +123,7 @@ export default function FriendsPage() {
         <Avatar name={u.displayName} src={u.avatarUrl} frame={u.avatarFrame} size={42} />
         <span className="min-w-0">
           <span className="block truncate text-[15px] font-semibold"><UserName name={u.displayName} effect={u.nameEffect} /></span>
-          <span className="block truncate font-mono text-[11px] text-ink-muted">@{u.handle}{sub ? ` · ${sub}` : ""}</span>
+          <span className="block truncate font-mono text-[12px] text-ink-muted">@{u.handle}{sub ? ` · ${sub}` : ""}</span>
         </span>
       </ProfileTrigger>
       <div className="flex shrink-0 items-center gap-1.5">{actions}</div>
@@ -151,7 +151,7 @@ export default function FriendsPage() {
                 className={cx("inline-flex h-8 items-center gap-1.5 rounded-control px-3 text-[13px] font-medium transition", t.id === "add" ? (tab === "add" ? "bg-accent/20 text-accent-text" : "bg-accent text-accent-ink hover:brightness-110") : tab === t.id ? "bg-raised text-ink" : "text-ink-muted hover:bg-raised/60 hover:text-ink")}
               >
                 {t.label}
-                {typeof t.count === "number" && t.count > 0 && <span className={cx("rounded-full px-1.5 font-mono text-[10px]", t.id === "pending" ? "bg-danger text-white" : "bg-line text-ink-muted")}>{t.count}</span>}
+                {typeof t.count === "number" && t.count > 0 && <span className={cx("rounded-full px-1.5 font-mono text-[12px]", t.id === "pending" ? "bg-danger text-white" : "bg-line text-ink-muted")}>{t.count}</span>}
               </button>
             ))}
           </div>
@@ -287,7 +287,7 @@ export default function FriendsPage() {
                   <Avatar name={s.user.displayName} src={s.user.avatarUrl} frame={s.user.avatarFrame} size={40} />
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-semibold"><UserName name={s.user.displayName} effect={s.user.nameEffect} /></span>
-                    <span className="block truncate text-[11px] text-ink-muted">
+                    <span className="block truncate text-[12px] text-ink-muted">
                       {s.mutualCommunities} {s.mutualCommunities === 1 ? "community" : "communities"} in common
                     </span>
                   </span>

@@ -509,7 +509,7 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
                   <Icon name="video" size={16} /> Join online
                 </a>
               )}
-              <p className="truncate text-center font-mono text-[11px] text-ink-muted">{[...new Set([event.ticketUrl, event.onlineUrl].map((u) => (u ? domainOf(u) : null)).filter(Boolean))].join(" · ")}</p>
+              <p className="truncate text-center font-mono text-[12px] text-ink-muted">{[...new Set([event.ticketUrl, event.onlineUrl].map((u) => (u ? domainOf(u) : null)).filter(Boolean))].join(" · ")}</p>
             </div>
           )}
           {!event.online && event.kliquesOn && !event.isPast && !cancelled && (

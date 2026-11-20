@@ -393,7 +393,7 @@ export function ChannelList({
           {fresh ? (
             <CountBadge n={Math.max(unread.n, unread.mentions)} mention={unread.mentions > 0} className="ml-auto" label={`${unread.n} unread`} />
           ) : (
-            typeof count === "number" && count > 0 && <span className="ml-auto font-mono text-[11px] text-ink-muted">{compactCount(count)}</span>
+            typeof count === "number" && count > 0 && <span className="ml-auto font-mono text-[12px] text-ink-muted">{compactCount(count)}</span>
           )}
         </SoftLink>
       </li>
@@ -406,7 +406,7 @@ export function ChannelList({
   const groupSection = (data.groups.length > 0 || canAddGroup) && (
     <section className="mt-3" aria-label="Your groups">
       <div className="flex items-center pr-1">
-        <button type="button" onClick={() => toggle("your-groups")} aria-expanded={!groupsFolded} className="flex min-w-0 flex-1 items-center gap-1 rounded-control px-2 py-1 text-left text-[11px] font-bold tracking-[0.08em] text-ink-muted uppercase hover:text-ink">
+        <button type="button" onClick={() => toggle("your-groups")} aria-expanded={!groupsFolded} className="flex min-w-0 flex-1 items-center gap-1 rounded-control px-2 py-1 text-left text-[12px] font-bold tracking-[0.08em] text-ink-muted uppercase hover:text-ink">
           <Icon name="chevron-down" size={12} className={cx("shrink-0 transition-transform", groupsFolded && "-rotate-90")} />
           <span className="truncate">Your groups</span>
         </button>
@@ -432,7 +432,7 @@ export function ChannelList({
   const crewSection = (list: MyCrewDTO[]) =>
     list.length > 0 && (
       <section className="mt-3" aria-label="Your kliques">
-        <p className="px-2 py-1 text-[11px] font-bold tracking-[0.08em] text-ink-muted uppercase">Your kliques</p>
+        <p className="px-2 py-1 text-[12px] font-bold tracking-[0.08em] text-ink-muted uppercase">Your kliques</p>
         <ul className="space-y-0.5">
           {list.map((x) => {
             const on = activeCrew === x.id;
@@ -448,7 +448,7 @@ export function ChannelList({
                   <Icon name="pin" size={16} className="shrink-0" />
                   <span className="min-w-0 flex-1">
                     <span className={cx("block truncate text-[14px]", x.unreadCount && !on ? "font-semibold text-ink" : "font-medium")}>{x.title}</span>
-                    <span className="block truncate text-[11.5px] opacity-80">{x.standing === "pending" ? "Asked to join · " : ""}{x.eventTitle ?? `From ${x.area}`}</span>
+                    <span className="block truncate text-[12px] opacity-80">{x.standing === "pending" ? "Asked to join · " : ""}{x.eventTitle ?? `From ${x.area}`}</span>
                   </span>
                   {!on && <CountBadge n={x.unreadCount ?? 0} />}
                 </SoftLink>
@@ -472,7 +472,7 @@ export function ChannelList({
             <span className="truncate">{name}</span>
             <VerifiedCheck on={verified} size={15} />
             {locked && <Icon name="lock" size={13} className="shrink-0 text-ink-muted" />}
-            {adult && <span className="shrink-0 rounded-full border border-line px-1.5 py-px font-mono text-[10px] font-bold text-ink-muted" title="For people 18 and over">18+</span>}
+            {adult && <span className="shrink-0 rounded-full border border-line px-1.5 py-px font-mono text-[12px] font-bold text-ink-muted" title="For people 18 and over">18+</span>}
           </span>
           <Icon name={open ? "x" : "chevron-down"} size={16} className="shrink-0 text-ink-muted" />
         </button>
@@ -516,7 +516,7 @@ export function ChannelList({
           {crewSection(crews.filter((x) => x.sub === g.slug))}
           <div className="my-3 h-px bg-line" />
           <div className="flex items-center pr-1">
-            <p className="flex-1 px-2 py-1 text-[11px] font-bold tracking-[0.08em] text-ink-muted uppercase">Channels</p>
+            <p className="flex-1 px-2 py-1 text-[12px] font-bold tracking-[0.08em] text-ink-muted uppercase">Channels</p>
             {gManage && (
               <Dropdown
                 items={addMenu(null, g.slug)}
@@ -553,7 +553,7 @@ export function ChannelList({
     c.boardsOn && (boards.length > 0 || manage) ? (
       <section className="mt-3" aria-label="Boards">
         <div className="flex items-center pr-1">
-          <p className="flex-1 px-2 py-1 text-[11px] font-bold tracking-[0.08em] text-ink-muted uppercase">Boards</p>
+          <p className="flex-1 px-2 py-1 text-[12px] font-bold tracking-[0.08em] text-ink-muted uppercase">Boards</p>
           {manage && (
             <Dropdown
               label="Boards options"
@@ -588,7 +588,7 @@ export function ChannelList({
                   >
                     <Icon name={b.postPolicy === "admins" ? "megaphone" : "topics"} size={16} />
                     <span className="truncate">{b.name}</span>
-                    {b.topicCount > 0 && <span className={cx("ml-auto font-mono text-[11px] text-ink-muted", manage && "group-hover/board:hidden")}>{compactCount(b.topicCount)}</span>}
+                    {b.topicCount > 0 && <span className={cx("ml-auto font-mono text-[12px] text-ink-muted", manage && "group-hover/board:hidden")}>{compactCount(b.topicCount)}</span>}
                   </SoftLink>
                   {manage && (
                     <div className="absolute top-1.5 right-1 hidden group-focus-within/board:block group-hover/board:block">
@@ -625,7 +625,7 @@ export function ChannelList({
                             className={cx("flex h-8 items-center gap-2 rounded-control px-2 text-[13px] transition", open ? "bg-raised text-ink" : n ? "font-semibold text-ink hover:bg-raised/60" : "text-ink-muted hover:bg-raised/60 hover:text-ink")}
                           >
                             <span className="truncate">{p.title}</span>
-                            {n > 0 && <span className="ml-auto shrink-0 font-mono text-[11px] font-bold text-ink">{n >= 99 ? "99+" : n} new</span>}
+                            {n > 0 && <span className="ml-auto shrink-0 font-mono text-[12px] font-bold text-ink">{n >= 99 ? "99+" : n} new</span>}
                           </SoftLink>
                         </li>
                       );
@@ -695,13 +695,13 @@ export function ChannelList({
                     type="button"
                     onClick={() => toggle(category.id)}
                     aria-expanded={!isCollapsed}
-                    className="flex min-w-0 flex-1 items-center gap-1 rounded-control px-2 py-1 text-left text-[11px] font-bold tracking-[0.08em] text-ink-muted uppercase hover:text-ink"
+                    className="flex min-w-0 flex-1 items-center gap-1 rounded-control px-2 py-1 text-left text-[12px] font-bold tracking-[0.08em] text-ink-muted uppercase hover:text-ink"
                   >
                     <Icon name="chevron-down" size={12} className={cx("shrink-0 transition-transform", isCollapsed && "-rotate-90")} />
                     <span className="truncate">{category.name}</span>
                   </button>
                 ) : (
-                  <p className="flex-1 px-2 py-1 text-[11px] font-bold tracking-[0.08em] text-ink-muted uppercase">Channels</p>
+                  <p className="flex-1 px-2 py-1 text-[12px] font-bold tracking-[0.08em] text-ink-muted uppercase">Channels</p>
                 )}
                 {chMgr && (
                   <>
@@ -772,7 +772,7 @@ function ChannelRow({ ch, href, active, menu, pinned, onNavigate }: { ch: Channe
         <span className="truncate">{ch.name}</span>
         {ch.visibility !== "all" && <Icon name="lock" size={12} className="shrink-0 opacity-70" aria-label={ch.visibility === "invite" ? "Invite-only channel" : "Admins only"} />}
         {pinned && <Icon name="pin" size={12} className="shrink-0 opacity-70" aria-label="Pinned" />}
-        {ch.muted && <span className="shrink-0 font-mono text-[10px] opacity-70">muted</span>}
+        {ch.muted && <span className="shrink-0 font-mono text-[12px] opacity-70">muted</span>}
         {!active && <CountBadge n={Math.max(ch.muted ? 0 : (ch.unreadCount ?? 0), ch.mentions)} mention={ch.mentions > 0} className="ml-auto" label={ch.mentions > 0 ? `${ch.unreadCount || ch.mentions} unread, ${ch.mentions} mention you` : `${ch.unreadCount} unread`} />}
       </SoftLink>
       {menu && (

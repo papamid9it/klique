@@ -200,7 +200,7 @@ function Crew({ crew, tab, embedded, onChange, onGone, onRead, onMenu, reload }:
         <Avatar name={m.displayName} src={m.avatarUrl} size={30} />
         <span className="truncate text-sm font-medium">{m.displayName}</span>
         <PlanBadge plan={m.badge} size={14} />
-        {i === 0 && <span className="rounded bg-accent/15 px-1.5 text-[10px] font-bold tracking-wide text-accent-text uppercase">Host</span>}
+        {i === 0 && <span className="rounded bg-accent/15 px-1.5 text-[12px] font-bold tracking-wide text-accent-text uppercase">Host</span>}
       </ProfileTrigger>
       {isHost && i > 0 && (
         <button
@@ -223,7 +223,7 @@ function Crew({ crew, tab, embedded, onChange, onGone, onRead, onMenu, reload }:
         <div className={compact ? "p-4" : "p-5 sm:p-6"}>
         <div className="flex flex-wrap items-center gap-2">
           <p className="eyebrow">Klique · {formatDateShort(crew.meetupAt, crew.timeZone)}</p>
-          {audienceTag(crew) && <span className="rounded-full border border-line px-2 py-0.5 text-[11px] font-semibold">{audienceTag(crew)}</span>}
+          {audienceTag(crew) && <span className="rounded-full border border-line px-2 py-0.5 text-[12px] font-semibold">{audienceTag(crew)}</span>}
           <StandingTag standing={v.standing} />
         </div>
         <h1 className={cx("mt-2 leading-tight font-bold tracking-[-0.03em]", compact ? "text-xl" : "text-[clamp(1.5rem,3.5vw,2rem)]")}>{crew.title}</h1>

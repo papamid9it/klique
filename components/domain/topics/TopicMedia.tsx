@@ -74,7 +74,7 @@ export function TopicMedia({ media, tall, className, mine }: { media: TopicMedia
           <button type="button" onClick={() => setI((i + 1) % media.length)} aria-label="Next picture" className="absolute top-1/2 right-2 inline-flex size-9 -translate-y-1/2 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur transition hover:bg-black/80">
             <Icon name="chevron-right" size={18} />
           </button>
-          <span className="absolute top-2 right-2 rounded-full bg-black/60 px-2 py-0.5 font-mono text-[11px] font-semibold text-white backdrop-blur">
+          <span className="absolute top-2 right-2 rounded-full bg-black/60 px-2 py-0.5 font-mono text-[12px] font-semibold text-white backdrop-blur">
             {i + 1}/{media.length}
           </span>
           <span className="absolute bottom-2 left-1/2 flex -translate-x-1/2 gap-1.5" aria-hidden="true">
@@ -96,7 +96,7 @@ export function GifPlaceholder({ onPlay, className }: { onPlay: () => void; clas
         <Icon name="play" size={18} />
       </span>
       <span className="text-[13px] font-semibold">GIF · tap to play</span>
-      <span className="text-[11px]">Data saver is on</span>
+      <span className="text-[12px]">Data saver is on</span>
     </button>
   );
 }

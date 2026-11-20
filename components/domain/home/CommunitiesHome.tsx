@@ -38,7 +38,7 @@ function EventTile({ e, big }: { e: EventDTO; big?: boolean }) {
       {e.viewer.rsvp === "going" && <span className={PILL}>Going</span>}
       <span className={SHADE}>
         {/* big screens: the date first, small and mono, like a ticket */}
-        <span className="hidden truncate font-mono text-[11px] tracking-[.08em] text-[#f5c542] uppercase lg:block">{when}</span>
+        <span className="hidden truncate font-mono text-[12px] tracking-[.08em] text-[#f5c542] uppercase lg:block">{when}</span>
         <span className={big ? "block text-2xl font-bold leading-tight" : "block truncate text-[15px] font-bold leading-5"}>{e.title}</span>
         <span className="block truncate text-sm text-white/90 lg:hidden">{big && e.community ? `${when} · ${e.community.name}` : when}</span>
         <span className="hidden truncate text-xs text-white/80 lg:block">{goingText(e.goingCount)}{big && e.community ? ` · ${e.community.name}` : ""}</span>
@@ -101,7 +101,7 @@ export function CommunitiesHome() {
       <div className="min-w-0">
       <div className="mb-3 flex items-baseline gap-3">
         <h2 className="text-2xl font-semibold tracking-[-0.02em]">Events</h2>
-        <span className="hidden font-mono text-[11px] tracking-[.12em] text-ink-muted uppercase lg:inline">Coming up · {events.length}</span>
+        <span className="hidden font-mono text-[12px] tracking-[.12em] text-ink-muted uppercase lg:inline">Coming up · {events.length}</span>
         <Link href="/events" className="ml-auto text-sm font-semibold text-ink-muted hover:text-ink">All events</Link>
       </div>
       {(discover.loading && !discover.data) || (going.loading && !going.data) ? (
@@ -199,7 +199,7 @@ export function HomeKliques({ cards }: { /** the side column's cards: event tag,
         <div className="flex flex-col gap-2.5">
           {forYou.map((k) => (
             <Link key={k.id} href={crewHref(k)} className="flex flex-col gap-2 rounded-card border border-line bg-surface p-3.5 hover:border-ink-muted/50">
-              <span className="flex justify-between gap-2 font-mono text-[11px] tracking-[.06em] text-ink-muted uppercase">
+              <span className="flex justify-between gap-2 font-mono text-[12px] tracking-[.06em] text-ink-muted uppercase">
                 <span className="truncate">{k.event?.title ?? k.community?.name ?? formatDateShort(k.meetupAt, k.timeZone)}</span>
                 <span className="shrink-0">{k.memberCount}/{k.maxMembers} spots</span>
               </span>

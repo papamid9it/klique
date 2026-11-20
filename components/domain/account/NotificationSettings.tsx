@@ -32,7 +32,7 @@ export function NotificationSettings() {
     // the table itself, row for row, so nothing jumps when it arrives
     return (
       <div role="status" aria-label="Loading notification settings" className="overflow-hidden rounded-card border border-line">
-        <div className="flex items-center gap-3 border-b border-line bg-raised/50 px-4 py-2 text-[11px] font-bold tracking-[0.08em] text-ink-muted uppercase">
+        <div className="flex items-center gap-3 border-b border-line bg-raised/50 px-4 py-2 text-[12px] font-bold tracking-[0.08em] text-ink-muted uppercase">
           <span className="flex-1">Notify me about</span>
           <span className="w-12 text-center">In app</span>
           <span className="w-12 text-center">Push</span>
@@ -56,7 +56,7 @@ export function NotificationSettings() {
 
   return (
     <div className="overflow-hidden rounded-card border border-line">
-      <div className="flex items-center gap-3 border-b border-line bg-raised/50 px-4 py-2 text-[11px] font-bold tracking-[0.08em] text-ink-muted uppercase">
+      <div className="flex items-center gap-3 border-b border-line bg-raised/50 px-4 py-2 text-[12px] font-bold tracking-[0.08em] text-ink-muted uppercase">
         <span className="flex-1">Notify me about</span>
         <span className="w-12 text-center">In app</span>
         <span className="w-12 text-center">Push</span>

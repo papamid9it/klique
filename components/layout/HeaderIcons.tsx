@@ -31,7 +31,7 @@ export function HeaderIcons({ className }: { className?: string }) {
         >
           <Icon name={n.icon} size={22} />
           {n.unread > 0 && (
-            <span aria-hidden="true" className="absolute -top-0.5 -right-0.5 inline-flex min-w-5 items-center justify-center rounded-full bg-accent px-1 text-[11px] leading-5 font-bold text-accent-ink ring-2 ring-canvas">
+            <span aria-hidden="true" className="absolute -top-0.5 -right-0.5 inline-flex min-w-5 items-center justify-center rounded-full bg-accent px-1 text-[12px] leading-5 font-bold text-accent-ink ring-2 ring-canvas">
               {n.unread > 9 ? "9+" : n.unread}
             </span>
           )}

@@ -101,15 +101,15 @@ export function useTagSuggest(target: React.RefObject<HTMLTextAreaElement | null
             <>
               <Avatar name={o.u.displayName} src={o.u.avatarUrl} size={24} />
               <span className="min-w-0 flex-1 truncate font-semibold">{o.u.displayName}</span>
-              <span className="font-mono text-[11px] text-ink-muted">@{o.u.handle}</span>
+              <span className="font-mono text-[12px] text-ink-muted">@{o.u.handle}</span>
             </>
           ) : o.kind === "community" ? (
             <>
-              <span className="inline-flex size-6 items-center justify-center rounded-[7px] bg-raised text-[11px] font-bold">{o.c.name[0]}</span>
+              <span className="inline-flex size-6 items-center justify-center rounded-[7px] bg-raised text-[12px] font-bold">{o.c.name[0]}</span>
               <span className="flex min-w-0 flex-1 items-center gap-1 truncate font-semibold">
                 {o.c.name} <VerifiedCheck on={o.c.verified} size={12} />
               </span>
-              <span className="text-[11px] text-ink-muted">Community</span>
+              <span className="text-[12px] text-ink-muted">Community</span>
             </>
           ) : (
             <span className="font-semibold">#{o.tag}</span>

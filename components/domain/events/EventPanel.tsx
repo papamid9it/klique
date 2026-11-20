@@ -30,12 +30,12 @@ function MiniEvent({ e }: { e: EventDTO }) {
     <li>
       <Link href={`/events/${e.id}`} className="flex items-center gap-2.5 rounded-control px-2 py-1.5 transition hover:bg-raised/60">
         <span className="flex size-9 shrink-0 flex-col items-center justify-center rounded-[10px] bg-raised leading-none">
-          <span className="font-mono text-[8px] text-ink-muted uppercase">{d.month}</span>
+          <span className="font-mono text-[11px] font-semibold text-ink-muted uppercase">{d.month}</span>
           <span className="text-[14px] font-semibold">{d.day}</span>
         </span>
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[13px] font-medium text-ink">{e.title}</span>
-          <span className="block truncate text-[11.5px] text-ink-muted">{e.online ? "Online" : e.venue}</span>
+          <span className="block truncate text-[12px] text-ink-muted">{e.online ? "Online" : e.venue}</span>
         </span>
       </Link>
     </li>
@@ -108,7 +108,7 @@ export function EventPanel({ event, people: firstPeople, nextCursor, friends = [
             </span>
             <span className="min-w-0">
               <span className="block truncate text-[14px] font-semibold hover:underline">{event.community.name}</span>
-              <span className="block font-mono text-[11px] text-ink-muted">{c?.memberCount != null ? membersText(c.memberCount) : event.community.privacy === "private" ? "Private" : " "}</span>
+              <span className="block font-mono text-[12px] text-ink-muted">{c?.memberCount != null ? membersText(c.memberCount) : event.community.privacy === "private" ? "Private" : " "}</span>
             </span>
           </Link>
           {c && !event.community.official && (
@@ -129,7 +129,7 @@ export function EventPanel({ event, people: firstPeople, nextCursor, friends = [
                 <Avatar key={p.id} name={p.displayName} src={p.avatarUrl} size={20} className="ring-2 ring-canvas" />
               ))}
             </span>
-            {goingShown(event.goingCount) && <span className="font-mono text-[11px]">{compactCount(event.goingCount)}</span>}
+            {goingShown(event.goingCount) && <span className="font-mono text-[12px]">{compactCount(event.goingCount)}</span>}
           </button>
         </li>
         {!event.online && event.kliquesOn && (
@@ -166,7 +166,7 @@ export function EventPanel({ event, people: firstPeople, nextCursor, friends = [
                     <span className="block truncate text-[14px] font-semibold">
                       <UserName name={p.displayName} effect={p.nameEffect} />
                     </span>
-                    <span className="block truncate font-mono text-[11px] text-ink-muted">@{p.handle}{friendSet.has(p.id) ? " · Friend" : ""}</span>
+                    <span className="block truncate font-mono text-[12px] text-ink-muted">@{p.handle}{friendSet.has(p.id) ? " · Friend" : ""}</span>
                   </span>
                 </button>
               </li>

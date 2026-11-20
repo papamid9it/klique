@@ -98,7 +98,7 @@ export function AdsPanel({ tab }: { tab: AdsTab }) {
                 <Link href={hrefOf(n.id)} scroll={false} onClick={(e) => { e.preventDefault(); go(hrefOf(n.id)); }} aria-current={on ? "page" : undefined} className={cx("flex h-10 items-center gap-3 rounded-control px-3 text-[14px] font-medium transition", on ? "bg-raised text-ink" : "text-ink-muted hover:bg-raised/60 hover:text-ink")}>
                   <Icon name={n.icon} size={17} />
                   {n.label}
-                  {count && <span className="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-accent px-1.5 text-[11px] font-bold text-accent-ink">{count}</span>}
+                  {count && <span className="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-accent px-1.5 text-[12px] font-bold text-accent-ink">{count}</span>}
                 </Link>
               </li>
             );
@@ -292,7 +292,7 @@ export function AdsTablePage({ list }: { list: AdCampaignDTO[] }) {
           return (
             <button key={x.id} type="button" role="tab" aria-selected={f === x.id} onClick={() => setF(x.id)} className={cx("inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-[13px] font-semibold", f === x.id ? "border-transparent bg-accent text-accent-ink" : "border-line bg-surface text-ink-muted hover:text-ink")}>
               {x.label}
-              <span className="font-mono text-[11px] opacity-80">{n}</span>
+              <span className="font-mono text-[12px] opacity-80">{n}</span>
             </button>
           );
         })}
@@ -326,7 +326,7 @@ export function AdsTable({ list }: { list: AdCampaignDTO[] }) {
       {/* big screens: a table */}
       <div className="hidden overflow-x-auto rounded-card border border-line bg-surface md:block">
         <table className="w-full min-w-[56rem] text-left text-sm">
-          <thead className="border-b border-line text-[11px] font-bold tracking-[0.06em] text-ink-muted uppercase">
+          <thead className="border-b border-line text-[12px] font-bold tracking-[0.06em] text-ink-muted uppercase">
             <tr>
               <th className="px-4 py-3 font-bold">Ad</th>
               <th className="px-3 py-3 font-bold">Delivery</th>
@@ -416,7 +416,7 @@ export function AdsBilling({ list }: { list: AdCampaignDTO[] }) {
       </div>
       <section className="overflow-x-auto rounded-card border border-line bg-surface">
         <table className="w-full min-w-[36rem] text-left text-sm">
-          <thead className="border-b border-line text-[11px] font-bold tracking-[0.06em] text-ink-muted uppercase">
+          <thead className="border-b border-line text-[12px] font-bold tracking-[0.06em] text-ink-muted uppercase">
             <tr>
               <th className="px-4 py-3">Date</th>
               <th className="px-3 py-3">Ad</th>

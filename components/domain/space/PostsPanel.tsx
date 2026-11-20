@@ -90,7 +90,7 @@ export function PostsPanel({ slug, subSlug, canPost }: { slug: string; subSlug?:
                       <ProfileTrigger handle={p.author.handle} className="block truncate text-sm font-semibold hover:underline text-left">
                         <UserName name={p.author.displayName} effect={p.author.nameEffect} />
                       </ProfileTrigger>
-                      <p className="font-mono text-[11px] text-ink-muted">
+                      <p className="font-mono text-[12px] text-ink-muted">
                         @{p.author.handle} · {formatDateShort(p.createdAt)}
                         {p.pinned && " · Pinned"}
                       </p>

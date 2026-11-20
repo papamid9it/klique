@@ -147,7 +147,7 @@ function UnlockRow({ u, me, now, onAdd, onRenew }: { u: StyleUnlockDTO; me: User
       <span className="min-w-0 flex-1">
         <span className="block text-[14px] font-semibold">
           {u.name}
-          {u.source === "gift" && <span className="ml-2 rounded-full bg-accent/15 px-2 py-0.5 text-[11px] font-semibold text-accent-text">Free</span>}
+          {u.source === "gift" && <span className="ml-2 rounded-full bg-accent/15 px-2 py-0.5 text-[12px] font-semibold text-accent-text">Free</span>}
         </span>
         <span className={cx("block text-[12px]", left !== null && left <= 3 ? "font-semibold text-danger" : "text-ink-muted")}>
           Until {dayLabel(u.expiresAt)}
@@ -264,7 +264,7 @@ export function HypeTab({ me, onStyle }: { me: UserMe; onStyle: () => void }) {
         <div className="grid gap-3 @sm:grid-cols-3">
           {w.config.packs.map((p) => (
             <div key={p.id} className="relative flex flex-col items-start gap-1 rounded-card border border-line bg-surface p-4">
-              {w.config.packs.length > 1 && p.hype / p.price === best && <span className="absolute -top-2.5 right-3 rounded-full bg-accent px-2 py-0.5 text-[11px] font-bold whitespace-nowrap text-accent-ink">Best value</span>}
+              {w.config.packs.length > 1 && p.hype / p.price === best && <span className="absolute -top-2.5 right-3 rounded-full bg-accent px-2 py-0.5 text-[12px] font-bold whitespace-nowrap text-accent-ink">Best value</span>}
               <HypePill value={p.hype} className="text-xl" />
               <span className="text-sm text-ink-muted">{formatPrice(p.price, "NGN")}</span>
               <Button size="sm" variant="primary" className="mt-2 w-full" loading={buying === p.id} disabled={!w.canBuy || (!!buying && buying !== p.id)} onClick={() => void buy(p.id)}>
@@ -317,7 +317,7 @@ export function HypeTab({ me, onStyle }: { me: UserMe; onStyle: () => void }) {
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[14px]">{t.note}</span>
-                  <span className="block font-mono text-[11px] text-ink-muted">{dayLabel(t.createdAt)} · balance {n(t.balanceAfter)}</span>
+                  <span className="block font-mono text-[12px] text-ink-muted">{dayLabel(t.createdAt)} · balance {n(t.balanceAfter)}</span>
                 </span>
                 <span className={cx("font-mono text-[14px] font-semibold", t.amount > 0 ? "text-success" : "text-ink-muted")}>
                   {t.amount > 0 ? "+" : "−"}

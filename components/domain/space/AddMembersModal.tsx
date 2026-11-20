@@ -83,7 +83,7 @@ export function AddMembersModal({ slug, subSlug, groupName, communityName, membe
                     <Avatar name={u.displayName} src={u.avatarUrl} frame={u.avatarFrame} size={34} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-semibold">{u.displayName}</span>
-                      <span className="block truncate font-mono text-[11px] text-ink-muted">@{u.handle}</span>
+                      <span className="block truncate font-mono text-[12px] text-ink-muted">@{u.handle}</span>
                     </span>
                     <span className={cx("inline-flex size-5 shrink-0 items-center justify-center rounded border", on ? "border-accent bg-accent text-accent-ink" : "border-line")}>{on && <Icon name="check" size={12} />}</span>
                   </button>

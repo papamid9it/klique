@@ -38,7 +38,7 @@ export function EmojiPicker({ community, onPick, onClose, className }: { communi
         <div className="max-h-72 space-y-3 overflow-y-auto">
           {data.groups.map((g) => (
             <section key={g.community.slug}>
-              <h3 className="mb-1 text-[11px] font-bold tracking-[0.06em] text-ink-muted uppercase">{g.community.name}</h3>
+              <h3 className="mb-1 text-[12px] font-bold tracking-[0.06em] text-ink-muted uppercase">{g.community.name}</h3>
               <div className={cx("grid grid-cols-7 gap-1", !g.usable && "opacity-40")}>
                 {g.items.map((e) => (
                   <button

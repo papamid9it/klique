@@ -139,9 +139,9 @@ export function DmSidebar({ onNavigate }: { onNavigate?: () => void }) {
               <Link href={n.href} onClick={onNavigate} aria-current={n.active ? "page" : undefined} className={cx("flex h-10 items-center gap-3 rounded-control px-2.5 text-[14px] font-medium transition", n.active ? "bg-raised text-ink" : "text-ink-muted hover:bg-raised/60 hover:text-ink")}>
                 <Icon name={n.icon} size={18} />
                 {n.label}
-                {!!n.count && <span className="ml-auto font-mono text-[11px] text-ink-muted">{n.count > 99 ? "99+" : n.count}</span>}
+                {!!n.count && <span className="ml-auto font-mono text-[12px] text-ink-muted">{n.count > 99 ? "99+" : n.count}</span>}
                 {!!n.badge && (
-                  <span className="ml-auto inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-danger px-1.5 text-[11px] leading-none font-bold text-white" aria-label={`${n.badge} waiting`}>
+                  <span className="ml-auto inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-danger px-1.5 text-[12px] leading-none font-bold text-white" aria-label={`${n.badge} waiting`}>
                     {n.badge > 99 ? "99+" : n.badge}
                   </span>
                 )}
@@ -157,7 +157,7 @@ export function DmSidebar({ onNavigate }: { onNavigate?: () => void }) {
         {makingGroup && <NewChatGroupModal onClose={() => setMakingGroup(false)} />}
 
         <div className="mt-4 mb-1 flex items-center justify-between px-2.5">
-          <h2 className="text-[11px] font-bold tracking-[0.08em] text-ink-muted uppercase">Direct messages</h2>
+          <h2 className="text-[12px] font-bold tracking-[0.08em] text-ink-muted uppercase">Direct messages</h2>
           <Link href="/search" onClick={onNavigate} aria-label="Find people to message" title="Find people" className="inline-flex size-6 items-center justify-center rounded-full text-ink-muted hover:bg-raised hover:text-ink">
             <Icon name="plus" size={14} />
           </Link>
@@ -202,12 +202,12 @@ export function DmSidebar({ onNavigate }: { onNavigate?: () => void }) {
                       <span className="flex items-center gap-2">
                         <span className={cx("truncate text-[14px]", unread || active ? "font-semibold text-ink" : "font-medium text-ink-muted")}><UserName name={c.other.displayName} effect={c.other.nameEffect} /></span>
                         {c.pinned && <Icon name="pin" size={12} className="shrink-0 text-accent-text" />}
-                        <span className="ml-auto shrink-0 font-mono text-[10px] text-ink-muted">{c.lastMessage && now ? relativeStamp(c.lastMessage.createdAt, now) : ""}</span>
+                        <span className="ml-auto shrink-0 font-mono text-[12px] text-ink-muted">{c.lastMessage && now ? relativeStamp(c.lastMessage.createdAt, now) : ""}</span>
                       </span>
                       <span className="flex items-center gap-2">
                         <span className={cx("truncate text-[12px]", unread ? "font-medium text-ink" : "text-ink-muted")}>{c.blockedByMe ? "Blocked" : preview}</span>
                         {unread && !active && (
-                          <span className="ml-auto inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-accent px-1.5 text-[11px] leading-none font-bold text-accent-ink" aria-label={`${c.unreadCount} unread`}>
+                          <span className="ml-auto inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-accent px-1.5 text-[12px] leading-none font-bold text-accent-ink" aria-label={`${c.unreadCount} unread`}>
                             {c.unreadCount > 99 ? "99+" : c.unreadCount}
                           </span>
                         )}
@@ -223,7 +223,7 @@ export function DmSidebar({ onNavigate }: { onNavigate?: () => void }) {
 
         {dq.length >= 2 && (
           <section aria-label="Messages found" className="mt-4">
-            <h2 className="mb-1 px-2.5 text-[11px] font-bold tracking-[0.08em] text-ink-muted uppercase">In your messages</h2>
+            <h2 className="mb-1 px-2.5 text-[12px] font-bold tracking-[0.08em] text-ink-muted uppercase">In your messages</h2>
             {found.loading && !found.data ? (
               <Skeleton className="mx-2.5 h-10" />
             ) : !found.data?.hits.length ? (
@@ -235,7 +235,7 @@ export function DmSidebar({ onNavigate }: { onNavigate?: () => void }) {
                     <Link href={h.href} onClick={onNavigate} className="block rounded-control px-2.5 py-1.5 hover:bg-raised/60">
                       <span className="flex items-center gap-2 text-[12px]">
                         <span className="truncate font-semibold text-ink">{h.title}</span>
-                        <span className="ml-auto shrink-0 font-mono text-[10px] text-ink-muted">{now ? relativeStamp(h.at, now) : ""}</span>
+                        <span className="ml-auto shrink-0 font-mono text-[12px] text-ink-muted">{now ? relativeStamp(h.at, now) : ""}</span>
                       </span>
                       <span className="line-clamp-2 text-[12px] text-ink-muted">
                         {h.author ? `${h.author.displayName}: ` : ""}

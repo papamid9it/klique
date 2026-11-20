@@ -220,7 +220,7 @@ export function Dropdown({
         >
           {it.leading}
           <span className="min-w-0 flex-1 truncate">{it.label}</span>
-          {it.hint && <span className="font-mono text-[11px] opacity-70">{it.hint}</span>}
+          {it.hint && <span className="font-mono text-[12px] opacity-70">{it.hint}</span>}
           {it.icon && <Icon name={it.icon} size={16} className="shrink-0" />}
           {it.checked && <Icon name="check" size={16} className="shrink-0" />}
         </button>

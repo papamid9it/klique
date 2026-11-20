@@ -58,7 +58,7 @@ export function PillTabs<T extends string>({ label, items, active, onChange }: {
           >
             {t.icon}
             {t.label}
-            {t.count != null && t.count > 0 && <span className={`font-mono text-[11px] ${on ? "opacity-70" : "text-ink-muted"}`}>{t.count}</span>}
+            {t.count != null && t.count > 0 && <span className={`font-mono text-[12px] ${on ? "opacity-70" : "text-ink-muted"}`}>{t.count}</span>}
           </button>
         );
       })}

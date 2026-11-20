@@ -114,7 +114,7 @@ export function CommunitySearchBox({ slug, channels, initial }: { slug: string; 
       </form>
       {show && (
         <ul role="listbox" className="absolute right-0 z-30 mt-1 w-72 rounded-card border border-line bg-surface p-1.5 shadow-lg">
-          {!m && <li className="px-2.5 pt-1 pb-1.5 text-[11px] font-bold tracking-[0.08em] text-ink-muted uppercase">Search options</li>}
+          {!m && <li className="px-2.5 pt-1 pb-1.5 text-[12px] font-bold tracking-[0.08em] text-ink-muted uppercase">Search options</li>}
           {options.map((o, i) => (
             <li
               key={o.insert}
@@ -180,11 +180,11 @@ function Hit({ h, words, now }: { h: SearchHitDTO; words: string[]; now: Date | 
           <span className="font-semibold">{h.kind === "member" ? h.title : (h.author?.displayName ?? "Someone")}</span>
           {h.kind !== "member" && <span className="text-ink-muted">{h.title}</span>}
           {h.pinned && (
-            <span className="inline-flex items-center gap-0.5 text-[11px] text-ink-muted">
+            <span className="inline-flex items-center gap-0.5 text-[12px] text-ink-muted">
               <Icon name="pushpin" size={11} /> Pinned
             </span>
           )}
-          {h.at && now && <span className="font-mono text-[11px] text-ink-muted">{relativeStamp(h.at, now)}</span>}
+          {h.at && now && <span className="font-mono text-[12px] text-ink-muted">{relativeStamp(h.at, now)}</span>}
         </p>
         <p className="mt-0.5 line-clamp-3 text-[14px] break-words text-ink/90">
           <Highlight text={h.snippet} words={words} />

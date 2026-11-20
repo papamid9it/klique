@@ -114,7 +114,7 @@ export function PanelSection({ title, children, action, collapse }: { title: str
 
 function Count({ n }: { n?: number | string | null }) {
   if (!n) return null;
-  return <span className="ml-auto font-mono text-[11px] text-ink-muted">{typeof n === "number" && n > 999 ? "999+" : n}</span>;
+  return <span className="ml-auto font-mono text-[12px] text-ink-muted">{typeof n === "number" && n > 999 ? "999+" : n}</span>;
 }
 
 /**
@@ -127,7 +127,7 @@ export function PanelItem({ href, onClick, on, icon, glyph, count, badge, dot, c
       {icon ? <Icon name={icon} size={16} /> : <span aria-hidden="true" className="w-4 text-center text-[15px]">{glyph}</span>}
       <span className={cx("min-w-0 flex-1 truncate", dot && "font-semibold text-ink")}>{children}</span>
       {dot && <span aria-label="New" className="size-2 shrink-0 rounded-full bg-accent" />}
-      {badge ? <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-accent px-1.5 text-[11px] font-bold text-accent-ink">{badge > 99 ? "99+" : badge}</span> : <Count n={count} />}
+      {badge ? <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-accent px-1.5 text-[12px] font-bold text-accent-ink">{badge > 99 ? "99+" : badge}</span> : <Count n={count} />}
     </>
   );
   return href ? (

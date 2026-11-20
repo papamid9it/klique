@@ -303,7 +303,7 @@ export function ChatPane({
                   return (
                     <div key={m.id} role="presentation">
                       {newDay && (
-                        <li role="separator" aria-label={dayLabel(m.createdAt)} className="mx-4 mt-5 flex items-center gap-3 text-[11px] font-semibold tracking-wide text-ink-muted uppercase sm:mx-6">
+                        <li role="separator" aria-label={dayLabel(m.createdAt)} className="mx-4 mt-5 flex items-center gap-3 text-[12px] font-semibold tracking-wide text-ink-muted uppercase sm:mx-6">
                           <span className="h-px flex-1 bg-line" />
                           {dayLabel(m.createdAt)}
                           <span className="h-px flex-1 bg-line" />
@@ -719,7 +719,7 @@ function Composer({
                 </span>
                 <span className="block truncate text-xs text-ink-muted">{c.description || c.bot}</span>
               </span>
-              <span className="shrink-0 text-[11px] text-ink-muted">{c.bot}</span>
+              <span className="shrink-0 text-[12px] text-ink-muted">{c.bot}</span>
             </li>
           ))}
         </ul>
@@ -743,13 +743,13 @@ function Composer({
                 <>
                   <span className="inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-raised font-mono text-sm font-bold">@</span>
                   <span className="min-w-0 flex-1 truncate text-sm font-semibold">@{o.handle}</span>
-                  <span className="truncate text-[11px] text-ink-muted">{o.displayName}</span>
+                  <span className="truncate text-[12px] text-ink-muted">{o.displayName}</span>
                 </>
               ) : (
                 <>
                   <Avatar name={o.displayName} src={o.avatarUrl} frame={o.avatarFrame} size={28} />
                   <span className="min-w-0 flex-1 truncate text-sm font-semibold">{o.displayName}</span>
-                  <span className="font-mono text-[11px] text-ink-muted">@{o.handle}</span>
+                  <span className="font-mono text-[12px] text-ink-muted">@{o.handle}</span>
                 </>
               )}
             </li>
@@ -864,7 +864,7 @@ function Composer({
           </button>
           {stickers && <StickerPicker onPick={pickSticker} onClose={() => setStickers(false)} className="absolute right-0 bottom-full mb-2" />}
         </span>
-        {left < 200 && <span className={cx("pb-2.5 font-mono text-[11px]", left < 0 ? "text-danger" : "text-ink-muted")}>{left}</span>}
+        {left < 200 && <span className={cx("pb-2.5 font-mono text-[12px]", left < 0 ? "text-danger" : "text-ink-muted")}>{left}</span>}
         {slow.left > 0 ? (
           <span role="timer" aria-label={`You can send again in ${formatWait(slow.left)}`} className="inline-flex h-10 min-w-10 shrink-0 items-center justify-center rounded-full bg-raised px-2.5 font-mono text-[12px] font-semibold text-ink-muted">
             {formatWait(slow.left)}
@@ -875,7 +875,7 @@ function Composer({
           </button>
         )}
       </div>
-      <p className="mt-1.5 hidden px-1 text-[11px] text-ink-muted sm:block">
+      <p className="mt-1.5 hidden px-1 text-[12px] text-ink-muted sm:block">
         <kbd className="font-mono">Enter</kbd> to send · <kbd className="font-mono">Shift + Enter</kbd> for a new line · <kbd className="font-mono">@</kbd> to tag someone · paste a link to preview it
       </p>
     </form>

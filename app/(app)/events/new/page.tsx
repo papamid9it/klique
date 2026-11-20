@@ -444,7 +444,7 @@ function AdminCommunityPicker({ value, name, officialName, onChange, error }: { 
                   className="flex w-full items-center gap-2 rounded-control px-2.5 py-2 text-left text-sm transition hover:bg-raised"
                 >
                   <span className="min-w-0 flex-1 truncate font-semibold">{c.name}</span>
-                  <span className="font-mono text-[11px] text-ink-muted">{c.memberCount} members</span>
+                  <span className="font-mono text-[12px] text-ink-muted">{c.memberCount} members</span>
                   {c.privacy === "private" && <Icon name="lock" size={12} className="text-ink-muted" />}
                 </button>
               </li>

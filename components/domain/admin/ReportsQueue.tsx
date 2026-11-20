@@ -66,14 +66,14 @@ function ReportCard({ r, onDone }: { r: ReportDTO; onDone: (id: string) => void 
       <header className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="eyebrow">
-            {r.priority === 2 && <span className="mr-1.5 rounded-full bg-danger px-1.5 py-0.5 text-[10px] font-bold text-white uppercase">Urgent · hidden</span>}
-            {r.priority === 1 && <span className="mr-1.5 rounded-full border border-danger px-1.5 py-0.5 text-[10px] font-bold text-danger">18+</span>}
+            {r.priority === 2 && <span className="mr-1.5 rounded-full bg-danger px-1.5 py-0.5 text-[12px] font-bold text-white uppercase">Urgent · hidden</span>}
+            {r.priority === 1 && <span className="mr-1.5 rounded-full border border-danger px-1.5 py-0.5 text-[12px] font-bold text-danger">18+</span>}
             {KIND[r.targetType]} · {reasonLabel(r.reason)}
             {r.openCount > 1 && <span className="ml-2 text-danger">{r.openCount} open reports</span>}
           </p>
           <h3 className="mt-1 text-[15px] font-semibold break-words">{r.target.title}</h3>
         </div>
-        <span className="font-mono text-[11px] text-ink-muted">{relativeStamp(r.createdAt)}</span>
+        <span className="font-mono text-[12px] text-ink-muted">{relativeStamp(r.createdAt)}</span>
       </header>
 
       {(r.target.body || r.target.images.length > 0) && (

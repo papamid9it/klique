@@ -41,7 +41,7 @@ export function MiniCalendar({ todayKey, counts, selected, onSelect }: { todayKe
       </div>
       <div className="grid grid-cols-7 gap-y-1 text-center">
         {DOW.map((d, i) => (
-          <span key={i} className="pb-1 font-mono text-[10px] text-ink-muted">{d}</span>
+          <span key={i} className="pb-1 font-mono text-[12px] text-ink-muted">{d}</span>
         ))}
         {cells.map((d, i) => {
           if (d === null) return <span key={`b${i}`} />;

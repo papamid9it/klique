@@ -12,7 +12,7 @@ export function PersonRow({ user, action, badge, onOpen }: { user: UserBrief; ac
         <Avatar name={user.displayName} src={user.avatarUrl} frame={user.avatarFrame} size={42} badge={badge} />
         <span className="min-w-0">
           <span className="block truncate text-sm font-semibold"><UserName name={user.displayName} effect={user.nameEffect} /> <PlanBadge plan={user.badge} size={13} /></span>
-          <span className="block truncate font-mono text-[11px] text-ink-muted">
+          <span className="block truncate font-mono text-[12px] text-ink-muted">
             @{user.handle} · {placeShort(user)}
           </span>
         </span>

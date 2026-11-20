@@ -69,7 +69,7 @@ export function ScopeButton({
           <Icon name="pin" size={16} className="shrink-0 text-ink-muted" />
           <span className="min-w-0 flex-1">
             <span className="block truncate font-mono text-[12px] leading-tight font-semibold tracking-[.1em] uppercase">{scopeLabel(scope)}</span>
-            <span className="block truncate text-[10px] leading-tight text-ink-muted">{scopeTrail(scope)}</span>
+            <span className="block truncate text-[12px] leading-tight text-ink-muted">{scopeTrail(scope)}</span>
           </span>
           <Icon name="chevron-down" size={15} className="shrink-0 text-ink-muted" />
         </button>

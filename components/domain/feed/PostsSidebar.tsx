@@ -34,7 +34,7 @@ export function PostsSidebar({ c, onCommunity }: { c: CommunityDTO; onCommunity:
           </span>
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-[15px] font-semibold tracking-[-0.01em]">{c.name}</h2>
-            {c.memberCount !== null && <p className="font-mono text-[11.5px] text-ink-muted">{membersText(c.memberCount)}</p>}
+            {c.memberCount !== null && <p className="font-mono text-[12px] text-ink-muted">{membersText(c.memberCount)}</p>}
           </div>
           {!c.viewer.isMember && <JoinButton community={c} onChange={onCommunity} />}
         </div>
@@ -44,11 +44,11 @@ export function PostsSidebar({ c, onCommunity }: { c: CommunityDTO; onCommunity:
         </div>
         <dl className="mt-3 grid grid-cols-2 gap-2 text-[13px]">
           <div className="rounded-control bg-raised px-3 py-2">
-            <dt className="text-[11px] text-ink-muted">Who can post</dt>
+            <dt className="text-[12px] text-ink-muted">Who can post</dt>
             <dd className="font-semibold">{c.feedPolicy === "admins" ? "Organisers" : "Members"}</dd>
           </div>
           <div className="rounded-control bg-raised px-3 py-2">
-            <dt className="text-[11px] text-ink-muted">You</dt>
+            <dt className="text-[12px] text-ink-muted">You</dt>
             <dd className="font-semibold">{c.canPostToFeed ? "Can post" : c.viewer.isMember ? "Can vote" : "Not joined"}</dd>
           </div>
         </dl>
@@ -72,7 +72,7 @@ export function PostsSidebar({ c, onCommunity }: { c: CommunityDTO; onCommunity:
                     <span className="block truncate text-[13.5px] font-semibold">
                       <UserName name={t.user.displayName} effect={t.user.nameEffect} />
                     </span>
-                    <span className="block font-mono text-[11px] text-ink-muted">
+                    <span className="block font-mono text-[12px] text-ink-muted">
                       {t.posts} {t.posts === 1 ? "post" : "posts"} · {compactCount(t.upvotes)} love
                     </span>
                   </span>
@@ -97,12 +97,12 @@ export function PostsSidebar({ c, onCommunity }: { c: CommunityDTO; onCommunity:
               <li key={e.id}>
                 <Link href={`/events/${e.id}`} className="flex items-center gap-3 rounded-control px-2 py-1.5 transition hover:bg-raised">
                   <span className="flex w-11 shrink-0 flex-col items-center rounded-control bg-raised py-1 leading-none">
-                    <span className="text-[10px] font-semibold text-accent-text uppercase">{formatDateShort(e.startsAt, e.timeZone).split(" ")[2]}</span>
+                    <span className="text-[12px] font-semibold text-accent-text uppercase">{formatDateShort(e.startsAt, e.timeZone).split(" ")[2]}</span>
                     <span className="text-base font-semibold">{formatDateShort(e.startsAt, e.timeZone).split(" ")[1]}</span>
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[13.5px] font-medium">{e.title}</span>
-                    <span className="block truncate text-[11.5px] text-ink-muted">
+                    <span className="block truncate text-[12px] text-ink-muted">
                       {formatTime(e.startsAt, e.timeZone)} · {e.online ? "Online" : e.venue}
                     </span>
                   </span>

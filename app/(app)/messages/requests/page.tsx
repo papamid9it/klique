@@ -78,7 +78,7 @@ export default function MessageRequestsPage() {
                   <span className="min-w-0 flex-1">
                     <span className="flex items-baseline gap-2">
                       <span className="truncate font-semibold">{c.other.displayName}</span>
-                      <span className="ml-auto shrink-0 font-mono text-[11px] text-ink-muted">{c.lastMessage && now ? relativeStamp(c.lastMessage.createdAt, now) : ""}</span>
+                      <span className="ml-auto shrink-0 font-mono text-[12px] text-ink-muted">{c.lastMessage && now ? relativeStamp(c.lastMessage.createdAt, now) : ""}</span>
                     </span>
                     <span className="block truncate text-sm text-ink-muted">{c.lastMessage?.body || "Sent you a message"}</span>
                   </span>
@@ -109,7 +109,7 @@ export default function MessageRequestsPage() {
                 </div>
 
                 <div className="mt-8">
-                  {picked.lastMessage && <p className="mb-2 text-center font-mono text-[11px] text-ink-muted">{formatDateShort(picked.lastMessage.createdAt)}</p>}
+                  {picked.lastMessage && <p className="mb-2 text-center font-mono text-[12px] text-ink-muted">{formatDateShort(picked.lastMessage.createdAt)}</p>}
                   <div className="flex items-end gap-2">
                     <Avatar name={picked.other.displayName} src={picked.other.avatarUrl} size={28} />
                     <p className="max-w-[70%] rounded-[18px] rounded-bl-[6px] bg-raised px-4 py-2.5 text-[15px] leading-6 break-words whitespace-pre-wrap">{picked.lastMessage?.body || "Sent you a message"}</p>

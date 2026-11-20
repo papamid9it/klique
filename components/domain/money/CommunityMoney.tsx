@@ -310,7 +310,7 @@ export function MoneySummary({ slug }: { slug: string }) {
                 <span className="block truncate text-[13px]">
                   <span className="font-semibold">{p.user.displayName}</span> <span className="text-ink-muted">{p.kind === "donation" ? "donated to" : "chipped in for"}</span> {p.forTitle}
                 </span>
-                <span className="block font-mono text-[11px] text-ink-muted">{now ? relativeStamp(p.createdAt, now) : ""}</span>
+                <span className="block font-mono text-[12px] text-ink-muted">{now ? relativeStamp(p.createdAt, now) : ""}</span>
               </span>
               <span className="font-mono text-[13px] font-semibold">{p.status === "refunded" ? <s className="text-ink-muted">{naira(p.amount)}</s> : naira(p.amount)}</span>
             </li>

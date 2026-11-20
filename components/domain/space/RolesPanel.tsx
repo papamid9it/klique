@@ -27,7 +27,7 @@ export function useRoles(slug: string) {
 /** A role's name in its colour (with its emoji), as a small chip. */
 export function RoleChip({ role, className }: { role: Pick<RoleDTO, "name" | "color" | "icon">; className?: string }) {
   return (
-    <span className={cx("inline-flex max-w-[10rem] items-center gap-1 rounded-full border border-line px-2 py-0.5 text-[11px] font-semibold", className)}>
+    <span className={cx("inline-flex max-w-[10rem] items-center gap-1 rounded-full border border-line px-2 py-0.5 text-[12px] font-semibold", className)}>
       <span aria-hidden="true" className="size-2 shrink-0 rounded-full" style={{ background: role.color ?? "var(--ink-muted)" }} />
       {role.icon && <span aria-hidden="true">{role.icon}</span>}
       <span className="truncate">{role.name}</span>
@@ -86,7 +86,7 @@ export function RolesPanel({ slug }: { slug: string }) {
               <p className="truncate text-sm font-semibold">
                 {data.owner.icon && <span className="mr-1">{data.owner.icon}</span>}
                 Owner
-                <span className="ml-2 text-[11px] font-normal text-ink-muted">built in</span>
+                <span className="ml-2 text-[12px] font-normal text-ink-muted">built in</span>
               </p>
               <p className="truncate text-xs text-ink-muted">1 person · every permission</p>
             </div>
@@ -95,7 +95,7 @@ export function RolesPanel({ slug }: { slug: string }) {
                 Edit
               </Button>
             ) : (
-              <span className="text-[11px] text-ink-muted" title="Only the owner can change this">
+              <span className="text-[12px] text-ink-muted" title="Only the owner can change this">
                 <Icon name="lock" size={13} />
               </span>
             )}
@@ -107,7 +107,7 @@ export function RolesPanel({ slug }: { slug: string }) {
                 <p className="truncate text-sm font-semibold" style={r.color ? { color: r.color } : undefined}>
                   {r.icon && <span className="mr-1">{r.icon}</span>}
                   {r.name}
-                  {r.builtin && <span className="ml-2 text-[11px] font-normal text-ink-muted">built in</span>}
+                  {r.builtin && <span className="ml-2 text-[12px] font-normal text-ink-muted">built in</span>}
                 </p>
                 <p className="truncate text-xs text-ink-muted">
                   {r.memberCount ?? 0} {(r.memberCount ?? 0) === 1 ? "person" : "people"} · {r.permissions.length ? `${r.permissions.length} ${r.permissions.length === 1 ? "permission" : "permissions"}` : "no extra powers"}
@@ -132,7 +132,7 @@ export function RolesPanel({ slug }: { slug: string }) {
                   )}
                 </div>
               ) : (
-                <span className="text-[11px] text-ink-muted" title="It's at or above your own highest role">
+                <span className="text-[12px] text-ink-muted" title="It's at or above your own highest role">
                   <Icon name="lock" size={13} />
                 </span>
               )}
@@ -303,7 +303,7 @@ export function MemberRolesModal({ slug, user, current, onClose, onSaved }: { sl
                   <label className={cx("flex items-center gap-3 rounded-control px-2 py-2", locked ? "opacity-50" : "cursor-pointer hover:bg-raised")}>
                     <input type="checkbox" disabled={locked} checked={picked.has(r.id)} onChange={(e) => setPicked((s) => { const n = new Set(s); if (e.target.checked) n.add(r.id); else n.delete(r.id); return n; })} className="size-4 accent-[var(--accent-text)]" />
                     <RoleChip role={r} />
-                    {r.builtin === "admin" && <span className="text-[11px] text-ink-muted">makes them an admin</span>}
+                    {r.builtin === "admin" && <span className="text-[12px] text-ink-muted">makes them an admin</span>}
                   </label>
                 </li>
               );

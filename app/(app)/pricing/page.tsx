@@ -123,7 +123,7 @@ export default function PricingPage() {
             <article key={p} className={cx("flex flex-col rounded-card border bg-surface p-6", p === "pro" ? "border-ink" : "border-line")}>
               <div className="flex items-center justify-between gap-2">
                 <h2 className="text-lg font-semibold">{PLAN_NAMES[p]}</h2>
-                {isCurrent ? <span className="rounded-full bg-accent px-2 py-0.5 text-[11px] font-semibold text-accent-ink">Your plan</span> : p === "pro" ? <span className="rounded-full border border-line px-2 py-0.5 text-[11px] font-semibold">Most room</span> : null}
+                {isCurrent ? <span className="rounded-full bg-accent px-2 py-0.5 text-[12px] font-semibold text-accent-ink">Your plan</span> : p === "pro" ? <span className="rounded-full border border-line px-2 py-0.5 text-[12px] font-semibold">Most room</span> : null}
               </div>
               <p className="mt-1 text-sm text-ink-muted">{BLURB[p]}</p>
               <p className="mt-4 text-3xl font-semibold tracking-tight">

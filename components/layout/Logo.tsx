@@ -19,7 +19,7 @@ export function Logo({ className = "", compact, tagline, height = 40 }: { classN
           <MarkArt size={36} colors={MOOD} title="" />
         </span>
       )}
-      {tagline && <span className="pl-1 font-mono text-[10.5px] font-medium tracking-[0.3em] text-ink-muted">{TAGLINE}</span>}
+      {tagline && <span className="pl-1 font-mono text-[12px] font-medium tracking-[0.3em] text-ink-muted">{TAGLINE}</span>}
     </Link>
   );
 }

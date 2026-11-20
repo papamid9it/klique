@@ -163,7 +163,7 @@ export function CommunityRail({ activeSlug, horizontal, onNavigate }: { activeSl
           ) : (
             c.unread && <span className="absolute top-0 right-1 size-3 rounded-full bg-accent ring-2 ring-canvas" aria-hidden="true" />
           )}
-          {horizontal && <span className={cx("w-full truncate px-1 text-center text-[10px] leading-tight", active ? "font-semibold text-ink" : "text-ink-muted group-hover:text-ink")}>{c.name}</span>}
+          {horizontal && <span className={cx("w-full truncate px-1 text-center text-[12px] leading-tight", active ? "font-semibold text-ink" : "text-ink-muted group-hover:text-ink")}>{c.name}</span>}
         </Link>
         </ContextMenu>
       </li>

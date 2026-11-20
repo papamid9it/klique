@@ -166,15 +166,15 @@ export function MembersPanel({ slug, subSlug, group }: { slug: string; subSlug?:
           action={
             <div className="flex flex-wrap items-center justify-end gap-1.5">
               <RoleBadge role={m.role} />
-              {m.title ? <span className="inline-flex items-center rounded-full border border-line px-2 py-0.5 text-[11px] font-semibold text-ink">{m.title}</span> : null}
+              {m.title ? <span className="inline-flex items-center rounded-full border border-line px-2 py-0.5 text-[12px] font-semibold text-ink">{m.title}</span> : null}
               {m.roles?.filter((r) => r.name !== "Admin").slice(0, 3).map((r) => <RoleChip key={r.id} role={r} className="hidden sm:inline-flex" />)}
               {isTimedOut(m, now) && (
-                <span className="inline-flex items-center gap-1 rounded-full border border-danger/40 px-2 py-0.5 text-[11px] font-semibold text-danger" title={m.timeoutReason ?? undefined}>
+                <span className="inline-flex items-center gap-1 rounded-full border border-danger/40 px-2 py-0.5 text-[12px] font-semibold text-danger" title={m.timeoutReason ?? undefined}>
                   <Icon name="clock" size={11} /> Timed out · {timeLeft(m.timedOutUntil!, now!)}
                 </span>
               )}
               {m.postBan && (
-                <span className="inline-flex items-center gap-1 rounded-full border border-danger/40 px-2 py-0.5 text-[11px] font-semibold text-danger" title={m.postBan.reason ?? undefined}>
+                <span className="inline-flex items-center gap-1 rounded-full border border-danger/40 px-2 py-0.5 text-[12px] font-semibold text-danger" title={m.postBan.reason ?? undefined}>
                   <Icon name="ban" size={11} /> No Posts or Boards
                 </span>
               )}
@@ -198,7 +198,7 @@ export function MembersPanel({ slug, subSlug, group }: { slug: string; subSlug?:
               <Avatar name={opened.user.displayName} src={opened.user.avatarUrl} frame={opened.user.avatarFrame} size={56} />
               <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                 <RoleBadge role={opened.role} />
-                {opened.title ? <span className="rounded-full border border-line px-2 py-0.5 text-[11px] font-semibold text-ink">{opened.title}</span> : null}
+                {opened.title ? <span className="rounded-full border border-line px-2 py-0.5 text-[12px] font-semibold text-ink">{opened.title}</span> : null}
                 {opened.roles?.filter((r) => r.name !== "Admin").map((r) => <RoleChip key={r.id} role={r} />)}
               </div>
             </div>

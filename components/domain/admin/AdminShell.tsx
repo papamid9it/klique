@@ -85,7 +85,7 @@ function Menu({ summary, onNavigate }: { summary: AdminSummaryDTO | null; onNavi
                   >
                     <Icon name={it.icon} size={16} />
                     <span className="flex-1">{it.label}</span>
-                    {n > 0 && <span className="min-w-5 rounded-full bg-accent px-1.5 text-center font-mono text-[11px] leading-5 font-semibold text-accent-ink">{n > 99 ? "99+" : n}</span>}
+                    {n > 0 && <span className="min-w-5 rounded-full bg-accent px-1.5 text-center font-mono text-[12px] leading-5 font-semibold text-accent-ink">{n > 99 ? "99+" : n}</span>}
                   </Link>
                 </li>
               );
@@ -105,7 +105,7 @@ function Brand() {
       </span>
       <span className="leading-tight">
         <span className="block text-sm font-semibold">klique. admin</span>
-        <span className="block font-mono text-[10px] tracking-wide text-ink-muted uppercase">Console</span>
+        <span className="block font-mono text-[12px] tracking-wide text-ink-muted uppercase">Console</span>
       </span>
     </Link>
   );
@@ -133,7 +133,7 @@ function Console({ children }: { children: ReactNode }) {
                 <Avatar name={user.displayName} src={user.avatarUrl} size={30} />
                 <div className="min-w-0">
                   <p className="truncate text-[13px] font-semibold">{user.displayName}</p>
-                  <p className="truncate font-mono text-[11px] text-ink-muted">{user.email}</p>
+                  <p className="truncate font-mono text-[12px] text-ink-muted">{user.email}</p>
                 </div>
               </div>
             )}

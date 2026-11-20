@@ -69,7 +69,7 @@ export function Faces({ people, total, size = 22 }: { people: UserBrief[]; total
           </span>
         );
       })}
-      {extra > 0 && <span className="ml-1 rounded-full bg-raised px-1.5 py-px font-mono text-[10.5px] font-semibold text-ink-muted">+{extra}</span>}
+      {extra > 0 && <span className="ml-1 rounded-full bg-raised px-1.5 py-px font-mono text-[12px] font-semibold text-ink-muted">+{extra}</span>}
     </span>
   );
 }
@@ -87,7 +87,7 @@ const STANDING: Record<Exclude<CrewStanding, null>, string> = { host: "Your kliq
 
 export function StandingTag({ standing }: { standing: CrewStanding }) {
   if (!standing) return null;
-  return <span className={cx("rounded-full px-2 py-0.5 text-[11px] font-semibold", standing === "pending" ? "border border-line text-ink-muted" : "bg-accent text-accent-ink")}>{STANDING[standing]}</span>;
+  return <span className={cx("rounded-full px-2 py-0.5 text-[12px] font-semibold", standing === "pending" ? "border border-line text-ink-muted" : "bg-accent text-accent-ink")}>{STANDING[standing]}</span>;
 }
 
 /** What the card's button says for this viewer. */
@@ -111,12 +111,12 @@ export function KliqueCard({ crew, wide, joinable = true, onDismiss }: { crew: C
     <article className={cx("relative flex h-full flex-col overflow-hidden rounded-card border bg-surface", s ? "border-accent-text" : "border-line", wide ? "w-full" : "w-64 shrink-0 snap-start")}>
       <SoftLink href={href} className="block" aria-label={crew.title}>
         <Cover src={crew.coverImage} seed={crew.id} interest={crew.interest} className={wide ? "aspect-[16/8.5]" : "aspect-[4/3]"}>
-          <span className="absolute top-2 left-2 rounded-control bg-black/70 px-2 py-1 font-mono text-[10px] leading-tight text-white uppercase backdrop-blur">
+          <span className="absolute top-2 left-2 rounded-control bg-black/70 px-2 py-1 font-mono text-[12px] leading-tight text-white uppercase backdrop-blur">
             {formatDateShort(crew.meetupAt, crew.timeZone)}
           </span>
           <span className="absolute top-2 right-2 flex gap-1">
-            {audienceTag(crew) && <span className="rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur">{audienceTag(crew)}</span>}
-            <span className="rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur">{interest.short}</span>
+            {audienceTag(crew) && <span className="rounded-full bg-black/70 px-2 py-0.5 text-[12px] font-semibold text-white backdrop-blur">{audienceTag(crew)}</span>}
+            <span className="rounded-full bg-black/70 px-2 py-0.5 text-[12px] font-semibold text-white backdrop-blur">{interest.short}</span>
           </span>
         </Cover>
       </SoftLink>
@@ -142,15 +142,15 @@ export function KliqueCard({ crew, wide, joinable = true, onDismiss }: { crew: C
         <div className="mt-auto flex items-center gap-2 pt-1">
           <Faces people={crew.faces} total={crew.memberCount} size={22} />
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-[11.5px] text-ink-muted">{goingLine(crew)}</span>
-            {!crew.closed && <span className={cx("block text-[11px] font-semibold", crew.isFull ? "text-ink-muted" : "text-accent-text")}>{crew.isFull ? `${crew.memberCount}/${crew.maxMembers} · Full` : `${spotsLeft} ${spotsLeft === 1 ? "spot" : "spots"} left`}</span>}
+            <span className="block truncate text-[12px] text-ink-muted">{goingLine(crew)}</span>
+            {!crew.closed && <span className={cx("block text-[12px] font-semibold", crew.isFull ? "text-ink-muted" : "text-accent-text")}>{crew.isFull ? `${crew.memberCount}/${crew.maxMembers} · Full` : `${spotsLeft} ${spotsLeft === 1 ? "spot" : "spots"} left`}</span>}
           </span>
           <SoftLink href={href} className={buttonClass(s === "host" || s === "member" ? "primary" : !s && !crew.closed && !crew.isFull && joinable ? "primary" : "secondary", "sm", "shrink-0")}>
             {actionLabel(crew, joinable)}
           </SoftLink>
         </div>
         {onDismiss && (
-          <button type="button" onClick={onDismiss} className="self-start text-[11.5px] text-ink-muted hover:text-ink hover:underline">
+          <button type="button" onClick={onDismiss} className="self-start text-[12px] text-ink-muted hover:text-ink hover:underline">
             Not interested
           </button>
         )}
@@ -207,7 +207,7 @@ export function KliquePhotoCard({ crew, joinable = true, className = "aspect-[4/
   return (
     <div>
       {card}
-      <button type="button" onClick={onDismiss} className="mt-1.5 text-[11.5px] text-ink-muted hover:text-ink hover:underline">
+      <button type="button" onClick={onDismiss} className="mt-1.5 text-[12px] text-ink-muted hover:text-ink hover:underline">
         Not interested
       </button>
     </div>
@@ -226,9 +226,9 @@ export function CrewRow({ crew, joinable = true }: { crew: CrewCardDTO; joinable
   return (
     <article className={cx("flex items-center gap-3.5 rounded-card border bg-surface p-3 transition hover:border-ink-muted/50 sm:gap-4 sm:p-3.5", s ? "border-accent-text" : "border-line")}>
       <div className="w-12 shrink-0 text-center leading-none sm:w-14" aria-hidden="true">
-        <p className="eyebrow text-[10px]">Meet</p>
+        <p className="eyebrow text-[12px]">Meet</p>
         <p className="mt-1 text-xl font-semibold tracking-tight">{clock}</p>
-        <p className="mt-1 font-mono text-[10px] text-ink-muted">{meridiem}</p>
+        <p className="mt-1 font-mono text-[12px] text-ink-muted">{meridiem}</p>
       </div>
       <span className="hidden shrink-0 sm:block">
         <Faces people={crew.faces} total={crew.memberCount} size={30} />
@@ -248,10 +248,10 @@ export function CrewRow({ crew, joinable = true }: { crew: CrewCardDTO; joinable
         </p>
       </div>
       <div className="hidden shrink-0 flex-col items-end gap-1.5 md:flex">
-        <span className="inline-flex items-center gap-1 font-mono text-[11px] text-ink-muted">
+        <span className="inline-flex items-center gap-1 font-mono text-[12px] text-ink-muted">
           <Icon name="users" size={12} /> {crew.memberCount}/{crew.maxMembers}
         </span>
-        {!crew.closed && (crew.isFull ? <span className="rounded-full border border-line px-2 py-0.5 text-[10.5px] font-semibold text-ink-muted">Full</span> : <span className="text-[11px] text-ink-muted">{spotsLeft} left</span>)}
+        {!crew.closed && (crew.isFull ? <span className="rounded-full border border-line px-2 py-0.5 text-[12px] font-semibold text-ink-muted">Full</span> : <span className="text-[12px] text-ink-muted">{spotsLeft} left</span>)}
       </div>
       <SoftLink href={href} scroll={false} className={buttonClass(s === "host" || s === "member" ? "primary" : "secondary", "sm", "shrink-0")}>
         {actionLabel(crew, joinable)}

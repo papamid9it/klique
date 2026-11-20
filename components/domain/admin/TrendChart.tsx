@@ -40,7 +40,7 @@ export function TrendChart({ data, unit }: { data: { day: string; value: number 
   return (
     <div className="flex gap-3">
       {/* the scale */}
-      <div className="relative h-48 w-7 shrink-0 font-mono text-[10px] text-ink-muted" aria-hidden="true">
+      <div className="relative h-48 w-7 shrink-0 font-mono text-[12px] text-ink-muted" aria-hidden="true">
         {[top, top / 2, 0].map((v, i) => (
           <span key={i} className="absolute right-0 -translate-y-1/2 tabular-nums" style={{ top: `${(1 - v / top) * 100}%` }}>
             {v.toLocaleString()}
@@ -90,7 +90,7 @@ export function TrendChart({ data, unit }: { data: { day: string; value: number 
           )}
           {total === 0 && <p className="absolute inset-x-0 top-1/3 text-center text-xs text-ink-muted">Nothing in these {n} days yet.</p>}
         </div>
-        <div className="relative mt-2 h-4 font-mono text-[10px] text-ink-muted" aria-hidden="true">
+        <div className="relative mt-2 h-4 font-mono text-[12px] text-ink-muted" aria-hidden="true">
           {ticks.map((i) => (
             <span key={i} className="absolute whitespace-nowrap" style={{ left: `${pct(i)}%`, transform: `translateX(${i === 0 ? "0" : i === n - 1 ? "-100%" : "-50%"})` }}>
               {i === n - 1 ? "Today" : fmtDay(data[i].day, { day: "numeric", month: "short" })}

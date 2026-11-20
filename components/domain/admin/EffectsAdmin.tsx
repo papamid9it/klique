@@ -53,13 +53,13 @@ function FileInput({ label, hint, value, onChange }: { label: string; hint: stri
           <Button size="sm" onClick={() => input.current?.click()} loading={busy}>
             <Icon name="image" size={14} /> {value ? "Replace" : "Upload"}
           </Button>
-          {value && <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-ink-muted">{value.split("/").pop()}</span>}
+          {value && <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-ink-muted">{value.split("/").pop()}</span>}
         </div>
       ) : (
         <input value={value} onChange={(e) => onChange(e.target.value.trim())} placeholder="https://…/effect.lottie" className="h-10 w-full rounded-control border border-line bg-canvas px-3 font-mono text-sm" aria-label={label} />
       )}
       {sizes && (
-        <p className="font-mono text-[11.5px] text-ink-muted">
+        <p className="font-mono text-[12px] text-ink-muted">
           {sizes.after < sizes.before ? `${kb(sizes.before)} → ${kb(sizes.after)} after minifying` : `${kb(sizes.after)}, stored as it is`}
         </p>
       )}
@@ -160,7 +160,7 @@ function EffectCard({ e, onEdit, onRemove }: { e: ProfileEffectDTO; onEdit: () =
       <div className="flex items-center gap-1 border-t border-line px-2.5 py-2">
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[13px] font-semibold">{e.name}</span>
-          <span className="block font-mono text-[11px] text-ink-muted">{e.price} Hype</span>
+          <span className="block font-mono text-[12px] text-ink-muted">{e.price} Hype</span>
         </span>
         <Button size="sm" variant="ghost" onClick={onEdit}>
           Edit

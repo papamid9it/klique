@@ -97,7 +97,7 @@ export function Segmented<T extends string>({ label, value, options, onChange }:
             className={cx("inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[0.55rem] px-3 text-[13px] font-medium transition", on ? "bg-ink text-canvas" : "text-ink-muted hover:bg-raised hover:text-ink")}
           >
             {o.label}
-            {o.count != null && o.count > 0 && <span className={cx("font-mono text-[11px]", on ? "opacity-70" : "")}>{o.count}</span>}
+            {o.count != null && o.count > 0 && <span className={cx("font-mono text-[12px]", on ? "opacity-70" : "")}>{o.count}</span>}
           </button>
         );
       })}
@@ -117,7 +117,7 @@ const BADGE = {
 } as const;
 
 export function Badge({ tone = "neutral", children }: { tone?: keyof typeof BADGE; children: ReactNode }) {
-  return <span className={cx("inline-flex h-5 shrink-0 items-center rounded-full border px-2 text-[11px] font-semibold whitespace-nowrap", BADGE[tone])}>{children}</span>;
+  return <span className={cx("inline-flex h-5 shrink-0 items-center rounded-full border px-2 text-[12px] font-semibold whitespace-nowrap", BADGE[tone])}>{children}</span>;
 }
 
 /** A bordered panel with an optional title row. */
@@ -310,11 +310,11 @@ export function AuditRow({ e, compact, count = 1 }: { e: AuditEntryDTO; compact?
           {before}
           {a.text.includes("{t}") && target}
           {after}
-          {count > 1 && <span className="ml-1.5 rounded-full bg-raised px-1.5 py-px font-mono text-[11px] text-ink-muted">×{count}</span>}
+          {count > 1 && <span className="ml-1.5 rounded-full bg-raised px-1.5 py-px font-mono text-[12px] text-ink-muted">×{count}</span>}
         </p>
         {e.note && !compact && <p className="mt-0.5 text-xs text-ink-muted [overflow-wrap:anywhere]">&ldquo;{e.note}&rdquo;</p>}
       </div>
-      <time dateTime={e.createdAt} title={new Date(e.createdAt).toLocaleString()} className="mt-0.5 shrink-0 font-mono text-[11px] text-ink-muted">
+      <time dateTime={e.createdAt} title={new Date(e.createdAt).toLocaleString()} className="mt-0.5 shrink-0 font-mono text-[12px] text-ink-muted">
         {relativeStamp(e.createdAt)}
       </time>
     </li>

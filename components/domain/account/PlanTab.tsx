@@ -163,7 +163,7 @@ export function PlanTab() {
               <article key={p} className={cx("flex flex-col rounded-card border bg-surface p-5", current ? "border-accent-text" : "border-line", p === "pro" && "shadow-[0_0_0_1px_var(--accent)]")}>
                 <div className="flex items-center justify-between gap-2">
                   <h3 className="text-lg font-semibold">{PLAN_NAMES[p]}</h3>
-                  {current && <span className="rounded-full bg-accent px-2 py-0.5 text-[11px] font-semibold text-accent-ink">Current</span>}
+                  {current && <span className="rounded-full bg-accent px-2 py-0.5 text-[12px] font-semibold text-accent-ink">Current</span>}
                 </div>
                 <p className="mt-1 text-2xl font-semibold tracking-tight">
                   {paid ? naira(c.prices[p as PaidPlan]) : "₦0"}

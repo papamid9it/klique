@@ -197,7 +197,7 @@ export const Message = memo(function Message({
               <span className="sr-only">Sending</span>
             </span>
           ) : (
-            <span className="invisible block pt-1 text-center font-mono text-[10px] text-ink-muted group-hover:visible" aria-hidden="true">
+            <span className="invisible block pt-1 text-center font-mono text-[12px] text-ink-muted group-hover:visible" aria-hidden="true">
               {formatClock(m.createdAt).replace(/ (AM|PM)/, "")}
             </span>
           )
@@ -219,7 +219,7 @@ export const Message = memo(function Message({
             )}
             {!m.bot && m.author.bot && <BotTag />}
             {!m.bot && <PlanBadge plan={m.author.badge} size={13} className="self-center" />}
-            <time dateTime={m.createdAt} className="font-mono text-[11px] text-ink-muted">
+            <time dateTime={m.createdAt} className="font-mono text-[12px] text-ink-muted">
               {formatClock(m.createdAt)}
             </time>
             {m.pending && (
@@ -229,7 +229,7 @@ export const Message = memo(function Message({
               </span>
             )}
             {m.pinned && (
-              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-accent-text" title="Pinned">
+              <span className="inline-flex items-center gap-1 text-[12px] font-semibold text-accent-text" title="Pinned">
                 <Icon name="pushpin" size={11} /> Pinned
               </span>
             )}

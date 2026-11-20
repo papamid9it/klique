@@ -178,13 +178,17 @@ body {
   font-weight: 650;
 }
 
-/* Small mono eyebrow labels used across the editorial UI. */
-.eyebrow {
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-muted);
+/* Small mono eyebrow labels used across the editorial UI (12px and medium: thinner reads faint, in light moods most). */
+@layer components {
+  /* in a layer, so a size, weight or colour set on the same element (text-ink, font-semibold…) still applies */
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+  }
 }
 
 /* Interest / status chips with subtle mood-tinted colour. */
@@ -580,4 +584,18 @@ img[data-broken] {
   background: var(--color-raised) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='3' width='18' height='18' rx='3'/%3E%3Ccircle cx='9' cy='9' r='1.8'/%3E%3Cpath d='m21 15-4.5-4.5L5 21'/%3E%3C/svg%3E") center / min(40%, 28px) no-repeat;
   object-fit: cover;
   opacity: 0.85;
+}
+
+/* Small text stays easy to read: anything 12–12.5px is medium weight unless it says otherwise (in the base layer with zero
+   specificity, so a font-semibold or font-bold on the element still wins). Thin 400 at that size looks faint, in light moods most. */
+@layer base {
+  :where(.text-xs, .text-\[12px\], .text-\[12\.5px\]) {
+    font-weight: 500;
+  }
+}
+
+/* Times ("9:41", "2h") in the main font: the mono one is thinner at small sizes. Digits keep an even width. */
+time.font-mono {
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
 }

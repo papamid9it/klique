@@ -57,7 +57,7 @@ export function HomePanel() {
                     <li key={n.href} className="flex-1">
                       <Link href={n.href} aria-current={on ? "page" : undefined} aria-label={unread ? `${n.label}, ${unread} unread` : n.label} title={n.label} className={cx("relative flex h-10 items-center justify-center rounded-control transition", on ? "bg-raised text-ink" : "text-ink-muted hover:bg-raised/60 hover:text-ink")}>
                         <Icon name={n.icon} size={18} />
-                        {!!unread && <span aria-hidden="true" className="absolute top-1 right-1.5 min-w-4 rounded-full bg-accent px-1 text-center text-[10px] leading-4 font-bold text-accent-ink">{unread > 9 ? "9+" : unread}</span>}
+                        {!!unread && <span aria-hidden="true" className="absolute top-1 right-1.5 min-w-4 rounded-full bg-accent px-1 text-center text-[12px] leading-4 font-bold text-accent-ink">{unread > 9 ? "9+" : unread}</span>}
                       </Link>
                     </li>
                   );
@@ -90,7 +90,7 @@ export function HomePanel() {
                       <Icon name={n.icon} size={18} />
                       {n.label}
                       {!!unread && (
-                        <span className="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-accent px-1.5 py-0.5 text-[11px] font-bold text-accent-ink" aria-label={`${unread} unread`}>
+                        <span className="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-accent px-1.5 py-0.5 text-[12px] font-bold text-accent-ink" aria-label={`${unread} unread`}>
                           {unread > 9 ? "9+" : unread}
                         </span>
                       )}
@@ -118,7 +118,7 @@ export function HomePanel() {
                 <span className="block truncate text-sm font-semibold text-ink">
                   <UserName name={user.displayName} effect={user.nameEffect} />
                 </span>
-                <span className="block truncate font-mono text-[11px] text-ink-muted">@{user.handle}</span>
+                <span className="block truncate font-mono text-[12px] text-ink-muted">@{user.handle}</span>
               </span>
             </button>
             <UserMenu

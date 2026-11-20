@@ -26,9 +26,9 @@ function Row({ scope, onPick, onDrill, count, active }: { scope: Scope; onPick: 
         <span className="w-6 shrink-0 text-center text-lg leading-none" aria-hidden="true">{scopeFlag(scope)}</span>
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-semibold">{scopeLabel(scope)}</span>
-          <span className="block truncate text-[11px] text-ink-muted">{scopeTrail(scope)}</span>
+          <span className="block truncate text-[12px] text-ink-muted">{scopeTrail(scope)}</span>
         </span>
-        {count !== undefined && <span className="font-mono text-[11px] text-ink-muted">{count}</span>}
+        {count !== undefined && <span className="font-mono text-[12px] text-ink-muted">{count}</span>}
         {active && <Icon name="check" size={15} className="text-accent-text" />}
       </button>
       {onDrill && (
@@ -135,7 +135,7 @@ export function PlacePicker({
                 <button type="button" onClick={() => pick(browse)} className="flex w-full items-center gap-3 rounded-control bg-accent/10 px-3 py-2.5 text-left text-sm font-semibold text-accent-text hover:bg-accent/15">
                   <span className="w-6 text-center text-lg leading-none" aria-hidden="true">{scopeFlag(browse)}</span>
                   All of {scopeLabel(browse)}
-                  <span className="ml-auto text-[11px] font-normal text-ink-muted">the whole {LEVEL_NOUN[browse.level]}</span>
+                  <span className="ml-auto text-[12px] font-normal text-ink-muted">the whole {LEVEL_NOUN[browse.level]}</span>
                 </button>
               </li>
             )}

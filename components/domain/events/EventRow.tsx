@@ -24,9 +24,9 @@ export function EventRow({ event, onChange }: { event: EventDTO; onChange: (e: E
   return (
     <article className="group flex items-center gap-3.5 rounded-card border border-line bg-surface p-3 transition hover:border-ink-muted/50 sm:gap-4 sm:p-3.5">
       <div className="w-12 shrink-0 text-center leading-none sm:w-14" aria-hidden="true">
-        <p className="eyebrow text-[10px]">{d.month}</p>
+        <p className="eyebrow text-[12px]">{d.month}</p>
         <p className="mt-1 text-2xl font-semibold tracking-tight">{d.day}</p>
-        <p className="mt-1 font-mono text-[10px] text-ink-muted">{d.weekday}</p>
+        <p className="mt-1 font-mono text-[12px] text-ink-muted">{d.weekday}</p>
       </div>
       <Link href={`/events/${event.id}`} tabIndex={-1} aria-hidden="true" className="hidden shrink-0 sm:block">
         <Cover src={eventPhoto(event.id, event.coverImage)} seed={event.id} interest={event.interest} className="size-[4.5rem] rounded-xl" />
@@ -52,7 +52,7 @@ export function EventRow({ event, onChange }: { event: EventDTO; onChange: (e: E
       </div>
       <div className="hidden shrink-0 flex-col items-end gap-1.5 md:flex">
         <PriceTag amount={event.priceNaira} currency={event.currency} />
-        <span className="inline-flex items-center gap-1 font-mono text-[11px] text-ink-muted"><Icon name="users" size={12} /> {goingShown(event.goingCount) ? event.goingCount : "New"}</span>
+        <span className="inline-flex items-center gap-1 font-mono text-[12px] text-ink-muted"><Icon name="users" size={12} /> {goingShown(event.goingCount) ? event.goingCount : "New"}</span>
       </div>
       {event.viewer.isHost || event.isPast || (event.isFull && !going) ? (
         <Button size="sm" href={`/events/${event.id}`}>{event.review ? "View" : event.viewer.isHost ? "Hosting" : event.isPast ? "View" : "Full"}</Button>
@@ -68,7 +68,7 @@ export function EventRow({ event, onChange }: { event: EventDTO; onChange: (e: E
 /** A member's event that isn't posted yet: waiting for an admin, or turned down. */
 export function ReviewBadge({ status }: { status: "pending" | "rejected" }) {
   return (
-    <span className={cx("inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold tracking-normal", status === "pending" ? "bg-raised text-ink-muted" : "bg-danger/15 text-danger")}>
+    <span className={cx("inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[12px] font-semibold tracking-normal", status === "pending" ? "bg-raised text-ink-muted" : "bg-danger/15 text-danger")}>
       <Icon name={status === "pending" ? "clock" : "x"} size={11} /> {status === "pending" ? "Waiting for approval" : "Not approved"}
     </span>
   );

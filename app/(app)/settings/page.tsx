@@ -809,7 +809,7 @@ export default function SettingsPage() {
           <Icon name="logout" size={17} /> Log out
         </button>
       </div>
-      <p className="px-2.5 font-mono text-[11px] text-ink-muted">klique · @{user.handle}</p>
+      <p className="px-2.5 font-mono text-[12px] text-ink-muted">klique · @{user.handle}</p>
     </nav>
   );
 
@@ -902,7 +902,7 @@ export default function SettingsPage() {
               <span className="inline-flex size-9 items-center justify-center rounded-full border-2 border-ink-muted/60 text-ink-muted transition group-hover:border-ink group-hover:text-ink">
                 <Icon name="x" size={17} />
               </span>
-              <span className="font-mono text-[11px] font-semibold text-ink-muted">ESC</span>
+              <span className="font-mono text-[12px] font-semibold text-ink-muted">ESC</span>
             </button>
           </div>
         </div>

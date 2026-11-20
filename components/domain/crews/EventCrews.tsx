@@ -33,7 +33,7 @@ export function EventCrewsRow({ event }: { event: EventDTO }) {
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-2 text-sm font-semibold">
           Going together · {n ? `${n} ${n === 1 ? "klique" : "kliques"}` : "no kliques yet"}
-          {data?.mine && <span className="rounded-full bg-success/15 px-2 py-0.5 text-[11px] font-semibold text-success">Yours</span>}
+          {data?.mine && <span className="rounded-full bg-success/15 px-2 py-0.5 text-[12px] font-semibold text-success">Yours</span>}
         </span>
         <span className="block text-xs text-ink-muted">{n ? "Meet up first with people from your area and go together." : "Start a klique from your area and meet up first."}</span>
       </span>

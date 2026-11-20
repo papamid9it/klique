@@ -17,7 +17,7 @@ export function DateChip({ iso, zone }: { iso: string; /** the event's own zone 
   const d = dateChip(iso, zone);
   return (
     <span className="inline-flex min-w-11 flex-col items-center rounded-lg bg-white px-2 py-1 text-center leading-none text-neutral-900 shadow-md">
-      <span className="font-mono text-[10px] font-medium tracking-wider">{d.month}</span>
+      <span className="font-mono text-[12px] font-medium tracking-wider">{d.month}</span>
       <span className="mt-0.5 text-xl font-bold tracking-tight">{d.day}</span>
     </span>
   );
@@ -27,7 +27,7 @@ export function PriceTag({ amount, currency, className }: { amount: number | nul
   // not known yet: no tag (it isn't free)
   if (amount === null) return null;
   return (
-    <span data-pill="" className={cx("inline-flex items-center rounded-full px-2.5 py-1 font-mono text-[11px] font-medium shadow-sm", isFree(amount) ? "bg-accent text-accent-ink" : "bg-accent2 text-accent2-ink", className)}>
+    <span data-pill="" className={cx("inline-flex items-center rounded-full px-2.5 py-1 font-mono text-[12px] font-medium shadow-sm", isFree(amount) ? "bg-accent text-accent-ink" : "bg-accent2 text-accent2-ink", className)}>
       {isFree(amount) ? "FREE" : formatPrice(amount, currency)}
     </span>
   );
@@ -48,10 +48,10 @@ export function EventCard({ event, onChange }: { event: EventDTO; onChange: (e: 
           </div>
           {(event.isPast || event.online || event.audience !== "public") && (
             <div className="absolute bottom-3 left-3 flex gap-1.5">
-              {event.isPast && <span className="rounded-full bg-black/70 px-2.5 py-1 font-mono text-[10px] text-white">PAST</span>}
-              {event.online && <span className="inline-flex items-center gap-1 rounded-full bg-black/70 px-2.5 py-1 font-mono text-[10px] text-white"><Icon name="globe" size={10} /> ONLINE</span>}
+              {event.isPast && <span className="rounded-full bg-black/70 px-2.5 py-1 font-mono text-[12px] text-white">PAST</span>}
+              {event.online && <span className="inline-flex items-center gap-1 rounded-full bg-black/70 px-2.5 py-1 font-mono text-[12px] text-white"><Icon name="globe" size={10} /> ONLINE</span>}
               {event.audience !== "public" && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-black/70 px-2.5 py-1 font-mono text-[10px] text-white">
+                <span className="inline-flex items-center gap-1 rounded-full bg-black/70 px-2.5 py-1 font-mono text-[12px] text-white">
                   <Icon name="lock" size={10} /> MEMBERS
                 </span>
               )}
@@ -79,7 +79,7 @@ export function EventCard({ event, onChange }: { event: EventDTO; onChange: (e: 
         </p>
 
         <div className="mt-auto flex items-center justify-between gap-3 border-t border-line pt-3.5" style={{ marginTop: "1rem" }}>
-          <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-ink-muted">
+          <span className="inline-flex items-center gap-1.5 font-mono text-[12px] text-ink-muted">
             <Icon name="users" size={13} /> {goingText(event.goingCount)}
           </span>
           <div className="flex items-center gap-1.5">

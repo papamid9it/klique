@@ -206,7 +206,7 @@ export const MOODS: Mood[] = [
       surface: "#fffdf8",
       raised: "#f1e8da",
       ink: "#2b2530",
-      inkMuted: "#665c6e",
+      inkMuted: "#544b5c",
       line: "#e1d4c1",
       accent: "#b9a5de",
       accentInk: "#241c33",

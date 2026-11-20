@@ -103,7 +103,7 @@ export function CategoriesAdmin() {
                     <Button size="sm" onClick={() => edit(i, { hidden: !c.hidden })}>
                       <Icon name={c.hidden ? "plus" : "x"} size={13} /> {c.hidden ? "Show" : "Hide"}
                     </Button>
-                    <p className="min-w-0 basis-full font-mono text-[11px] text-ink-muted sm:basis-auto">
+                    <p className="min-w-0 basis-full font-mono text-[12px] text-ink-muted sm:basis-auto">
                       {c.id}
                       {!known.has(c.id) && " · new, not saved yet"}
                       {c.hidden && " · hidden"}

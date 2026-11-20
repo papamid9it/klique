@@ -36,7 +36,7 @@ function CommunityTile({ c, onChange }: { c: CommunityCardDTO; onChange: (c: Com
           <span className="truncate">{c.name}</span>
           <VerifiedCheck on={c.verified} size={13} />
         </Link>
-        <p className="font-mono text-[11px] text-ink-muted">{c.memberCount === null ? "Private" : `${compactCount(c.memberCount)} members`}</p>
+        <p className="font-mono text-[12px] text-ink-muted">{c.memberCount === null ? "Private" : `${compactCount(c.memberCount)} members`}</p>
         <JoinButton community={c} onChange={onChange} />
       </div>
     </li>
@@ -53,7 +53,7 @@ function EventTile({ e, onChange }: { e: EventDTO; onChange: (e: EventDTO) => vo
       <Link href={`/events/${e.id}`} className="block">
         <Cover src={eventPhoto(e.id, e.coverImage)} seed={e.id} interest={e.interest} className="aspect-[4/3]">
           <span className="absolute top-2 left-2 flex flex-col items-center rounded-control bg-black/70 px-2 py-1 leading-none text-white backdrop-blur">
-            <span className="font-mono text-[9px] uppercase">{d.month}</span>
+            <span className="font-mono text-[11px] font-semibold uppercase">{d.month}</span>
             <span className="text-[17px] font-semibold">{d.day}</span>
           </span>
         </Cover>
@@ -62,11 +62,11 @@ function EventTile({ e, onChange }: { e: EventDTO; onChange: (e: EventDTO) => vo
         <Link href={`/events/${e.id}`} className="line-clamp-2 text-[14px] leading-snug font-semibold hover:underline">
           {e.title}
         </Link>
-        <p className="truncate font-mono text-[11px] text-ink-muted">
+        <p className="truncate font-mono text-[12px] text-ink-muted">
           {formatTime(e.startsAt, e.timeZone)} · {e.online ? "Online" : e.venue}
         </p>
         <div className="mt-auto flex items-center justify-between gap-2 pt-2">
-          <span className="inline-flex items-center gap-1 font-mono text-[11px] text-ink-muted">
+          <span className="inline-flex items-center gap-1 font-mono text-[12px] text-ink-muted">
             <Icon name="users" size={12} /> {compactCount(e.goingCount)} going
           </span>
           {e.viewer.isHost ? (
@@ -103,7 +103,7 @@ export function EventFeedCard({ e, onChange }: { e: EventDTO; onChange: (e: Even
       <Link href={`/events/${e.id}`} className="block">
         <Cover src={eventPhoto(e.id, e.coverImage)} seed={e.id} interest={e.interest} className="aspect-[16/9]">
           <span className="absolute top-2 left-2 flex flex-col items-center rounded-control bg-black/70 px-2.5 py-1.5 leading-none text-white backdrop-blur">
-            <span className="font-mono text-[10px] uppercase">{d.month}</span>
+            <span className="font-mono text-[12px] uppercase">{d.month}</span>
             <span className="text-[20px] font-semibold">{d.day}</span>
           </span>
         </Cover>
@@ -113,7 +113,7 @@ export function EventFeedCard({ e, onChange }: { e: EventDTO; onChange: (e: Even
           <Link href={`/events/${e.id}`} className="line-clamp-2 text-[17px] leading-snug font-semibold hover:underline">
             {e.title}
           </Link>
-          <p className="mt-1 truncate font-mono text-[11px] text-ink-muted">
+          <p className="mt-1 truncate font-mono text-[12px] text-ink-muted">
             {formatTime(e.startsAt, e.timeZone)} · {e.online ? "Online" : e.venue} · {compactCount(e.goingCount)} going
           </p>
         </div>

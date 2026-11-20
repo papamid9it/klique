@@ -39,7 +39,7 @@ export function TopicRow({ topic: t, onChange, onRemoved, onTag, active }: { top
           <ul className="relative mb-1.5 flex flex-wrap gap-1.5" aria-label="Tags">
             {t.tags.map((tag) => (
               <li key={tag}>
-                <button type="button" onClick={() => onTag?.(tag)} title={`Show posts tagged ${tag}`} className="rounded-full bg-raised px-2 py-0.5 text-[11.5px] font-medium text-ink-muted transition hover:bg-line hover:text-ink">
+                <button type="button" onClick={() => onTag?.(tag)} title={`Show posts tagged ${tag}`} className="rounded-full bg-raised px-2 py-0.5 text-[12px] font-medium text-ink-muted transition hover:bg-line hover:text-ink">
                   {tag}
                 </button>
               </li>

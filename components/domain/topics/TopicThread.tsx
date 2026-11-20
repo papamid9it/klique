@@ -280,7 +280,7 @@ function PostIntro({ t, empty, count, full }: { t: TopicDTO; empty: boolean; /**
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <GiftButton target={{ type: "topic", id: t.id }} authorId={t.author.id} />
       </div>
-      <div className="mt-5 flex items-center gap-3 text-[11px] font-semibold tracking-wide text-ink-muted uppercase">
+      <div className="mt-5 flex items-center gap-3 text-[12px] font-semibold tracking-wide text-ink-muted uppercase">
         <span className="h-px flex-1 bg-line" />
         {empty ? "No replies yet" : `${replies} ${replies === 1 ? "reply" : "replies"}`}
         <span className="h-px flex-1 bg-line" />

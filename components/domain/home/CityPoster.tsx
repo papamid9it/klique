@@ -20,9 +20,9 @@ import { useHomeKliques } from "./useHomeKliques";
 import type { CommunityCardDTO, EventDTO, MyCommunityDTO } from "@/lib/types";
 
 /** small mono uppercase label */
-const LABEL = "font-mono text-[11px] tracking-[.14em] text-ink-muted uppercase";
+const LABEL = "font-mono text-[12px] tracking-[.14em] text-ink-muted uppercase";
 /** a mono "SEE ALL →" link */
-const MORE = "mt-3 inline-block font-mono text-[11px] tracking-[.12em] text-ink uppercase underline underline-offset-4 hover:text-ink-muted";
+const MORE = "mt-3 inline-block font-mono text-[12px] tracking-[.12em] text-ink uppercase underline underline-offset-4 hover:text-ink-muted";
 const ROW = "flex min-h-11 items-center gap-3 border-b border-line py-2";
 
 /**
@@ -92,7 +92,7 @@ export function CityPoster({
           This week
         </h1>
         {stats.length > 0 && (
-          <ul className="shrink-0 space-y-1.5 pb-1 text-right font-mono text-[11px] tracking-[.12em] text-ink-muted uppercase">
+          <ul className="shrink-0 space-y-1.5 pb-1 text-right font-mono text-[12px] tracking-[.12em] text-ink-muted uppercase">
             {stats.map((s) => (
               <li key={s}>{s}</li>
             ))}
@@ -118,7 +118,7 @@ export function CityPoster({
               <Cover src={eventPhoto(top.id, top.coverImage)} seed={top.id} interest={top.interest} className="absolute inset-0 !rounded-none" />
               <span aria-hidden className="absolute inset-0 bg-[linear-gradient(to_top,rgba(0,0,0,.88)_0%,rgba(0,0,0,.45)_38%,transparent_68%)]" />
             </Link>
-            <span className="pointer-events-none absolute top-4 left-4 rounded-control bg-white px-2 py-1 font-mono text-[11px] tracking-[.08em] text-black uppercase">{formatDateShort(top.startsAt)}</span>
+            <span className="pointer-events-none absolute top-4 left-4 rounded-control bg-white px-2 py-1 font-mono text-[12px] tracking-[.08em] text-black uppercase">{formatDateShort(top.startsAt)}</span>
             <div className="pointer-events-none absolute inset-x-6 bottom-6 flex flex-wrap items-end gap-x-6 gap-y-4 text-white">
               <div className="min-w-0 flex-[1_1_320px]">
                 <h2 className="line-clamp-2 font-display text-[clamp(30px,3.2vw,48px)] leading-[.92] font-black tracking-[-0.02em] uppercase">{top.title}</h2>
@@ -187,7 +187,7 @@ export function CityPoster({
                 <li key={c.id}>
                   <Link href={`/communities/${c.slug}`} className={cx(ROW, "hover:text-ink")}>
                     <span className="min-w-0 flex-1 truncate text-sm font-semibold">{c.name}</span>
-                    <span className={cx("shrink-0 font-mono text-[11px] tracking-[.08em] uppercase", c.mentions || c.unreadCount ? "text-accent-text" : "text-ink-muted")}>
+                    <span className={cx("shrink-0 font-mono text-[12px] tracking-[.08em] uppercase", c.mentions || c.unreadCount ? "text-accent-text" : "text-ink-muted")}>
                       {communityNews(c) ?? (c.lastActivityAt ? `Active ${relativeStamp(c.lastActivityAt)}` : "Quiet")}
                     </span>
                   </Link>

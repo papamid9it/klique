@@ -371,7 +371,7 @@ export function FeedMedia({ media, className, onOpen, onDoubleTap, fill, withSou
                   <button type="button" onClick={(e) => tap(k, e)} aria-label={onOpen ? `${openLabel} (picture ${k + 1} of ${media.length})` : `Picture ${k + 1} of ${media.length}`} className={cx("group/zoom relative block size-full", zoomHint && onOpen ? "cursor-zoom-in" : onOpen ? "cursor-pointer" : "cursor-default")}>
                     {zoomHint && onOpen && (
                       // "tap to zoom": always there on touch screens, on hover with a mouse
-                      <span aria-hidden="true" className="pointer-events-none absolute right-2 bottom-2 z-10 inline-flex items-center gap-1 rounded-full bg-black/60 px-2 py-1 text-[11px] font-semibold text-white backdrop-blur transition [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/zoom:opacity-100">
+                      <span aria-hidden="true" className="pointer-events-none absolute right-2 bottom-2 z-10 inline-flex items-center gap-1 rounded-full bg-black/60 px-2 py-1 text-[12px] font-semibold text-white backdrop-blur transition [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/zoom:opacity-100">
                         <Icon name="zoom-in" size={13} /> Zoom
                       </span>
                     )}
@@ -407,7 +407,7 @@ export function FeedMedia({ media, className, onOpen, onDoubleTap, fill, withSou
           <button type="button" onClick={() => go(i + 1)} aria-label="Next picture" className="absolute top-1/2 right-2 inline-flex size-9 -translate-y-1/2 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur transition hover:bg-black/80">
             <Icon name="chevron-right" size={18} />
           </button>
-          <span className="pointer-events-none absolute top-2 right-2 rounded-full bg-black/60 px-2 py-0.5 font-mono text-[11px] font-semibold text-white backdrop-blur">
+          <span className="pointer-events-none absolute top-2 right-2 rounded-full bg-black/60 px-2 py-0.5 font-mono text-[12px] font-semibold text-white backdrop-blur">
             {i + 1}/{media.length}
           </span>
           <span className="pointer-events-none absolute bottom-2.5 left-1/2 flex -translate-x-1/2 gap-1.5" aria-hidden="true">

@@ -266,7 +266,7 @@ export function EventsExplorer() {
           </div>
           <button type="button" onClick={() => setFiltersOpen(true)} className={cx("relative inline-flex h-11 shrink-0 items-center gap-2 rounded-full border px-4 text-sm font-semibold", activeFilters ? "border-accent-text bg-surface text-ink" : "border-line bg-surface text-ink")}>
             <Icon name="sliders" size={15} /> Filters
-            {activeFilters > 0 && <span className="inline-flex size-5 items-center justify-center rounded-full bg-accent text-[11px] font-bold text-accent-ink">{activeFilters}</span>}
+            {activeFilters > 0 && <span className="inline-flex size-5 items-center justify-center rounded-full bg-accent text-[12px] font-bold text-accent-ink">{activeFilters}</span>}
           </button>
         </div>
         <Modal open={filtersOpen} onClose={() => setFiltersOpen(false)} title="Filter events">
@@ -361,7 +361,7 @@ export function EventsExplorer() {
           <div className="mt-4 flex flex-wrap gap-2 xl:hidden" role="group" aria-label={`Browse ${childNoun}`}>
             {places.map((p) => (
               <button key={p.scope} type="button" onClick={() => place.setScope(p.s)} className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-dashed border-line px-3 text-[13px] text-ink-muted hover:border-ink-muted hover:text-ink">
-                <span aria-hidden="true">{scopeFlag(p.s)}</span> {scopeLabel(p.s)} <span className="font-mono text-[11px]">{p.count}</span>
+                <span aria-hidden="true">{scopeFlag(p.s)}</span> {scopeLabel(p.s)} <span className="font-mono text-[12px]">{p.count}</span>
               </button>
             ))}
           </div>
@@ -393,7 +393,7 @@ export function EventsExplorer() {
                 <section key={g.key} aria-label={dayHeading(g.key, g.iso, g.events[0]?.timeZone)}>
                   <h2 className="mb-3 flex items-baseline gap-2.5 text-lg font-semibold tracking-[-0.02em]">
                     {dayHeading(g.key, g.iso, g.events[0]?.timeZone)}
-                    <span className="font-mono text-[11px] font-normal text-ink-muted">{g.events.length} {g.events.length === 1 ? "event" : "events"}</span>
+                    <span className="font-mono text-[12px] font-normal text-ink-muted">{g.events.length} {g.events.length === 1 ? "event" : "events"}</span>
                   </h2>
                   <div className="space-y-2.5">
                     {g.events.map((e) => (
@@ -433,7 +433,7 @@ export function EventsExplorer() {
                     <button type="button" onClick={() => place.setScope(p.s)} className="flex w-full items-center gap-2.5 rounded-control px-2 py-2 text-left hover:bg-raised">
                       <span className="w-5 text-center" aria-hidden="true">{scopeFlag(p.s)}</span>
                       <span className="min-w-0 flex-1 truncate text-sm font-medium">{scopeLabel(p.s)}</span>
-                      <span className="font-mono text-[11px] text-ink-muted">{p.count}</span>
+                      <span className="font-mono text-[12px] text-ink-muted">{p.count}</span>
                     </button>
                   </li>
                 ))}

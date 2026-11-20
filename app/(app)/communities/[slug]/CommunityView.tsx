@@ -483,7 +483,7 @@ function CommunityWorkspace({ slug }: { slug: string }) {
             {!view && activeChannel?.topic && <p className="hidden truncate text-xs text-ink-muted sm:block">{activeChannel.topic}</p>}
           </div>
           {!view && !!activeChannel?.slowModeSec && (
-            <span title={`Slow mode: one message every ${slowModeLabel(activeChannel.slowModeSec)}`} className="inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 font-mono text-[11px] font-semibold text-ink-muted">
+            <span title={`Slow mode: one message every ${slowModeLabel(activeChannel.slowModeSec)}`} className="inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 font-mono text-[12px] font-semibold text-ink-muted">
               <Icon name="timer" size={14} />
               <span className="sr-only">Slow mode:</span>
               {slowModeLabel(activeChannel.slowModeSec)}

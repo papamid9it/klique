@@ -166,7 +166,7 @@ export function NotificationRow({ n, now, icon, kind, onOpen, onPatch, onRemove 
           </p>
           {others && <p className="mt-0.5 text-[12.5px] font-medium text-ink-muted">{others}</p>}
           {n.body && <p className="mt-0.5 line-clamp-2 text-[13px] text-ink-muted">{n.body}</p>}
-          <p className="mt-1 font-mono text-[11px] text-ink-muted">
+          <p className="mt-1 font-mono text-[12px] text-ink-muted">
             {kind} · {now ? relativeStamp(n.updatedAt, now) : ""}
           </p>
           {actions && (

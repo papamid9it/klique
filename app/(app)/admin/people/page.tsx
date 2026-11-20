@@ -63,7 +63,7 @@ function People() {
                     <Avatar name={u.displayName} src={u.avatarUrl} size={34} />
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-semibold">{u.displayName}</span>
-                      <span className="block truncate font-mono text-[11px] text-ink-muted">
+                      <span className="block truncate font-mono text-[12px] text-ink-muted">
                         @{u.handle} · {placeShort(u)}
                       </span>
                     </span>

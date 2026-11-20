@@ -36,12 +36,12 @@ function Tag({ a }: { a: ReturnType<StyleAccess> | null }) {
   if (!a || a.price === 0) return null;
   if (a.locked)
     return (
-      <span className="inline-flex items-center gap-0.5 rounded-full bg-ink/80 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-canvas">
+      <span className="inline-flex items-center gap-0.5 rounded-full bg-ink/80 px-1.5 py-0.5 font-mono text-[12px] font-semibold text-canvas">
         <Icon name="lock" size={10} /> {a.price}
       </span>
     );
   return (
-    <span className="inline-flex items-center rounded-full bg-success/15 px-1.5 py-0.5 text-[10px] font-semibold text-success" title={`Yours until ${new Date(a.until!).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`}>
+    <span className="inline-flex items-center rounded-full bg-success/15 px-1.5 py-0.5 text-[12px] font-semibold text-success" title={`Yours until ${new Date(a.until!).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`}>
       Yours
     </span>
   );
@@ -254,7 +254,7 @@ function TryOnPanel({ look, saved, tried, access, balance, handle, onReset, onUn
     <section aria-label="Trying on" className="rounded-card border border-accent/50 bg-accent/5 p-4">
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="text-[15px] font-semibold">Trying on</h3>
-        <span className="inline-flex items-center gap-1 rounded-full bg-raised px-2 py-0.5 text-[11px] font-semibold text-ink-muted">
+        <span className="inline-flex items-center gap-1 rounded-full bg-raised px-2 py-0.5 text-[12px] font-semibold text-ink-muted">
           <Icon name="eye" size={12} /> Preview, only you can see this
         </span>
         <span className="flex-1" />
@@ -271,7 +271,7 @@ function TryOnPanel({ look, saved, tried, access, balance, handle, onReset, onUn
             {items.map((i) => (
               <li key={i.f} className="flex items-center gap-2 px-3 py-2.5">
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[11px] text-ink-muted">{KIND[i.f]}</span>
+                  <span className="block text-[12px] text-ink-muted">{KIND[i.f]}</span>
                   <span className="block truncate text-sm font-semibold">{i.label}</span>
                 </span>
                 {i.a?.locked ? (
@@ -279,7 +279,7 @@ function TryOnPanel({ look, saved, tried, access, balance, handle, onReset, onUn
                     <Icon name="lock" size={12} /> {i.a.price.toLocaleString("en-NG")}
                   </Button>
                 ) : (
-                  <span className="rounded-full bg-success/15 px-2 py-0.5 text-[11px] font-semibold text-success">{i.a && i.a.price > 0 ? "Yours" : "Free"}</span>
+                  <span className="rounded-full bg-success/15 px-2 py-0.5 text-[12px] font-semibold text-success">{i.a && i.a.price > 0 ? "Yours" : "Free"}</span>
                 )}
               </li>
             ))}

@@ -188,7 +188,7 @@ export function JoinButton({
 export function PointsNeededChip({ need, className }: { need: number; className?: string }) {
   if (!need) return null;
   return (
-    <span className={cx("inline-flex items-center gap-1 rounded-full bg-raised px-2 py-0.5 text-[11.5px] font-semibold text-ink-muted", className)}>
+    <span className={cx("inline-flex items-center gap-1 rounded-full bg-raised px-2 py-0.5 text-[12px] font-semibold text-ink-muted", className)}>
       <Icon name="asterisk" size={11} className="text-accent-text" /> Needs {need.toLocaleString("en-NG")} points to join
     </span>
   );

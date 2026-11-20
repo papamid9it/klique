@@ -72,7 +72,7 @@ export function MessageEditor({ initial, onSave, onCancel, className, max = LIMI
         </p>
       )}
       <div className="mt-1.5 flex flex-wrap items-center gap-2">
-        <p className="mr-auto text-[11px] text-ink-muted">
+        <p className="mr-auto text-[12px] text-ink-muted">
           escape to <button type="button" onClick={onCancel} className="text-accent-text hover:underline">cancel</button> · enter to <button type="button" onClick={() => void save()} className="text-accent-text hover:underline">save</button>
         </p>
         <Button size="sm" variant="ghost" onClick={onCancel} disabled={busy}>
@@ -90,7 +90,7 @@ export function MessageEditor({ initial, onSave, onCancel, className, max = LIMI
 export function EditedTag({ at }: { at: string | null }) {
   if (!at) return null;
   return (
-    <span title={`Edited ${new Date(at).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "Africa/Lagos" })}`} className="ml-1.5 text-[11px] text-ink-muted select-none">
+    <span title={`Edited ${new Date(at).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "Africa/Lagos" })}`} className="ml-1.5 text-[12px] text-ink-muted select-none">
       (edited)
     </span>
   );

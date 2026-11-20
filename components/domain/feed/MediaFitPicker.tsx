@@ -33,7 +33,7 @@ export function MediaFitPicker({ media, value, onChange }: { media: TopicMediaDT
                 )}
               </span>
               <span className="mt-1 block text-[12.5px] font-semibold">{f.label}</span>
-              <span className="block text-[11px] leading-tight text-ink-muted">{f.hint}</span>
+              <span className="block text-[12px] leading-tight text-ink-muted">{f.hint}</span>
             </button>
           );
         })}

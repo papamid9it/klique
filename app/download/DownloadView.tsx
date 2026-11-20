@@ -148,7 +148,7 @@ export function DownloadView({ release }: { release: DesktopRelease & { live: bo
               <span className="size-3 rounded-full bg-[#ff5f57]" />
               <span className="size-3 rounded-full bg-[#febc2e]" />
               <span className="size-3 rounded-full bg-[#28c840]" />
-              <span className="ml-3 font-mono text-[11px] text-ink-muted">Klique</span>
+              <span className="ml-3 font-mono text-[12px] text-ink-muted">Klique</span>
             </div>
             <div className="grid grid-cols-[3.25rem_1fr]">
               <div className="space-y-2.5 border-r border-line p-2.5">
@@ -265,7 +265,7 @@ function OsCard({ os, here, files, steps }: { os: DesktopOs; here: boolean; file
     <div className={cx("flex flex-col rounded-[22px] border bg-surface p-6", here ? "border-ink ring-2 ring-accent-text" : "border-line")}>
       <div className="flex items-center justify-between">
         <p className="eyebrow">{OS_NAME[os]}</p>
-        {here && <span className="rounded-full bg-accent px-2.5 py-0.5 text-[11px] font-bold text-accent-ink">Your system</span>}
+        {here && <span className="rounded-full bg-accent px-2.5 py-0.5 text-[12px] font-bold text-accent-ink">Your system</span>}
       </div>
       <ul className="mt-4 space-y-2">
         {files.map((f) => (
@@ -273,14 +273,14 @@ function OsCard({ os, here, files, steps }: { os: DesktopOs; here: boolean; file
             <a href={f.url} className="flex items-center gap-3 font-semibold hover:underline">
               <Icon name="download" size={16} className="shrink-0" />
               <span className="min-w-0 flex-1 truncate">{f.label}</span>
-              {fileSize(f.size) && <span className="shrink-0 font-mono text-[11px] font-normal text-ink-muted">{fileSize(f.size)}</span>}
+              {fileSize(f.size) && <span className="shrink-0 font-mono text-[12px] font-normal text-ink-muted">{fileSize(f.size)}</span>}
             </a>
             {f.sha256 && (
               <button
                 type="button"
                 onClick={() => void navigator.clipboard.writeText(f.sha256!).then(() => (setCopied(f.url), setTimeout(() => setCopied(null), 1500)))}
                 title="Copy SHA-256"
-                className="mt-1.5 block w-full truncate text-left font-mono text-[10.5px] text-ink-muted hover:text-ink"
+                className="mt-1.5 block w-full truncate text-left font-mono text-[12px] text-ink-muted hover:text-ink"
               >
                 {copied === f.url ? "Copied ✓" : `SHA-256 ${f.sha256}`}
               </button>

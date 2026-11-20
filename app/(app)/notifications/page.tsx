@@ -135,7 +135,7 @@ function NotificationsContent() {
         return (
           <button key={f.id} type="button" onClick={() => go(f.id)} aria-pressed={filter === f.id} className={cx("inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-[13px] font-semibold", filter === f.id ? "border-transparent bg-accent text-accent-ink" : "border-line bg-surface text-ink-muted")}>
             {f.label}
-            {n > 0 && <span className="font-mono text-[11px]">{n}</span>}
+            {n > 0 && <span className="font-mono text-[12px]">{n}</span>}
           </button>
         );
       })}

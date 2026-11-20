@@ -24,7 +24,7 @@ export function Tabs({ items, active, onChange, label }: { items: TabItem[]; act
         const inner = (
           <>
             {t.label}
-            {t.count != null && t.count > 0 && <span className="font-mono text-[11px] text-ink-muted">{t.count}</span>}
+            {t.count != null && t.count > 0 && <span className="font-mono text-[12px] text-ink-muted">{t.count}</span>}
           </>
         );
         return t.href ? (

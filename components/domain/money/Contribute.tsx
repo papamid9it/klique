@@ -51,7 +51,7 @@ export function ContributeCard({ event }: { event: EventDTO }) {
           <p className="font-mono text-[12px] text-ink-muted">{naira(c.unitPrice)} each</p>
         </div>
         {c.withdrawn && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-[11.5px] font-semibold text-success">
+          <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-[12px] font-semibold text-success">
             <Icon name="check" size={12} /> Withdrawn
           </span>
         )}
@@ -134,13 +134,13 @@ export function ContributionsPanel({ event }: { event: EventDTO }) {
               <Avatar name={p.user.displayName} src={p.user.avatarUrl} size={30} />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[13.5px] font-semibold">{p.user.displayName}</span>
-                <span className="block font-mono text-[11px] text-ink-muted">
+                <span className="block font-mono text-[12px] text-ink-muted">
                   {p.quantity} × · {now ? relativeStamp(p.createdAt, now) : ""}
                 </span>
               </span>
               <span className="text-right font-mono text-[13px]">
                 {naira(p.amount)}
-                <span className="block text-[10.5px] text-ink-muted">{naira(p.net)} after fee</span>
+                <span className="block text-[12px] text-ink-muted">{naira(p.net)} after fee</span>
               </span>
               {p.status === "refunded" ? (
                 <span className="text-[12px] font-semibold text-ink-muted">Refunded</span>

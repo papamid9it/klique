@@ -50,7 +50,7 @@ function CommunityPicker({ value, onPick }: { value: AdminAdDTO["community"]; on
             <li key={c.id}>
               <button type="button" onClick={() => onPick(c)} className={cx("flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-raised/60", value?.id === c.id && "bg-raised")}>
                 <span className="min-w-0 truncate font-medium">{c.name}</span>
-                <span className="shrink-0 font-mono text-[11px] text-ink-muted">{c.memberCount} members</span>
+                <span className="shrink-0 font-mono text-[12px] text-ink-muted">{c.memberCount} members</span>
               </button>
             </li>
           ))
@@ -98,7 +98,7 @@ function EventPicker({ value, onPick }: { value: AdminAdDTO["event"]; onPick: (e
             <li key={e.id}>
               <button type="button" onClick={() => onPick(e)} className={cx("flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-raised/60", value?.id === e.id && "bg-raised")}>
                 <span className="min-w-0 truncate font-medium">{e.title}</span>
-                <span className="shrink-0 font-mono text-[11px] text-ink-muted">{formatDateShort(e.startsAt)}</span>
+                <span className="shrink-0 font-mono text-[12px] text-ink-muted">{formatDateShort(e.startsAt)}</span>
               </button>
             </li>
           ))

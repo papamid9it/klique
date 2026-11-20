@@ -89,7 +89,7 @@ export function TextArea({ label, hint, error, counter, value, ...rest }: AreaPr
         <div className="relative">
           <textarea id={id} value={value} aria-describedby={describedBy} aria-invalid={invalid} className={cx(CONTROL, "min-h-24 resize-y py-2.5 leading-relaxed")} {...rest} />
           {counter !== undefined && (
-            <span className={cx("pointer-events-none absolute right-3 bottom-2 text-[11px]", len > counter ? "text-danger" : "text-ink-muted")}>
+            <span className={cx("pointer-events-none absolute right-3 bottom-2 text-[12px]", len > counter ? "text-danger" : "text-ink-muted")}>
               {len}/{counter}
             </span>
           )}

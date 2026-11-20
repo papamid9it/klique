@@ -65,7 +65,7 @@ export function CampaignPreview({ c, className }: { c: Pick<AdCampaignDTO, "kind
     <article className={cx("overflow-hidden rounded-card border border-line bg-surface", className)} aria-label="Ad preview">
       <Cover src={img} seed={c.id ?? c.title ?? "ad"} interest="art" className="aspect-[16/8] w-full" />
       <div className="space-y-1.5 p-3.5">
-        <p className="text-[11px] font-semibold tracking-wide text-ink-muted uppercase">Sponsored · {who}</p>
+        <p className="text-[12px] font-semibold tracking-wide text-ink-muted uppercase">Sponsored · {who}</p>
         <p className="text-[15px] leading-snug font-semibold">{c.title || "Your headline"}</p>
         {c.body && <p className="line-clamp-2 text-[13px] text-ink-muted">{c.body}</p>}
         <span className="mt-1 inline-flex h-8 items-center rounded-full bg-accent px-3.5 text-[13px] font-semibold text-accent-ink">{c.ctaLabel || "Learn more"}</span>

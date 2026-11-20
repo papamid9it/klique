@@ -259,7 +259,7 @@ function NewAdForm() {
                 <input type="radio" name="reach" className="sr-only" checked={reach === r.id} onChange={() => setReach(r.id)} />
                 <span className="text-sm font-semibold">{r.id === "city" ? cityName(home.country, home.city) : r.id === "country" ? countryName(home.country) : "Everywhere"}</span>
                 <span className="text-xs text-ink-muted">{r.hint}</span>
-                {p && p.reach[r.id] !== 1 && <span className="font-mono text-[11px] text-ink-muted">×{p.reach[r.id]}</span>}
+                {p && p.reach[r.id] !== 1 && <span className="font-mono text-[12px] text-ink-muted">×{p.reach[r.id]}</span>}
               </label>
             ))}
           </div>

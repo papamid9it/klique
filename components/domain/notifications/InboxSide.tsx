@@ -135,13 +135,13 @@ export function InboxSide() {
               {soon.map((e) => (
                 <li key={e.id}>
                   <Link href={`/events/${e.id}`} className="flex items-center gap-2.5 rounded-control px-1.5 py-1.5 hover:bg-raised">
-                    <span className="inline-flex h-9 w-14 shrink-0 flex-col items-center justify-center rounded-[10px] bg-raised font-mono text-[10px] leading-tight text-ink-muted">
+                    <span className="inline-flex h-9 w-14 shrink-0 flex-col items-center justify-center rounded-[10px] bg-raised font-mono text-[12px] leading-tight text-ink-muted">
                       <span className="font-semibold text-ink">{lagosDay(e.startsAt) === today ? "Today" : "Tmrw"}</span>
                       {formatTime(e.startsAt, e.timeZone)}
                     </span>
                     <span className="min-w-0">
                       <span className="block truncate text-[13px] font-semibold">{e.title}</span>
-                      <span className="block truncate text-[11.5px] text-ink-muted">{e.online ? "Online" : e.venue}</span>
+                      <span className="block truncate text-[12px] text-ink-muted">{e.online ? "Online" : e.venue}</span>
                     </span>
                   </Link>
                 </li>
