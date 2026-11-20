@@ -899,6 +899,10 @@ export interface MessageDTO {
   createdAt: ISODate;
   /** deleted by the group chat's owner, not its sender ("Deleted by an admin") */
   deletedByAdmin?: boolean;
+  /** link previews, fetched by the server when it was sent (drawn at their size, no fetching or jumping) */
+  embeds?: LinkPreviewDTO[];
+  /** its link previews are still being fetched: they arrive in a moment */
+  embedsPending?: boolean;
   mine: boolean;
   /** when the sender last changed the text (null if never) */
   editedAt: ISODate | null;

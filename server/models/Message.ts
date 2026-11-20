@@ -1,3 +1,4 @@
+import type { LinkPreviewDTO } from "@/lib/types";
 import { Schema, type Model, type Types } from "mongoose";
 import { defineModel } from "./define";
 
@@ -17,6 +18,9 @@ export interface IMessage {
   editedAt: Date | null;
   /** soft delete ("unsend"): the row stays so the timeline and reports keep their place */
   deletedAt: Date | null;
+  /** link previews fetched when it was sent (LinkPreviewDTO); pending: still being fetched */
+  embeds?: LinkPreviewDTO[];
+  embedsPending?: boolean;
   /** who deleted it: the sender, or a group chat's owner ("Deleted by an admin") */
   deletedById?: Types.ObjectId | null;
   /** hidden pending review (a "minor or non-consensual" report): shown as removed until an admin decides */
@@ -37,6 +41,8 @@ const MessageSchema = new Schema<IMessage>(
     editedAt: { type: Date, default: null },
     deletedAt: { type: Date, default: null },
     deletedById: { type: Schema.Types.ObjectId, default: null },
+    embeds: { type: [Schema.Types.Mixed], default: undefined },
+    embedsPending: { type: Boolean, default: undefined },
     hiddenAt: { type: Date, default: null },
   },
   { timestamps: { createdAt: true, updatedAt: false } },

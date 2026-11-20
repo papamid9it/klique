@@ -1,3 +1,7 @@
+import { after } from "next/server";
+import { previewLinks } from "@/lib/embed-links";
+import { previewFor } from "./unfurl.service";
+import type { LinkPreviewDTO } from "@/lib/types";
 import { stripFormat } from "@/lib/textFormat";
 import type { Types } from "mongoose";
 import { deleteUploads } from "./media.service";
@@ -106,6 +110,9 @@ const toMessageShown = (m: IMessage, viewerId: Types.ObjectId, reactions: Reacti
   mine: sid(m.senderId) === sid(viewerId),
   editedAt: m.deletedAt || !m.editedAt ? null : m.editedAt.toISOString(),
   deleted: !!m.deletedAt,
+  // link previews saved with it, or on their way
+  ...(m.embeds && !m.deletedAt ? { embeds: m.embeds } : {}),
+  ...(m.embedsPending && !m.deletedAt ? { embedsPending: true } : {}),
   // a group chat's owner removed someone else's message
   ...(m.deletedAt && m.deletedById && sid(m.deletedById) !== sid(m.senderId) ? { deletedByAdmin: true } : {}),
   pollId: m.deletedAt || !m.pollId ? null : sid(m.pollId),
@@ -317,7 +324,8 @@ export async function sendMessage(viewer: IUser, id: string, input: string | { b
   const poll = typeof input !== "string" && input.poll ? await createPoll(viewer, { scope: "dm", targetId: convo._id }, input.poll) : null;
   const msg = poll
     ? await Message.create({ conversationId: convo._id, senderId: viewer._id, body: "", images: [], pollId: poll._id, replyToId: replyTarget?._id ?? null })
-    : await Message.create({ conversationId: convo._id, senderId: viewer._id, body, sticker: sticker ?? null, stickerUrl, images, replyToId: replyTarget?._id ?? null });
+    : await Message.create({ conversationId: convo._id, senderId: viewer._id, body, sticker: sticker ?? null, stickerUrl, images, replyToId: replyTarget?._id ?? null, ...(previewLinks(body).length ? { embedsPending: true } : {}) });
+  if (!poll) fetchEmbedsLater(msg._id, body, convo);
   noteStickerUse(viewer._id, stickerUrl);
   const preview = poll ? pollPreview(poll.question) : previewOf({ body, sticker, stickerUrl, images });
   await Conversation.updateOne(
@@ -391,6 +399,22 @@ async function refreshPreview(convo: IConversation, msg: IMessage, preview: stri
   if (isLast) await Conversation.updateOne({ _id: convo._id }, { $set: { "lastMessage.body": preview } });
 }
 
+/**
+ * Link previews, like Discord: fetched once by the server just after a message is sent, saved on it with each
+ * picture's size, then the chat is told to update. Everyone gets them with the message from then on: nothing loads in
+ * afterwards and pushes the chat around. (The same as community chat: channels.service.)
+ */
+function fetchEmbedsLater(messageId: Types.ObjectId, body: string, convo: Pick<IConversation, "_id" | "participants">) {
+  const links = previewLinks(body);
+  if (!links.length) return;
+  after(async () => {
+    // keyed by the link exactly as written, which is what the apps look it up by
+    const found = (await Promise.all(links.map((u) => previewFor(u).then((p) => (p ? { ...p, url: u } : null), () => null)))).filter((p): p is LinkPreviewDTO => !!p);
+    const res = await Message.updateOne({ _id: messageId, body, deletedAt: null }, { $set: { embeds: found }, $unset: { embedsPending: 1 } });
+    if (res.modifiedCount) emitDm(convo.participants, convo._id);
+  });
+}
+
 export async function editMessage(viewer: IUser, id: string, messageId: string, body: string): Promise<MessageDTO> {
   rateLimit(`dm-edit:${sid(viewer._id)}`, 30, 60_000);
   const { convo, msg } = await loadOwnMessage(viewer, id, messageId);
@@ -402,10 +426,14 @@ export async function editMessage(viewer: IUser, id: string, messageId: string, 
   const reply = msg.replyToId ? (replies.get(sid(msg.replyToId)) ?? null) : null;
   if (next === msg.body) return toMessage(msg, viewer._id, (await summarizeReactions("dm", [msg._id], viewer._id)).get(sid(msg._id)) ?? [], reply);
   const editedAt = new Date();
-  await Message.updateOne({ _id: msg._id }, { $set: { body: next, editedAt } });
+  // new links: their previews are fetched again
+  const relink = previewLinks(next).join(" ") !== previewLinks(msg.body).join(" ");
+  const embedSet = relink ? (previewLinks(next).length ? { embedsPending: true } : { embeds: [] as LinkPreviewDTO[] }) : {};
+  await Message.updateOne({ _id: msg._id }, { $set: { body: next, editedAt, ...embedSet } });
+  if (relink) fetchEmbedsLater(msg._id, next, convo);
   await refreshPreview(convo, msg, next.slice(0, 140));
   emitDm(convo.participants, convo._id);
-  const fresh = { ...msg, body: next, editedAt };
+  const fresh = { ...msg, body: next, editedAt, ...embedSet };
   return toMessage(fresh, viewer._id, (await summarizeReactions("dm", [msg._id], viewer._id)).get(sid(msg._id)) ?? [], reply);
 }
 

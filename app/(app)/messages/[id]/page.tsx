@@ -1,5 +1,6 @@
 "use client";
 
+import { Embeds } from "@/components/domain/chat/Embeds";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 import { SelectBar, SelectTick } from "@/components/domain/chat/SelectBar";
 import { HeaderIcons } from "@/components/layout/HeaderIcons";
@@ -420,7 +421,7 @@ export default function ConversationPage() {
       </header>
 
       {picked && <SelectBar count={picked.size} busy={deletingMany} onCancel={() => setPicked(null)} onDelete={() => void deletePicked()} />}
-      <div className="kq-calm min-h-0 flex-1 space-y-1.5 overflow-y-auto px-4 py-5 sm:px-6" aria-live="polite">
+      <div className="kq-calm min-h-0 flex-1 space-y-1.5 overflow-y-auto px-4 py-5 sm:px-6 [&>*]:[overflow-anchor:none]" aria-live="polite">
         {hasMore && (
           <div className="mb-3 flex justify-center">
             <Button size="sm" onClick={() => void loadEarlier()} loading={loadingMore}>
@@ -472,6 +473,8 @@ export default function ConversationPage() {
                         {m.pending && <Icon name="clock" size={11} aria-label="Sending" />}
                       </span>
                     </div>
+                    {/* link previews under the bubble, saved with the message (no fetching, no jumping) */}
+                    {!m.pending && !m.failed && m.body && <div className="w-full max-w-md"><Embeds body={m.body} embeds={m.embeds} pending={m.embedsPending} /></div>}
                     </>
                   )}
                   {!m.pending && !m.failed && !m.deleted && editingId !== m.id && <ReactionBar reactions={m.reactions ?? []} canReact={detail.canSend} onToggle={(k) => void react(m, k)} mine={m.mine} />}
@@ -491,7 +494,8 @@ export default function ConversationPage() {
             </div>
           );
         })}
-        <div ref={bottomRef} />
+        {/* the browser keeps this in view while you're at the bottom, so a link preview or picture arriving never hides the newest message */}
+        <div ref={bottomRef} style={{ overflowAnchor: "auto", height: 1 }} />
       </div>
 
       {/* a message request for you: accept, delete or block (replying accepts it too) */}
