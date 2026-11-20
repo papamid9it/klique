@@ -67,11 +67,25 @@ export function MembersPanel({ slug, subSlug, group }: { slug: string; subSlug?:
     setOpenId(null);
     next();
   };
-  const option = (label: string, icon: IconName, onClick: () => void, busy = false, danger = false) => (
-    <button type="button" key={label} disabled={busy} onClick={onClick} className={`flex h-10 w-full items-center gap-2.5 rounded-control px-3 text-left text-sm font-medium hover:bg-raised disabled:opacity-60 ${danger ? "text-danger" : ""}`}>
-      {busy ? <Spinner size={15} /> : <Icon name={icon} size={15} />} {label}
+  // a choice in the member window, with a few words on what it does (as in the app)
+  const option = (label: string, icon: IconName, onClick: () => void, busy = false, danger = false, hint?: string) => (
+    <button type="button" key={label} disabled={busy} onClick={onClick} className={cx("flex min-h-10 w-full items-center gap-2.5 rounded-control px-3 py-1.5 text-left text-sm font-medium hover:bg-raised disabled:opacity-60", danger && "text-danger")}>
+      {busy ? <Spinner size={15} /> : <Icon name={icon} size={15} className="shrink-0" />}
+      <span className="min-w-0 flex-1">
+        <span className="block">{label}</span>
+        {hint && <span className="block text-[12.5px] font-normal text-ink-muted">{hint}</span>}
+      </span>
     </button>
   );
+  const section = (title: string, items: React.ReactNode[]) => {
+    const shown = items.filter(Boolean);
+    return shown.length ? (
+      <div key={title} className="space-y-0.5 border-t border-line pt-2">
+        <p className="px-3 pb-1 text-[12px] font-semibold text-ink-muted">{title}</p>
+        {shown}
+      </div>
+    ) : null;
+  };
   async function liftPostBan(m: MemberDTO) {
     setBusyId(m.user.id);
     try {
@@ -170,14 +184,15 @@ export function MembersPanel({ slug, subSlug, group }: { slug: string; subSlug?:
               {m.roles?.filter((r) => r.name !== "Admin").slice(0, 3).map((r) => <RoleChip key={r.id} role={r} className="hidden sm:inline-flex" />)}
               {isTimedOut(m, now) && (
                 <span className="inline-flex items-center gap-1 rounded-full border border-danger/40 px-2 py-0.5 text-[12px] font-semibold text-danger" title={m.timeoutReason ?? undefined}>
-                  <Icon name="clock" size={11} /> Timed out · {timeLeft(m.timedOutUntil!, now!)}
+                  <Icon name="clock" size={11} /> Muted · {timeLeft(m.timedOutUntil!, now!)}
                 </span>
               )}
               {m.postBan && (
                 <span className="inline-flex items-center gap-1 rounded-full border border-danger/40 px-2 py-0.5 text-[12px] font-semibold text-danger" title={m.postBan.reason ?? undefined}>
-                  <Icon name="ban" size={11} /> No Posts or Boards
+                  <Icon name="ban" size={11} /> Can&apos;t post
                 </span>
               )}
+              {now && +now - +new Date(m.joinedAt) < 14 * 86_400_000 && <span className="inline-flex items-center rounded-full border border-line px-2 py-0.5 text-[12px] font-semibold text-ink-muted">New</span>}
               <button type="button" onClick={() => setOpenId(m.user.id)} aria-label={`Open ${m.user.displayName}`} className="inline-flex size-8 items-center justify-center rounded-full text-ink-muted hover:bg-raised hover:text-ink">
                 <Icon name="chevron-right" size={15} />
               </button>
@@ -202,22 +217,29 @@ export function MembersPanel({ slug, subSlug, group }: { slug: string; subSlug?:
                 {opened.roles?.filter((r) => r.name !== "Admin").map((r) => <RoleChip key={r.id} role={r} />)}
               </div>
             </div>
-            {isTimedOut(opened, now) && <p className="rounded-control border border-danger/40 px-3 py-2 text-sm text-ink">Timed out · {timeLeft(opened.timedOutUntil!, now!)}{opened.timeoutReason ? `. ${opened.timeoutReason}` : ""}</p>}
+            {isTimedOut(opened, now) && <p className="rounded-control border border-danger/40 px-3 py-2 text-sm text-ink">Muted · {timeLeft(opened.timedOutUntil!, now!)}{opened.timeoutReason ? `. ${opened.timeoutReason}` : ""}</p>}
             {opened.postBan && <p className="rounded-control border border-danger/40 px-3 py-2 text-sm text-ink">Can&apos;t write in Posts or on Boards{opened.postBan.until && now ? ` · ${timeLeft(opened.postBan.until, now)}` : " until it's lifted"}{opened.postBan.reason ? `. ${opened.postBan.reason}` : ""}. They can still chat.</p>}
             {opened.answers?.length ? <EntryAnswers answers={opened.answers} /> : null}
-            <div className="space-y-1.5">
-              <ProfileTrigger handle={opened.user.handle} className="flex h-10 w-full items-center gap-2.5 rounded-control px-3 text-left text-sm font-medium hover:bg-raised">
-                <Icon name="user" size={15} /> View profile
-              </ProfileTrigger>
-              {opened.canChangeRole && opened.role !== "owner" && option(opened.role === "admin" ? "Make member" : "Make admin", "shield", () => swap(() => setAsking(opened.role === "admin" ? { title: `Make ${opened.user.displayName} a member?`, description: "They'll stop being an admin here.", label: "Make member", run: () => changeRole(opened, "member") } : { title: `Make ${opened.user.displayName} an admin?`, description: "They'll be able to manage members, channels and events here.", label: "Make admin", danger: false, run: () => changeRole(opened, "admin") })), busyId === opened.user.id)}
-              {iOwn && opened.user.id !== user?.id && option("Make owner", "shield", () => swap(() => setHandingOver(opened)))}
-              {opened.canEditRoles && option("Roles", "shield", () => swap(() => setEditingRoles(opened)))}
-              {opened.canEditMod && option("Title and powers", "shield", () => swap(() => setNamingMod(opened)))}
-              {opened.canTimeout && option(isTimedOut(opened, now) ? "Lift timeout" : "Time out", "clock", () => swap(() => setTimingOut({ m: opened, lifting: isTimedOut(opened, now) })))}
-              {opened.canPostBan && (opened.postBan ? option("Let them write in Posts and Boards", "check", () => swap(() => setAsking({ title: `Let ${opened.user.displayName} write again?`, description: "They'll be able to post and comment in Posts and on Boards.", label: "Let them write", danger: false, run: () => liftPostBan(opened) })), busyId === opened.user.id) : option("Stop from Posts and Boards", "ban", () => swap(() => setPostBanning(opened))))}
-              {opened.canRemove && option("Remove", "logout", () => swap(() => setRemoving({ m: opened, ban: false })))}
-              {opened.canRemove && option("Ban", "ban", () => swap(() => setRemoving({ m: opened, ban: true })), false, true)}
-              {user && opened.user.id !== user.id && option("Report", "flag", () => swap(() => setReporting(opened)))}
+            <div className="space-y-2">
+              <div className="space-y-0.5">
+                <ProfileTrigger handle={opened.user.handle} className="flex h-10 w-full items-center gap-2.5 rounded-control px-3 text-left text-sm font-medium hover:bg-raised">
+                  <Icon name="user" size={15} /> View profile
+                </ProfileTrigger>
+                {user && opened.user.id !== user.id && option("Report", "flag", () => swap(() => setReporting(opened)), false, false, "Tell the Klique team")}
+              </div>
+              {section("Manage", [
+                opened.canChangeRole && opened.role !== "owner" && option(opened.role === "admin" ? "Make member" : "Make admin", "shield", () => swap(() => setAsking(opened.role === "admin" ? { title: `Make ${opened.user.displayName} a member?`, description: "They'll stop being an admin here.", label: "Make member", run: () => changeRole(opened, "member") } : { title: `Make ${opened.user.displayName} an admin?`, description: "They'll be able to manage members, channels and events here.", label: "Make admin", danger: false, run: () => changeRole(opened, "admin") })), busyId === opened.user.id, false, opened.role === "admin" ? "They stop running things here" : "They can help run everything"),
+                opened.canEditRoles && option("Roles", "shield", () => swap(() => setEditingRoles(opened)), false, false, "Give or take away roles"),
+                opened.canEditMod && option("Title and powers", "shield", () => swap(() => setNamingMod(opened)), false, false, "What they can do in this group"),
+              ])}
+              {/* gentle first, strongest last */}
+              {section("Take action", [
+                opened.canTimeout && option(isTimedOut(opened, now) ? "Unmute" : "Mute", "clock", () => swap(() => setTimingOut({ m: opened, lifting: isTimedOut(opened, now) })), false, false, isTimedOut(opened, now) ? "Let them write again now" : "They can read but not write for a while"),
+                opened.canPostBan && (opened.postBan ? option("Let them post again", "check", () => swap(() => setAsking({ title: `Let ${opened.user.displayName} post again?`, description: "They'll be able to post and comment in Posts and on Boards.", label: "Let them post", danger: false, run: () => liftPostBan(opened) })), busyId === opened.user.id, false, "In Posts and on the board") : option("Stop them posting", "ban", () => swap(() => setPostBanning(opened)), false, false, "No Posts or board. They can still chat")),
+                opened.canRemove && option("Remove", "logout", () => swap(() => setRemoving({ m: opened, ban: false })), false, false, "They can join again"),
+                opened.canRemove && option("Ban", "ban", () => swap(() => setRemoving({ m: opened, ban: true })), false, true, "Removed for good"),
+              ])}
+              {section("Owner only", [iOwn && opened.user.id !== user?.id && option("Make owner", "shield", () => swap(() => setHandingOver(opened)), false, false, "Hand the community over. You stay an admin")])}
             </div>
           </div>
         </Modal>

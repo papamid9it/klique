@@ -34,6 +34,8 @@ export async function runReminders(): Promise<{ events: number; notified: number
     );
     notified += going.length;
   }
+  // Event reminders bots: the week's events, Monday mornings
+  await (await import("./event-digest.service")).runEventDigests(now).catch((e) => console.warn("[event digest]", (e as Error).message));
   // kliques hear about an hour before their own meetup time
   notified += await runCrewReminders(now);
   // ads: "ends tomorrow" and "ended" (with results)

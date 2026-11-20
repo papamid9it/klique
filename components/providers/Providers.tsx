@@ -18,6 +18,7 @@ import { RealtimeProvider } from "./RealtimeProvider";
 import { ProfileCardProvider } from "./ProfileCardProvider";
 import { ThemeProvider } from "./ThemeProvider";
 import { ToastProvider } from "./ToastProvider";
+import { HypeReturn } from "@/components/domain/gifts/HypeReturn";
 import { ConfirmProvider } from "./ConfirmProvider";
 
 /** The admin's category list: the built-in defaults show until it arrives (they're the usual answer anyway). */
@@ -126,6 +127,7 @@ export function Providers({ children }: { children: ReactNode }) {
                     </Suspense>
                     <BrokenImages />
                     <SignOutHost />
+                    <HypeReturn />
                     <PanelSlotProvider>{children}</PanelSlotProvider>
                   </LeaveProvider>
                 </ProfileCardProvider>

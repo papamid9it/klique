@@ -14,6 +14,8 @@ import { useApi } from "@/lib/hooks/useApi";
 import type { AutoModAction, AutoModConfig } from "@/lib/automod";
 import type { Envelope } from "@/lib/types";
 import { RoleChip, useRoles } from "./RolesPanel";
+import { Icon } from "@/components/ui/Icon";
+import { cx } from "@/components/ui/cx";
 
 const api = new ApiClient();
 type State = { config: AutoModConfig; raidUntil: string | null; raidMode: "pause" | "approval" | null };
@@ -49,6 +51,29 @@ function ActionPicker({ value, onChange, canAlert }: { value: AutoModAction; onC
   );
 }
 
+type Level = "relaxed" | "balanced" | "strict";
+const a = (block: boolean, alert: boolean, timeoutSec = 0) => ({ block, alert, timeoutSec });
+/** The three ready-made strengths, the same as the app's: what each switches on (alerts, skipped roles and channels, and word lists stay yours) */
+function preset(level: Level, cfg: AutoModConfig): AutoModConfig {
+  const base = { ...cfg, enabled: true };
+  if (level === "relaxed")
+    return { ...base, links: { ...cfg.links, on: true, scamFilter: true, blockAll: false, newMemberMinutes: 0, action: a(true, true) }, mentions: { on: true, max: 15, action: a(true, true) }, flood: { on: false, repeats: 5, action: a(true, false) }, raid: { ...cfg.raid, on: false } };
+  if (level === "balanced")
+    return { ...base, links: { ...cfg.links, on: true, scamFilter: true, blockAll: false, newMemberMinutes: 10, action: a(true, true) }, mentions: { on: true, max: 8, action: a(true, true, 600) }, flood: { on: true, repeats: 4, action: a(true, false, 300) }, raid: { ...cfg.raid, on: true, joins: 15, minutes: 5, mode: "approval", lockMinutes: 30 } };
+  return { ...base, links: { ...cfg.links, on: true, scamFilter: true, blockAll: true, newMemberMinutes: 60, action: a(true, true) }, words: { ...cfg.words, on: true }, mentions: { on: true, max: 5, action: a(true, true, 600) }, flood: { on: true, repeats: 3, action: a(true, false, 600) }, raid: { ...cfg.raid, on: true, joins: 10, minutes: 5, mode: "approval", lockMinutes: 60 } };
+}
+/** which strength these settings are, if they match one exactly */
+function levelOf(cfg: AutoModConfig): Level | "custom" {
+  const key = (c: AutoModConfig) => JSON.stringify([c.links.scamFilter, c.links.blockAll, c.links.newMemberMinutes, c.links.on, c.mentions, c.flood, c.raid.on, c.raid.on ? [c.raid.joins, c.raid.minutes, c.raid.mode, c.raid.lockMinutes] : null]);
+  for (const l of ["relaxed", "balanced", "strict"] as Level[]) if (key(preset(l, cfg)) === key(cfg)) return l;
+  return "custom";
+}
+const LEVELS: { id: Level; label: string; points: string[] }[] = [
+  { id: "relaxed", label: "Relaxed", points: ["Blocks scam links", "Stops someone pinging lots of people at once"] },
+  { id: "balanced", label: "Balanced", points: ["Everything in Relaxed", "New members can't post links for 10 minutes", "Mutes someone sending the same message over and over", "Asks you to approve people if many join at once"] },
+  { id: "strict", label: "Strict", points: ["Everything in Balanced", "No links at all (admins and roles you skip still can)", "Turns on your list of words you don't allow"] },
+];
+
 const lines = (s: string) => s.split(/[\n,]/).map((x) => x.trim()).filter(Boolean);
 
 /**
@@ -64,6 +89,7 @@ export function AutoModPanel({ slug }: { slug: string }) {
   const [words, setWords] = useState("");
   const [blockList, setBlockList] = useState("");
   const [busy, setBusy] = useState(false);
+  const [custom, setCustom] = useState(false);
   useEffect(() => {
     if (!data) return;
     setCfg(data.config);
@@ -85,7 +111,7 @@ export function AutoModPanel({ slug }: { slug: string }) {
     setBusy(true);
     try {
       await api.put(`/api/communities/${slug}/automod`, next);
-      toast(next.enabled ? "AutoMod saved" : "AutoMod is off", "success");
+      toast(next.enabled ? "Auto-filters saved" : "Auto-filters are off", "success");
       await reload();
     } catch (e) {
       toast(errorMessage(e), "error");
@@ -115,10 +141,31 @@ export function AutoModPanel({ slug }: { slug: string }) {
           </Button>
         </div>
       )}
-      <SettingsBlock title="AutoMod" intro="Checks every chat message, board post and comment, and post and comment here before it goes up. Owners and admins are never checked.">
-        <Switch checked={cfg.enabled} onChange={(v) => set("enabled", v)} label="AutoMod on" />
+      <SettingsBlock title="Auto-filters" intro="Stops spam, scam links and bad words before anyone sees them, in chat, on the board and in posts and comments. Owners and admins are never checked.">
+        <Switch checked={cfg.enabled} onChange={(v) => setCfg(v && levelOf(cfg) === "custom" && !data.config.enabled ? preset("balanced", cfg) : { ...cfg, enabled: v })} label="Auto-filters on" />
+      </SettingsBlock>
+      {/* how strict, in one choice; the rules themselves are under Customise */}
+      <SettingsBlock title="How strict?">
+        <div role="radiogroup" aria-label="How strict?" className={cx("space-y-2", !cfg.enabled && "pointer-events-none opacity-50")}>
+          {LEVELS.map((l) => {
+            const on = levelOf(cfg) === l.id;
+            return (
+              <button key={l.id} type="button" role="radio" aria-checked={on} onClick={() => setCfg(preset(l.id, cfg))} className={cx("flex w-full gap-3 rounded-card bg-surface p-4 text-left transition hover:bg-raised", on ? "border-2 border-ink p-[15px]" : "border border-line")}>
+                <span aria-hidden="true" className={cx("mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full border-2", on ? "border-ink" : "border-ink-muted")}>{on && <span className="size-2.5 rounded-full bg-ink" />}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2 text-[15px] font-semibold">
+                    {l.label}
+                    {l.id === "balanced" && <span className="rounded-[5px] bg-accent px-1.5 text-[12px] font-bold text-accent-ink">Recommended</span>}
+                  </span>
+                  {l.points.map((x) => <span key={x} className="block text-sm text-ink-muted">• {x}</span>)}
+                </span>
+              </button>
+            );
+          })}
+          {levelOf(cfg) === "custom" && cfg.enabled && <p className="text-sm text-ink-muted">Your own mix (changed under Customise). Pick one above to use it instead.</p>}
+        </div>
         <div className="mt-4 max-w-sm">
-          <SelectField label="Alert channel" value={cfg.alertChannelId ?? ""} onChange={(e) => set("alertChannelId", e.target.value || null)} hint="Where AutoMod posts what it did (a staff channel is best).">
+          <SelectField label="Where alerts go" value={cfg.alertChannelId ?? ""} onChange={(e) => set("alertChannelId", e.target.value || null)} hint="A channel where it tells you what it stopped (a staff channel is best).">
             <option value="">No alerts</option>
             {textChannels.map((c) => (
               <option key={c.id} value={c.id}>
@@ -129,8 +176,12 @@ export function AutoModPanel({ slug }: { slug: string }) {
         </div>
       </SettingsBlock>
 
-      <fieldset disabled={!cfg.enabled} className="space-y-0 disabled:opacity-60">
-        <SettingsBlock title="Spam and scam links">
+      <button type="button" onClick={() => setCustom((v) => !v)} aria-expanded={custom} className="mb-6 flex h-11 w-full items-center justify-between rounded-control border border-line bg-surface px-3.5 text-sm font-semibold hover:bg-raised">
+        {custom ? "Hide the details" : "Customise"}
+        <Icon name={custom ? "chevron-up" : "chevron-down"} size={16} />
+      </button>
+      <fieldset disabled={!cfg.enabled} hidden={!custom} className="space-y-0 disabled:opacity-60">
+        <SettingsBlock title="Links">
           <Switch checked={cfg.links.on} onChange={(v) => set("links", { ...cfg.links, on: v })} label="Check links" />
           <div className="mt-3 space-y-3">
             <Switch checked={cfg.links.blockAll} onChange={(v) => set("links", { ...cfg.links, blockAll: v })} label="Block all links" hint="Nobody can post a link. Owners, admins and the roles you skip below still can." />
@@ -155,7 +206,7 @@ export function AutoModPanel({ slug }: { slug: string }) {
           </div>
         </SettingsBlock>
 
-        <SettingsBlock title="Mention spam">
+        <SettingsBlock title="Pinging lots of people">
           <Switch checked={cfg.mentions.on} onChange={(v) => set("mentions", { ...cfg.mentions, on: v })} label="Stop mass mentions" />
           <div className="mt-3 space-y-3">
             <div className="max-w-[12rem]">
@@ -175,7 +226,7 @@ export function AutoModPanel({ slug }: { slug: string }) {
           </div>
         </SettingsBlock>
 
-        <SettingsBlock title="Raid protection" intro="When lots of people join at once (often bots), lock joining for a while and tell the owner and admins. Invite links still work.">
+        <SettingsBlock title="Many people joining at once" intro="When lots of people join at once (often bots), lock joining for a while and tell the owner and admins. Invite links still work.">
           <Switch checked={cfg.raid.on} onChange={(v) => set("raid", { ...cfg.raid, on: v })} label="Watch for raids" />
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <TextField label="Joins" type="number" min={3} max={500} value={cfg.raid.joins} onChange={(e) => set("raid", { ...cfg.raid, joins: Number(e.target.value) || 15 })} />
@@ -194,7 +245,7 @@ export function AutoModPanel({ slug }: { slug: string }) {
           </div>
         </SettingsBlock>
 
-        <SettingsBlock title="Skip these" intro="AutoMod doesn't check people with these roles, or these channels.">
+        <SettingsBlock title="Skip these" intro="Auto-filters don't check people with these roles, or these channels.">
           {roleList.length > 0 && (
             <div className="mb-4 flex flex-wrap gap-2">
               {roleList.map((r) => (

@@ -48,7 +48,7 @@ export function TimeoutModal({ slug, user, lifting, onClose, onDone }: { slug: s
   }
   if (lifting) {
     return (
-      <Modal open onClose={onClose} title={`Lift ${user.displayName}'s timeout?`} description="They can post and react again straight away. They're told." size="sm">
+      <Modal open onClose={onClose} title={`Unmute ${user.displayName}?`} description="They can post and react again straight away. They're told." size="sm">
         <div className="flex justify-end gap-2">
           <Button onClick={onClose}>Cancel</Button>
           <Button variant="primary" loading={busy} onClick={() => void go(0)}>
@@ -59,7 +59,7 @@ export function TimeoutModal({ slug, user, lifting, onClose, onDone }: { slug: s
     );
   }
   return (
-    <Modal open onClose={onClose} title={`Time out ${user.displayName}`} description="They can still read, but can't post, react, vote or start events or kliques here until it ends. They're told why." size="sm">
+    <Modal open onClose={onClose} title={`Mute ${user.displayName}`} description="They can still read, but can't post, react, vote or start events or kliques here until it ends. They're told why." size="sm">
       <div className="space-y-4">
         <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="How long">
           {TIMEOUTS.map((t) => (
@@ -72,7 +72,7 @@ export function TimeoutModal({ slug, user, lifting, onClose, onDone }: { slug: s
         <div className="flex justify-end gap-2">
           <Button onClick={onClose}>Cancel</Button>
           <Button variant="danger" loading={busy} onClick={() => void go(seconds)}>
-            Time out
+            Mute
           </Button>
         </div>
       </div>

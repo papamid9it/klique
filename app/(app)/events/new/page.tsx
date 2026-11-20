@@ -34,8 +34,11 @@ function toIso(date: string, time: string, zone: string): string | null {
   return wallToIso(date, time, zone);
 }
 
-/** What's asked on the first page, so an error about one of these goes back there. */
-const FIRST_PAGE_FIELDS = ["title", "description", "interest", "city", "country", "region", "neighborhood", "venue", "onlineUrl", "date", "startsAt", "endsAt", "coverImage"];
+/** Which step asks for each field, so an error about one goes back to that step (as in the app: three short steps) */
+const STEP1 = ["title", "description", "interest", "date", "startsAt", "endsAt", "coverImage"];
+const STEP2 = ["city", "country", "region", "neighborhood", "venue", "onlineUrl", "priceNaira", "capacity", "ticketUrl", "ticketLabel"];
+const stepOf = (errs: Record<string, string>): 1 | 2 | null => (STEP1.some((k) => errs[k]) ? 1 : STEP2.some((k) => errs[k]) ? 2 : null);
+const STEP_NAMES = { 1: "What and when", 2: "Where and price", 3: "Check and post" } as const;
 
 function NewEventForm() {
   const categories = useCategories();
@@ -65,8 +68,11 @@ function NewEventForm() {
   const [end, setEnd] = useState("");
   // an event over several days: the day it ends (empty: the same day it starts)
   const [endDate, setEndDate] = useState("");
-  // empty: not known yet (shown as "Price TBC"); 0: free
+  // the price, as a choice: free, paid (then an amount), or not known yet ("Price TBC")
+  const [priceMode, setPriceMode] = useState<"free" | "paid" | "tbc">("free");
   const [price, setPrice] = useState("");
+  // ticket link and button: folded away until wanted
+  const [tickets, setTickets] = useState(false);
   const [capacity, setCapacity] = useState("");
   const [cover, setCover] = useState("");
   const [chipIn, setChipIn] = useState<ContributionDraft>(() => contributionDraftOf(null));
@@ -75,8 +81,8 @@ function NewEventForm() {
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
-  // first the event itself, then a second page to preview it, set the extras and publish
-  const [step, setStep] = useState<1 | 2>(1);
+  // what and when, then where and price, then check and post
+  const [step, setStep] = useState<1 | 2 | 3>(1);
 
   useEffect(() => {
     if (status === "anon") requireAuth({ redirect: true });
@@ -101,24 +107,30 @@ function NewEventForm() {
   const pickedSub = subs.find((s) => s.slug === subSlug);
   const privateSpace = pickedCommunity?.privacy === "private" || !!pickedSub;
 
-  const priceNum = price.trim() === "" ? null : Math.max(0, Math.round(Number(price) || 0));
+  const priceNum = priceMode === "free" ? 0 : priceMode === "tbc" ? null : Math.max(0, Math.round(Number(price) || 0));
   const cur = currency ?? currencyOf(place.country);
   // the times are typed in the place's zone (Lagos for Nigeria)
   const { zone, choices: zoneChoices, setZone } = usePlaceZone(place);
 
-  /** What the first page needs before moving on. */
-  function firstPageProblems() {
+  /** What a step needs before moving on (step 2 checks step 1's too). */
+  function problems(upTo: 1 | 2) {
     const next: Record<string, string> = {};
-    if (!title.trim()) next.title = "Give your event a title.";
-    if (!venue.trim()) next.venue = online ? "Where do people join? A link or a platform name." : "Where is it happening?";
-    if (!place.city) next.city = "Which city or town is it in?";
+    if (!title.trim()) next.title = "Give your event a name.";
     if (!date) next.date = "Pick a date.";
     if (!start) next.startsAt = "Pick a start time.";
     const from = toIso(date, start, zone);
     const to = endIso();
     if (to && from && to <= from) next.endsAt = endDate && endDate !== date ? "The end has to be after the start." : "End time must be after the start.";
+    if (upTo === 1) return next;
+    if (!venue.trim()) next.venue = online ? "Where do people join? A link or a platform name." : "Where is it happening?";
+    if (!place.city) next.city = "Which city or town is it in?";
     const joinLink = online ? normalizeLink(onlineUrl) : "";
     if (joinLink && !isHttpLink(joinLink)) next.onlineUrl = "Enter a valid link, like https://meet.google.com/abc-defg-hij";
+    if (priceMode === "paid" && !(Number(price) > 0)) next.priceNaira = "Add the price, or pick Free or Not sure yet.";
+    const tix = normalizeLink(ticketUrl);
+    if (tix && !isHttpLink(tix)) next.ticketUrl = "Enter a valid link, like https://tix.africa/your-event";
+    const cap = capacity.trim() ? Math.round(Number(capacity)) : null;
+    if (cap !== null && (!Number.isFinite(cap) || cap < 1)) next.capacity = "Capacity must be 1 or more.";
     return next;
   }
 
@@ -131,30 +143,29 @@ function NewEventForm() {
   }
 
   function goNext() {
-    const next = firstPageProblems();
+    const now = step === 1 ? 1 : 2;
+    const next = problems(now);
     setErrors(next);
     setFormError(null);
-    if (Object.keys(next).length) return;
-    setStep(2);
+    if (Object.keys(next).length) return setStep(stepOf(next) ?? now);
+    setStep(now === 1 ? 2 : 3);
     window.scrollTo({ top: 0 });
   }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (step === 1) return goNext();
+    if (step !== 3) return goNext();
     if (!requireAuth()) return;
-    const next: Record<string, string> = firstPageProblems();
+    const next: Record<string, string> = problems(2);
     const startsAt = toIso(date, start, zone);
     const endsAt = endIso();
     const tickets = normalizeLink(ticketUrl);
     const joinLink = online ? normalizeLink(onlineUrl) : "";
-    if (tickets && !isHttpLink(tickets)) next.ticketUrl = "Enter a valid link, like https://tix.africa/your-event";
     const cap = capacity.trim() ? Math.round(Number(capacity)) : null;
-    if (cap !== null && (!Number.isFinite(cap) || cap < 1)) next.capacity = "Capacity must be 1 or more.";
     if (Object.keys(next).length || !startsAt) {
       setErrors(next);
       setFormError(null);
-      if (FIRST_PAGE_FIELDS.some((k) => next[k])) setStep(1);
+      setStep(stepOf(next) ?? 1);
       return;
     }
     const input: EventInput = {
@@ -201,7 +212,8 @@ function NewEventForm() {
       if (isApiError(err) && err.errors) {
         setErrors(err.errors);
         // something on the first page: take them back to it
-        if (FIRST_PAGE_FIELDS.some((k) => err.errors?.[k])) setStep(1);
+        const back = stepOf(err.errors);
+        if (back) setStep(back);
       }
       setFormError(errorMessage(err));
       setBusy(false);
@@ -247,12 +259,23 @@ function NewEventForm() {
 
   return (
     <form onSubmit={submit} className="max-w-2xl space-y-5" noValidate>
-      <p className="eyebrow">Step {step} of 2 · {step === 1 ? "the event" : "preview and publish"}</p>
+      {/* where you are: a bar for each step */}
+      <div className="space-y-2">
+        <div className="flex gap-1.5" aria-hidden="true">{[1, 2, 3].map((n) => <span key={n} className={`h-1 flex-1 rounded-full ${n <= step ? "bg-ink" : "bg-raised"}`} />)}</div>
+        <p className="text-sm font-medium text-ink-muted">Step {step} of 3 · {STEP_NAMES[step]}</p>
+      </div>
       {step === 1 ? (
       <>
       <ImageField kind="photo" label="Flyer or cover picture (optional)" value={cover} onChange={setCover} reposition={{ aspect: 16 / 9, title: "Choose what shows on event cards", description: "The event page shows your whole flyer. Lists and Home show a wide strip of it: drag to pick which part, and pinch, scroll or use the slider to zoom." }} error={errors.coverImage} hint="Your flyer or poster, any shape: the event page shows all of it. Event cards show a wide strip; use Reposition to pick which part. We'll use artwork if you skip it." />
-      <TextField label="Title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={LIMITS.eventTitle} error={errors.title} placeholder="Sunday sunset skate" />
-      <TextArea label="Description" value={description} onChange={(e) => setDescription(e.target.value)} maxLength={LIMITS.eventDescription} counter={LIMITS.eventDescription} error={errors.description} hint="What should people expect? What should they bring?" />
+      <TextField label="Event name" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={LIMITS.eventTitle} error={errors.title} placeholder="Sunday sunset skate" />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <TextField label="Starts on" type="date" value={date} onChange={(e) => setDate(e.target.value)} error={errors.date} />
+        <TextField label="Starts at" type="time" value={start} onChange={(e) => setStart(e.target.value)} error={errors.startsAt} />
+        <TextField label="Ends on (optional)" type="date" min={date || undefined} value={endDate} onChange={(e) => setEndDate(e.target.value)} hint="Only for an event over more than one day." />
+        <TextField label="Ends at (optional)" type="time" value={end} onChange={(e) => setEnd(e.target.value)} error={errors.endsAt} />
+      </div>
+      <ZoneField zone={zone} choices={zoneChoices} onChange={setZone} />
+      <TextArea label="What's it about? (optional)" value={description} onChange={(e) => setDescription(e.target.value)} maxLength={LIMITS.eventDescription} counter={LIMITS.eventDescription} error={errors.description} hint="Who it's for, what to bring, anything people should know." />
       <div className="grid gap-4 sm:grid-cols-2">
         <SelectField label="Interest" value={interest} onChange={(e) => isInterestId(e.target.value) && setInterest(e.target.value)} error={errors.interest}>
           {categories.map((i) => (
@@ -262,6 +285,9 @@ function NewEventForm() {
           ))}
         </SelectField>
       </div>
+      </>
+      ) : step === 2 ? (
+      <>
       <label className="flex cursor-pointer items-start gap-3 rounded-control border border-line bg-raised p-3.5 has-[:checked]:border-accent-text">
         <input type="checkbox" checked={online} onChange={(e) => setOnline(e.target.checked)} className="mt-1 accent-[var(--accent-text)]" />
         <span>
@@ -272,13 +298,46 @@ function NewEventForm() {
       <PlaceFields value={place} onChange={setPlace} neighborhood={neighborhood} onNeighborhood={setNeighborhood} errors={errors} />
       <TextField label={online ? "Where to join" : "Venue"} value={venue} onChange={(e) => setVenue(e.target.value)} maxLength={LIMITS.venue} error={errors.venue} placeholder={online ? "Zoom, Google Meet, a Discord server…" : "Name of the spot"} />
       {online && <TextField label="Join link (optional)" type="url" inputMode="url" value={onlineUrl} onChange={(e) => setOnlineUrl(e.target.value)} onBlur={() => setOnlineUrl((v) => normalizeLink(v))} error={errors.onlineUrl} placeholder="https://meet.google.com/…" hint="Shows as a Join online button on the event." />}
-      <div className="grid gap-4 sm:grid-cols-2">
-        <TextField label="Starts on" type="date" value={date} onChange={(e) => setDate(e.target.value)} error={errors.date} />
-        <TextField label="Starts at" type="time" value={start} onChange={(e) => setStart(e.target.value)} error={errors.startsAt} />
-        <TextField label="Ends on (optional)" type="date" min={date || undefined} value={endDate} onChange={(e) => setEndDate(e.target.value)} hint="Only for an event over more than one day." />
-        <TextField label="Ends at (optional)" type="time" value={end} onChange={(e) => setEnd(e.target.value)} error={errors.endsAt} />
-      </div>
-      <ZoneField zone={zone} choices={zoneChoices} onChange={setZone} />
+      {/* the price, as one choice */}
+      <fieldset className="space-y-3">
+        <legend className="mb-1.5 text-[13px] font-medium">Price</legend>
+        <div role="radiogroup" aria-label="Price" className="grid grid-cols-3 gap-1 rounded-control bg-raised p-1">
+          {([["free", "Free"], ["paid", "Paid"], ["tbc", "Not sure yet"]] as const).map(([id, label]) => (
+            <button key={id} type="button" role="radio" aria-checked={priceMode === id} onClick={() => setPriceMode(id)} className={`h-9 rounded-[6px] text-sm font-semibold transition ${priceMode === id ? "bg-surface text-ink shadow-sm" : "text-ink-muted hover:text-ink"}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+        {priceMode === "paid" && (
+          <div className="grid grid-cols-[6.5rem_1fr] gap-3">
+            <SelectField label="Currency" value={cur} onChange={(e) => setCurrency(e.target.value)}>
+              {[...new Set([currencyOf(place.country), ...CURRENCIES])].map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </SelectField>
+            <TextField label="Price" type="number" inputMode="numeric" min={1} step={1} value={price} onChange={(e) => setPrice(e.target.value)} error={errors.priceNaira} placeholder="5000" />
+          </div>
+        )}
+        {priceMode === "tbc" && <p className="text-sm text-ink-muted">It shows &ldquo;Price TBC&rdquo; until you add one.</p>}
+        {priceMode !== "paid" && errors.priceNaira && <p className="text-sm text-danger">{errors.priceNaira}</p>}
+      </fieldset>
+      <TextField label="Capacity (optional)" type="number" inputMode="numeric" min={1} value={capacity} onChange={(e) => setCapacity(e.target.value)} error={errors.capacity} hint="Leave empty for unlimited spots." />
+      {tickets || ticketUrl ? (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <TextField label="Ticket link" type="url" inputMode="url" value={ticketUrl} onChange={(e) => setTicketUrl(e.target.value)} onBlur={() => setTicketUrl((v) => normalizeLink(v))} error={errors.ticketUrl} placeholder="https://tix.africa/…" hint="Shows as a button on the event." />
+          <TextField label="Button name (optional)" value={ticketLabel} onChange={(e) => setTicketLabel(e.target.value)} maxLength={LIMITS.ticketLabel} error={errors.ticketLabel} placeholder="Get tickets" />
+        </div>
+      ) : (
+        <button type="button" onClick={() => setTickets(true)} className="flex w-full items-center gap-3 rounded-control border border-line bg-surface px-3.5 py-3 text-left hover:bg-raised">
+          <Icon name="ticket" size={18} className="shrink-0" />
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold">Selling tickets somewhere?</span>
+            <span className="block text-[13px] text-ink-muted">Add the link, and a button shows on the event</span>
+          </span>
+          <Icon name="plus" size={16} />
+        </button>
+      )}
+      {communitySlug && communitySlug !== KLIQUE_SLUG && <ContributionFields value={chipIn} onChange={setChipIn} error={errors.contribution} />}
       </>
       ) : (
       <>
@@ -293,21 +352,6 @@ function NewEventForm() {
           {description.trim() && <p className="line-clamp-3 pt-1 text-sm whitespace-pre-wrap text-ink-muted">{description.trim()}</p>}
         </div>
       </section>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="grid grid-cols-[6.5rem_1fr] gap-3">
-          <SelectField label="Currency" value={cur} onChange={(e) => setCurrency(e.target.value)}>
-            {[...new Set([currencyOf(place.country), ...CURRENCIES])].map((c) => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </SelectField>
-          <TextField label="Price" type="number" inputMode="numeric" min={0} step={1} value={price} onChange={(e) => setPrice(e.target.value)} error={errors.priceNaira} placeholder="Not sure yet? Leave it empty" hint={`Shown as: ${eventPrice(priceNum, cur)}. Leave it empty if you don't know yet; 0 means free.`} />
-        </div>
-        <TextField label="Capacity (optional)" type="number" inputMode="numeric" min={1} value={capacity} onChange={(e) => setCapacity(e.target.value)} error={errors.capacity} hint="Leave empty for unlimited spots." />
-      </div>
-      <TextField label="Ticket link (optional)" type="url" inputMode="url" value={ticketUrl} onChange={(e) => setTicketUrl(e.target.value)} onBlur={() => setTicketUrl((v) => normalizeLink(v))} error={errors.ticketUrl} placeholder="https://tix.africa/…" hint="Shows as a button on the event. People see where it goes before they leave Klique." />
-      <TextField label="Button name (optional)" value={ticketLabel} onChange={(e) => setTicketLabel(e.target.value)} maxLength={LIMITS.ticketLabel} error={errors.ticketLabel} placeholder="Get tickets" hint="Like See more, Buy tickets or Main site. Empty shows Get tickets." />
-      {communitySlug && communitySlug !== KLIQUE_SLUG && <ContributionFields value={chipIn} onChange={setChipIn} error={errors.contribution} />}
-
       <fieldset className="space-y-4 rounded-card border border-line bg-surface p-4">
         <legend className="px-1 text-[13px] font-medium">Where it&apos;s posted</legend>
         {siteAdmin ? (
@@ -372,21 +416,27 @@ function NewEventForm() {
         </p>
       )}
       <div className="flex gap-2">
-        {step === 1 ? (
+        {step !== 3 ? (
           <>
             <Button key="next" type="submit" variant="primary" size="lg">
               Next <Icon name="chevron-right" size={16} />
             </Button>
-            <Button size="lg" href="/events">
-              Cancel
-            </Button>
+            {step === 1 ? (
+              <Button size="lg" href="/events">
+                Cancel
+              </Button>
+            ) : (
+              <Button size="lg" onClick={() => setStep(1)}>
+                <Icon name="chevron-left" size={16} /> Back
+              </Button>
+            )}
           </>
         ) : (
           <>
             <Button key="publish" type="submit" variant="primary" size="lg" loading={busy} disabled={status !== "authed"}>
-              {submitting ? "Send for approval" : "Publish event"}
+              {submitting ? "Send for approval" : "Post event"}
             </Button>
-            <Button size="lg" disabled={busy} onClick={() => setStep(1)}>
+            <Button size="lg" disabled={busy} onClick={() => setStep(2)}>
               <Icon name="chevron-left" size={16} /> Back
             </Button>
           </>

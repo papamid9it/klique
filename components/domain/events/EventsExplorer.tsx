@@ -63,7 +63,7 @@ function MyEvents({ scope, onBack }: { scope: Mine; onBack: () => void }) {
         ) : error ? (
           <ErrorState message={error} onRetry={reload} />
         ) : !items.length ? (
-          <EmptyState icon={scope === "saved" ? "bookmark" : "calendar"} title={scope === "saved" ? "Nothing saved yet" : scope === "going" ? "You're not going to anything yet" : "You aren't hosting anything"}>
+          <EmptyState icon={scope === "saved" ? "bookmark" : "calendar"} title={scope === "saved" ? "Nothing saved yet" : scope === "going" ? "You're not going to anything yet" : "You aren't hosting anything"} action={scope === "hosted" ? <Button href="/events/new" variant="primary">Create an event</Button> : <Button href="/events">Find events</Button>}>
             {scope === "saved" ? "Tap the bookmark on any event to keep it here." : scope === "going" ? "RSVP to an event and it'll show up here." : "Events live in communities: post one from your community's Events page."}
           </EmptyState>
         ) : (

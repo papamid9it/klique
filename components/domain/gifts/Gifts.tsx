@@ -13,8 +13,9 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { cx } from "@/components/ui/cx";
 import { compactCount } from "@/lib/format";
 import { cdn } from "@/lib/cdn";
-import { burstTier, giftArtStill, giftTargetKey, type GiftTargetType } from "@/lib/gifts";
-import type { GiftDTO, GiftSummaryDTO, GiftTrayDTO } from "@/lib/types";
+import { HYPE_NAIRA, burstTier, giftArtStill, giftTargetKey, hypeForNaira, type GiftTargetType } from "@/lib/gifts";
+import type { GiftDTO, GiftSummaryDTO, GiftTrayDTO, GiftWalletDTO } from "@/lib/types";
+import { rememberAward } from "./HypeReturn";
 
 export type GiftTarget = { type: GiftTargetType; id: string };
 
@@ -56,6 +57,11 @@ function want(key: string) {
   if (known.has(key) || waiting.has(key)) return;
   waiting.add(key);
   if (!timer) timer = setTimeout(flush, 40);
+}
+
+/** An award sent from somewhere else (after a top-up): show it on its post or comment */
+export function noteSent(target: GiftTarget, s: GiftSummaryDTO) {
+  setSummary(giftTargetKey(target), s);
 }
 
 function setSummary(key: string, s: GiftSummaryDTO) {
@@ -220,6 +226,10 @@ function GiftTray({ target, anchor, initial, onClose, onSent }: { target: GiftTa
   // one key per gift picked here: the same send twice (a double click, a slow network) is one gift
   const key = useRef(newClientKey());
   const [style, setStyle] = useState(() => placeTray(anchor));
+  // not enough Hype: the packs, right here (loaded the first time it's needed)
+  const [wallet, setWallet] = useState<GiftWalletDTO | null>(null);
+  const [packNaira, setPackNaira] = useState<number | null>(null);
+  const [paying, setPaying] = useState(false);
 
   // like Discord: while it's open the chat and page don't scroll (only the gifts inside it do); a resize re-places it
   useEffect(() => {
@@ -291,6 +301,29 @@ function GiftTray({ target, anchor, initial, onClose, onSent }: { target: GiftTa
   }
 
   const short = picked && data ? picked.hype > data.balance : false;
+  useEffect(() => {
+    if (short && !wallet) GiftService.wallet().then((r) => setWallet(r.data), () => {});
+  }, [short, wallet]);
+  const need = short && picked && data ? picked.hype - data.balance : 0;
+  // the packs, and the smallest one that covers it ("Covers it"); none big enough: exactly what's missing
+  const packs = wallet ? wallet.webPacks : [];
+  const covers = packs.find((p) => p.hype >= need) ?? null;
+  const exact = Math.min(wallet?.customMax ?? Infinity, Math.max(wallet?.customMin ?? 0, need * HYPE_NAIRA));
+  const chosen = packNaira ?? covers?.naira ?? exact;
+  const enough = hypeForNaira(chosen) >= need;
+  async function topUpAndSend() {
+    if (!picked || !data || paying) return;
+    setPaying(true);
+    try {
+      const here = window.location.pathname + window.location.search;
+      const res = await GiftService.topup(chosen, undefined, here);
+      rememberAward({ reference: res.data.reference, giftId: picked.id, giftName: picked.name, target, anonymous, clientKey: key.current });
+      window.location.href = res.data.authorizationUrl;
+    } catch (e) {
+      toast(errorMessage(e), "error");
+      setPaying(false);
+    }
+  }
   return (
     <div ref={ref} role="dialog" aria-label="Send an award" style={style} className="fixed z-50 flex w-[21rem] max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden rounded-card border border-line bg-surface p-3 shadow-xl">
       <TrayReceived target={target} />
@@ -329,16 +362,38 @@ function GiftTray({ target, anchor, initial, onClose, onSent }: { target: GiftTa
             <span className="text-ink-muted">(they see “Someone”)</span>
           </label>
           {short && (
-            <p className="mt-2 shrink-0 text-[12.5px] text-ink-muted">
-              You need {(picked!.hype - data.balance).toLocaleString("en-NG")} more Hype.{" "}
-              <Link href="/settings?tab=hype" className="font-semibold text-accent-text underline">
-                Top up
-              </Link>
-            </p>
+            <div className="mt-2 shrink-0 rounded-control bg-raised/70 p-2.5">
+              <p className="text-[13px]">
+                You need <strong>{need.toLocaleString("en-NG")} more Hype</strong> for {picked!.name}.
+              </p>
+              {!wallet ? (
+                <Skeleton className="mt-2 h-14" />
+              ) : !wallet.canBuyWeb ? (
+                <p className="mt-1 text-[12.5px] text-ink-muted">For now, buy Hype in the Klique app.</p>
+              ) : (
+                <div role="radiogroup" aria-label="How much Hype" className="mt-2 flex gap-1.5 overflow-x-auto no-bar">
+                  {(packs.some((p) => p.hype >= need) ? packs.filter((p) => p.hype >= need) : [{ naira: exact, hype: hypeForNaira(exact) }]).slice(0, 3).map((p) => {
+                    const on = chosen === p.naira;
+                    return (
+                      <button key={p.naira} type="button" role="radio" aria-checked={on} onClick={() => setPackNaira(p.naira)} className={cx("relative min-w-[5.5rem] flex-1 rounded-control border bg-surface px-2 py-1.5 text-left transition", on ? "border-2 border-ink px-[7px] py-[5px]" : "border-line hover:bg-raised")}>
+                        <span className="block font-mono text-[14px] font-semibold tabular-nums">{p.hype.toLocaleString("en-NG")}</span>
+                        <span className="block text-[12px] text-ink-muted">₦{p.naira.toLocaleString("en-NG")}{covers?.naira === p.naira ? " · covers it" : ""}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           )}
-          <button type="button" onClick={() => void send()} disabled={!picked || busy || short} className="mt-2 inline-flex h-9 w-full shrink-0 items-center justify-center gap-2 rounded-full bg-accent text-sm font-semibold text-accent-ink transition disabled:opacity-40">
-            {busy ? "Sending…" : picked ? `Send ${picked.name} · ${picked.hype.toLocaleString("en-NG")} Hype` : "Pick an award"}
-          </button>
+          {short && wallet?.canBuyWeb ? (
+            <button type="button" onClick={() => void topUpAndSend()} disabled={paying || !enough} className="mt-2 inline-flex min-h-9 w-full shrink-0 items-center justify-center gap-2 rounded-full bg-accent px-3 py-1.5 text-sm font-semibold text-accent-ink transition disabled:opacity-40">
+              {paying ? "Opening checkout…" : `Get ${hypeForNaira(chosen).toLocaleString("en-NG")} Hype and send ${picked!.name} · ₦${chosen.toLocaleString("en-NG")}`}
+            </button>
+          ) : (
+            <button type="button" onClick={() => void send()} disabled={!picked || busy || short} className="mt-2 inline-flex h-9 w-full shrink-0 items-center justify-center gap-2 rounded-full bg-accent text-sm font-semibold text-accent-ink transition disabled:opacity-40">
+              {busy ? "Sending…" : picked ? `Send ${picked.name} · ${picked.hype.toLocaleString("en-NG")} Hype` : "Pick an award"}
+            </button>
+          )}
         </>
       )}
     </div>

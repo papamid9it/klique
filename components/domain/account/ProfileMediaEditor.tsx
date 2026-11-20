@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { errorMessage } from "@/app/ApiCore";
+import { errorMessage, isApiError } from "@/app/ApiCore";
+import { UpgradePrompt } from "./PlanTab";
 import { ProfileService } from "@/app/services/ProfileService";
 import { SubscriptionService } from "@/app/services/SubscriptionService";
 import { UploadService } from "@/app/services/UploadService";
@@ -58,6 +59,8 @@ export function ProfileMediaEditor({ me }: { me: UserMe }) {
   const over = c ? Math.max(0, items.length - slots) : 0;
   const upgrade = p !== "pro" ? ", or upgrade" : "";
 
+  // the plans sheet: a locked slot clicked, or the server saying the gallery is full
+  const [limitMsg, setLimitMsg] = useState<string | null>(null);
   async function save(next: TopicMediaDTO[]) {
     const prev = items;
     setItems(next);
@@ -65,7 +68,8 @@ export function ProfileMediaEditor({ me }: { me: UserMe }) {
       setUser((await ProfileService.setMedia(next)).data);
     } catch (e) {
       setItems(prev);
-      toast(errorMessage(e), "error");
+      if (isApiError(e) && e.code === "plan_limit") setLimitMsg(errorMessage(e));
+      else toast(errorMessage(e), "error");
     }
   }
 
@@ -201,10 +205,10 @@ export function ProfileMediaEditor({ me }: { me: UserMe }) {
                   </div>
                 </>
               ) : locked ? (
-                <a href="/pricing" className="flex size-full flex-col items-center justify-center gap-1.5 p-3 text-center text-xs text-ink-muted hover:text-ink">
+                <button type="button" onClick={() => setLimitMsg(`You're on ${PLAN_NAMES[p]}, which has ${slots} ${slots === 1 ? "slot" : "slots"} for photos and videos.`)} className="flex size-full flex-col items-center justify-center gap-1.5 p-3 text-center text-xs text-ink-muted hover:text-ink">
                   <Icon name="lock" size={18} />
                   <span>{p === "free" ? "More with Lite or Pro" : "More with Pro"}</span>
-                </a>
+                </button>
               ) : (
                 <button type="button" disabled={!c || busy !== null || i !== items.length} onClick={() => choose(i)} className="flex size-full flex-col items-center justify-center gap-1.5 text-xs text-ink-muted transition hover:bg-line/40 hover:text-ink disabled:pointer-events-none disabled:opacity-40">
                   <span className="inline-flex size-9 items-center justify-center rounded-full border border-line bg-surface">
@@ -218,6 +222,7 @@ export function ProfileMediaEditor({ me }: { me: UserMe }) {
           );
         })}
       </ul>
+      <UpgradePrompt message={limitMsg} onClose={() => setLimitMsg(null)} />
     </section>
   );
 }

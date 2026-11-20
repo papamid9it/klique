@@ -1007,7 +1007,12 @@ export const giftSendSchema = z.object({
   /** a random id per send: the same send twice makes one gift */
   clientKey: z.string().regex(/^[A-Za-z0-9_-]{8,64}$/),
 });
-export const giftTopupSchema = z.object({ amount: z.number().int().min(1).max(10_000_000), provider: payProviderField });
+export const giftTopupSchema = z.object({
+  amount: z.number().int().min(1).max(10_000_000),
+  provider: payProviderField,
+  /** topping up from the award tray: the page to come back to (a path on this site only) */
+  back: z.string().max(500).regex(/^\/(?![\/\\])[^\s]*$/, "A path on this site").optional(),
+});
 export const giftStoreTopupSchema = z.discriminatedUnion("platform", [
   z.object({ platform: z.literal("apple"), transactionId: z.string().trim().min(1).max(100) }),
   z.object({ platform: z.literal("google"), productId: z.string().trim().regex(/^hype_\d{1,7}$/), purchaseToken: z.string().trim().min(1).max(4000) }),

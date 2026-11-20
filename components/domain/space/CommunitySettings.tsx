@@ -4,7 +4,8 @@ import { usePayments } from "@/lib/hooks/usePayments";
 import { useRouter } from "next/navigation";
 import { audienceLabel } from "@/lib/constants";
 import { useAutoSave } from "@/lib/hooks/useAutoSave";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { SpaceService } from "@/app/services/SpaceService";
 import { errorMessage } from "@/app/ApiCore";
 import { CommunityService } from "@/app/services/CommunityService";
 import { useAuth } from "@/components/providers/AuthProvider";
@@ -31,8 +32,14 @@ import { VerificationBlock } from "./VerificationBlock";
 import { WelcomePanel } from "./Welcome";
 import { EmojiPanel } from "./EmojiPanel";
 
-export type CommunityTab = "overview" | "groups" | "posts" | "donations" | "payouts" | "members" | "requests" | "invites" | "screening" | "roles" | "automod" | "welcome" | "emoji" | "modlog" | "webhooks" | "notifications" | "privacy" | "delete" | "sections";
-const TITLES: Record<CommunityTab, string> = { overview: "Overview", groups: "Events and mentions", posts: "Posts, boards & kliques", donations: "Donations", payouts: "Payouts", members: "Members", requests: "Join requests", invites: "Invite links", screening: "Entry questions", roles: "Roles", automod: "AutoMod", welcome: "Welcome screen", emoji: "Emoji", modlog: "Moderation log", webhooks: "Webhooks & bots", notifications: "Your notifications", privacy: "Privacy", delete: "Delete community", sections: "Board and kliques" };
+export type CommunityTab = "overview" | "joining" | "events" | "kliques" | "mentions" | "groups" | "posts" | "donations" | "payouts" | "members" | "requests" | "invites" | "screening" | "roles" | "automod" | "welcome" | "emoji" | "modlog" | "webhooks" | "notifications" | "privacy" | "delete" | "sections";
+const TITLES: Record<CommunityTab, string> = {
+  overview: "Name, picture and description", joining: "Who can join", welcome: "Welcome message", posts: "Posts and board", events: "Events", kliques: "Kliques",
+  members: "Members", roles: "Roles and permissions", automod: "Auto-filters", mentions: "Who can ping everyone", modlog: "Removed content log", emoji: "Custom emoji",
+  webhooks: "Bots and connections", donations: "Donations", payouts: "Payouts", requests: "Join requests", delete: "Delete community",
+  // older links still open
+  groups: "Events and mentions", sections: "Board and kliques", privacy: "Privacy", invites: "Invite links", screening: "Questions for new members", notifications: "Your notifications",
+};
 
 /** Discord-style full-screen community settings. Owners and admins only; the server re-checks every change. */
 export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: CommunityDTO; tab: string; onTab: (t: CommunityTab) => void; onClose: () => void; onChanged: () => Promise<void> | void }) {
@@ -85,40 +92,61 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
   const setPrivacy = (next: boolean) => privacySave.run(() => saveTo({ privacy: next ? "private" : "public" }, next ? "Community is now private" : "Community is now public"), next);
 
   const donationsOn = !!usePayments()?.donations;
+  // people waiting to be let in: shown first, with a count, like the app
+  const [waiting, setWaiting] = useState(0);
+  useEffect(() => {
+    if (!admin || !isPrivate) return void setWaiting(0);
+    let on = true;
+    SpaceService.requests(c.slug).then((r) => on && setWaiting(r.data.length), () => {});
+    return () => void (on = false);
+  }, [admin, isPrivate, c.slug, active]);
+  // the same groups, names and explanations as the app's settings (components/settings/groups.ts there)
   const groups: SettingsGroup[] = [
+    { title: "Needs your attention", items: [{ id: "requests", label: "Join requests", icon: "userplus", hint: "People waiting to be let in", count: waiting, hidden: !admin || !waiting }] },
     {
-      title: "Community",
+      title: "Your community",
       items: [
-        { id: "overview", label: "Overview", icon: "sliders", hidden: !admin },
-        { id: "groups", label: "Events and mentions", icon: "calendar", hidden: !admin },
-        // one place for what the community is made of: its Posts, its boards and its kliques
-        { id: "posts", label: "Posts, boards & kliques", icon: "image", hidden: !admin },
-        { id: "privacy", label: "Privacy", icon: "lock", hidden: !isOwner },
-        // your own (every member has one; members reach it from the community's menu)
-        { id: "notifications", label: "Your notifications", icon: "bell" },
+        { id: "overview", label: "Name, picture and description", icon: "edit", hint: "How it looks to everyone", hidden: !admin },
+        { id: "joining", label: "Who can join", icon: "lock", hint: isPrivate ? "Private: approvals, invite links, questions" : "Public or private, questions for new members", hidden: !admin },
+        { id: "welcome", label: "Welcome message", icon: "heart", hint: "What new members see first", hidden: !admin },
       ],
     },
-    // Klique itself takes no donations
-    // donations and payouts: only while they're switched on (Admin → System)
-    ...(c.official || !admin || !donationsOn ? [] : [{ title: "Money", items: [{ id: "donations", label: "Donations", icon: "heart" as const }, { id: "payouts", label: "Payouts", icon: "coin" as const }] }]),
     {
-      title: "People",
+      title: "What's inside",
       items: [
-        { id: "members", label: "Members", icon: "users", hidden: !canMembers },
-        { id: "roles", label: "Roles", icon: "shield", hidden: !may("manageRoles") },
-        { id: "automod", label: "AutoMod", icon: "ban", hidden: !admin },
-        { id: "welcome", label: "Welcome screen", icon: "userplus", hidden: !admin },
-        { id: "emoji", label: "Emoji", icon: "smile", hidden: !may("manageEmoji") },
-        { id: "requests", label: "Join requests", icon: "userplus", hidden: !admin },
-        { id: "invites", label: "Invite links", icon: "link", hidden: !isPrivate || !admin },
-        // official communities (Klique HQ) take everyone, no questions asked
-        { id: "screening", label: "Entry questions", icon: "info", hidden: !!c.official || !admin },
-        { id: "modlog", label: "Moderation log", icon: "shield", hidden: !may("viewModLog") },
+        { id: "posts", label: "Posts and board", icon: "image", hint: "Photos, the board, and who can post", hidden: !admin },
+        { id: "events", label: "Events", icon: "calendar", hint: "Who can suggest events", hidden: !admin },
+        { id: "kliques", label: "Kliques", icon: "pin", hint: "Going out together, on or off", hidden: !admin },
       ],
     },
-    // bots: channel webhooks (the owner only; never in 18+ communities)
-    ...(c.adult || !(runsApps || perms.includes("manageWebhooks")) ? [] : [{ title: "Apps", items: [{ id: "webhooks", label: "Webhooks & bots", icon: "link" as const }] }]),
-    { items: [{ id: "delete", label: "Delete community", icon: "trash", danger: true, hidden: !isOwner }] },
+    {
+      title: "Members",
+      items: [
+        { id: "members", label: "Members", icon: "users", hint: "See everyone, remove or ban", hidden: !canMembers },
+        { id: "roles", label: "Roles and permissions", icon: "shield", hint: "Admins, moderators and what they can do", hidden: !may("manageRoles") },
+      ],
+    },
+    {
+      title: "Keeping it safe",
+      items: [
+        { id: "automod", label: "Auto-filters", icon: "ban", hint: "Block links, bad words and spam", hidden: !admin },
+        { id: "mentions", label: "Who can ping everyone", icon: "megaphone", hint: "@everyone and @here", hidden: !admin },
+        { id: "modlog", label: "Removed content log", icon: "topics", hint: "What was removed, and by whom", hidden: !may("viewModLog") },
+      ],
+    },
+    // Klique itself takes no donations; donations and payouts only while they're switched on (Admin → System)
+    ...(c.official || !admin || !donationsOn ? [] : [{ title: "Money", items: [{ id: "donations", label: "Donations", icon: "heart" as const, hint: "Let members support the community" }, { id: "payouts", label: "Payouts", icon: "coin" as const, hint: "Where the money goes" }] }]),
+    {
+      title: "Extras",
+      items: [
+        { id: "emoji", label: "Custom emoji", icon: "smile", hint: "Your community's own emoji", hidden: !may("manageEmoji") },
+        // bots: never in 18+ communities
+        { id: "webhooks", label: "Bots and connections", icon: "link", hint: "Auto-posts and slash commands", hidden: !!c.adult || !(runsApps || perms.includes("manageWebhooks")) },
+      ],
+    },
+    // your own (every member has one; members reach it from the community's menu)
+    { title: "Just for you", items: [{ id: "notifications", label: "Your notifications", icon: "bell", hint: "What you hear about from here" }] },
+    { items: [{ id: "delete", label: "Delete community", icon: "trash", hint: "Removes everything for good", danger: true, hidden: !isOwner }] },
   ];
 
   return (
@@ -164,7 +192,7 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
         </>
       )}
 
-      {active === "groups" && (
+      {(active === "groups" || active === "events") && (
         <SettingsBlock title="Who can post events" intro="Owners and admins post events straight away, from the Events page. A group's own owner and admins can post in their group.">
           <Switch
             checked={eventsSave.pending ?? c.memberEvents}
@@ -176,7 +204,7 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
         </SettingsBlock>
       )}
 
-      {active === "groups" && (
+      {(active === "groups" || active === "mentions") && (
         <SettingsBlock title="Mentions" intro="Like Discord's “Mention @everyone, @here and all roles”. @everyone (or @all) pings everyone who can see the channel; @here (or @channel) only those online now.">
           <Switch
             checked={massSave.pending ?? !!c.membersMassMention}
@@ -211,7 +239,7 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
       )}
 
       {(active === "posts" || active === "sections") && (
-        <SettingsBlock title="Board and kliques" intro="Switch off what this community doesn't use. Nothing is deleted: switching it back on brings it all back.">
+        <SettingsBlock title="Board" intro="Switch it off if this community doesn't use it. Nothing is deleted: switching it back on brings it all back.">
           <Switch
             checked={boardsSave.pending ?? c.boardsOn}
             status={boardsSave.status}
@@ -219,6 +247,11 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
             label="Board"
             hint="Topics members start and reply to. Off: the board is hidden and nobody can post there."
           />
+        </SettingsBlock>
+      )}
+
+      {(active === "kliques" || active === "sections") && (
+        <SettingsBlock title="Kliques" intro="Small groups going out together. Nothing is deleted when it's off: switching it back on brings it all back.">
           <Switch
             checked={kliquesSave.pending ?? c.kliquesOn}
             status={kliquesSave.status}
@@ -254,10 +287,43 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
           <CommunityNotifySettings c={c} onChanged={onChanged} />
         </SettingsBlock>
       )}
-      {active === "webhooks" && !c.adult && (runsApps || perms.includes("manageWebhooks")) && <WebhooksPanel slug={c.slug} />}
+      {active === "webhooks" && !c.adult && (runsApps || perms.includes("manageWebhooks")) && <WebhooksPanel slug={c.slug} onWelcome={admin ? () => onTab("welcome") : undefined} />}
       {active === "screening" && <ScreeningPanel slug={c.slug} />}
-      {active === "requests" && <RequestsPanel slug={c.slug} onDecided={onChanged} />}
+      {active === "requests" && <RequestsPanel slug={c.slug} onDecided={async () => { setWaiting((n) => Math.max(0, n - 1)); await onChanged(); }} />}
       {active === "invites" && <InvitesPanel slug={c.slug} spaceName={c.name} />}
+
+      {active === "joining" && (
+        <>
+          {isOwner && (
+            <SettingsBlock title="Public or private">
+              <Switch
+                checked={privacySave.pending ?? isPrivate}
+                onChange={(v) => void setPrivacy(v)}
+                status={privacySave.status}
+                label="Private community"
+                disabled={!!audienceLabel(c.audience)}
+                hint={audienceLabel(c.audience) ? `This is a ${audienceLabel(c.audience)!.toLowerCase()} community, so it stays private. Who it's for can't be changed.` : "On: only members see posts, events and members, and new people need your OK or an invite link."}
+              />
+            </SettingsBlock>
+          )}
+          {isPrivate && (
+            <SettingsBlock title="Waiting to join">
+              <RequestsPanel slug={c.slug} onDecided={async () => { setWaiting((n) => Math.max(0, n - 1)); await onChanged(); }} />
+            </SettingsBlock>
+          )}
+          {isPrivate && (
+            <SettingsBlock title="Invite links" intro="Anyone with a link joins straight away.">
+              <InvitesPanel slug={c.slug} spaceName={c.name} />
+            </SettingsBlock>
+          )}
+          {/* official communities (Klique HQ) take everyone, no questions asked */}
+          {!c.official && (
+            <SettingsBlock title="Questions for new members" intro="Optional. New members answer these before they join.">
+              <ScreeningPanel slug={c.slug} />
+            </SettingsBlock>
+          )}
+        </>
+      )}
 
       {active === "privacy" && (
         <SettingsBlock title="Access">

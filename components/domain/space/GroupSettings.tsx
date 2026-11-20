@@ -16,7 +16,7 @@ import { MembersPanel } from "./MembersPanel";
 import { ConfirmModal } from "./parts";
 
 export type GroupTab = "overview" | "members" | "invites" | "delete";
-const TITLES: Record<GroupTab, string> = { overview: "Overview", members: "Members", invites: "Invite links", delete: "Delete group" };
+const TITLES: Record<GroupTab, string> = { overview: "Name, picture and description", members: "Members", invites: "Invite links", delete: "Delete group" };
 
 /** Discord-style full-screen group settings. */
 export function GroupSettings({ g, tab, onTab, onClose, onChanged }: { g: SubcommunityDTO; tab: string; onTab: (t: GroupTab) => void; onClose: () => void; onChanged: () => Promise<void> | void }) {
@@ -49,12 +49,12 @@ export function GroupSettings({ g, tab, onTab, onClose, onChanged }: { g: Subcom
     {
       title: g.name,
       items: [
-        { id: "overview", label: "Overview", icon: "sliders" },
-        { id: "members", label: "Members", icon: "users" },
-        { id: "invites", label: "Invite links", icon: "link", hidden: !g.viewer.canManage },
+        { id: "overview", label: "Name, picture and description", icon: "edit", hint: "How the group looks" },
+        { id: "members", label: "Members", icon: "users", hint: "Add people, give titles, remove" },
+        { id: "invites", label: "Invite links", icon: "link", hint: "Links that let people in", hidden: !g.viewer.canManage },
       ],
     },
-    { items: [{ id: "delete", label: "Delete group", icon: "trash", danger: true, hidden: !canDelete }] },
+    { items: [{ id: "delete", label: "Delete group", icon: "trash", hint: "Removes it for everyone", danger: true, hidden: !canDelete }] },
   ];
 
   return (

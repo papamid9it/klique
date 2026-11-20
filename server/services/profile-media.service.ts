@@ -3,7 +3,7 @@ import { unreadTotal } from "./messaging.service";
 import { unreadNotificationCount } from "./notifications.service";
 import type { TopicMediaDTO, UserMe } from "@/lib/types";
 import { PLAN_NAMES } from "@/lib/plans";
-import { badRequest, forbidden } from "../http/errors";
+import { ApiError, badRequest } from "../http/errors";
 import { rateLimit } from "../http/rate-limit";
 import { User, type IUser } from "../models/User";
 import { toMe } from "../serializers";
@@ -41,7 +41,7 @@ export async function setProfileMedia(viewer: IUser, items: Item[]): Promise<Use
     const adds = items.some((m) => !had.has(m.url));
     if (adds || items.length > before.length) {
       const over = Math.max(1, before.length - slots);
-      throw forbidden(`You're on ${PLAN_NAMES[plan]}, which has ${slots} ${slots === 1 ? "slot" : "slots"}: remove ${over} to add new ones${plan !== "pro" ? ", or upgrade" : ""}.`);
+      throw new ApiError(403, `You're on ${PLAN_NAMES[plan]}, which has ${slots} ${slots === 1 ? "slot" : "slots"}: remove ${over} to add new ones${plan !== "pro" ? ", or upgrade" : ""}.`, plan !== "pro" ? { code: "plan_limit" } : {});
     }
   }
   // only files uploaded here (never someone else's link)

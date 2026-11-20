@@ -47,7 +47,74 @@ interface Hooks {
  * renewed. The community's owner only; how many is set by their plan (Free 2, Lite 5, Pro 10). Webhooks belong
  * to the community, so they keep working if it changes owner.
  */
-export function WebhooksPanel({ slug }: { slug: string }) {
+/**
+ * Ready-made bots first, in plain words (as in the app): the Welcome bot (Welcome message settings), Event reminders
+ * (the week's events in a channel every Monday) and posting from another app (a webhook, below).
+ */
+function AddABot({ slug, data, onWelcome, onWebhook }: { slug: string; data: Hooks; onWelcome?: () => void; onWebhook: () => void }) {
+  const toast = useToast();
+  const digest = useApi(() => api.get<Envelope<{ channelId: string | null; lastAt: string | null }>>(`/api/communities/${slug}/event-digest`), [slug], { key: `event-digest:${slug}` });
+  const [open, setOpen] = useState(false);
+  const [room, setRoom] = useState("");
+  const [busy, setBusy] = useState(false);
+  const on = digest.data?.channelId ?? null;
+  const roomName = (id: string | null) => data.channels.find((c) => c.id === id)?.name ?? "a channel";
+  async function save(channelId: string | null) {
+    setBusy(true);
+    try {
+      await api.put(`/api/communities/${slug}/event-digest`, { channelId });
+      toast(channelId ? `Event reminders post in #${roomName(channelId)} every Monday` : "Event reminders are off", "success");
+      setOpen(false);
+      await digest.reload();
+    } catch (e) {
+      toast(errorMessage(e), "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+  const rows = [
+    ...(onWelcome ? [{ icon: "heart" as const, label: "Welcome bot", hint: "Says hello to new members in a channel you pick", go: onWelcome }] : []),
+    { icon: "calendar" as const, label: "Event reminders", hint: on ? `On · posts in #${roomName(on)} every Monday` : "Posts the week's events in a channel every Monday", go: () => (setRoom(on ?? data.channels[0]?.id ?? ""), setOpen((v) => !v)) },
+    { icon: "link" as const, label: "Post from another app", hint: data.createBlock ?? `A link other apps (Zapier, GitHub, your website) can post to · ${data.cap === null ? `${data.items.length} made` : `${data.used} of ${data.cap} used`}`, go: () => !data.createBlock && onWebhook() },
+  ];
+  return (
+    <SettingsBlock title="Add a bot" intro="Bots post for you. Klique runs the first ones; the last lets another app post here.">
+      <ul className="divide-y divide-line overflow-hidden rounded-card border border-line bg-surface">
+        {rows.map((r) => (
+          <li key={r.label}>
+            <button type="button" onClick={r.go} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-raised">
+              <Icon name={r.icon} size={19} className="shrink-0" />
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-semibold">{r.label}</span>
+                <span className="block text-[13px] text-ink-muted">{r.hint}</span>
+              </span>
+              <Icon name="chevron-right" size={15} className="text-ink-muted" />
+            </button>
+          </li>
+        ))}
+      </ul>
+      {open && (
+        <div className="mt-3 space-y-3 rounded-card border border-line bg-surface p-4">
+          <p className="text-sm font-semibold">Event reminders</p>
+          <p className="text-sm text-ink-muted">Every Monday morning, this community&apos;s events for the week are posted in the channel you pick, with a link to each. A week with nothing on posts nothing.</p>
+          <div className="max-w-xs">
+            <SelectField label="Posts in" value={room} onChange={(e) => setRoom(e.target.value)}>
+              {data.channels.map((c) => (
+                <option key={c.id} value={c.id}>#{c.name}</option>
+              ))}
+            </SelectField>
+          </div>
+          <div className="flex gap-2">
+            <Button onClick={() => (on ? void save(null) : setOpen(false))} disabled={busy}>{on ? "Turn off" : "Cancel"}</Button>
+            <Button variant="primary" loading={busy} disabled={!room} onClick={() => void save(room)}>{on ? "Save" : "Turn on"}</Button>
+          </div>
+        </div>
+      )}
+    </SettingsBlock>
+  );
+}
+
+export function WebhooksPanel({ slug, onWelcome }: { slug: string; /** opens the Welcome message settings (the Welcome bot) */ onWelcome?: () => void }) {
   const [busy, setBusy] = useState<{ id: string; what: "mass" | "renew" } | null>(null);
   const toast = useToast();
   const confirm = useConfirm();
@@ -87,7 +154,8 @@ export function WebhooksPanel({ slug }: { slug: string }) {
 
   return (
     <>
-      <SettingsBlock title="Webhooks" intro="A webhook is a secret link that lets another app post messages into one of your channels: alerts from Zapier, GitHub, a Google Form or your own script. Its messages show its name and picture with a BOT tag.">
+      <AddABot slug={slug} data={data} onWelcome={onWelcome} onWebhook={() => setMaking(true)} />
+      <SettingsBlock title="Posting from other apps" intro="A webhook is a secret link that lets another app post messages into one of your channels: alerts from Zapier, GitHub, a Google Form or your own script. Its messages show its name and picture with a BOT tag.">
         <div className="flex flex-wrap items-center gap-3">
           <Button variant="primary" size="sm" onClick={() => setMaking(true)} disabled={!!data.createBlock}>
             <Icon name="plus" size={14} /> New webhook

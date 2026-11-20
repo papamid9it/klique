@@ -3,7 +3,7 @@ import { Types } from "mongoose";
 import { z } from "zod";
 import { EMOJI_NAME, EMOJI_TOKEN } from "@/lib/emoji-tokens";
 import { PLAN_NAMES, type PlanId } from "@/lib/plans";
-import { badRequest, conflict, forbidden, notFound } from "../http/errors";
+import { ApiError, badRequest, conflict, forbidden, notFound } from "../http/errors";
 import { rateLimit } from "../http/rate-limit";
 import { Community, type ICommunity } from "../models/Community";
 import { CommunityEmoji, type ICommunityEmoji } from "../models/CommunityEmoji";
@@ -57,7 +57,11 @@ export async function createEmoji(viewer: IUser, slug: string, input: z.infer<ty
   rateLimit(`emoji:${sid(viewer._id)}`, 60, 60 * 60_000);
   const cid = space.community._id;
   const { cap, plan } = await capFor(space.community);
-  if ((await CommunityEmoji.countDocuments({ communityId: cid })) >= cap) throw forbidden(`This community is on its owner's ${PLAN_NAMES[plan]} plan: ${cap} emoji.${plan !== "pro" ? " The owner can upgrade for more, or delete one." : " Delete one to add another."}`);
+  if ((await CommunityEmoji.countDocuments({ communityId: cid })) >= cap) {
+    // the owner sees their plan's limits (and a way to more); anyone else just hears it
+    const theirs = sid(space.community.ownerId) === sid(viewer._id) && plan !== "pro";
+    throw new ApiError(403, `This community is on its owner's ${PLAN_NAMES[plan]} plan: ${cap} emoji.${plan !== "pro" ? " The owner can upgrade for more, or delete one." : " Delete one to add another."}`, theirs ? { code: "plan_limit" } : {});
+  }
   try {
     const e = await CommunityEmoji.create({ communityId: cid, name: input.name, url: input.url, animated: /\.gif(\?|#|$)/i.test(input.url), createdById: viewer._id });
     void ModAction.create({ communityId: cid, actorId: viewer._id, action: "emoji.create", targetType: "emoji", targetId: e._id, label: `:${e.name}:`, authorId: null }).catch(() => {});

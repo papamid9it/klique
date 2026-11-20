@@ -14,6 +14,7 @@ import { useApi } from "@/lib/hooks/useApi";
 import { PLAN_NAMES, type PlanId } from "@/lib/plans";
 import type { Envelope } from "@/lib/types";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
+import { usePlanLimit } from "@/components/domain/account/PlanTab";
 
 const api = new ApiClient();
 type E = { id: string; name: string; url: string; animated: boolean };
@@ -32,6 +33,8 @@ export function EmojiPanel({ slug }: { slug: string }) {
   const file = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<{ url: string; name: string } | null>(null);
+  // the owner at their plan's emoji limit: the plans sheet, never a nudge before it
+  const limit = usePlanLimit();
 
   async function pick(f: File | undefined) {
     if (!f) return;
@@ -55,7 +58,7 @@ export function EmojiPanel({ slug }: { slug: string }) {
       setPending(null);
       await reload();
     } catch (e) {
-      toast(errorMessage(e), "error");
+      if (!limit.handled(e)) toast(errorMessage(e), "error");
     } finally {
       setBusy(false);
     }
@@ -76,6 +79,7 @@ export function EmojiPanel({ slug }: { slug: string }) {
   const full = data.items.length >= data.cap;
   return (
     <>
+      {limit.prompt}
       <SettingsBlock title="Custom emoji" intro="Members type :name: (or pick it from the smiley button) to use them here. Pro members can use them anywhere.">
         <div className="flex flex-wrap items-center gap-3">
           <input ref={file} type="file" accept="image/png,image/gif,image/webp" hidden onChange={(e) => void pick(e.target.files?.[0])} />

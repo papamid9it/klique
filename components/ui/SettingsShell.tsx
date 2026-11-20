@@ -14,6 +14,10 @@ export interface SettingsItem {
   danger?: boolean;
   /** hide the item (e.g. private-only sections) */
   hidden?: boolean;
+  /** a few words under the name saying what it's for (as in the app) */
+  hint?: string;
+  /** something waiting there (join requests): a count beside it */
+  count?: number;
 }
 export interface SettingsGroup {
   title?: string;
@@ -91,11 +95,17 @@ export function SettingsShell({
                     }}
                     aria-current={active === it.id && !menu ? "page" : undefined}
                     className={cx(
-                      "flex h-10 w-full items-center gap-3 rounded-control px-2.5 text-left text-[15px] font-medium transition md:h-9",
+                      "flex w-full items-center gap-3 rounded-control px-2.5 text-left text-[15px] font-medium transition",
+                      it.hint ? "min-h-12 py-1.5" : "h-10 md:h-9",
                       it.danger ? (active === it.id ? "bg-danger/15 text-danger" : "text-danger hover:bg-danger/10") : active === it.id ? "bg-raised text-ink" : "text-ink-muted hover:bg-raised/60 hover:text-ink",
                     )}
                   >
-                    <Icon name={it.icon} size={17} /> {it.label}
+                    <Icon name={it.icon} size={17} className="shrink-0" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate">{it.label}</span>
+                      {it.hint && <span className="block truncate text-[12.5px] font-normal text-ink-muted">{it.hint}</span>}
+                    </span>
+                    {!!it.count && <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1.5 text-[12px] font-bold text-accent-ink">{it.count > 99 ? "99+" : it.count}</span>}
                   </button>
                 </li>
               ))}

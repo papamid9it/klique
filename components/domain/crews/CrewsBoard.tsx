@@ -86,7 +86,7 @@ export function CrewsBoard({ slug, sub, eventId, community, onChanged }: { slug:
           <Button onClick={() => void kliques.loadMore()} loading={kliques.loadingMore}>See more</Button>
         </div>
       ) : (
-        <EmptyState icon="users" title="No kliques yet">
+        <EmptyState icon="users" title="No kliques yet" action={!sub ? <Button variant="primary" onClick={() => requireAuth() && setStarting(true)}>Start a klique</Button> : undefined}>
           Start the first one. Pick a plan, add a picture, and people here can join you.
         </EmptyState>
       )}

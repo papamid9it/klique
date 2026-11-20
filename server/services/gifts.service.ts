@@ -200,7 +200,8 @@ export async function startTopup(viewer: IUser, input: z.infer<typeof giftTopupS
   // the company they picked (of those switched on), or the first one on
   const provider = await pickProvider(input.provider);
   await HypeTopup.create({ userId: viewer._id, platform: "web", hype: hypeForNaira(amount), amount, storeFee: 0, pack, reference, provider });
-  const back = `${appUrl()}/settings?tab=hype&hype_ref=${reference}`;
+  // from the award tray: back to the same page (only ever this site), which checks the payment and sends the award
+  const back = input.back && provider === "paystack" ? sameSiteBack(input.back, reference) : `${appUrl()}/settings?tab=hype&hype_ref=${reference}`;
   if (provider !== "paystack") {
     const url = await startCharge(provider, { reference, amountNaira: amount, email: viewer.email, name: viewer.displayName, title: `${hypeForNaira(amount).toLocaleString("en-NG")} Hype` });
     return { authorizationUrl: url, reference };
@@ -210,6 +211,19 @@ export async function startTopup(viewer: IUser, input: z.infer<typeof giftTopupS
     body: { email: viewer.email, amount: amount * 100, currency: "NGN", reference, callback_url: back, metadata: { purpose: "gift-hype", hype: hypeForNaira(amount), cancel_action: back } },
   });
   return { authorizationUrl: data.authorization_url, reference };
+}
+
+/** A path on this site with `hype_ref` added (anything pointing elsewhere falls back to Settings → Hype). */
+function sameSiteBack(path: string, reference: string): string {
+  const base = appUrl();
+  try {
+    const u = new URL(path, base);
+    if (u.origin !== new URL(base).origin) throw new Error("elsewhere");
+    u.searchParams.set("hype_ref", reference);
+    return u.toString();
+  } catch {
+    return `${base}/settings?tab=hype&hype_ref=${reference}`;
+  }
 }
 
 let failCreditForTests = false;

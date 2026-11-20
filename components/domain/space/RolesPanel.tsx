@@ -17,6 +17,42 @@ import type { Envelope, RoleDTO } from "@/lib/types";
 import { ConfirmModal } from "./parts";
 
 const api = new ApiClient();
+/** The powers, in three plain groups (as in the app) */
+const POWER_GROUPS: { title: string; items: { id: Permission; label: string; hint: string }[] }[] = [
+  { title: "In chat", items: [
+    { id: "deleteMessages", label: "Remove messages", hint: "Delete other people's messages, posts and comments" },
+    { id: "mentionEveryone", label: "Ping everyone", hint: "Use @everyone and @here, even when members can't" },
+  ] },
+  { title: "With people", items: [
+    { id: "timeout", label: "Mute people", hint: "Stop someone writing for a while" },
+    { id: "kick", label: "Remove people", hint: "They can join again" },
+    { id: "ban", label: "Ban people", hint: "Removed for good" },
+    { id: "manageRoles", label: "Give roles", hint: "Only roles below this one" },
+  ] },
+  { title: "Running the community", items: [
+    { id: "manageChannels", label: "Chat rooms", hint: "Add, edit and order rooms and sections" },
+    { id: "manageEvents", label: "Events", hint: "Approve, edit and cancel members' events" },
+    { id: "manageEmoji", label: "Custom emoji", hint: "Add and delete the community's emoji" },
+    { id: "manageWebhooks", label: "Bots and connections", hint: "Normally the owner only" },
+    { id: "viewModLog", label: "Removed content log", hint: "See what was removed, and by whom" },
+  ] },
+];
+const SHORT: Partial<Record<Permission, string>> = { deleteMessages: "removes messages", mentionEveryone: "pings everyone", timeout: "mutes", kick: "removes people", ban: "bans", manageRoles: "gives roles", manageChannels: "edits rooms", manageEvents: "handles events", manageEmoji: "adds emoji", manageWebhooks: "runs bots", viewModLog: "sees the log" };
+/** "Removes messages, mutes and removes people": what a role does, in a line */
+function powersLine(perms: Permission[]): string {
+  const words = perms.map((x) => SHORT[x]).filter((x): x is string => !!x);
+  if (!words.length) return "A name, colour and emoji, no extra powers";
+  const shown = words.slice(0, 3);
+  const more = words.length - shown.length;
+  const line = shown.length > 1 ? `${shown.slice(0, -1).join(", ")} and ${shown[shown.length - 1]}` : shown[0];
+  return `${line[0].toUpperCase()}${line.slice(1)}${more ? ` (+${more} more)` : ""}`;
+}
+/** One click makes these (renamed or changed after, like any role) */
+const READY: { name: string; color: string; permissions: Permission[]; line: string; icon: "shield" | "calendar" }[] = [
+  { name: "Moderator", color: ROLE_COLORS[2], permissions: ["deleteMessages", "timeout", "kick", "viewModLog"], line: "Removes messages, mutes and removes people", icon: "shield" },
+  { name: "Event helper", color: ROLE_COLORS[4], permissions: ["manageEvents"], line: "Approves and edits members' events", icon: "calendar" },
+];
+
 type Roles = { items: RoleDTO[]; myRank: number; canManage: boolean; cap: number; owner: { icon: string | null; canEdit: boolean } };
 
 /** The community's roles, for pickers elsewhere (members, channel permissions). */
@@ -50,6 +86,16 @@ export function RolesPanel({ slug }: { slug: string }) {
   if (error || !data) return <ErrorState message={error} onRetry={reload} />;
   const roles = data.items;
   const mine = (r: RoleDTO) => r.position < data.myRank;
+  const ready = data.canManage && roles.length < data.cap ? READY.filter((x) => !roles.some((r) => r.name.toLowerCase() === x.name.toLowerCase())) : [];
+  async function addReady(x: (typeof READY)[number]) {
+    try {
+      await api.post(`/api/communities/${slug}/roles`, { name: x.name, color: x.color, icon: null, permissions: x.permissions, selfAssignable: false });
+      toast(`${x.name} role added`, "success");
+      await reload();
+    } catch (e) {
+      toast(errorMessage(e), "error");
+    }
+  }
 
   async function move(r: RoleDTO, dir: -1 | 1) {
     const movable = roles.filter(mine);
@@ -68,10 +114,30 @@ export function RolesPanel({ slug }: { slug: string }) {
 
   return (
     <>
-      <SettingsBlock title="Roles" intro="Give people jobs and powers here: moderators, hosts, VIPs. Roles higher up the list outrank the ones below. People with a role see its colour on their name.">
+      <SettingsBlock title="Roles" intro="Give trusted members a role so they can help run the community. Higher roles can manage the ones below them.">
+        {ready.length > 0 && (
+          <div className="mb-4">
+            <p className="mb-1 text-sm font-semibold">Ready-made roles</p>
+            <p className="mb-2 text-sm text-ink-muted">Add one in a click. You can rename or change it after.</p>
+            <ul className="divide-y divide-line overflow-hidden rounded-card border border-line bg-surface">
+              {ready.map((x) => (
+                <li key={x.name}>
+                  <button type="button" onClick={() => void addReady(x)} aria-label={`Add a ${x.name} role. ${x.line}`} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-raised">
+                    <Icon name={x.icon} size={19} className="shrink-0" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-semibold">{x.name}</span>
+                      <span className="block text-[13px] text-ink-muted">{x.line}</span>
+                    </span>
+                    <Icon name="plus" size={17} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-3">
           <Button variant="primary" size="sm" onClick={() => setEditing("new")} disabled={roles.length >= data.cap}>
-            <Icon name="plus" size={14} /> New role
+            <Icon name="plus" size={14} /> New custom role
           </Button>
           <span className="text-xs text-ink-muted">
             {roles.length} of {data.cap}
@@ -110,7 +176,7 @@ export function RolesPanel({ slug }: { slug: string }) {
                   {r.builtin && <span className="ml-2 text-[12px] font-normal text-ink-muted">built in</span>}
                 </p>
                 <p className="truncate text-xs text-ink-muted">
-                  {r.memberCount ?? 0} {(r.memberCount ?? 0) === 1 ? "person" : "people"} · {r.permissions.length ? `${r.permissions.length} ${r.permissions.length === 1 ? "permission" : "permissions"}` : "no extra powers"}
+                  {r.memberCount ?? 0} {(r.memberCount ?? 0) === 1 ? "person" : "people"} · {r.builtin === "admin" ? "Can do everything" : powersLine(r.permissions)}
                   {r.selfAssignable ? " · members can pick it" : ""}
                 </p>
               </div>
@@ -258,13 +324,18 @@ function RoleModal({ slug, role, onClose, onSaved }: { slug: string; role: RoleD
           </div>
         </fieldset>
         <fieldset>
-          <legend className="mb-1 text-[13px] font-medium">Permissions</legend>
+          <legend className="mb-1 text-[13px] font-medium">What they can do</legend>
           {fixed ? (
             <p className="text-sm text-ink-muted">The Admin role can do everything except manage webhooks, which stays the owner&apos;s. Its permissions can&apos;t be changed.</p>
           ) : (
-            <div className="space-y-2">
-              {PERMISSIONS.map((p) => (
-                <Switch key={p.id} checked={perms.has(p.id)} onChange={(v) => toggle(p.id, v)} label={p.label} hint={p.hint} />
+            <div className="space-y-4">
+              {POWER_GROUPS.map((g) => (
+                <div key={g.title} className="space-y-2">
+                  <p className="text-[13px] font-semibold text-ink-muted">{g.title}</p>
+                  {g.items.filter((p) => PERMISSIONS.some((x) => x.id === p.id)).map((p) => (
+                    <Switch key={p.id} checked={perms.has(p.id)} onChange={(v) => toggle(p.id, v)} label={p.label} hint={p.hint} />
+                  ))}
+                </div>
               ))}
               <p className="text-xs text-ink-muted">You can only give powers you have yourself. Whatever the permission, people only ever act on members below them in the role list.</p>
             </div>

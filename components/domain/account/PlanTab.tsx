@@ -23,15 +23,93 @@ import { PointsCard } from "./PointsCard";
 const ORDER: PlanId[] = ["free", "lite", "pro"];
 const naira = (n: number) => `₦${n.toLocaleString("en-NG")}`;
 
-/** A limit was hit (a klique, a community, a group): say so kindly, with the way to more. */
+type Limit = "create" | "join" | "mediaSlots" | "communitiesCreate" | "communitiesJoin" | "webhooks" | "emojiSlots";
+const WHAT: Record<Limit, { title: string; unit: string; icon: "pin" | "image" | "users" | "link" | "smile" }> = {
+  create: { title: "You've started all your kliques this month", unit: "a month", icon: "pin" },
+  join: { title: "You're in as many kliques as you can be", unit: "at once", icon: "pin" },
+  mediaSlots: { title: "Your gallery is full", unit: "slots", icon: "image" },
+  communitiesCreate: { title: "You own as many communities as you can", unit: "in total", icon: "users" },
+  communitiesJoin: { title: "You're in as many communities as you can be", unit: "in total", icon: "users" },
+  webhooks: { title: "This community has all its bots", unit: "per community", icon: "link" },
+  emojiSlots: { title: "This community has all its emoji", unit: "per community", icon: "smile" },
+};
+/** which limit the server's message is about (its wording is fixed in klique-limits, space-limits and friends) */
+function limitOf(message: string): Limit | null {
+  const m = message.toLowerCase();
+  if (m.includes("started") && m.includes("klique")) return "create";
+  if (m.includes("klique")) return "join";
+  if (m.includes("slot")) return "mediaSlots";
+  if (m.includes("you own")) return "communitiesCreate";
+  if (m.includes("communities")) return "communitiesJoin";
+  if (m.includes("emoji")) return "emojiSlots";
+  if (m.includes("webhook") || m.includes("bot")) return "webhooks";
+  return null;
+}
+
+/**
+ * A limit was hit (a klique, a community, a group, the gallery): the same sheet as the app's. What you reached, what
+ * Free, Lite and Pro give for that exact thing, and a way to more. Only ever shown at a limit, never before.
+ */
 export function UpgradePrompt({ message, onClose }: { message: string | null; onClose: () => void }) {
+  const toast = useToast();
+  const [sub, setSub] = useState<SubscriptionDTO | null>(null);
+  const [busy, setBusy] = useState(false);
+  const payWith = usePayWith();
+  useEffect(() => {
+    if (message && !sub) SubscriptionService.mine().then((r) => setSub(r.data), () => {});
+  }, [message, sub]);
+  const limit = message ? limitOf(message) : null;
+  const now: PlanId = sub?.plan ?? "free";
+  const next: PaidPlan | null = now === "free" ? "lite" : now === "lite" ? "pro" : null;
+  const value = (p: PlanId) => {
+    if (!sub || !limit) return null;
+    const v = (sub.config[limit] as Record<PlanId, number | null>)[p];
+    return v === null ? "No limit" : String(v);
+  };
+  async function buy() {
+    if (!next) return;
+    setBusy(true);
+    try {
+      const res = await SubscriptionService.checkout(next, payWith.provider);
+      window.location.assign(res.data.authorizationUrl);
+    } catch (e) {
+      toast(errorMessage(e), "error");
+      setBusy(false);
+    }
+  }
+  const text = (message ?? "").replace(/:? see \/pricing\.?/i, ".").replace(/\s*Upgrade to (Lite or Pro|Pro) for more\.?/i, "");
   return (
-    <Modal open={!!message} onClose={onClose} title="You've hit your plan's limit" description={(message ?? "").replace(/:? see \/pricing\.?/i, ".")} size="sm">
-      <div className="flex justify-end gap-2">
-        <Button onClick={onClose}>Not now</Button>
-        <Button variant="primary" href="/pricing">
-          See plans
-        </Button>
+    <Modal open={!!message} onClose={onClose} title={limit ? WHAT[limit].title : "You've hit your plan's limit"} size="sm">
+      <div className="space-y-4">
+        <div className="flex items-start gap-3">
+          <span className="inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-raised"><Icon name={limit ? WHAT[limit].icon : "shield"} size={21} /></span>
+          <p className="text-sm text-ink-muted">{text}</p>
+        </div>
+        {limit && (
+          !sub ? <Skeleton className="h-20" /> : (
+            <div className="grid grid-cols-3 gap-2">
+              {ORDER.map((p) => (
+                <div key={p} className={cx("rounded-control py-2.5 text-center", p === next ? "border-2 border-ink py-[9px]" : "border border-line", p === now ? "bg-raised" : "bg-surface")}>
+                  <p className="text-[12px] font-semibold tracking-wide text-ink-muted uppercase">{PLAN_NAMES[p]}{p === now ? " · you" : ""}</p>
+                  <p className="text-xl font-bold">{value(p)}</p>
+                  <p className="text-[12px] text-ink-muted">{p === "free" ? WHAT[limit].unit : `${naira(sub.config.prices[p])}/mo`}</p>
+                </div>
+              ))}
+            </div>
+          )
+        )}
+        <div className="space-y-2">
+          {sub && next && sub.canBuy && !sub.renews && !sub.siteAdmin && (
+            <>
+              {payWith.picker}
+              <Button variant="primary" className="w-full" loading={busy} onClick={() => void buy()}>
+                Get {PLAN_NAMES[next]} · {naira(sub.config.prices[next])} a month
+              </Button>
+            </>
+          )}
+          <Button className="w-full" href="/settings?tab=plan">{next ? "See everything in Lite and Pro" : "See your plan"}</Button>
+          <button type="button" onClick={onClose} className="h-10 w-full text-sm font-semibold text-ink-muted hover:text-ink">Not now</button>
+        </div>
       </div>
     </Modal>
   );
