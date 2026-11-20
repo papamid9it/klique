@@ -677,7 +677,8 @@ async function toMessages(rows: IChannelMessage[], viewer: IUser | null, access:
 export async function listMessages(viewer: IUser | null, space: Space, access: SpaceAccess, channelSlug: string, q: ListQuery): Promise<ChatPage> {
   // the channel, and the people you've blocked (or who blocked you), side by side
   const [{ channel }, hidden] = await Promise.all([loadChannel(viewer, space, access, channelSlug), hiddenUserIds(viewer?._id ?? null)]);
-  const base: Record<string, unknown> = { channelId: channel._id };
+  // deleted messages nobody replied to (and moderators' removals) aren't shown at all
+  const base: Record<string, unknown> = { channelId: channel._id, gone: { $ne: true } };
   if (hidden.length) base.authorId = { $nin: hidden };
 
   if (q.after) {
@@ -1027,7 +1028,11 @@ export async function deleteMessage(viewer: IUser, space: Space, access: SpaceAc
       if (author && author.rank >= (access.rank ?? 0)) throw forbidden("You can't remove a message from someone at or above your rank.");
     }
   }
-  await ChannelMessage.updateOne({ _id: msg._id }, { body: "", mentions: [], images: [], cards: [], sticker: null, stickerUrl: null, pinnedAt: null, pinnedById: null, deletedAt: new Date(), deletedById: viewer._id });
+  // like Discord: a deleted message leaves the chat altogether, unless its writer deleted it and people replied to it
+  // (or it started a thread): then a "Message deleted" line keeps their replies making sense. A moderator's removal
+  // always goes completely (it's in the moderation log).
+  const keepLine = own && (!!msg.thread || !!(await ChannelMessage.exists({ channelId: channel._id, replyToId: msg._id, deletedAt: null })));
+  await ChannelMessage.updateOne({ _id: msg._id }, { body: "", mentions: [], images: [], cards: [], sticker: null, stickerUrl: null, pinnedAt: null, pinnedById: null, deletedAt: new Date(), deletedById: viewer._id, ...(keepLine ? {} : { gone: true }) });
   deleteUploads(msg.images ?? []); // its photos and videos go with it
   await deletePoll(msg.pollId);
   // one at a time: open chats reload now; in a batch, once at the end (a reload halfway shows some as not deleted)

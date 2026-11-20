@@ -268,12 +268,15 @@ export function PostComments({ post, onCount, pinned, top, focus }: { post: Feed
   async function remove(c: FeedCommentDTO) {
     // Shift+click skips the question (like Discord)
     if (!shiftHeld() && !(await confirm({ title: "Delete comment?" }))) return;
-    setData((d) => (d ?? []).map((x) => (x.id === c.id ? { ...x, body: "", sticker: null, stickerUrl: null, deleted: true, reactions: [], canDelete: false } : x)));
+    // with replies under it, it stays as "Comment deleted"; with none, it goes altogether (as the server keeps it)
+    const before = data ?? [];
+    const hasReplies = before.some((x) => x.parentId === c.id && !x.deleted);
+    setData((d) => (hasReplies ? (d ?? []).map((x) => (x.id === c.id ? { ...x, body: "", sticker: null, stickerUrl: null, deleted: true, reactions: [], canDelete: false } : x)) : (d ?? []).filter((x) => x.id !== c.id)));
     onCount(Math.max(0, post.commentCount - 1));
     try {
       await FeedService.removeComment(slug, post.id, c.id);
     } catch (e) {
-      setData((d) => (d ?? []).map((x) => (x.id === c.id ? c : x)));
+      setData(before);
       onCount(post.commentCount);
       toast(errorMessage(e), "error");
     }

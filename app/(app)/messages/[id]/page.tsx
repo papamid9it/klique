@@ -112,12 +112,14 @@ export default function ConversationPage() {
     ...(m.mine && !(m.sticker || m.stickerUrl) ? [{ label: "Edit message", icon: "edit" as const, onSelect: () => setEditingId(m.id) }] : []),
     ...saveItem(m),
     ...(m.mine ? [{ label: "Select", icon: "check" as const, onSelect: () => setPicked(new Set([m.id])) }] : []),
+    // a group chat's owner may remove anyone's message (it shows as "Deleted by an admin")
+    ...(!m.mine && detail?.conversation.group?.mine ? [{ label: "Delete message", icon: "trash" as const, danger: true, onSelect: () => (shiftHeld() ? deleteNow(m) : setDeleteMsg(m)) }] : []),
     ...(m.mine ? [{ label: "Delete message", icon: "trash" as const, danger: true, onSelect: () => (shiftHeld() ? deleteNow(m) : setDeleteMsg(m)) }] : [{ label: "Report message", icon: "flag" as const, danger: true, onSelect: () => setReportMsg(m.id) }]),
   ];
   const [sheetFor, setSheetFor] = useState<Local | null>(null);
   /** gone at once; the server is told behind (put back with a note if that fails) */
   const deleteNow = (before: Local) => {
-    setMessages((prev) => prev.map((x) => (x.id === before.id ? { ...x, body: "", sticker: null, stickerUrl: null, images: [], replyTo: null, deleted: true } : x)));
+    setMessages((prev) => prev.map((x) => (x.id === before.id ? { ...x, body: "", sticker: null, stickerUrl: null, images: [], replyTo: null, deleted: true, ...(before.mine ? {} : { deletedByAdmin: true }) } : x)));
     void MessageService.remove(id, before.id).catch((e) => {
       setMessages((prev) => prev.map((x) => (x.id === before.id ? before : x)));
       toast(errorMessage(e), "error");
@@ -444,7 +446,7 @@ export default function ConversationPage() {
                 <div className={cx("flex max-w-[80%] flex-col", m.mine ? "items-end" : "items-start")}>
                   {chatGroup && !m.mine && m.sender && <ProfileTrigger handle={m.sender.handle} className="mb-0.5 px-1 text-left text-xs font-semibold text-accent-text hover:underline">{m.sender.displayName}</ProfileTrigger>}
                   {m.deleted ? (
-                    <div className="rounded-2xl border border-dashed border-line px-3.5 py-2 text-sm text-ink-muted italic">Message deleted</div>
+                    <div className="rounded-2xl border border-dashed border-line px-3.5 py-2 text-sm text-ink-muted italic">{m.deletedByAdmin ? "Deleted by an admin" : m.mine ? "You deleted this message" : "This message was deleted"}</div>
                   ) : editingId === m.id ? (
                     <MessageEditor className="w-[min(32rem,80vw)]" initial={m.body} onCancel={() => setEditingId(null)} onSave={(body) => saveEdit(m, body)} />
                   ) : (m.sticker || m.stickerUrl) && !m.body && !m.images?.length ? (

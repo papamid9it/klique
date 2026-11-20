@@ -110,6 +110,8 @@ export interface IFeedComment {
   tags?: string[];
   editedAt?: Date | null;
   deletedAt: Date | null;
+  /** deleted with nothing under it: left out of the thread altogether (no "Comment deleted" line) */
+  gone?: boolean;
   /** a one-off id sent with the comment, so a repeat of the same send never makes a second */
   clientKey?: string | null;
   createdAt: Date;
@@ -129,6 +131,7 @@ const FeedCommentSchema = new Schema<IFeedComment>(
     tags: { type: [String], default: [] },
     editedAt: { type: Date, default: null },
     deletedAt: { type: Date, default: null },
+    gone: { type: Boolean, default: undefined },
     clientKey: { type: String, default: undefined },
   },
   { timestamps: { createdAt: true, updatedAt: false } },

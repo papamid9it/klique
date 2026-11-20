@@ -149,6 +149,8 @@ export interface IChannelMessage {
   editedAt: Date | null;
   /** soft delete: the row stays so the timeline doesn't jump and reports keep their target */
   deletedAt: Date | null;
+  /** deleted and taken out of the chat altogether (no "deleted" line): nobody had replied, or a moderator removed it */
+  gone?: boolean;
   /** hidden pending review (a "minor or non-consensual" report): shown as removed until an admin decides */
   hiddenAt?: Date | null;
   deletedById: Types.ObjectId | null;
@@ -180,6 +182,7 @@ const MessageSchema = new Schema<IChannelMessage>(
     massMention: { type: String, enum: ["everyone", "here", null], default: null },
     editedAt: { type: Date, default: null },
     deletedAt: { type: Date, default: null },
+    gone: { type: Boolean, default: undefined },
     deletedById: { type: Schema.Types.ObjectId, default: null },
     thread: { type: new Schema({ channelId: Schema.Types.ObjectId, slug: String, name: String, count: { type: Number, default: 0 }, lastAt: { type: Date, default: null }, lastBy: { type: String, default: null } }, { _id: false }), default: null },
     webhook: { type: new Schema({ id: { type: Schema.Types.ObjectId }, name: { type: String, maxlength: 80 }, avatarUrl: { type: String, default: null } }, { _id: false }), default: null },

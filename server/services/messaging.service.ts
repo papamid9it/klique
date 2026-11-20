@@ -106,6 +106,8 @@ const toMessageShown = (m: IMessage, viewerId: Types.ObjectId, reactions: Reacti
   mine: sid(m.senderId) === sid(viewerId),
   editedAt: m.deletedAt || !m.editedAt ? null : m.editedAt.toISOString(),
   deleted: !!m.deletedAt,
+  // a group chat's owner removed someone else's message
+  ...(m.deletedAt && m.deletedById && sid(m.deletedById) !== sid(m.senderId) ? { deletedByAdmin: true } : {}),
   pollId: m.deletedAt || !m.pollId ? null : sid(m.pollId),
 });
 
@@ -408,8 +410,14 @@ export async function editMessage(viewer: IUser, id: string, messageId: string, 
 }
 
 export async function deleteMessage(viewer: IUser, id: string, messageId: string, opts: { quiet?: boolean } = {}) {
-  const { convo, msg } = await loadOwnMessage(viewer, id, messageId);
-  await Message.updateOne({ _id: msg._id }, { $set: { body: "", sticker: null, stickerUrl: null, images: [], deletedAt: new Date() } });
+  // your own message; in a group chat its owner may remove anyone's too (shown as "Deleted by an admin")
+  const convo = await loadMyConversation(viewer, id);
+  const msg = await Message.findOne({ _id: messageId, conversationId: convo._id }).lean<IMessage>();
+  if (!msg) throw notFound("We couldn't find that message.");
+  if (msg.deletedAt) throw notFound("That message was deleted.");
+  const own = sid(msg.senderId) === sid(viewer._id);
+  if (!own && !(convo.group && sid(convo.group.ownerId) === sid(viewer._id))) throw forbidden("You can only delete your own messages.");
+  await Message.updateOne({ _id: msg._id }, { $set: { body: "", sticker: null, stickerUrl: null, images: [], deletedAt: new Date(), deletedById: viewer._id } });
   deleteUploads(msg.images ?? []); // its photos and videos go with it
   await deletePoll(msg.pollId);
   await refreshPreview(convo, msg, "Message deleted");

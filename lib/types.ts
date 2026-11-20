@@ -897,6 +897,8 @@ export interface MessageDTO {
   replyTo: ReplyRefDTO | null;
   reactions: ReactionDTO[];
   createdAt: ISODate;
+  /** deleted by the group chat's owner, not its sender ("Deleted by an admin") */
+  deletedByAdmin?: boolean;
   mine: boolean;
   /** when the sender last changed the text (null if never) */
   editedAt: ISODate | null;

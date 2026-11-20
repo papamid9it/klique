@@ -362,7 +362,7 @@ export async function listComments(viewer: IUser | null, space: Space, access: S
   assertCanView(access, "this post");
   const p = await loadPost(space, postId);
   const hidden = await hiddenUserIds(viewer?._id ?? null);
-  const rows = await FeedComment.find({ postId: p._id, ...(hidden.length ? { authorId: { $nin: hidden } } : {}) }).sort({ _id: 1 }).limit(COMMENT_CAP).lean<IFeedComment[]>();
+  const rows = await FeedComment.find({ postId: p._id, gone: { $ne: true }, ...(hidden.length ? { authorId: { $nin: hidden } } : {}) }).sort({ _id: 1 }).limit(COMMENT_CAP).lean<IFeedComment[]>();
   const list = await toComments(rows, viewer, access.role);
   // Lite and Pro members' comments come first; replies stay with what they answer
   const paid = (c: FeedCommentDTO) => (!c.parentId && c.author.badge ? 1 : 0);
@@ -447,8 +447,11 @@ export async function deleteComment(viewer: IUser, space: Space, access: SpaceAc
     const authorM = await Membership.findOne({ communityId: p.communityId, subcommunityId: null, userId: c.authorId, status: "active" }).select("role").lean<Pick<IMembership, "role">>();
     if (authorM && !outranks(access.role, authorM.role)) throw forbidden("You can't remove a comment from someone of equal or higher rank.");
   }
-  // the row stays as "deleted" so the replies under it keep their place
-  await Promise.all([FeedComment.updateOne({ _id: c._id }, { $set: { body: "", sticker: null, stickerUrl: null, deletedAt: new Date() } }), FeedPost.updateOne({ _id: p._id, commentCount: { $gt: 0 } }, { $inc: { commentCount: -1 } }), purgeReactions("feedComment", [c._id])]);
+  // with replies under it, the row stays as "Comment deleted" so they keep their place; with none, it goes altogether
+  const hasReplies = !!(await FeedComment.exists({ postId: p._id, parentId: c._id, gone: { $ne: true } }));
+  await Promise.all([FeedComment.updateOne({ _id: c._id }, { $set: { body: "", sticker: null, stickerUrl: null, deletedAt: new Date(), ...(hasReplies ? {} : { gone: true }) } }), FeedPost.updateOne({ _id: p._id, commentCount: { $gt: 0 } }, { $inc: { commentCount: -1 } }), purgeReactions("feedComment", [c._id])]);
+  // its parent was a "Comment deleted" kept only for its replies, and this was the last: the parent goes too
+  if (c.parentId && !(await FeedComment.exists({ postId: p._id, parentId: c.parentId, gone: { $ne: true } }))) await FeedComment.updateOne({ _id: c.parentId, deletedAt: { $ne: null } }, { $set: { gone: true } });
   if (sid(c.authorId) !== sid(viewer._id)) await logModDelete(viewer, { communityId: p.communityId, authorId: c.authorId }, "feedPost", p._id, `Comment on a post in ${space.community.name}: ${c.body.slice(0, 80)}`, `/p/${sid(p._id)}`);
   return { deleted: true };
 }
