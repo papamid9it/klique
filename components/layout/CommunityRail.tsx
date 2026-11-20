@@ -69,12 +69,14 @@ export function CommunityRail({ activeSlug, horizontal, onNavigate }: { activeSl
         <ul className={horizontal ? "flex gap-2 overflow-hidden" : "flex w-full flex-col items-center gap-2.5"}>
           {[0, 1, 2].map((i) => (
             <li key={i} className={cx("flex flex-col items-center gap-1", horizontal ? "w-14 shrink-0" : "w-full")}>
-              <span className={cx("skeleton block rounded-full", horizontal ? "size-11" : "size-14")} aria-hidden="true" />
+              {/* the same shape as a community's picture on the rail: a rounded square */}
+              <span className={cx("skeleton block rounded-[14px]", horizontal ? "size-11" : "size-14")} aria-hidden="true" />
               {horizontal && <span className="skeleton block h-2 w-10 rounded" aria-hidden="true" />}
             </li>
           ))}
           <li className={cx("flex justify-center", horizontal ? "shrink-0 self-start" : "w-full")}>
-            <span className={cx("skeleton block rounded-full", horizontal ? "size-11" : "size-14")} aria-hidden="true" />
+            {/* the "find communities" box */}
+            <span className={cx("skeleton block rounded-control", horizontal ? "size-11" : "size-14")} aria-hidden="true" />
           </li>
         </ul>
       </nav>

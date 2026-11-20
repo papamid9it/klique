@@ -140,15 +140,16 @@ function EmbedBody({ url, signedIn, near, saved }: { url: string; signedIn: bool
       return <PlayableVideo provider="Vimeo" thumb={vimeo?.image ?? null} src={`https://player.vimeo.com/video/${kind.id}?autoplay=1`} href={url} title={vimeo?.title} />;
     case "video":
       return (
-        <video controls preload={near && !isDataSaver() ? "metadata" : "none"} className="max-h-80 max-w-full rounded-card bg-black">
+        <video controls preload={near && !isDataSaver() ? "metadata" : "none"} className="aspect-video w-full max-w-md rounded-card bg-black">
           <source src={kind.src} />
         </video>
       );
     case "image":
       return (
-        <a href={url} target="_blank" rel="noopener noreferrer nofollow ugc" className="inline-block">
+        // a fixed 4:3 frame (its size isn't known), the picture whole inside it: nothing moves when it loads
+        <a href={url} target="_blank" rel="noopener noreferrer nofollow ugc" className="block aspect-[4/3] w-80 max-w-full overflow-hidden rounded-card border border-line bg-raised">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={kind.src} alt="Linked image" loading="lazy" decoding="async" referrerPolicy="no-referrer" className="max-h-80 max-w-full rounded-card border border-line object-contain" />
+          <img src={kind.src} alt="Linked image" loading="lazy" decoding="async" referrerPolicy="no-referrer" className="size-full object-contain" />
         </a>
       );
     default:

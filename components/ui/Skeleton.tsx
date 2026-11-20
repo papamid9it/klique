@@ -138,12 +138,12 @@ export function EventPageSkeleton() {
   // the event page's layout: Back, the flyer on the left, details and the Going / tickets box on the right
   return (
     <div role="status" aria-label="Loading event">
-      <Skeleton className="mb-4 h-9 w-24 rounded-full" />
+      <Skeleton className="mb-4 h-9 w-24 rounded-control" />
       <div className="grid gap-8 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] lg:items-start">
         <Skeleton className="aspect-[4/5] w-full rounded-card" />
         <div className="min-w-0 space-y-6">
           <div className="space-y-3">
-            <Skeleton className="h-6 w-32 rounded-full" />
+            <Skeleton className="h-6 w-32 rounded-control" />
             <div className="space-y-2.5">
               <Skeleton className="h-8 w-4/5 rounded-[8px]" />
               <Skeleton className="h-8 w-1/2 rounded-[8px]" />

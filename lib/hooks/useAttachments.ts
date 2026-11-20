@@ -1,12 +1,13 @@
 "use client";
 
+import { CHAT_IMAGES_MAX, withSize } from "@/lib/media-size";
 import { useCallback, useRef, useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
 import { UploadService } from "@/app/services/UploadService";
 import { checkFile } from "@/lib/uploads";
 import { useUploadStatus } from "./useUploads";
 
-export const MAX_CHAT_IMAGES = 4;
+export const MAX_CHAT_IMAGES = CHAT_IMAGES_MAX;
 
 /** Pictures being attached to a chat message: choose, upload with progress, remove, clear after sending. */
 export function useAttachments() {
@@ -29,7 +30,8 @@ export function useAttachments() {
       for (const f of list) {
         setProgress(0);
         const up = await UploadService.upload("photo", f, { onProgress: setProgress });
-        setUrls((u) => [...u, up.url].slice(0, MAX_CHAT_IMAGES));
+        // its size goes with it, so chats hold its space before it loads (lib/media-size)
+        setUrls((u) => [...u, withSize(up.url, up.width, up.height)].slice(0, MAX_CHAT_IMAGES));
       }
     } catch (e) {
       setError(errorMessage(e));

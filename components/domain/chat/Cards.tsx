@@ -1,5 +1,6 @@
 "use client";
 
+import { chatAspect } from "@/lib/media-size";
 import { Fragment, useState } from "react";
 import { Button, buttonClass } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
@@ -37,7 +38,7 @@ function Picture({ src, className }: { src: string; className: string }) {
   const [broken, setBroken] = useState(false);
   if (broken) return null;
   return (
-    <a href={src} target="_blank" rel="noopener noreferrer nofollow ugc" className="block">
+    <a href={src} target="_blank" rel="noopener noreferrer nofollow ugc" className="block size-full">
       <img src={src} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setBroken(true)} className={className} />
     </a>
   );
@@ -111,7 +112,10 @@ export function Cards({ cards, onPress }: { cards: MessageCard[]; /** left out: 
           )}
           {c.image && (
             <div className="clear-both mt-2 first:mt-0">
-              <Picture src={c.image} className="max-h-80 w-full rounded-control object-cover" />
+              {/* its space is held before it loads: the shape the bot gave (#s=WxH on the link), else 16:9, shown whole */}
+              <div className="w-full max-w-full overflow-hidden rounded-control bg-raised" style={{ aspectRatio: String(chatAspect(c.image) ?? 16 / 9), maxHeight: "20rem" }}>
+                <Picture src={c.image} className={chatAspect(c.image) ? "size-full object-cover" : "size-full object-contain"} />
+              </div>
             </div>
           )}
           {c.footer && <p className="clear-both mt-2 text-[12px] break-words text-ink-muted first:mt-0">{c.footer}</p>}

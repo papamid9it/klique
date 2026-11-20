@@ -1,4 +1,5 @@
 import { MAX_AD_INTERESTS } from "@/lib/ads";
+import { CHAT_IMAGES_MAX } from "@/lib/media-size";
 import { z } from "zod";
 import { DATE_FILTERS } from "@/lib/dates";
 import { DM_POLICIES, LIMITS, MEDIA_FIT_IDS, PRESENCES, PROFILE_VISIBILITY, REPORT_REASONS, SLOW_MODE_STEPS } from "@/lib/constants";
@@ -467,7 +468,7 @@ const chatPayload = z
     sticker: z.enum(STICKER_IDS).optional(),
     /** a saved picture sticker (checked against our uploads by the service) */
     stickerUrl: stickerUrl.optional(),
-    images: z.array(mediaUrl).max(4, "Up to 4 pictures per message").default([]),
+    images: z.array(mediaUrl).max(CHAT_IMAGES_MAX, `Up to ${CHAT_IMAGES_MAX} pictures per message`).default([]),
     replyToId: objectId.optional(),
     poll: pollInput.optional(),
   })
@@ -825,7 +826,7 @@ export const crewMessageSchema = z
     body: text(1000).default(""),
     sticker: z.enum(STICKER_IDS).optional(),
     stickerUrl: stickerUrl.optional(),
-    images: z.array(mediaUrl).max(4, "Up to 4 pictures per message").default([]),
+    images: z.array(mediaUrl).max(CHAT_IMAGES_MAX, `Up to ${CHAT_IMAGES_MAX} pictures per message`).default([]),
     replyToId: z.string().regex(/^[a-f0-9]{24}$/).nullish(),
     poll: pollInput.optional(),
   })

@@ -127,7 +127,7 @@ export function DmSidebar({ onNavigate }: { onNavigate?: () => void }) {
               if (e.key === "Enter" && q.trim() && !rows.length) router.push(`/search?q=${encodeURIComponent(q.trim())}`);
             }}
             placeholder="Find a chat or search messages"
-            className="min-w-0 flex-1 bg-transparent text-[13px] text-ink placeholder:text-ink-muted/80 focus:outline-none"
+            className="min-w-0 flex-1 bg-transparent text-[14px] text-ink placeholder:text-ink-muted/80 focus:outline-none"
           />
         </div>
       </div>
@@ -136,7 +136,7 @@ export function DmSidebar({ onNavigate }: { onNavigate?: () => void }) {
         <ul className="space-y-0.5">
           {nav.map((n) => (
             <li key={n.label}>
-              <Link href={n.href} onClick={onNavigate} aria-current={n.active ? "page" : undefined} className={cx("flex h-10 items-center gap-3 rounded-control px-2.5 text-[14px] font-medium transition", n.active ? "bg-raised text-ink" : "text-ink-muted hover:bg-raised/60 hover:text-ink")}>
+              <Link href={n.href} onClick={onNavigate} aria-current={n.active ? "page" : undefined} className={cx("flex h-10 items-center gap-3 rounded-control px-2.5 text-[15px] font-medium transition", n.active ? "bg-raised text-ink" : "text-ink-muted hover:bg-raised/60 hover:text-ink")}>
                 <Icon name={n.icon} size={18} />
                 {n.label}
                 {!!n.count && <span className="ml-auto font-mono text-[12px] text-ink-muted">{n.count > 99 ? "99+" : n.count}</span>}
@@ -149,7 +149,7 @@ export function DmSidebar({ onNavigate }: { onNavigate?: () => void }) {
             </li>
           ))}
           <li>
-            <button type="button" onClick={() => setMakingGroup(true)} className="flex h-10 w-full items-center gap-3 rounded-control px-2.5 text-[14px] font-medium text-ink-muted transition hover:bg-raised/60 hover:text-ink">
+            <button type="button" onClick={() => setMakingGroup(true)} className="flex h-10 w-full items-center gap-3 rounded-control px-2.5 text-[15px] font-medium text-ink-muted transition hover:bg-raised/60 hover:text-ink">
               <Icon name="users" size={18} /> New group
             </button>
           </li>
@@ -176,7 +176,7 @@ export function DmSidebar({ onNavigate }: { onNavigate?: () => void }) {
             ))}
           </div>
         ) : !rows.length ? (
-          <p className="px-2.5 py-3 text-[13px] text-ink-muted">{q ? "No one matches. Press Enter to search people." : "No conversations yet. Message a friend or find people from a community."}</p>
+          <p className="px-2.5 py-3 text-[14px] text-ink-muted">{q ? "No one matches. Press Enter to search people." : "No conversations yet. Message a friend or find people from a community."}</p>
         ) : (
           <ul className="space-y-0.5">
             {rows.map((c) => {
@@ -200,12 +200,12 @@ export function DmSidebar({ onNavigate }: { onNavigate?: () => void }) {
                     <Avatar name={c.other.displayName} src={c.other.avatarUrl} frame={c.other.avatarFrame} size={36} />
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-2">
-                        <span className={cx("truncate text-[14px]", unread || active ? "font-semibold text-ink" : "font-medium text-ink-muted")}><UserName name={c.other.displayName} effect={c.other.nameEffect} /></span>
+                        <span className={cx("truncate text-[15px] text-ink", unread || active ? "font-semibold" : "font-medium")}><UserName name={c.other.displayName} effect={c.other.nameEffect} /></span>
                         {c.pinned && <Icon name="pin" size={12} className="shrink-0 text-accent-text" />}
                         <span className="ml-auto shrink-0 font-mono text-[12px] text-ink-muted">{c.lastMessage && now ? relativeStamp(c.lastMessage.createdAt, now) : ""}</span>
                       </span>
                       <span className="flex items-center gap-2">
-                        <span className={cx("truncate text-[12px]", unread ? "font-medium text-ink" : "text-ink-muted")}>{c.blockedByMe ? "Blocked" : preview}</span>
+                        <span className={cx("truncate text-[13.5px]", unread ? "font-medium text-ink" : "text-ink-muted")}>{c.blockedByMe ? "Blocked" : preview}</span>
                         {unread && !active && (
                           <span className="ml-auto inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-accent px-1.5 text-[12px] leading-none font-bold text-accent-ink" aria-label={`${c.unreadCount} unread`}>
                             {c.unreadCount > 99 ? "99+" : c.unreadCount}
@@ -227,7 +227,7 @@ export function DmSidebar({ onNavigate }: { onNavigate?: () => void }) {
             {found.loading && !found.data ? (
               <Skeleton className="mx-2.5 h-10" />
             ) : !found.data?.hits.length ? (
-              <p className="px-2.5 py-2 text-[13px] text-ink-muted">Nothing found. Try from:@name, has:image, has:link or before:2026-10-01.</p>
+              <p className="px-2.5 py-2 text-[14px] text-ink-muted">Nothing found. Try from:@name, has:image, has:link or before:2026-10-01.</p>
             ) : (
               <ul className="space-y-0.5">
                 {found.data.hits.map((h) => (
