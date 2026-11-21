@@ -213,7 +213,9 @@ function SearchView() {
     setTabFor(q);
     setTab("all");
   }
-  const asked: SearchFilters = { ...f.filters, where, type: tab, interest: f.filters.interest || undefined };
+  // starting with "#": it's a tag being looked for, so tags come up as you type
+  const tagMode = q.startsWith("#");
+  const asked: SearchFilters = { ...f.filters, where, type: tagMode ? "tags" : tab, interest: f.filters.interest || undefined };
   const askedKey = JSON.stringify(asked);
   const { data, loading, error, reload, setData } = useApi(q ? () => DiscoverService.search(q, asked) : null, [q, askedKey], { wait: !ready });
 
@@ -222,7 +224,15 @@ function SearchView() {
   const counts = { communities: data?.communities.length ?? 0, events: data?.events.length ?? 0, people: data?.people.length ?? 0, posts: data?.posts?.length ?? 0, tags: data?.tags?.length ?? 0 };
   const panel = <SearchFiltersList f={f} />;
   const total = counts.communities + counts.events + counts.people + counts.posts + counts.tags;
-  const show = (t: Exclude<Tab, "all">) => (tab === "all" || tab === t) && counts[t] > 0;
+  const show = (t: Exclude<Tab, "all">) => (tab === "all" || tab === t || (tagMode && t === "tags")) && counts[t] > 0;
+  // your last 5 searches (this browser): kept once a search with results has been looked at for a moment
+  const recent = useRecent();
+  useEffect(() => {
+    if (!q || !total) return;
+    const id = setTimeout(() => recent.remember(q), 1500);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, total]);
 
   return (
     <div>
@@ -280,7 +290,27 @@ function SearchView() {
         Tip: use &ldquo;quotes&rdquo; for exact words, -word to leave a word out, and @name to find people.
       </p>
 
-      {!q ? (
+      {!q && recent.list.length ? (
+        <section aria-label="Recent searches" className="max-w-xl">
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="eyebrow">Recent</h2>
+            <button type="button" onClick={recent.clear} className="text-[13px] font-semibold text-ink-muted hover:text-ink">Clear</button>
+          </div>
+          <ul className="divide-y divide-line overflow-hidden rounded-card border border-line bg-surface">
+            {recent.list.map((term) => (
+              <li key={term} className="flex items-center gap-2 pr-2">
+                <button type="button" onClick={() => setText(term)} className="flex min-w-0 flex-1 items-center gap-3 px-3.5 py-2.5 text-left hover:bg-raised">
+                  <Icon name={term.startsWith("#") ? "hash" : "clock"} size={16} className="shrink-0 text-ink-muted" />
+                  <span className="truncate text-[15px]">{term}</span>
+                </button>
+                <button type="button" onClick={() => recent.forget(term)} aria-label={`Remove ${term}`} className="inline-flex size-8 items-center justify-center rounded-full text-ink-muted hover:bg-raised hover:text-ink">
+                  <Icon name="x" size={14} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : !q ? (
         <EmptyState icon="search" title="Search klique">
           Look up communities, events, people, posts and #tags{inPlace}.
         </EmptyState>
@@ -374,6 +404,39 @@ function SearchView() {
       ) : null}
     </div>
   );
+}
+
+/** Your last few searches, in this browser only (newest first), to run again with a click. */
+const RECENT_KEY = "klique:recent-searches";
+function useRecent() {
+  const [list, setList] = useState<string[]>([]);
+  useEffect(() => {
+    try {
+      setList(JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]") as string[]);
+    } catch {}
+  }, []);
+  const save = (next: string[]) => {
+    setList(next);
+    try {
+      localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+    } catch {}
+  };
+  return {
+    list,
+    remember: (term: string) => {
+      const t = term.trim();
+      if (t.length < 2) return;
+      setList((now) => {
+        const next = [t, ...now.filter((x) => x.toLowerCase() !== t.toLowerCase())].slice(0, 5);
+        try {
+          localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+    },
+    forget: (term: string) => save(list.filter((x) => x !== term)),
+    clear: () => save([]),
+  };
 }
 
 export default function SearchPage() {
