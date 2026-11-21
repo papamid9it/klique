@@ -1,6 +1,5 @@
 "use client";
 
-import { FriendsGoing } from "./FriendsGoing";
 import Link from "next/link";
 import { PriceTag } from "@/components/domain/EventCard";
 import { Button } from "@/components/ui/Button";
@@ -50,8 +49,6 @@ export function EventRow({ event, onChange }: { event: EventDTO; onChange: (e: E
             </SoftLink>
           )}
         </p>
-        {/* your friends going: their faces and names */}
-        {event.friendsGoing && <FriendsGoing f={event.friendsGoing} compact className="mt-1.5" />}
       </div>
       <div className="hidden shrink-0 flex-col items-end gap-1.5 md:flex">
         <PriceTag amount={event.priceNaira} currency={event.currency} />

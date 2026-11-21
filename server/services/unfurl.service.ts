@@ -8,6 +8,8 @@ import type { IUser } from "../models/User";
 import { assertPublicHttpUrl, safeLookup, UnsafeUrlError } from "../net-guard";
 import { badRequest } from "../http/errors";
 import { sid } from "./helpers";
+import { appUrl } from "../env";
+import { communityShare, crewShare, eventShare, postShare } from "./share.service";
 
 const TIMEOUT_MS = 5000;
 const MAX_BYTES = 400 * 1024;
@@ -153,8 +155,33 @@ export async function previewFor(rawUrl: string): Promise<LinkPreviewDTO | null>
   return previewOfUrl(url);
 }
 
+/**
+ * Klique's own links (a post, event, klique or community shared in a chat): the card comes straight from the database,
+ * the same public summary and share picture their pages give other sites, so a signed-out visitor's view is all it
+ * shows (private things stay a plain card). No fetching our own site, which could time out while it starts up.
+ */
+async function ownPreview(url: URL): Promise<LinkPreviewDTO | null | undefined> {
+  const host = url.hostname.replace(/^www\./, "").toLowerCase();
+  const ours = new Set(["getklique.app", new URL(appUrl()).hostname.replace(/^www\./, "").toLowerCase()]);
+  if (!ours.has(host)) return undefined;
+  const base = appUrl().replace(/\/$/, "");
+  const [, kind, id] = url.pathname.split("/");
+  if (!id) return undefined;
+  const found =
+    kind === "p" ? { info: await postShare(id), image: `${base}/og/post/${id}` }
+    : kind === "events" ? { info: await eventShare(id), image: `${base}/events/${id}/opengraph-image` }
+    : kind === "kliques" ? { info: await crewShare(id), image: `${base}/og/klique/${id}` }
+    : kind === "communities" ? { info: await communityShare(id), image: `${base}/og/community/${id}` }
+    : null;
+  if (!found) return undefined;
+  if (!found.info) return null;
+  return { url: url.toString(), siteName: "Klique", title: found.info.title, description: found.info.description, image: found.image, imageWidth: 1200, imageHeight: 630, videoUrl: null };
+}
+
 async function previewOfUrl(url: URL): Promise<LinkPreviewDTO | null> {
   url.hash = "";
+  const own = await ownPreview(url).catch(() => undefined);
+  if (own !== undefined) return own;
   const key = url.toString();
   const urlHash = createHash("sha256").update(key).digest("hex");
 
