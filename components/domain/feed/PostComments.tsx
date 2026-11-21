@@ -314,7 +314,8 @@ export function PostComments({ post, onCount, pinned, top, focus }: { post: Feed
           <>
             {c.body && <CommentText text={c.body} to={to} refs={c.refs} />}
             {(c.sticker || c.stickerUrl) && (
-              <div className="mt-1">
+              // sending: dimmed until it's posted, as in chats
+              <div className={cx("mt-1 transition-opacity", stateOf(c.id) === "sending" && "opacity-45")}>
                 <StickerView id={c.sticker} url={c.stickerUrl} size={52} />
               </div>
             )}
