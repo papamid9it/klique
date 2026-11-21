@@ -773,6 +773,8 @@ export interface KliqueStartDTO {
   canMenOnly: boolean;
   /** why you can't start one at all (age, email, plan limit…), in words */
   blockedReason: string | null;
+  /** you may start one for All communities (Lite and Pro; Free members see it, and picking it shows the plans) */
+  allCommunities?: boolean;
   /** communities you're in, for a community klique */
   communities: { slug: string; name: string; interest: InterestId }[];
 }

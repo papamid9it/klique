@@ -1,4 +1,5 @@
 "use client";
+import { UpgradePrompt, usePlanLimit } from "@/components/domain/account/PlanTab";
 
 import { DEFAULT_ZONE, zoneLabel } from "@/lib/timezones";
 import { useRef, useState } from "react";
@@ -62,7 +63,15 @@ export function StartCrewModal({ event, community, open, onClose, onCreated }: {
 
   const choices = info.data?.communities ?? [];
   const blocked = info.data?.blockedReason ?? null;
+  // All communities is a Lite and Pro perk: on Free, picking it shows the plans (and the choice stays as it was)
+  const everywhere = info.data?.allCommunities !== false;
+  const limit = usePlanLimit();
+  const [askPlan, setAskPlan] = useState<string | null>(null);
   const pickCommunity = (slug: string) => {
+    if (slug === ALL && !everywhere) {
+      setAskPlan("Kliques for All communities come with Lite and Pro. You can start one in a community you're in, or join anyone's.");
+      return;
+    }
     setCommunitySlug(slug);
     const c = choices.find((x) => x.slug === slug);
     if (c && !interest) setInterest(c.interest);
@@ -93,6 +102,7 @@ export function StartCrewModal({ event, community, open, onClose, onCreated }: {
       const res = event ? await CrewService.create(event.id, input) : communitySlug === ALL ? await CrewService.createInCommunity(null, { ...input, country: place.country, city: place.city }) : await CrewService.createInCommunity(communitySlug, input);
       onCreated(res.data);
     } catch (err) {
+      if (limit.handled(err)) return setBusy(false);
       if (isApiError(err) && err.errors) setErrors(err.errors);
       setFormError(errorMessage(err));
       setBusy(false);
@@ -119,10 +129,12 @@ export function StartCrewModal({ event, community, open, onClose, onCreated }: {
         </div>
       ) : (
         <form ref={form} onSubmit={submit} className="space-y-4" noValidate>
+          {limit.prompt}
+          <UpgradePrompt message={askPlan} onClose={() => setAskPlan(null)} />
           {!event && !community && (
             <SelectField label="Community" value={communitySlug} onChange={(e) => pickCommunity(e.target.value)} error={errors.community} hint={communitySlug === ALL ? "Anyone can see and join it. It's recommended to people into what it's about." : "Only its members can see and join it. Going to an event? Start one from the event's page instead."}>
               <option value="">Pick one…</option>
-              <option value={ALL}>All communities</option>
+              <option value={ALL}>{everywhere ? "All communities" : "All communities · Lite or Pro"}</option>
               {choices.map((c) => (
                 <option key={c.slug} value={c.slug}>
                   {c.name}

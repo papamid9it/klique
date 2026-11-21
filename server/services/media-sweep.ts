@@ -20,6 +20,7 @@ import { BotApp } from "../models/BotApp";
 import { r2Config } from "../env";
 import { CommunityEmoji } from "../models/CommunityEmoji";
 import { Webhook } from "../models/Webhook";
+import { Conversation } from "../models/Conversation";
 
 /**
  * The nightly sweep for orphaned uploads. A file reaches R2 the moment someone picks it, so
@@ -96,6 +97,8 @@ async function referencedKeys(): Promise<Set<string>> {
   // communities' custom emoji, and webhooks' pictures
   for await (const e of CommunityEmoji.find().select("url").lean().cursor()) add(e.url);
   for await (const w of Webhook.find({ avatarUrl: has }).select("avatarUrl").lean().cursor()) add(w.avatarUrl);
+  // group chats' photos (Messages)
+  for await (const c of Conversation.find({ "group.image": has }).select("group.image").lean<{ group?: { image?: string | null } }>().cursor()) add(c.group?.image);
   // the award catalogue (and the art kept on awards already sent), profile effects, ads waiting for review, bots
   for await (const g of Gift.find({ artUrl: has }).select("artUrl").lean().cursor()) add(g.artUrl);
   for await (const g of GiftSend.find({ artUrl: has }).select("artUrl").lean().cursor()) add(g.artUrl);

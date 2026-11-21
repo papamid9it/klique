@@ -33,7 +33,7 @@ import { isCountryCode, parseScope, scopeFilter, slugify } from "@/lib/places";
 import { purgeCrewChat } from "./crew-chat-purge";
 import { kliqueBoost, kliqueCreateBlock, kliqueJoinBlock } from "./klique-limits";
 import { logModDelete } from "./admin-audit";
-import { noteKliqueStart } from "./subscriptions.service";
+import { noteKliqueStart, planOf } from "./subscriptions.service";
 import { deleteUploads } from "./media.service";
 import { mentionBriefs } from "./mentions";
 import { awardPointsLater } from "./points.service";
@@ -623,6 +623,7 @@ export async function kliqueStartInfo(viewer: IUser): Promise<KliqueStartDTO> {
     canWomenOnly: viewer.gender === "woman",
     canMenOnly: viewer.gender === "man",
     blockedReason: personBlock(viewer, "start") ?? (await kliqueCreateBlock(viewer)),
+    allCommunities: canStartEverywhere(viewer),
     communities: communities.map((c) => ({ slug: c.slug, name: c.name, interest: c.interest })),
   };
 }
@@ -837,10 +838,16 @@ export async function createCrew(viewer: IUser, eventId: string, input: EventKli
   return startKlique(viewer, { ...input, interest: community?.interest ?? event.interest }, { event, community: null });
 }
 
+/** Kliques for All communities (open to anyone in the city) are started by Lite and Pro members (and the Klique team). */
+const ALL_COMMUNITIES_PAID = "Kliques for All communities come with Lite and Pro. You can start one in a community you're in, or join anyone's.";
+const canStartEverywhere = (viewer: IUser) => isSiteAdmin(viewer) || planOf(viewer) !== "free";
+
 /** A community's klique: anything its members want to do together. `community: null` is all communities, in a place. */
 export async function createCommunityKlique(viewer: IUser, input: z.infer<typeof kliqueCreateSchema>): Promise<CrewDTO> {
   if (input.community === null) {
     if (isMinor(viewer)) throw forbidden("Kliques are for people 18 and over.");
+    // open to everyone in the city: a Lite and Pro perk (anyone can still join one)
+    if (!canStartEverywhere(viewer)) throw new ApiError(403, ALL_COMMUNITIES_PAID, { code: "plan_limit" });
     const city = slugify(input.city ?? "");
     if (!isCountryCode(input.country)) throw new ApiError(400, "Pick a country.", { errors: { country: "Pick a country." } });
     if (!city) throw new ApiError(400, "Which city is it in?", { errors: { city: "Which city is it in?" } });
@@ -848,7 +855,7 @@ export async function createCommunityKlique(viewer: IUser, input: z.infer<typeof
   }
   const community = await Community.findOne({ slug: input.community.toLowerCase() }).select(COMMUNITY_FIELDS).lean<CommunityBits>();
   if (!community || isMinor(viewer)) throw notFound("We couldn't find that community.");
-  if (!kliquesOn(community)) throw forbidden(`${community.name} doesn't have kliques. Start one for All communities instead.`);
+  if (!kliquesOn(community)) throw forbidden(`${community.name} doesn't have kliques.${canStartEverywhere(viewer) ? " Start one for All communities instead." : ""}`);
   if (!(await isMemberOf(viewer, community._id))) throw forbidden(`Join ${community.name} to start a klique there.`);
   await assertNoCommunityTimeout(viewer._id, community._id);
   const { community: _slug, ...rest } = input;

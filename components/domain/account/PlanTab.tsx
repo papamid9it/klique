@@ -36,6 +36,8 @@ const WHAT: Record<Limit, { title: string; unit: string; icon: "pin" | "image" |
 /** which limit the server's message is about (its wording is fixed in klique-limits, space-limits and friends) */
 function limitOf(message: string): Limit | null {
   const m = message.toLowerCase();
+  // a perk, not a number: no Free/Lite/Pro table for it
+  if (m.includes("all communities")) return null;
   if (m.includes("started") && m.includes("klique")) return "create";
   if (m.includes("klique")) return "join";
   if (m.includes("slot")) return "mediaSlots";
@@ -79,7 +81,7 @@ export function UpgradePrompt({ message, onClose }: { message: string | null; on
   }
   const text = (message ?? "").replace(/:? see \/pricing\.?/i, ".").replace(/\s*Upgrade to (Lite or Pro|Pro) for more\.?/i, "");
   return (
-    <Modal open={!!message} onClose={onClose} title={limit ? WHAT[limit].title : "You've hit your plan's limit"} size="sm">
+    <Modal open={!!message} onClose={onClose} title={limit ? WHAT[limit].title : /all communities/i.test(message ?? "") ? "All communities is for Lite and Pro" : "You've hit your plan's limit"} size="sm">
       <div className="space-y-4">
         <div className="flex items-start gap-3">
           <span className="inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-raised"><Icon name={limit ? WHAT[limit].icon : "shield"} size={21} /></span>
