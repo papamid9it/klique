@@ -32,8 +32,8 @@ const TOKEN_RX = /(https?:\/\/[^\s<]+)|(?<![\w@])@([a-zA-Z0-9_]{3,20})(?![\w])/g
 
 /** Plain text with clickable links and @mention chips. Never injects HTML. */
 /** A message's text with its @mentions highlighted (also used by group chats in Messages). */
-export function ChatBody(props: { text: string; mentions: MentionDTO[]; meId: string | null }) {
-  return <Body {...props} />;
+export function ChatBody({ onAccent, ...props }: { text: string; mentions: MentionDTO[]; meId: string | null; /** on your own coloured bubble */ onAccent?: boolean }) {
+  return <span className={onAccent ? "[--tag:var(--tag-on-accent)]" : undefined}><Body {...props} /></span>;
 }
 
 function Body({ text, mentions, meId, mass }: { text: string; mentions: MentionDTO[]; meId: string | null; mass?: "everyone" | "here" | null }) {
@@ -74,7 +74,7 @@ function PlainBody({ text, mentions, meId, mass }: { text: string; mentions: Men
         );
       } else if (who) {
         out.push(
-          <ProfileTrigger key={at} handle={who.handle} className={cx("rounded-md px-1 py-px font-semibold no-underline transition", who.id === meId ? "bg-accent text-accent-ink" : "bg-accent/15 text-accent-text hover:bg-accent/25")}>
+          <ProfileTrigger key={at} handle={who.handle} className={cx("rounded-md px-1 py-px font-semibold no-underline transition", who.id === meId ? "bg-tag text-canvas" : "bg-tag/15 text-tag hover:bg-tag/25")}>
             @{who.handle}
           </ProfileTrigger>,
         );

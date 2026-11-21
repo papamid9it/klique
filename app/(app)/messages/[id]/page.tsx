@@ -527,7 +527,7 @@ export default function ConversationPage() {
                     )}
                     <div id={`msg-${m.id}`} className={cx("rounded-2xl px-3.5 py-2 text-[15px] break-words whitespace-pre-wrap transition-colors", m.mine ? "rounded-br-md bg-accent text-accent-ink" : "rounded-bl-md border border-line bg-surface text-ink")}>
                       {m.replyTo && <ReplyQuote reply={m.replyTo} onJump={jump} className={cx("whitespace-normal", m.mine ? "!text-accent-ink/80 [&_span]:!text-accent-ink/80" : "")} />}
-                      {m.mentions?.length ? <ChatBody text={m.body} mentions={m.mentions} meId={user?.id ?? null} /> : <Formatted text={m.body} plain={(words) => <EmojiText text={words} />} />}
+                      {m.mentions?.length ? <ChatBody text={m.body} mentions={m.mentions} meId={user?.id ?? null} onAccent={m.mine} /> : <Formatted text={m.body} plain={(words) => <EmojiText text={words} />} />}
                       {!m.body && !m.images?.length && <span className="italic opacity-70">Sticker unavailable</span>}
                       <ChatImages images={m.images ?? []} mine={m.mine} className={m.body ? "mt-1.5" : ""} />
                       <span className={cx("mt-0.5 flex items-baseline justify-end gap-1.5 font-mono text-[12px]", m.mine ? "text-accent-ink/70" : "text-ink-muted")}>

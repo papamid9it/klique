@@ -40,6 +40,8 @@
   --color-accent: var(--accent);
   --color-accent-ink: var(--accent-ink);
   --color-accent-text: var(--accent-text);
+  /* @tags in chat: their own colour (see the mood rules below) */
+  --color-tag: var(--tag);
   --color-accent2: var(--accent2);
   --color-accent2-ink: var(--accent2-ink);
   --color-accent2-text: var(--accent2-text);
@@ -599,3 +601,9 @@ time.font-mono {
   font-family: var(--font-sans);
   font-variant-numeric: tabular-nums;
 }
+
+/* @tags in chat: the mood's own colour, except in the black-and-white moods, where they're blue (as in the app's
+   tagColor) so a tag never looks like plain text. Your own bubble gets a colour that reads on it. */
+:root { --tag: var(--accent-text); --tag-on-accent: var(--accent-ink); }
+:root:not([data-theme]), [data-theme="paper-mono"] { --tag: #0b62d6; --tag-on-accent: #6cb6ff; }
+[data-theme="monochrome"] { --tag: #6cb6ff; --tag-on-accent: #0b62d6; }

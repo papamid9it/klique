@@ -16,8 +16,12 @@ import { Icon } from "@/components/ui/Icon";
 import { Modal } from "@/components/ui/Modal";
 import { RowSkeleton } from "@/components/ui/Skeleton";
 import { LIMITS } from "@/lib/constants";
+import { cx } from "@/components/ui/cx";
 import { useApi } from "@/lib/hooks/useApi";
 import type { UserBrief } from "@/lib/types";
+
+/** members shown in the panel; the rest are behind "See all" */
+const FIRST = 10;
 
 /** Tick your friends. Only friends can be added to a group. */
 function FriendPicker({ picked, onToggle, leaveOut = [] }: { picked: string[]; onToggle: (id: string) => void; leaveOut?: string[] }) {
@@ -94,8 +98,13 @@ export function ChatGroupInfo({ id, onChanged }: { id: string; onChanged: () => 
   // editing the photo, name and description together (null: not editing)
   const [draft, setDraft] = useState<{ name: string; image: string; description: string } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [allOpen, setAllOpen] = useState(false);
+  const [find, setFind] = useState("");
+  const [longText, setLongText] = useState(false);
   if (!g) return <div className="p-4"><RowSkeleton rows={4} /></div>;
   const me = g.members.find((m) => m.me);
+  const f = find.trim().toLowerCase();
+  const matching = f ? g.members.filter((m) => m.user.displayName.toLowerCase().includes(f) || m.user.handle.toLowerCase().includes(f)) : g.members;
 
   async function add() {
     setBusy(true);
@@ -132,10 +141,42 @@ export function ChatGroupInfo({ id, onChanged }: { id: string; onChanged: () => 
     }
   }
 
+  const full = g.members.length >= LIMITS.chatGroupMembers;
+  const memberRow = (m: (typeof g.members)[number]) => (
+    <li key={m.user.id} className="flex items-center gap-2 px-2">
+      <ProfileTrigger handle={m.user.handle} className="flex min-w-0 flex-1 items-center gap-3 rounded-control px-1.5 py-2 text-left hover:bg-raised">
+        <Avatar name={m.user.displayName} src={m.user.avatarUrl} size={36} />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-semibold">{m.me ? "You" : m.user.displayName}</span>
+          <span className="block truncate font-mono text-[12px] text-ink-muted">@{m.user.handle}</span>
+        </span>
+        {m.owner && <span className="shrink-0 rounded-md border border-line px-1.5 py-0.5 text-[12px] font-semibold text-ink-muted">Owner</span>}
+      </ProfileTrigger>
+      {g.mine && !m.me && (
+        <button type="button" aria-label={`Remove ${m.user.displayName}`} title="Remove" onClick={() => setRemoving(m.user)} className="inline-flex size-8 shrink-0 items-center justify-center rounded-full text-ink-muted hover:bg-raised hover:text-danger">
+          <Icon name="x" size={15} />
+        </button>
+      )}
+    </li>
+  );
+  const box = "overflow-hidden rounded-[18px] border border-line bg-surface";
+  const quick = (icon: "userplus" | "edit", label: string, onClick: () => void) => (
+    <button key={label} type="button" onClick={onClick} className={`${box} flex flex-1 flex-col items-center gap-1.5 py-3 text-sm font-semibold transition hover:bg-raised`}>
+      <Icon name={icon} size={20} /> {label}
+    </button>
+  );
+
   return (
     <div className="space-y-4 p-4">
+      {/* who the group is */}
+      <div className="flex flex-col items-center gap-1 pt-1 text-center">
+        <Avatar name={g.name} src={g.image} size={88} />
+        <p className="mt-1.5 text-lg font-bold break-words">{g.name}</p>
+        <p className="text-[13px] text-ink-muted">Group · {g.members.length} {g.members.length === 1 ? "member" : "members"}</p>
+      </div>
+
       {draft ? (
-        <div className="space-y-3">
+        <div className={`${box} space-y-3 p-3.5`}>
           <ImageField kind="avatar" shape="round" label="Group photo" value={draft.image} onChange={(image) => setDraft({ ...draft, image })} reposition={{ aspect: 1, round: true, title: "Position the group photo", description: "Drag to move it, and pinch, scroll or use the slider to zoom." }} hint="Optional. After choosing one you can move and zoom it to fit the circle." />
           <TextField label="Group name" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} maxLength={LIMITS.chatGroupName} />
           <TextArea label="Description (optional)" value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} maxLength={LIMITS.chatGroupDescription} counter={LIMITS.chatGroupDescription} rows={3} placeholder="What's this group for?" />
@@ -145,56 +186,79 @@ export function ChatGroupInfo({ id, onChanged }: { id: string; onChanged: () => 
           </div>
         </div>
       ) : (
-        <div className="space-y-3">
-          <div className="flex flex-col items-center gap-2 pt-1 text-center">
-            <Avatar name={g.name} src={g.image} size={76} />
-            <div className="min-w-0">
-              <p className="text-lg font-semibold break-words">{g.name}</p>
-              <p className="text-xs text-ink-muted">Group · {g.members.length} of {LIMITS.chatGroupMembers} people</p>
+        <>
+          {(g.mine && !full) || g.canEdit ? (
+            <div className="flex gap-2">
+              {g.mine && !full && quick("userplus", "Add", () => setAdding((v) => !v))}
+              {g.canEdit && quick("edit", "Edit", () => setDraft({ name: g.name, image: g.image ?? "", description: g.description }))}
             </div>
-            {g.description && <p className="w-full text-sm whitespace-pre-wrap break-words text-ink">{g.description}</p>}
-            {g.canEdit && (
-              <Button size="sm" onClick={() => setDraft({ name: g.name, image: g.image ?? "", description: g.description })}>
-                <Icon name="edit" size={14} /> {g.description || g.image ? "Edit group" : "Add a photo and description"}
-              </Button>
-            )}
-          </div>
-          {g.mine && (
-            <Switch checked={g.membersCanEdit} onChange={(v) => void setMembersCanEdit(v)} label="Members can edit the group" hint="Change its photo, name and description, and pin messages. Off: only you." />
-          )}
-        </div>
+          ) : null}
+          {g.description ? (
+            <div className={`${box} p-3.5`}>
+              <p className="eyebrow mb-1">About</p>
+              <p className={cx("text-sm whitespace-pre-wrap break-words", !longText && "line-clamp-4")}>{g.description}</p>
+              {!longText && g.description.length > 180 && <button type="button" onClick={() => setLongText(true)} className="mt-1 text-sm font-semibold">More</button>}
+            </div>
+          ) : g.canEdit ? (
+            <button type="button" onClick={() => setDraft({ name: g.name, image: g.image ?? "", description: "" })} className={`${box} flex w-full items-center gap-2.5 p-3.5 text-left text-sm text-ink-muted hover:bg-raised`}>
+              <Icon name="edit" size={16} /> Add a description
+            </button>
+          ) : null}
+        </>
       )}
-      {g.mine && !adding && g.members.length < LIMITS.chatGroupMembers && (
-        <Button className="w-full" onClick={() => setAdding(true)}><Icon name="userplus" size={15} /> Add friends</Button>
-      )}
+
       {adding && (
-        <div className="space-y-2 rounded-card border border-line p-3">
+        <div className={`${box} space-y-2 p-3`}>
+          <p className="text-sm font-semibold">Add friends</p>
           <FriendPicker picked={picked} leaveOut={g.members.map((m) => m.user.id)} onToggle={(x) => setPicked((p) => (p.includes(x) ? p.filter((y) => y !== x) : [...p, x]))} />
           <div className="grid grid-cols-2 gap-2">
             <Button onClick={() => setAdding(false)}>Cancel</Button>
-            <Button variant="primary" loading={busy} disabled={!picked.length} onClick={() => void add()}>Add</Button>
+            <Button variant="primary" loading={busy} disabled={!picked.length} onClick={() => void add()}>{picked.length ? `Add ${picked.length}` : "Add"}</Button>
           </div>
         </div>
       )}
-      <ul className="space-y-0.5">
-        {g.members.map((m) => (
-          <li key={m.user.id} className="flex items-center gap-2">
-            <ProfileTrigger handle={m.user.handle} className="flex min-w-0 flex-1 items-center gap-3 rounded-control px-1.5 py-1.5 text-left hover:bg-raised">
-              <Avatar name={m.user.displayName} src={m.user.avatarUrl} size={34} />
-              <span className="min-w-0">
-                <span className="block truncate text-sm font-medium">{m.user.displayName}{m.me ? " (you)" : ""}</span>
-                <span className="block truncate text-xs text-ink-muted">{m.owner ? "Started this group" : `@${m.user.handle}`}</span>
-              </span>
-            </ProfileTrigger>
-            {g.mine && !m.me && (
-              <button type="button" aria-label={`Remove ${m.user.displayName}`} title="Remove" onClick={() => setRemoving(m.user)} className="inline-flex size-8 shrink-0 items-center justify-center rounded-full text-ink-muted hover:bg-raised hover:text-danger">
-                <Icon name="x" size={15} />
-              </button>
-            )}
-          </li>
-        ))}
-      </ul>
-      {me && <Button variant="danger" className="w-full" onClick={() => setLeaving(true)}><Icon name="logout" size={15} /> Leave group</Button>}
+
+      {/* the members: the first ten here, everyone behind See all */}
+      <div>
+        <p className="eyebrow mb-2 px-1">{g.members.length} {g.members.length === 1 ? "member" : "members"}</p>
+        <div className={box}>
+          <ul className="divide-y divide-line py-0.5">{g.members.slice(0, FIRST).map(memberRow)}</ul>
+          {g.members.length > FIRST && (
+            <button type="button" onClick={() => setAllOpen(true)} className="flex h-11 w-full items-center justify-between border-t border-line px-3.5 text-sm font-semibold hover:bg-raised">
+              See all {g.members.length} <Icon name="chevron-right" size={15} className="text-ink-muted" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {g.mine && (
+        <div>
+          <p className="eyebrow mb-2 px-1">Group settings</p>
+          <div className={`${box} p-3.5`}>
+            <Switch checked={g.membersCanEdit} onChange={(v) => void setMembersCanEdit(v)} label="Members can edit the group" hint="Change its photo, name and description, and pin messages. Off: only you." />
+          </div>
+        </div>
+      )}
+
+      {me && (
+        <button type="button" onClick={() => setLeaving(true)} className={`${box} flex h-12 w-full items-center gap-2.5 px-3.5 text-sm font-semibold text-danger hover:bg-danger/10`}>
+          <Icon name="logout" size={16} /> Leave group
+        </button>
+      )}
+
+      <Modal open={allOpen} onClose={() => (setAllOpen(false), setFind(""))} title={`${g.members.length} members`} size="sm">
+        <div className="space-y-3">
+          <label className="relative block">
+            <span className="sr-only">Search members</span>
+            <Icon name="search" size={15} className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-ink-muted" />
+            <input type="search" value={find} onChange={(e) => setFind(e.target.value)} placeholder="Search members" className="h-10 w-full rounded-full border border-line bg-surface pr-3 pl-10 text-sm text-ink placeholder:text-ink-muted/70 focus:border-accent-text focus:outline-none" />
+          </label>
+          <ul className="-mx-2 max-h-[60vh] divide-y divide-line overflow-y-auto">
+            {matching.map(memberRow)}
+            {!matching.length && <li className="py-6 text-center text-sm text-ink-muted">Nobody matches “{find.trim()}”.</li>}
+          </ul>
+        </div>
+      </Modal>
       <ConfirmModal open={!!removing} onClose={() => setRemoving(null)} title={`Remove ${removing?.displayName ?? ""}?`} description="They leave the group, and they'll be told." confirmLabel="Remove" onConfirm={async () => {
         await MessageService.removeFromGroup(id, removing!.id);
         void reload();
