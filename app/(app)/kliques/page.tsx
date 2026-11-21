@@ -13,7 +13,7 @@ import { usePlace } from "@/components/providers/PlaceProvider";
 import { useRealtimeEvent } from "@/components/providers/RealtimeProvider";
 import { Button, Spinner } from "@/components/ui/Button";
 import { MoreOnScroll } from "@/components/ui/MoreOnScroll";
-import { Dropdown } from "@/components/ui/Dropdown";
+import { Modal } from "@/components/ui/Modal";
 import { Icon } from "@/components/ui/Icon";
 import { RowSkeleton } from "@/components/ui/Skeleton";
 import { SlideOver } from "@/components/ui/SlideOver";
@@ -122,6 +122,9 @@ function FilterControls({ f }: { f: Filters }) {
   const mine = useApi(status === "authed" ? () => CrewService.startInfo() : null, [status], { key: "klique-start" });
   const [q, setQ] = useState(f.q);
   const [allWhat, setAllWhat] = useState(false);
+  // the "Pick a community…" popup, and what's typed in its search
+  const [picking, setPicking] = useState(false);
+  const [find, setFind] = useState("");
   const query = useDebounced(q.trim(), 350);
   const { set, q: current } = f;
   // the search goes into the address once they stop typing
@@ -159,20 +162,33 @@ function FilterControls({ f }: { f: Filters }) {
               My communities
             </button>
           )}
+          {/* one of yours: a popup with a search (you may be in a hundred), not a long dropdown */}
           {myCommunities.length > 0 && (
-            <Dropdown
-              className="mt-1 block w-full"
-              width={240}
-              label="One of your communities"
-              items={myCommunities.map((c) => ({ label: c.name, checked: f.community === c.slug, onSelect: () => f.set({ c: c.slug }) }))}
-              trigger={({ open, props }) => (
-                <button {...props} className={cx("flex h-10 w-full items-center gap-2 rounded-control border bg-surface px-3 text-left text-[14px] transition", oneOfMine ? "border-accent-text font-semibold text-ink" : "border-line text-ink-muted hover:text-ink", open && "border-accent-text")}>
-                  <span className="min-w-0 flex-1 truncate">{oneOfMine?.name ?? "One of mine…"}</span>
-                  <Icon name="chevron-down" size={14} className="shrink-0" />
-                </button>
-              )}
-            />
+            <button type="button" onClick={() => setPicking(true)} className={cx("mt-1 flex h-10 w-full items-center gap-2 rounded-control border bg-surface px-3 text-left text-[14px] transition", oneOfMine ? "border-accent-text font-semibold text-ink" : "border-line text-ink-muted hover:text-ink")}>
+              <span className="min-w-0 flex-1 truncate">{oneOfMine?.name ?? "Pick a community…"}</span>
+              <Icon name="chevron-down" size={14} className="shrink-0" />
+            </button>
           )}
+          <Modal open={picking} onClose={() => (setPicking(false), setFind(""))} title="Your communities" size="sm">
+            <div className="space-y-3">
+              <label className="relative block">
+                <span className="sr-only">Search your communities</span>
+                <Icon name="search" size={15} className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-ink-muted" />
+                <input type="search" autoFocus value={find} onChange={(e) => setFind(e.target.value)} placeholder="Search your communities" className="h-10 w-full rounded-full border border-line bg-surface pr-3 pl-10 text-sm text-ink placeholder:text-ink-muted/70 focus:border-accent-text focus:outline-none" />
+              </label>
+              <ul className="-mx-2 max-h-[60vh] overflow-y-auto">
+                {myCommunities.filter((c) => c.name.toLowerCase().includes(find.trim().toLowerCase())).map((c) => (
+                  <li key={c.slug}>
+                    <button type="button" onClick={() => (f.set({ c: c.slug }), setPicking(false), setFind(""))} className={cx("flex w-full items-center gap-2 rounded-control px-3 py-2.5 text-left text-sm hover:bg-raised", f.community === c.slug && "font-semibold")}>
+                      <span className="min-w-0 flex-1 truncate">{c.name}</span>
+                      {f.community === c.slug && <Icon name="check" size={15} />}
+                    </button>
+                  </li>
+                ))}
+                {!myCommunities.some((c) => c.name.toLowerCase().includes(find.trim().toLowerCase())) && <li className="py-6 text-center text-sm text-ink-muted">None of your communities match “{find.trim()}”.</li>}
+              </ul>
+            </div>
+          </Modal>
         </div>
       </Group>
 
