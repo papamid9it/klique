@@ -247,7 +247,8 @@ export const Message = memo(function Message({
         ) : (
           <>
             {(m.sticker || m.stickerUrl) && (
-              <div className="py-1">
+              // sending: the sticker shows at once, dimmed, then solid once it's sent
+              <div className={cx("py-1 transition-opacity", m.pending && "opacity-45")}>
                 <StickerView id={m.sticker} url={m.stickerUrl} />
               </div>
             )}

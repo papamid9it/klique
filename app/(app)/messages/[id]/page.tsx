@@ -514,14 +514,15 @@ export default function ConversationPage() {
                     <MessageEditor className="w-[min(32rem,80vw)]" initial={m.body} onCancel={() => setEditingId(null)} onSave={(body) => saveEdit(m, body)} />
                   ) : (m.sticker || m.stickerUrl) && !m.body && !m.images?.length ? (
                     <div id={`msg-${m.id}`} className={cx("flex flex-col px-1", m.mine ? "items-end" : "items-start")}>
-                      <StickerView id={m.sticker} url={m.stickerUrl} size={84} />
+                      {/* sending: the sticker shows at once, dimmed, then solid once it's sent */}
+                      <span className={cx("transition-opacity", m.pending && "opacity-45")}><StickerView id={m.sticker} url={m.stickerUrl} size={84} /></span>
                       <span className="flex items-center justify-end gap-1 font-mono text-[12px] text-ink-muted">{m.failed ? "Not sent" : formatClock(m.createdAt)}{m.pending && <Icon name="clock" size={11} aria-label="Sending" />}</span>
                     </div>
                   ) : (
                     <>
                     {(m.sticker || m.stickerUrl) && (
                       <div className={cx("mb-1 px-1")}>
-                        <StickerView id={m.sticker} url={m.stickerUrl} size={84} />
+                        <span className={cx("transition-opacity", m.pending && "opacity-45")}><StickerView id={m.sticker} url={m.stickerUrl} size={84} /></span>
                       </div>
                     )}
                     <div id={`msg-${m.id}`} className={cx("rounded-2xl px-3.5 py-2 text-[15px] break-words whitespace-pre-wrap transition-colors", m.mine ? "rounded-br-md bg-accent text-accent-ink" : "rounded-bl-md border border-line bg-surface text-ink")}>

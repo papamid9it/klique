@@ -160,15 +160,22 @@ export function AttachedSticker({ choice, onRemove }: { choice: StickerChoice | 
 export function StickerView({ id, url, size = 72 }: { id?: string | null; url?: string | null; size?: number }) {
   const view = useMediaViewer();
   const [broken, setBroken] = useState(false);
+  // while it downloads, a turning ring holds its place (the box keeps its size, so nothing jumps when it arrives)
+  const [loaded, setLoaded] = useState(false);
   const quick = useQuickSave(url ?? "");
   if (url) {
     if (broken) return <span className="text-sm text-ink-muted italic">Sticker unavailable</span>;
     const box = Math.round(size * 2);
     return (
       <span className="group/stk relative inline-block" {...quick.handlers}>
-        <button type="button" onClick={() => view([url])} aria-label="Sticker. Open it to save it" className="block cursor-zoom-in rounded-control transition active:scale-95">
+        <button type="button" onClick={() => view([url])} aria-label="Sticker. Open it to save it" className="relative block cursor-zoom-in rounded-control transition active:scale-95">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={stickerThumb(url)} alt="" loading="lazy" decoding="async" draggable={false} onError={() => setBroken(true)} style={{ maxWidth: box, maxHeight: box }} className="block h-auto w-auto object-contain drop-shadow-sm select-none [-webkit-touch-callout:none]" />
+          <img src={stickerThumb(url)} alt="" loading="lazy" decoding="async" draggable={false} onError={() => setBroken(true)} onLoad={() => setLoaded(true)} ref={(el) => { if (el?.complete && el.naturalWidth && !loaded) setLoaded(true); }} style={{ width: box, height: box }} className={cx("block object-contain drop-shadow-sm transition-opacity select-none [-webkit-touch-callout:none]", loaded ? "opacity-100" : "opacity-0")} />
+          {!loaded && (
+            <span role="status" aria-label="Loading sticker" className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              <span className="size-8 animate-spin rounded-full border-[3px] border-line border-t-ink-muted" />
+            </span>
+          )}
         </button>
         {quick.enabled && (
           <button
@@ -233,6 +240,18 @@ function useQuickSave(url: string) {
  * ones. Picking one attaches it to the message being written (Send sends it). Upload your own with +, and use
  * Edit to reorder or remove.
  */
+/** A sticker in the picker: a small turning ring in its square until its picture has loaded. */
+function TrayImg({ src }: { src: string }) {
+  const [loaded, setLoaded] = useState(false);
+  return (
+    <span className="relative flex size-full items-center justify-center">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt="" loading="lazy" decoding="async" onLoad={() => setLoaded(true)} ref={(el) => { if (el?.complete && el.naturalWidth && !loaded) setLoaded(true); }} className={cx("max-h-full max-w-full object-contain transition-opacity", loaded ? "opacity-100" : "opacity-0")} />
+      {!loaded && <span aria-hidden="true" className="absolute size-5 animate-spin rounded-full border-2 border-line border-t-ink-muted" />}
+    </span>
+  );
+}
+
 /** GIPHY's stickers: trending, or what you search, loading more as you scroll. */
 function GiphyTab({ onPick }: { onPick: (url: string) => void }) {
   const [q, setQ] = useState("");
@@ -276,8 +295,7 @@ function GiphyTab({ onPick }: { onPick: (url: string) => void }) {
             {items.map((g) => (
               <li key={g.id}>
                 <button type="button" onClick={() => onPick(g.url)} title={g.title} aria-label={g.title || "GIPHY sticker"} className="flex aspect-square w-full items-center justify-center rounded-control p-1 transition hover:bg-raised">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={g.url} alt="" loading="lazy" decoding="async" className="max-h-full max-w-full object-contain" />
+                  <TrayImg src={g.url} />
                 </button>
               </li>
             ))}
@@ -370,8 +388,7 @@ export function StickerPicker({ onPick, onClose, className }: { onPick: (s: Stic
                 {top.map((s) => (
                   <li key={s.id}>
                     <button type="button" onClick={() => attach(s.url)} aria-label="Add this sticker (one of your most used)" className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-control p-1 transition hover:bg-raised">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={stickerThumb(s.url)} alt="" loading="lazy" decoding="async" className="max-h-full max-w-full object-contain" />
+                      <TrayImg src={stickerThumb(s.url)} />
                     </button>
                   </li>
                 ))}
@@ -389,8 +406,7 @@ export function StickerPicker({ onPick, onClose, className }: { onPick: (s: Stic
                   onClick={() => attach(s.url)}
                   className={cx("flex aspect-square w-full items-center justify-center overflow-hidden rounded-control p-1 transition hover:bg-raised", editing && "bg-raised/60")}
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={stickerThumb(s.url)} alt="" loading="lazy" decoding="async" className="max-h-full max-w-full object-contain" />
+                  <TrayImg src={stickerThumb(s.url)} />
                 </button>
                 {editing && (
                   <>
@@ -412,7 +428,7 @@ export function StickerPicker({ onPick, onClose, className }: { onPick: (s: Stic
           </ul>
           </div>
           {saved.list.length === 0 ? (
-            <p className="px-1 pt-2 text-[12.5px] leading-snug text-ink-muted">{giphyOn ? "Find stickers in GIPHY, or save one someone sends you from its menu." : "Save a sticker someone sends you from its menu."} They&apos;re saved to your account, so they show on all your devices.</p>
+            <p className="px-1 py-6 text-center text-[13px] text-ink-muted">No stickers</p>
           ) : (
             <p className="px-1 pt-2 font-mono text-[12px] text-ink-muted">
               {saved.list.length}/{MAX_STICKERS}

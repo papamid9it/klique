@@ -20,7 +20,10 @@ export async function giphyStickers(q: string, offset = 0): Promise<{ items: Gip
   const body = (await res.json()) as { data: Raw[]; pagination?: { total_count?: number; count?: number; offset?: number } };
   const items = body.data.flatMap((g) => {
     const f = g.images?.fixed_width;
-    const url = f?.webp || f?.url;
+    const raw = f?.webp || f?.url;
+    // the same clean link the server keeps (no tracking part): what shows in the tray is already loaded when it's sent
+    const file = raw ? /\/([\w.-]+\.(?:gif|webp))(?:\?|$)/i.exec(raw)?.[1] : null;
+    const url = file && /^[A-Za-z0-9]{6,40}$/.test(g.id) ? `https://media.giphy.com/media/${g.id}/${file}` : raw;
     return url ? [{ id: g.id, url, width: Number(f?.width) || 200, height: Number(f?.height) || 200, title: g.title ?? "" }] : [];
   });
   const total = body.pagination?.total_count ?? 0;
