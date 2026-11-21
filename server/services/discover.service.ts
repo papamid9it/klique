@@ -1,3 +1,5 @@
+import { searchPosts, searchTags } from "./tags.service";
+import { feedCards } from "./feed.service";
 import { communityRankStage } from "./communities.service";
 import type { InterestId } from "@/lib/constants";
 import { notOverFilter } from "@/lib/event-time";
@@ -175,9 +177,11 @@ export async function search(viewer: IUser | null, input: z.infer<typeof searchQ
   const { q, where, type, interest, when, price, format, past, verified, sort } = input;
   const eventOnly = when !== "any" || price !== "any" || format !== "any" || past;
   const person = /^@\S+$/.test(q);
-  const wants = (kind: "communities" | "events" | "people") => {
+  const wants = (kind: "communities" | "events" | "people" | "posts" | "tags") => {
     if (type !== "all") return type === kind;
     if (person) return kind === "people";
+    // posts and tags: not when the search is narrowed to events (dates, price) or verified communities
+    if (kind === "posts" || kind === "tags") return !eventOnly && !verified && !interest;
     if (kind === "communities") return !eventOnly;
     if (kind === "events") return !verified;
     return !eventOnly && !verified && !interest;
@@ -188,6 +192,10 @@ export async function search(viewer: IUser | null, input: z.infer<typeof searchQ
     wants("events") ? listEvents(viewer, { q, where, interest, page: 1, price, format, date: when, scope: "all", past, sort: sort === "new" ? "new" : sort === "popular" ? "popular" : "soonest" }).then((r) => r.items) : Promise.resolve([] as EventDTO[]),
     wants("people") ? searchPeople(viewer, q, where, type === "people" ? 24 : 8) : Promise.resolve([]),
   ]);
+  const [posts, tags] = await Promise.all([
+    wants("posts") ? searchPosts(viewer, q, type === "posts" ? 30 : 6, feedCards) : Promise.resolve([]),
+    wants("tags") ? searchTags(q, type === "tags" ? 30 : 6) : Promise.resolve([]),
+  ]);
   // best match first: a name that is what you typed beats one that only mentions it
   const rank = <T,>(rows: T[], name: (r: T) => string) => (sort === "best" ? [...rows].sort((a, b) => matchScore(name(b), q) - matchScore(name(a), q)) : rows);
   return {
@@ -195,6 +203,8 @@ export async function search(viewer: IUser | null, input: z.infer<typeof searchQ
     communities: rank(communityRows, (c) => c.name).slice(0, cap),
     events: rank(eventRows, (e) => e.title).slice(0, cap),
     people: rank(people, (p) => p.displayName),
+    posts,
+    tags,
   };
 }
 

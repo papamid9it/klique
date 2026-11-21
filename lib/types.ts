@@ -852,7 +852,7 @@ export interface DiscoverDTO {
 /** What can narrow a search; leave anything out for "any". */
 export interface SearchFilters {
   where?: string;
-  type?: "all" | "communities" | "events" | "people";
+  type?: "all" | "communities" | "events" | "people" | "posts" | "tags";
   interest?: string;
   when?: string;
   price?: "any" | "free" | "paid";
@@ -867,6 +867,10 @@ export interface SearchResultsDTO {
   communities: CommunityCardDTO[];
   events: EventDTO[];
   people: UserBrief[];
+  /** public posts whose caption has the words (or the #tag) */
+  posts?: FeedPostDTO[];
+  /** #tags starting with what's typed, with how many public posts use each */
+  tags?: { tag: string; count: number }[];
 }
 
 /* ----------------------------- messaging ---------------------------- */

@@ -441,7 +441,7 @@ export const searchQuery = z.object({
   q: z.string().trim().min(1, "Type something to search").max(60),
   where: whereParam,
   /** one kind of result, and more of it */
-  type: z.enum(["all", "communities", "events", "people"]).default("all"),
+  type: z.enum(["all", "communities", "events", "people", "posts", "tags"]).default("all"),
   interest: z.preprocess(blankToUndef, interestId.optional()),
   /** events only */
   when: z.enum(DATE_FILTERS.map((d) => d.id) as [string, ...string[]]).default("any"),

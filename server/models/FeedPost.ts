@@ -67,6 +67,8 @@ FeedPostSchema.index({ communityId: 1, createdAt: -1 });
 FeedPostSchema.index({ createdAt: -1 });
 FeedPostSchema.index({ authorId: 1, createdAt: -1 });
 FeedPostSchema.index({ tags: 1, createdAt: -1 });
+// search: words in captions (global search's Posts); run `npm run db:indexes` once to create it
+FeedPostSchema.index({ caption: "text" }, { default_language: "none", name: "caption_text" });
 // one post per send (only rows that have a key)
 FeedPostSchema.index({ authorId: 1, clientKey: 1 }, { unique: true, partialFilterExpression: { clientKey: { $type: "string" } } });
 

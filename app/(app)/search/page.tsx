@@ -15,6 +15,8 @@ import { usePlace } from "@/components/providers/PlaceProvider";
 import { Button } from "@/components/ui/Button";
 import { Switch } from "@/components/ui/Field";
 import { Icon } from "@/components/ui/Icon";
+import { cdn } from "@/lib/cdn";
+import Link from "next/link";
 import { SlideOver } from "@/components/ui/SlideOver";
 import { CardGridSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/States";
@@ -23,7 +25,7 @@ import { useApi, useDebounced } from "@/lib/hooks/useApi";
 import { useCategories } from "@/lib/hooks/useCategories";
 import type { EventDTO, SearchFilters } from "@/lib/types";
 
-type Tab = "all" | "communities" | "events" | "people";
+type Tab = "all" | "communities" | "events" | "people" | "posts" | "tags";
 /** Same columns as the Communities page: up to 4 across on wide screens. */
 const GRID = "grid gap-5 min-[540px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
 
@@ -217,9 +219,9 @@ function SearchView() {
 
   const [searchAd] = useAds("search", { q }, !!q);
   const updateEvent = (next: EventDTO) => setData((d) => (d ? { ...d, events: d.events.map((x) => (x.id === next.id ? next : x)) } : d));
-  const counts = { communities: data?.communities.length ?? 0, events: data?.events.length ?? 0, people: data?.people.length ?? 0 };
+  const counts = { communities: data?.communities.length ?? 0, events: data?.events.length ?? 0, people: data?.people.length ?? 0, posts: data?.posts?.length ?? 0, tags: data?.tags?.length ?? 0 };
   const panel = <SearchFiltersList f={f} />;
-  const total = counts.communities + counts.events + counts.people;
+  const total = counts.communities + counts.events + counts.people + counts.posts + counts.tags;
   const show = (t: Exclude<Tab, "all">) => (tab === "all" || tab === t) && counts[t] > 0;
 
   return (
@@ -247,17 +249,19 @@ function SearchView() {
                 { id: "communities", label: "Communities", icon: <Icon name="users" size={15} /> },
                 { id: "events", label: "Events", icon: <Icon name="calendar" size={15} /> },
                 { id: "people", label: "People", icon: <Icon name="user" size={15} /> },
+                { id: "posts", label: "Posts", icon: <Icon name="image" size={15} /> },
+                { id: "tags", label: "Tags", icon: <Icon name="hash" size={15} /> },
               ]}
             />
           ) : undefined
         }
       >
-        Communities, events and people{inPlace}.
+        Communities, events, people, posts and #tags{inPlace}.
       </PageBanner>
 
       <div role="search" aria-label="Search klique" className="mb-8 flex flex-wrap items-center gap-3">
         <label className="relative min-w-56 flex-1">
-          <span className="sr-only">Search communities, events and people</span>
+          <span className="sr-only">Search communities, events, people, posts and tags</span>
           <Icon name="search" size={16} className="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 text-ink-muted" />
           <input
             type="search"
@@ -278,7 +282,7 @@ function SearchView() {
 
       {!q ? (
         <EmptyState icon="search" title="Search klique">
-          Look up communities, events and people{inPlace}.
+          Look up communities, events, people, posts and #tags{inPlace}.
         </EmptyState>
       ) : loading ? (
         <CardGridSkeleton count={4} />
@@ -309,6 +313,51 @@ function SearchView() {
                   <EventCard key={e.id} event={e} onChange={updateEvent} />
                 ))}
               </div>
+            </section>
+          )}
+          {show("tags") && (
+            <section aria-label="Tags">
+              <SectionHeader title={`Tags · ${counts.tags}`} />
+              <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {data.tags?.map((x) => (
+                  <li key={x.tag}>
+                    <Link href={`/tags/${encodeURIComponent(x.tag)}`} className="flex items-center gap-3 rounded-card border border-line bg-surface px-3.5 py-2.5 transition hover:bg-raised">
+                      <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-line"><Icon name="hash" size={18} /></span>
+                      <span className="min-w-0">
+                        <span className="block truncate text-[15px] font-semibold">#{x.tag}</span>
+                        <span className="block text-[13px] text-ink-muted">{x.count === 1 ? "1 post" : `${x.count.toLocaleString("en-NG")} posts`}</span>
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+          {show("posts") && (
+            <section aria-label="Posts">
+              <SectionHeader title={`Posts · ${counts.posts}`} />
+              {/* Instagram's grid: three across, each a square */}
+              <ul className="grid grid-cols-3 gap-1 sm:gap-1.5">
+                {data.posts?.map((p) => {
+                  const m = p.media[0];
+                  const pic = m ? (m.kind === "video" ? m.poster : m.url) : null;
+                  return (
+                    <li key={p.id}>
+                      <Link href={`/p/${p.id}`} aria-label={p.caption ? p.caption.slice(0, 80) : "Post"} className="relative block aspect-square overflow-hidden rounded-[6px] bg-raised">
+                        {pic ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={cdn(pic, { w: 400 })} alt="" loading="lazy" decoding="async" className="size-full object-cover" />
+                        ) : (
+                          <span className="line-clamp-6 p-2.5 text-[13px] leading-snug text-ink">{p.caption}</span>
+                        )}
+                        {(m?.kind === "video" || p.media.length > 1) && (
+                          <span className="absolute top-1.5 right-1.5 text-white drop-shadow"><Icon name={m?.kind === "video" ? "play" : "image"} size={15} /></span>
+                        )}
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
             </section>
           )}
           {show("people") && (

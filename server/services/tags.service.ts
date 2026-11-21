@@ -130,3 +130,48 @@ export async function suggest(viewer: IUser, kind: "@" | "#", q: string) {
   return { tags: [], people: [...briefs.values()], communities: communities.map((c) => ({ slug: c.slug, name: c.name, verified: !!c.verified || !!c.official })) };
 }
 
+
+/* ---------------------------- search ---------------------------- */
+
+/**
+ * Search: #tags that start with what's typed ("skate" or "#skate"), with how many public posts use each, most used
+ * first. Only public, non-18+ posts count, as on the tag pages.
+ */
+export async function searchTags(q: string, limit = 12): Promise<{ tag: string; count: number }[]> {
+  const needle = normalizeTag(q.replace(/^#/, ""));
+  if (!needle) return [];
+  const ids = await publicCommunityIds();
+  const rx = { $regex: `^${escapeRegex(needle)}` };
+  const rows = await FeedPost.aggregate<{ _id: string; count: number }>([
+    { $match: { tags: rx, communityId: { $in: ids }, hiddenAt: null, explicit: { $ne: true } } },
+    { $unwind: "$tags" },
+    { $match: { tags: rx } },
+    { $group: { _id: "$tags", count: { $sum: 1 } } },
+    // the exact tag first, then the most used
+    { $addFields: { exact: { $cond: [{ $eq: ["$_id", needle] }, 1, 0] } } },
+    { $sort: { exact: -1, count: -1, _id: 1 } },
+    { $limit: limit },
+  ]);
+  return rows.map((r) => ({ tag: r._id, count: r.count }));
+}
+
+/**
+ * Search: public posts whose caption has what's typed (or that carry it as a #tag), newest first. Only public,
+ * non-18+, non-explicit posts, never from people you've blocked: members-only posts stay in their community's own
+ * search. Uses the caption text index when it's there, and a plain match until it is.
+ */
+export async function searchPosts(viewer: IUser | null, q: string, limit: number, toPosts: (rows: IFeedPost[], viewer: IUser | null) => Promise<FeedPostDTO[]>): Promise<FeedPostDTO[]> {
+  const words = q.trim().replace(/^#/, "");
+  if (words.length < 2) return [];
+  const [ids, hidden] = await Promise.all([publicCommunityIds(), hiddenUserIds(viewer?._id ?? null)]);
+  const base = { communityId: { $in: ids }, hiddenAt: null, explicit: { $ne: true }, ...(hidden.length ? { authorId: { $nin: hidden } } : {}) };
+  const tag = normalizeTag(words);
+  let rows: IFeedPost[];
+  try {
+    rows = await FeedPost.find({ ...base, $text: { $search: words } }, { score: { $meta: "textScore" } }).sort({ score: { $meta: "textScore" }, createdAt: -1 }).limit(limit).lean<IFeedPost[]>();
+  } catch {
+    // no text index yet (npm run db:indexes): a plain, case-blind match on the caption, or the tag itself
+    rows = await FeedPost.find({ ...base, $or: [{ caption: { $regex: escapeRegex(words), $options: "i" } }, ...(isTag(tag) ? [{ tags: tag }] : [])] }).sort({ createdAt: -1 }).limit(limit).lean<IFeedPost[]>();
+  }
+  return toPosts(rows, viewer);
+}
