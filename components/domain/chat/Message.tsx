@@ -165,9 +165,10 @@ export const Message = memo(function Message({
   const [editing, setEditing] = useState(false);
   const sheet = useMessageSheet();
   // a sticker someone sent can be saved (stickers are for sharing); a picture only becomes a sticker if it's yours
-  const saveable = !m.deleted && !m.pending ? (m.stickerUrl ?? (mine && m.images.length === 1 ? m.images[0] : null)) : null;
+  // stickers come from GIPHY: a sticker someone sent can be saved, a picture can't be turned into one
+  const saveable = !m.deleted && !m.pending ? (m.stickerUrl ?? null) : null;
   const items: OverflowItem[] = [
-    ...(saveable && onSaveSticker ? [{ label: m.stickerUrl ? "Save sticker" : "Save as sticker", icon: "sticker" as const, onSelect: () => onSaveSticker(saveable) }] : []),
+    ...(saveable && onSaveSticker ? [{ label: "Save sticker", icon: "sticker" as const, onSelect: () => onSaveSticker(saveable) }] : []),
     ...(onReply && !m.deleted && !m.pending ? [{ label: "Reply", icon: "reply" as const, onSelect: () => onReply(m) }] : []),
     // a thread anyone can open; starting one is for people who may post in the channel
     ...(onThread && !m.deleted && !m.pending && (m.thread || canStartThread) ? [{ label: m.thread ? "Open thread" : "Start thread", icon: "message" as const, onSelect: () => onThread(m) }] : []),

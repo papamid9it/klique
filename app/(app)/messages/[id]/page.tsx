@@ -111,11 +111,10 @@ export default function ConversationPage() {
   const attach = useAttachments();
   const fileInput = useRef<HTMLInputElement>(null);
   const stickers = useStickers();
-  /** "Save as sticker" for a sticker or a single picture */
+  /** "Save sticker" for a sticker someone sent (stickers come from GIPHY: a picture can't be turned into one) */
   const saveItem = (m: Local) => {
-    // someone else's picture can't be made a sticker (a sticker they sent can be saved)
-    const url = m.stickerUrl ?? (m.mine && m.images?.length === 1 ? m.images[0] : null);
-    return url ? [{ label: m.stickerUrl ? "Save sticker" : "Save as sticker", icon: "sticker" as const, onSelect: () => void stickers.save(url).then((err) => toast(err ?? "Saved to your stickers.", err ? "error" : "success")) }] : [];
+    const url = m.stickerUrl ?? null;
+    return url ? [{ label: "Save sticker", icon: "sticker" as const, onSelect: () => void stickers.save(url).then((err) => toast(err ?? "Saved to your stickers.", err ? "error" : "success")) }] : [];
   };
   /** a message's actions: the ⋯ menu (mouse) and the press-and-hold sheet (touch) */
   const actionsFor = (m: Local) => [

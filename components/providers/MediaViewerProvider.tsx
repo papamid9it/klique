@@ -2,11 +2,8 @@
 
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import { MediaViewer, type ViewerItem } from "@/components/ui/MediaViewer";
-import { useStickers } from "@/lib/hooks/useStickers";
-import { useAuth } from "./AuthProvider";
-import { useToast } from "./ToastProvider";
 
-/** `mine`: the viewer's own uploads (they can download them, or make one a sticker); off by default */
+/** `mine`: the viewer's own uploads (they can download them); off by default */
 type Open = (items: (ViewerItem | string)[], start?: number, opts?: { mine?: boolean }) => void;
 const Ctx = createContext<Open>(() => {});
 
@@ -15,9 +12,6 @@ export const useMediaViewer = () => useContext(Ctx);
 
 export function MediaViewerProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState<{ items: ViewerItem[]; start: number } | null>(null);
-  const { user } = useAuth();
-  const stickers = useStickers();
-  const toast = useToast();
 
   const show = useCallback<Open>((items, start = 0, opts) => {
     const list = items
@@ -36,18 +30,8 @@ export function MediaViewerProvider({ children }: { children: ReactNode }) {
           items={open.items}
           start={open.start}
           onClose={close}
-          actions={(item) =>
-            user && item.kind === "image" && item.mine
-              ? [
-                  {
-                    label: stickers.has(item.url) ? "Saved" : "Save as sticker",
-                    icon: "sticker",
-                    done: stickers.has(item.url),
-                    onSelect: (it) => void stickers.save(it.url).then((err) => toast(err ?? "Saved to your stickers.", err ? "error" : "success")),
-                  },
-                ]
-              : []
-          }
+          // stickers come from GIPHY now: a picture can't be turned into one
+          actions={() => []}
         />
       )}
     </Ctx.Provider>

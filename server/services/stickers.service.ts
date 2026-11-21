@@ -14,11 +14,14 @@ export const MAX_STICKERS = 200;
 
 /**
  * A picture link that may be used as a sticker, normalised to the full-size file, or null. Only our own uploaded
- * pictures (and the bundled /mock samples used in development): no hotlinking other sites into chats.
+ * pictures (and the bundled /mock samples used in development), and GIPHY's stickers: no hotlinking any other site.
  */
 export function stickerSource(raw: string): string | null {
   const url = raw.trim().split("#")[0];
   if (/^\/mock\/[\w.-]+\.(jpe?g|png|webp|gif)$/i.test(url)) return url;
+  // a GIPHY sticker (searched in the tray): only GIPHY's own media files, without their tracking query
+  const giphy = /^https:\/\/(?:media\d?|i)\.giphy\.com\/media\/(?:v1\.[\w.-]+\/)?([A-Za-z0-9]{6,40})\/([\w.-]{1,40}\.(?:gif|webp))(?:\?.*)?$/i.exec(url);
+  if (giphy) return `https://media.giphy.com/media/${giphy[1]}/${giphy[2]}`;
   const key = keyFromUrl(url);
   if (!key || !/^klique\/(photos|avatars)\//.test(key) || !/\.(webp|jpe?g|png|gif)$/i.test(key)) return null;
   return url.split("?")[0].replace(/_sm\.(webp|jpe?g)$/i, ".$1");

@@ -1,9 +1,8 @@
 "use client";
 
+import { giphyOn, giphyStickers, type GiphySticker } from "@/lib/giphy";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { errorMessage } from "@/app/ApiCore";
-import { UploadService } from "@/app/services/UploadService";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useMediaViewer } from "@/components/providers/MediaViewerProvider";
 import { useToast } from "@/components/providers/ToastProvider";
@@ -12,9 +11,7 @@ import { cx } from "@/components/ui/cx";
 import { compactCount } from "@/lib/format";
 import { REACTIONS, STICKERS, reactionEmoji, stickerOf, type ReactionKind } from "@/lib/reactions";
 import { stickerThumb, useStickers } from "@/lib/hooks/useStickers";
-import { useUploadStatus } from "@/lib/hooks/useUploads";
 import type { ReactionDTO } from "@/lib/types";
-import { checkFile } from "@/lib/uploads";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 
 export const MAX_STICKERS = 200;
@@ -236,34 +233,71 @@ function useQuickSave(url: string) {
  * ones. Picking one attaches it to the message being written (Send sends it). Upload your own with +, and use
  * Edit to reorder or remove.
  */
+/** GIPHY's stickers: trending, or what you search, loading more as you scroll. */
+function GiphyTab({ onPick }: { onPick: (url: string) => void }) {
+  const [q, setQ] = useState("");
+  const [term, setTerm] = useState("");
+  const [items, setItems] = useState<GiphySticker[]>([]);
+  const [more, setMore] = useState(false);
+  const [busy, setBusy] = useState(true);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    const id = setTimeout(() => setTerm(q.trim()), 350);
+    return () => clearTimeout(id);
+  }, [q]);
+  useEffect(() => {
+    let on = true;
+    setBusy(true);
+    setError("");
+    giphyStickers(term).then(
+      (r) => on && (setItems(r.items), setMore(r.more), setBusy(false)),
+      (e: unknown) => on && (setError((e as Error).message), setBusy(false)),
+    );
+    return () => void (on = false);
+  }, [term]);
+  const loadMore = () => {
+    if (busy || !more) return;
+    setBusy(true);
+    giphyStickers(term, items.length).then(
+      (r) => (setItems((l) => [...l, ...r.items.filter((x) => !l.some((y) => y.id === x.id))]), setMore(r.more), setBusy(false)),
+      () => setBusy(false),
+    );
+  };
+  return (
+    <div>
+      <input type="search" autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search GIPHY" aria-label="Search GIPHY stickers" className="mb-2 h-9 w-full rounded-full border border-line bg-raised px-3.5 text-sm text-ink placeholder:text-ink-muted/70 focus:border-accent-text focus:outline-none" />
+      <div className="max-h-64 overflow-y-auto overscroll-contain" onScroll={(e) => { const el = e.currentTarget; if (el.scrollHeight - el.scrollTop - el.clientHeight < 120) loadMore(); }}>
+        {error ? (
+          <p className="py-6 text-center text-sm text-ink-muted">{error}</p>
+        ) : !items.length ? (
+          <p className="py-6 text-center text-sm text-ink-muted">{busy ? "Loading…" : `No stickers for “${term}”.`}</p>
+        ) : (
+          <ul className="grid grid-cols-3 gap-1">
+            {items.map((g) => (
+              <li key={g.id}>
+                <button type="button" onClick={() => onPick(g.url)} title={g.title} aria-label={g.title || "GIPHY sticker"} className="flex aspect-square w-full items-center justify-center rounded-control p-1 transition hover:bg-raised">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={g.url} alt="" loading="lazy" decoding="async" className="max-h-full max-w-full object-contain" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      {/* GIPHY asks for this wherever its pictures show */}
+      <p className="pt-1.5 text-center text-[12px] font-semibold text-ink-muted">Powered by GIPHY</p>
+    </div>
+  );
+}
+
 export function StickerPicker({ onPick, onClose, className }: { onPick: (s: StickerChoice) => void; onClose: () => void; className?: string }) {
   const ref = useDismiss(onClose);
   const keep = useKeepOnScreen(ref);
   const saved = useStickers();
   const toast = useToast();
   const confirm = useConfirm();
-  const uploads = useUploadStatus();
-  const [tab, setTab] = useState<"saved" | "emoji">(() => (saved.list.length ? "saved" : "emoji"));
+  const [tab, setTab] = useState<"saved" | "emoji" | "giphy">(() => (saved.list.length ? "saved" : "emoji"));
   const [editing, setEditing] = useState(false);
-  const [progress, setProgress] = useState<number | null>(null);
-  const file = useRef<HTMLInputElement>(null);
-
-  async function upload(f: File | undefined) {
-    if (!f) return;
-    const problem = checkFile("photo", f);
-    if (problem) return toast(problem, "error");
-    setProgress(0);
-    try {
-      const up = await UploadService.upload("photo", f, { onProgress: setProgress });
-      const err = await saved.save(up.url);
-      if (err) toast(err, "error");
-    } catch (e) {
-      toast(errorMessage(e), "error");
-    } finally {
-      setProgress(null);
-      if (file.current) file.current.value = "";
-    }
-  }
 
   // the tray may be stale on this device (counts change as you send): refresh when it opens
   useEffect(() => void saved.refresh(), []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -283,7 +317,7 @@ export function StickerPicker({ onPick, onClose, className }: { onPick: (s: Stic
     void saved.reorder(ids).then((err) => err && toast(err, "error"));
   }
 
-  const tabBtn = (id: "saved" | "emoji", label: string) => (
+  const tabBtn = (id: "saved" | "emoji" | "giphy", label: string) => (
     <button type="button" role="tab" aria-selected={tab === id} onClick={() => (setTab(id), setEditing(false))} className={cx("rounded-full px-3 py-1 text-[13px] font-semibold transition", tab === id ? "bg-ink text-canvas" : "text-ink-muted hover:bg-raised hover:text-ink")}>
       {label}
     </button>
@@ -294,6 +328,7 @@ export function StickerPicker({ onPick, onClose, className }: { onPick: (s: Stic
       <div className="mb-2 flex items-center gap-1" role="tablist">
         {tabBtn("saved", "Saved")}
         {tabBtn("emoji", "Animated")}
+        {giphyOn && tabBtn("giphy", "GIPHY")}
         <span className="flex-1" />
         {tab === "saved" && saved.list.length > 0 && (
           <button type="button" onClick={() => setEditing((e) => !e)} aria-pressed={editing} className="rounded-full px-2.5 py-1 text-[12px] font-semibold text-accent-text hover:bg-raised">
@@ -302,7 +337,9 @@ export function StickerPicker({ onPick, onClose, className }: { onPick: (s: Stic
         )}
       </div>
 
-      {tab === "emoji" ? (
+      {tab === "giphy" ? (
+        <GiphyTab onPick={(url) => (onPick({ stickerUrl: url }), onClose())} />
+      ) : tab === "emoji" ? (
         // compact like a phone keyboard's sticker tray: small cells, as many as fit, scrolling inside
         <div className="grid max-h-64 grid-cols-[repeat(auto-fill,minmax(44px,1fr))] gap-0.5 overflow-y-auto overscroll-contain">
           {STICKERS.map((s, i) => (
@@ -343,14 +380,6 @@ export function StickerPicker({ onPick, onClose, className }: { onPick: (s: Stic
             </>
           )}
           <ul className="grid grid-cols-[repeat(auto-fill,minmax(56px,1fr))] gap-1">
-            {uploads?.photo && !editing && (
-              <li>
-                <input ref={file} type="file" hidden accept=".jpg,.jpeg,.png,.webp,.gif,.avif,.heic,.heif" onChange={(e) => void upload(e.target.files?.[0])} aria-label="Upload a sticker" />
-                <button type="button" onClick={() => file.current?.click()} disabled={progress !== null} aria-label="Upload your own sticker" title="Upload your own" className="flex aspect-square w-full flex-col items-center justify-center gap-0.5 rounded-control border border-dashed border-line text-ink-muted transition hover:border-ink-muted hover:text-ink">
-                  {progress !== null ? <span className="font-mono text-xs">{Math.round(progress * 100)}%</span> : <Icon name="plus" size={20} />}
-                </button>
-              </li>
-            )}
             {saved.list.map((s, i) => (
               <li key={s.id} className={cx("relative", top.some((x) => x.id === s.id) && "hidden")}>
                 <button
@@ -383,7 +412,7 @@ export function StickerPicker({ onPick, onClose, className }: { onPick: (s: Stic
           </ul>
           </div>
           {saved.list.length === 0 ? (
-            <p className="px-1 pt-2 text-[12.5px] leading-snug text-ink-muted">Open any picture or GIF in a chat and tap Save as sticker{uploads?.photo ? ", or upload your own with +" : ""}. They&apos;re saved to your account, so they show on all your devices.</p>
+            <p className="px-1 pt-2 text-[12.5px] leading-snug text-ink-muted">{giphyOn ? "Find stickers in GIPHY, or save one someone sends you from its menu." : "Save a sticker someone sends you from its menu."} They&apos;re saved to your account, so they show on all your devices.</p>
           ) : (
             <p className="px-1 pt-2 font-mono text-[12px] text-ink-muted">
               {saved.list.length}/{MAX_STICKERS}

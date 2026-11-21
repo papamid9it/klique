@@ -64,7 +64,9 @@ export async function shareImage(card: Card | null): Promise<Response> {
     headers: {
       "content-type": "image/jpeg",
       // its photo didn't load this time: try again soon, rather than keep a card without it for an hour
-      "cache-control": c.image && !image ? "public, max-age=60, s-maxage=60" : "public, max-age=600, s-maxage=3600, stale-while-revalidate=86400",
+      // drawing one costs server time, and a card rarely changes: the CDN keeps it a day (and serves the old one while
+      // it redraws), so each is drawn about once a day however often it's shared
+      "cache-control": c.image && !image ? "public, max-age=60, s-maxage=60" : "public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800",
     },
   });
 }
