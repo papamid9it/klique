@@ -16,7 +16,10 @@ export async function giphyStickers(q: string, offset = 0): Promise<{ items: Gip
   const base = term ? "https://api.giphy.com/v1/stickers/search" : "https://api.giphy.com/v1/stickers/trending";
   const params = new URLSearchParams({ api_key: KEY, limit: "24", offset: String(offset), rating: "pg-13", lang: "en", ...(term ? { q: term } : {}) });
   const res = await fetch(`${base}?${params}`);
-  if (!res.ok) throw new Error("GIPHY isn't answering right now.");
+  // say why, so a bad key or the beta key's hourly limit is obvious
+  if (res.status === 401 || res.status === 403) throw new Error("GIPHY didn't accept Klique's key. Check the GIPHY key is right.");
+  if (res.status === 429) throw new Error("Too many sticker searches this hour (GIPHY's beta limit). Try again a bit later.");
+  if (!res.ok) throw new Error(`GIPHY isn't answering right now (${res.status}).`);
   const body = (await res.json()) as { data: Raw[]; pagination?: { total_count?: number; count?: number; offset?: number } };
   const items = body.data.flatMap((g) => {
     const f = g.images?.fixed_width;

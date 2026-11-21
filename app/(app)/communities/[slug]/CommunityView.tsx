@@ -53,6 +53,7 @@ import { EmptyState, ErrorState } from "@/components/ui/States";
 
 import { useRealtime, useRealtimeEvent } from "@/components/providers/RealtimeProvider";
 import { mutateApi, useApi } from "@/lib/hooks/useApi";
+import ApiClient from "@/app/ApiCore";
 import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { softNavigate } from "@/lib/nav";
 import type { ChannelDTO, ChannelGroupDTO, ChannelsDTO, CommunityDTO, MyCommunityDTO } from "@/lib/types";
@@ -336,6 +337,9 @@ function CommunityWorkspace({ slug }: { slug: string }) {
   };
   const leave = async () => {
     await SpaceService.leave(slug);
+    // out of your communities everywhere at once (the rail, the Communities page), not after a cached copy runs out
+    ApiClient.clearCache();
+    mutateApi<MyCommunityDTO[]>("my-communities", (list) => list.filter((m) => m.slug !== slug));
     toast(`You left ${c.name}`, "success");
     setLeaving(false);
     await Promise.all([reload(), myCrews.reload()]);
