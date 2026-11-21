@@ -32,7 +32,10 @@ import { AttachmentStrip } from "@/components/domain/chat/AttachmentStrip";
 import { ChatImages } from "@/components/domain/chat/ChatImages";
 import { ReplyingTo, ReplyQuote } from "@/components/domain/chat/ReplyQuote";
 import { useAttachments } from "@/lib/hooks/useAttachments";
-import { mutateApi, recallApi, rememberApi } from "@/lib/hooks/useApi";
+import { mutateApi, recallApi, rememberApi, useApi } from "@/lib/hooks/useApi";
+import { PollCard, PollComposer } from "@/components/domain/chat/Polls";
+import { ChatBody } from "@/components/domain/chat/Message";
+import { activeMention } from "@/lib/mentions";
 import { EditedTag, MessageEditor } from "@/components/domain/chat/MessageEditor";
 import { ChatGroupInfo } from "@/components/domain/messages/ChatGroup";
 import { FormatButton } from "@/components/ui/FormatButton";
@@ -89,6 +92,8 @@ export default function ConversationPage() {
   // "X is typing…" in this conversation
   const afterRequest = useAfterRequest(id);
   const typing = useTyping(detail?.canSend ? { kind: "dm", id } : null);
+  // a group's members: who @ can tag (shared with the group info panel)
+  const members = useApi(detail?.conversation.group ? () => MessageService.group(id) : null, [id, !!detail?.conversation.group], { key: `chat-group:${id}` });
   const [infoOpen, setInfoOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteMsg, setDeleteMsg] = useState<Local | null>(null);
@@ -98,6 +103,11 @@ export default function ConversationPage() {
   const ask = useConfirm();
   const togglePick = (mid: string) => setPicked((p) => { const n = new Set(p ?? []); if (n.has(mid)) n.delete(mid); else n.add(mid); return n; });
   const [replyTo, setReplyTo] = useState<Local | null>(null);
+  // group chats: a poll being made, which pinned message the bar shows, and @ suggestions while typing
+  const [polling, setPolling] = useState(false);
+  const [pinAt, setPinAt] = useState(0);
+  const [mention, setMention] = useState<{ start: number; query: string } | null>(null);
+  const [mentionAt, setMentionAt] = useState(0);
   const attach = useAttachments();
   const fileInput = useRef<HTMLInputElement>(null);
   const stickers = useStickers();
@@ -113,11 +123,23 @@ export default function ConversationPage() {
     ...(m.mine && !(m.sticker || m.stickerUrl) ? [{ label: "Edit message", icon: "edit" as const, onSelect: () => setEditingId(m.id) }] : []),
     ...saveItem(m),
     ...(m.mine ? [{ label: "Select", icon: "check" as const, onSelect: () => setPicked(new Set([m.id])) }] : []),
+    // group chats: pin it at the top (whoever may edit the group)
+    ...(detail?.conversation.group?.canEdit && !m.pending && !m.failed ? [{ label: detail.pins?.some((p) => p.id === m.id) ? "Unpin" : "Pin", icon: "pushpin" as const, onSelect: () => void pin(m.id, !detail.pins?.some((p) => p.id === m.id)) }] : []),
     // a group chat's owner may remove anyone's message (it shows as "Deleted by an admin")
     ...(!m.mine && detail?.conversation.group?.mine ? [{ label: "Delete message", icon: "trash" as const, danger: true, onSelect: () => (shiftHeld() ? deleteNow(m) : setDeleteMsg(m)) }] : []),
     ...(m.mine ? [{ label: "Delete message", icon: "trash" as const, danger: true, onSelect: () => (shiftHeld() ? deleteNow(m) : setDeleteMsg(m)) }] : [{ label: "Report message", icon: "flag" as const, danger: true, onSelect: () => setReportMsg(m.id) }]),
   ];
   const [sheetFor, setSheetFor] = useState<Local | null>(null);
+  async function pin(messageId: string, on: boolean) {
+    try {
+      const res = await MessageService.pin(id, messageId, on);
+      setDetail((d) => (d ? { ...d, pins: res.data.pins } : d));
+      setPinAt(0);
+      toast(on ? "Pinned" : "Unpinned", "success");
+    } catch (e) {
+      toast(errorMessage(e), "error");
+    }
+  }
   /** gone at once; the server is told behind (put back with a note if that fails) */
   const deleteNow = (before: Local) => {
     setMessages((prev) => prev.map((x) => (x.id === before.id ? { ...x, body: "", sticker: null, stickerUrl: null, images: [], replyTo: null, deleted: true, ...(before.mine ? {} : { deletedByAdmin: true }) } : x)));
@@ -240,7 +262,7 @@ export default function ConversationPage() {
         const res = await MessageService.open(id);
         // opening it marks it read on the server: the list and the unread badge say so too
         if (seenHere()) void refresh();
-        setDetail((d) => (d ? { ...d, conversation: res.data.conversation, canSend: res.data.canSend, cannotSendReason: res.data.cannotSendReason } : res.data));
+        setDetail((d) => (d ? { ...d, conversation: res.data.conversation, canSend: res.data.canSend, cannotSendReason: res.data.cannotSendReason, pins: res.data.pins } : res.data));
         // keep reactions you changed after this poll began (it would show the old counts for a moment)
         setMessages((prev) => {
           const keep = new Map(prev.filter((m) => (touched.current.get(m.id) ?? 0) > startedAt).map((m) => [m.id, m.reactions]));
@@ -380,6 +402,23 @@ export default function ConversationPage() {
 
   const { other, blockedByMe, group: chatGroup } = detail.conversation;
   let lastDay = "";
+  const pins = detail.pins ?? [];
+  const shownPin = pins.length ? pins[Math.min(pinAt, pins.length - 1)] : null;
+  const q = mention?.query.toLowerCase() ?? "";
+  const tagOptions = chatGroup && mention ? (members.data?.members ?? []).filter((x) => !x.me && (x.user.handle.toLowerCase().startsWith(q) || x.user.displayName.toLowerCase().includes(q))).slice(0, 8) : [];
+  const pickTag = (handle: string) => {
+    const el = draftArea.current;
+    if (!mention || !el) return;
+    const caret = el.selectionStart ?? draft.length;
+    const next = `${draft.slice(0, mention.start)}@${handle} ${draft.slice(caret)}`;
+    const pos = mention.start + handle.length + 2;
+    setDraft(next);
+    setMention(null);
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(pos, pos);
+    });
+  };
 
   return (
     <div className="flex min-h-0 flex-1">
@@ -390,7 +429,7 @@ export default function ConversationPage() {
         </Link>
         {chatGroup ? (
           <button type="button" onClick={() => setInfoOpen(true)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
-            <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-raised text-ink-muted"><Icon name="users" size={18} /></span>
+            {other.avatarUrl ? <Avatar name={other.displayName} src={other.avatarUrl} size={40} /> : <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-raised text-ink-muted"><Icon name="users" size={18} /></span>}
             <span className="min-w-0">
               <span className="block truncate text-sm font-semibold">{other.displayName}</span>
               <span className="block truncate text-[12px] text-ink-muted">{chatGroup.memberCount} people</span>
@@ -420,6 +459,26 @@ export default function ConversationPage() {
         <HeaderIcons className="ml-auto" />
       </header>
 
+      {/* pinned messages: the newest shows; click jumps to it and moves on to the next */}
+      {shownPin && (
+        <div className="flex items-center gap-2 border-b border-line bg-surface px-3 sm:px-5">
+          <button type="button" onClick={() => { jump(shownPin.id); setPinAt((i) => (i + 1) % pins.length); }} className="flex min-h-12 min-w-0 flex-1 items-center gap-3 text-left">
+            <span className="flex shrink-0 flex-col gap-0.5" aria-hidden="true">
+              {pins.map((p, i) => <span key={p.id} className={cx("h-2.5 w-[3px] rounded-full", i === Math.min(pinAt, pins.length - 1) ? "bg-ink" : "bg-line")} />)}
+            </span>
+            <Icon name="pushpin" size={15} className="shrink-0 text-ink-muted" />
+            <span className="min-w-0">
+              <span className="block text-[12px] font-semibold text-ink-muted">{pins.length > 1 ? `Pinned message ${Math.min(pinAt, pins.length - 1) + 1} of ${pins.length}` : "Pinned message"}</span>
+              <span className="block truncate text-sm"><span className="font-semibold">{shownPin.sender}:</span> {shownPin.text}</span>
+            </span>
+          </button>
+          {chatGroup?.canEdit && (
+            <button type="button" onClick={() => void pin(shownPin.id, false)} aria-label="Unpin" title="Unpin" className="inline-flex size-8 shrink-0 items-center justify-center rounded-full text-ink-muted hover:bg-raised hover:text-ink">
+              <Icon name="x" size={15} />
+            </button>
+          )}
+        </div>
+      )}
       {picked && <SelectBar count={picked.size} busy={deletingMany} onCancel={() => setPicked(null)} onDelete={() => void deletePicked()} />}
       <div className="kq-calm min-h-0 flex-1 space-y-1.5 overflow-y-auto px-4 py-5 sm:px-6 [&>*]:[overflow-anchor:none]" aria-live="polite">
         {hasMore && (
@@ -448,6 +507,10 @@ export default function ConversationPage() {
                   {chatGroup && !m.mine && m.sender && <ProfileTrigger handle={m.sender.handle} className="mb-0.5 px-1 text-left text-xs font-semibold text-accent-text hover:underline">{m.sender.displayName}</ProfileTrigger>}
                   {m.deleted ? (
                     <div className="rounded-2xl border border-dashed border-line px-3.5 py-2 text-sm text-ink-muted italic">{m.deletedByAdmin ? "Deleted by an admin" : m.mine ? "You deleted this message" : "This message was deleted"}</div>
+                  ) : m.pollId ? (
+                    <div id={`msg-${m.id}`} className="w-[min(24rem,80vw)]">
+                      <PollCard id={m.pollId} />
+                    </div>
                   ) : editingId === m.id ? (
                     <MessageEditor className="w-[min(32rem,80vw)]" initial={m.body} onCancel={() => setEditingId(null)} onSave={(body) => saveEdit(m, body)} />
                   ) : (m.sticker || m.stickerUrl) && !m.body && !m.images?.length ? (
@@ -464,7 +527,7 @@ export default function ConversationPage() {
                     )}
                     <div id={`msg-${m.id}`} className={cx("rounded-2xl px-3.5 py-2 text-[15px] break-words whitespace-pre-wrap transition-colors", m.mine ? "rounded-br-md bg-accent text-accent-ink" : "rounded-bl-md border border-line bg-surface text-ink")}>
                       {m.replyTo && <ReplyQuote reply={m.replyTo} onJump={jump} className={cx("whitespace-normal", m.mine ? "!text-accent-ink/80 [&_span]:!text-accent-ink/80" : "")} />}
-                      <Formatted text={m.body} plain={(words) => <EmojiText text={words} />} />
+                      {m.mentions?.length ? <ChatBody text={m.body} mentions={m.mentions} meId={user?.id ?? null} /> : <Formatted text={m.body} plain={(words) => <EmojiText text={words} />} />}
                       {!m.body && !m.images?.length && <span className="italic opacity-70">Sticker unavailable</span>}
                       <ChatImages images={m.images ?? []} mine={m.mine} className={m.body ? "mt-1.5" : ""} />
                       <span className={cx("mt-0.5 flex items-baseline justify-end gap-1.5 font-mono text-[12px]", m.mine ? "text-accent-ink/70" : "text-ink-muted")}>
@@ -509,6 +572,17 @@ export default function ConversationPage() {
       )}
       <div className="relative border-t border-line bg-canvas px-4 py-3 sm:px-6">
         {/* over the chat's bottom edge, so nothing moves when they start or stop typing */}
+        {tagOptions.length > 0 && (
+          <ul role="listbox" aria-label="Tag someone" className="absolute right-4 bottom-full left-4 z-20 mb-1 max-h-64 overflow-y-auto rounded-card border border-line bg-surface p-1.5 shadow-2xl sm:right-6 sm:left-6">
+            {tagOptions.map((o, i) => (
+              <li key={o.user.id} role="option" aria-selected={i === mentionAt} onMouseDown={(e) => { e.preventDefault(); pickTag(o.user.handle); }} onMouseEnter={() => setMentionAt(i)} className={cx("flex cursor-pointer items-center gap-3 rounded-control px-2.5 py-2", i === mentionAt ? "bg-raised" : "")}>
+                <Avatar name={o.user.displayName} src={o.user.avatarUrl} size={28} />
+                <span className="min-w-0 flex-1 truncate text-sm font-semibold">{o.user.displayName}</span>
+                <span className="truncate font-mono text-[12px] text-ink-muted">@{o.user.handle}</span>
+              </li>
+            ))}
+          </ul>
+        )}
         {detail.canSend && <TypingLine names={typing.names} className="pointer-events-none absolute right-4 bottom-full left-4 bg-gradient-to-t from-canvas to-transparent pt-2 sm:right-6 sm:left-6" />}
         {detail.canSend ? (
           <form
@@ -529,17 +603,46 @@ export default function ConversationPage() {
                 </button>
               </>
             )}
+            {chatGroup && (
+              <button type="button" onClick={() => setPolling(true)} aria-label="Make a poll" title="Poll" className="inline-flex size-11 items-center justify-center rounded-full text-ink-muted transition hover:bg-raised hover:text-ink">
+                <Icon name="poll" size={21} />
+              </button>
+            )}
             <FormatButton area={draftArea} value={draft} onChange={setDraft} />
             <textarea
               ref={draftArea}
               value={draft}
               onChange={(e) => {
                 setDraft(e.target.value);
+                if (chatGroup) {
+                  setMention(activeMention(e.target.value, e.target.selectionStart ?? e.target.value.length));
+                  setMentionAt(0);
+                }
                 if (e.target.value.trim()) typing.typed();
                 else typing.stopped();
               }}
-              onBlur={typing.stopped}
+              onBlur={() => {
+                typing.stopped();
+                setMention(null);
+              }}
               onKeyDown={(e) => {
+                // @ suggestions open: arrows move, Enter or Tab picks, Escape closes
+                if (tagOptions.length) {
+                  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                    e.preventDefault();
+                    setMentionAt((i) => (i + (e.key === "ArrowDown" ? 1 : tagOptions.length - 1)) % tagOptions.length);
+                    return;
+                  }
+                  if (e.key === "Enter" || e.key === "Tab") {
+                    e.preventDefault();
+                    pickTag(tagOptions[Math.min(mentionAt, tagOptions.length - 1)].user.handle);
+                    return;
+                  }
+                  if (e.key === "Escape") {
+                    setMention(null);
+                    return;
+                  }
+                }
                 if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                   e.preventDefault();
                   void send();
@@ -611,6 +714,20 @@ export default function ConversationPage() {
           deleteNow(deleteMsg);
         }}
       />
+      {polling && (
+        <PollComposer
+          onClose={() => setPolling(false)}
+          onCreate={async (poll) => {
+            try {
+              await MessageService.send(id, { body: "", poll });
+              await load();
+              return null;
+            } catch (e) {
+              return errorMessage(e);
+            }
+          }}
+        />
+      )}
       <ReportDialog open={reportUser} onClose={() => setReportUser(false)} targetType="user" targetId={other.id} subject={`@${other.handle}`} />
       <ReportDialog open={reportMsg !== null} onClose={() => setReportMsg(null)} targetType="message" targetId={reportMsg ?? ""} subject="this message" />
       {sheetFor && <MessageSheet open onClose={() => setSheetFor(null)} onReact={detail.canSend ? (k) => void react(sheetFor, k) : undefined} items={actionsFor(sheetFor)} copyText={sheetFor.body || undefined} />}

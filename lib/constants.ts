@@ -163,6 +163,8 @@ export const LIMITS = {
   /** a group chat of friends, its creator included */
   chatGroupMembers: 100,
   chatGroupName: 60,
+  chatGroupDescription: 500,
+  chatGroupPins: 3,
   pinnedChats: 10,
   pinnedCommunities: 10,
   /** events a community's owner can pin at once */

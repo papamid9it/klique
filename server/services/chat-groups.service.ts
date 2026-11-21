@@ -1,7 +1,7 @@
 import "server-only";
 import { Types } from "mongoose";
 import { LIMITS } from "@/lib/constants";
-import type { ChatGroupDTO, ConversationDetailDTO } from "@/lib/types";
+import type { ChatGroupDTO, ChatPinDTO, ConversationDetailDTO } from "@/lib/types";
 import { badRequest, conflict, forbidden, notFound } from "../http/errors";
 import { rateLimit } from "../http/rate-limit";
 import { Conversation, type IConversation } from "../models/Conversation";
@@ -10,7 +10,11 @@ import type { IUser } from "../models/User";
 import { GHOST, loadBriefs } from "../serializers";
 import { areFriends } from "./friends.service";
 import { sid } from "./helpers";
-import { getConversation } from "./messaging.service";
+import { getConversation, pinsOf } from "./messaging.service";
+import { deleteUploads } from "./media.service";
+import { keyFromUrl } from "./r2";
+import type { z } from "zod";
+import type { chatGroupEditSchema } from "../validators/schemas";
 import { notify } from "./push.service";
 import { emitDm } from "./realtime";
 
@@ -26,6 +30,8 @@ async function loadGroup(viewer: IUser, id: string): Promise<IConversation & { g
 }
 
 const isOwner = (c: { group: { ownerId: Types.ObjectId } }, viewer: IUser) => sid(c.group.ownerId) === sid(viewer._id);
+/** may change the photo, name and description, and pin: the owner, or everyone when the owner allows it */
+const mayEdit = (c: { group: { ownerId: Types.ObjectId; membersCanEdit?: boolean } }, viewer: IUser) => isOwner(c, viewer) || !!c.group.membersCanEdit;
 
 async function assertAllFriends(viewer: IUser, ids: string[]) {
   const checks = await Promise.all(ids.map((x) => areFriends(viewer._id, x)));
@@ -64,6 +70,10 @@ export async function getChatGroup(viewer: IUser, id: string): Promise<ChatGroup
     id: sid(c._id),
     name: c.group.name,
     mine: isOwner(c, viewer),
+    image: c.group.image ?? null,
+    description: c.group.description ?? "",
+    membersCanEdit: !!c.group.membersCanEdit,
+    canEdit: mayEdit(c, viewer),
     members: c.participants
       .map((p) => ({ user: briefs.get(sid(p)) ?? { ...GHOST, id: sid(p) }, owner: sid(p) === sid(c.group.ownerId), me: sid(p) === sid(viewer._id) }))
       .sort((a, b) => Number(b.owner) - Number(a.owner) || a.user.displayName.localeCompare(b.user.displayName)),
@@ -71,11 +81,52 @@ export async function getChatGroup(viewer: IUser, id: string): Promise<ChatGroup
 }
 
 export async function renameChatGroup(viewer: IUser, id: string, name: string): Promise<ChatGroupDTO> {
+  return editChatGroup(viewer, id, { name });
+}
+
+/**
+ * Change a group: its name, photo (null removes it), description, and (the owner only) whether members may change
+ * these and pin. A replaced photo's old file is deleted from storage.
+ */
+export async function editChatGroup(viewer: IUser, id: string, input: z.infer<typeof chatGroupEditSchema>): Promise<ChatGroupDTO> {
   const c = await loadGroup(viewer, id);
-  if (!isOwner(c, viewer)) throw forbidden("Only the person who started this group can rename it.");
-  await Conversation.updateOne({ _id: c._id }, { $set: { "group.name": name } });
+  rateLimit(`chat-group-edit:${sid(viewer._id)}`, 60, 60 * 60_000);
+  if (input.membersCanEdit !== undefined && !isOwner(c, viewer)) throw forbidden("Only the person who started this group can change who edits it.");
+  const changesInfo = input.name !== undefined || input.image !== undefined || input.description !== undefined;
+  if (changesInfo && !mayEdit(c, viewer)) throw forbidden("Only the person who started this group can change it.");
+  if (input.image && !keyFromUrl(input.image)) throw badRequest("Upload the picture here.");
+  const set: Record<string, unknown> = {};
+  if (input.name !== undefined) set["group.name"] = input.name;
+  if (input.image !== undefined) set["group.image"] = input.image;
+  if (input.description !== undefined) set["group.description"] = input.description;
+  if (input.membersCanEdit !== undefined) set["group.membersCanEdit"] = input.membersCanEdit;
+  if (!Object.keys(set).length) return getChatGroup(viewer, id);
+  await Conversation.updateOne({ _id: c._id }, { $set: set });
+  // the old photo's file goes once nothing uses it
+  // (only moving or zooming the same photo changes just its #position part: the file stays)
+  const fileOf = (u: string | null | undefined) => (u ? u.split("#")[0] : null);
+  if (input.image !== undefined && c.group.image && fileOf(c.group.image) !== fileOf(input.image)) deleteUploads([c.group.image]);
   emitDm(c.participants, c._id);
   return getChatGroup(viewer, id);
+}
+
+/**
+ * Pin or unpin a message at the top of a group chat (whoever may edit the group). At most 3, newest first: a 4th
+ * pushes the oldest off, as on WhatsApp. Everyone's open chat updates.
+ */
+export async function pinChatMessage(viewer: IUser, id: string, messageId: string, on: boolean): Promise<{ pins: ChatPinDTO[] }> {
+  const c = await loadGroup(viewer, id);
+  if (!mayEdit(c, viewer)) throw forbidden("Only the person who started this group can pin messages.");
+  const pins = (c.group.pins ?? []).filter((p) => sid(p.messageId) !== messageId);
+  if (on) {
+    const m = await Message.findOne({ _id: messageId, conversationId: c._id, deletedAt: null }).select("_id").lean();
+    if (!m) throw notFound("That message isn't here any more.");
+    pins.unshift({ messageId: new Types.ObjectId(messageId), byId: viewer._id, at: new Date() });
+  }
+  const next = pins.slice(0, LIMITS.chatGroupPins);
+  await Conversation.updateOne({ _id: c._id }, { $set: { "group.pins": next } });
+  emitDm(c.participants, c._id);
+  return { pins: await pinsOf({ ...c, group: { ...c.group, pins: next } }) };
 }
 
 export async function addChatGroupMembers(viewer: IUser, id: string, memberIds: string[]): Promise<ChatGroupDTO> {

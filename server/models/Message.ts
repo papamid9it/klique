@@ -12,6 +12,8 @@ export interface IMessage {
   stickerUrl?: string | null;
   images: string[];
   replyToId: Types.ObjectId | null;
+  /** group chats: members tagged with @handle (only people in the group) */
+  mentions?: Types.ObjectId[];
   /** a poll posted with this message (models/Poll) */
   pollId?: Types.ObjectId | null;
   /** set when the sender changed the text after sending */
@@ -38,6 +40,7 @@ const MessageSchema = new Schema<IMessage>(
     images: { type: [String], default: [] },
     replyToId: { type: Schema.Types.ObjectId, default: null },
     pollId: { type: Schema.Types.ObjectId, ref: "Poll", default: null },
+    mentions: { type: [Schema.Types.ObjectId], default: undefined },
     editedAt: { type: Date, default: null },
     deletedAt: { type: Date, default: null },
     deletedById: { type: Schema.Types.ObjectId, default: null },

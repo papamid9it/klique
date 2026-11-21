@@ -10,7 +10,8 @@ import { ProfileTrigger } from "@/components/providers/ProfileCardProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
-import { TextField } from "@/components/ui/Field";
+import { Switch, TextArea, TextField } from "@/components/ui/Field";
+import { ImageField } from "@/components/ui/ImageField";
 import { Icon } from "@/components/ui/Icon";
 import { Modal } from "@/components/ui/Modal";
 import { RowSkeleton } from "@/components/ui/Skeleton";
@@ -90,7 +91,9 @@ export function ChatGroupInfo({ id, onChanged }: { id: string; onChanged: () => 
   const [busy, setBusy] = useState(false);
   const [removing, setRemoving] = useState<UserBrief | null>(null);
   const [leaving, setLeaving] = useState(false);
-  const [name, setName] = useState<string | null>(null);
+  // editing the photo, name and description together (null: not editing)
+  const [draft, setDraft] = useState<{ name: string; image: string; description: string } | null>(null);
+  const [saving, setSaving] = useState(false);
   if (!g) return <div className="p-4"><RowSkeleton rows={4} /></div>;
   const me = g.members.find((m) => m.me);
 
@@ -107,11 +110,22 @@ export function ChatGroupInfo({ id, onChanged }: { id: string; onChanged: () => 
       setBusy(false);
     }
   }
-  async function rename() {
-    if (!name?.trim()) return;
+  async function save() {
+    if (!draft?.name.trim()) return;
+    setSaving(true);
     try {
-      setData((await MessageService.renameGroup(id, name.trim())).data);
-      setName(null);
+      setData((await MessageService.editGroup(id, { name: draft.name.trim(), image: draft.image || null, description: draft.description.trim() })).data);
+      setDraft(null);
+      onChanged();
+    } catch (e) {
+      toast(errorMessage(e), "error");
+    } finally {
+      setSaving(false);
+    }
+  }
+  async function setMembersCanEdit(on: boolean) {
+    try {
+      setData((await MessageService.editGroup(id, { membersCanEdit: on })).data);
       onChanged();
     } catch (e) {
       toast(errorMessage(e), "error");
@@ -120,21 +134,34 @@ export function ChatGroupInfo({ id, onChanged }: { id: string; onChanged: () => 
 
   return (
     <div className="space-y-4 p-4">
-      {name !== null ? (
-        <div className="space-y-2">
-          <TextField label="Group name" value={name} onChange={(e) => setName(e.target.value)} maxLength={LIMITS.chatGroupName} autoFocus />
+      {draft ? (
+        <div className="space-y-3">
+          <ImageField kind="avatar" shape="round" label="Group photo" value={draft.image} onChange={(image) => setDraft({ ...draft, image })} reposition={{ aspect: 1, round: true, title: "Position the group photo", description: "Drag to move it, and pinch, scroll or use the slider to zoom." }} hint="Optional. After choosing one you can move and zoom it to fit the circle." />
+          <TextField label="Group name" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} maxLength={LIMITS.chatGroupName} />
+          <TextArea label="Description (optional)" value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} maxLength={LIMITS.chatGroupDescription} counter={LIMITS.chatGroupDescription} rows={3} placeholder="What's this group for?" />
           <div className="grid grid-cols-2 gap-2">
-            <Button onClick={() => setName(null)}>Cancel</Button>
-            <Button variant="primary" onClick={() => void rename()} disabled={!name.trim()}>Save</Button>
+            <Button onClick={() => setDraft(null)} disabled={saving}>Cancel</Button>
+            <Button variant="primary" loading={saving} onClick={() => void save()} disabled={!draft.name.trim()}>Save</Button>
           </div>
         </div>
       ) : (
-        <div className="flex items-center justify-between gap-2">
-          <div className="min-w-0">
-            <p className="truncate text-base font-semibold">{g.name}</p>
-            <p className="text-xs text-ink-muted">{g.members.length} of {LIMITS.chatGroupMembers} people</p>
+        <div className="space-y-3">
+          <div className="flex flex-col items-center gap-2 pt-1 text-center">
+            <Avatar name={g.name} src={g.image} size={76} />
+            <div className="min-w-0">
+              <p className="text-lg font-semibold break-words">{g.name}</p>
+              <p className="text-xs text-ink-muted">Group · {g.members.length} of {LIMITS.chatGroupMembers} people</p>
+            </div>
+            {g.description && <p className="w-full text-sm whitespace-pre-wrap break-words text-ink">{g.description}</p>}
+            {g.canEdit && (
+              <Button size="sm" onClick={() => setDraft({ name: g.name, image: g.image ?? "", description: g.description })}>
+                <Icon name="edit" size={14} /> {g.description || g.image ? "Edit group" : "Add a photo and description"}
+              </Button>
+            )}
           </div>
-          {g.mine && <Button size="sm" onClick={() => setName(g.name)}><Icon name="edit" size={14} /> Rename</Button>}
+          {g.mine && (
+            <Switch checked={g.membersCanEdit} onChange={(v) => void setMembersCanEdit(v)} label="Members can edit the group" hint="Change its photo, name and description, and pin messages. Off: only you." />
+          )}
         </div>
       )}
       {g.mine && !adding && g.members.length < LIMITS.chatGroupMembers && (

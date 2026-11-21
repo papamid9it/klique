@@ -214,6 +214,14 @@ export const screeningSchema = z.object({
 
 export const chatGroupCreateSchema = z.object({ name: z.string().trim().min(1).max(LIMITS.chatGroupName), memberIds: z.array(z.string().regex(/^[a-f0-9]{24}$/)).min(2).max(LIMITS.chatGroupMembers) });
 export const chatGroupRenameSchema = z.object({ name: z.string().trim().min(1).max(LIMITS.chatGroupName) });
+/** Change a group chat: any of its name, photo (null removes it), description, and whether members may change these */
+export const chatGroupEditSchema = z.object({
+  name: z.string().trim().min(1).max(LIMITS.chatGroupName).optional(),
+  image: z.union([z.string().trim().max(2000).regex(/^https:\/\//, "Upload the picture here."), z.null()]).optional(),
+  description: z.string().trim().max(LIMITS.chatGroupDescription).optional(),
+  membersCanEdit: z.boolean().optional(),
+});
+export const chatPinSchema = z.object({ messageId: z.string().regex(/^[a-f0-9]{24}$/), on: z.boolean() });
 export const chatGroupMembersSchema = z.object({ memberIds: z.array(z.string().regex(/^[a-f0-9]{24}$/)).min(1).max(LIMITS.chatGroupMembers) });
 export const listPinSchema = z.object({ kind: z.enum(["chat", "community"]), id: z.string().max(40), on: z.boolean() });
 export const eventPinSchema = z.object({ on: z.boolean() });

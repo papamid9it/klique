@@ -19,7 +19,18 @@ export interface IConversation {
    */
   request?: { fromId: Types.ObjectId; at: Date } | null;
   /** a group of friends (up to LIMITS.chatGroupMembers), not a chat between two people */
-  group?: { name: string; ownerId: Types.ObjectId } | null;
+  group?: {
+    name: string;
+    ownerId: Types.ObjectId;
+    /** the group's photo (one of our uploads); none: the members' pictures stand in */
+    image?: string | null;
+    /** what the group is for */
+    description?: string;
+    /** members (not only the owner) may change the photo, name and description, and pin messages */
+    membersCanEdit?: boolean;
+    /** pinned messages, newest first, at most 3 (WhatsApp's limit): a 4th pushes the oldest off */
+    pins?: { messageId: Types.ObjectId; byId: Types.ObjectId; at: Date }[];
+  } | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -50,7 +61,20 @@ const ConversationSchema = new Schema<IConversation>(
     },
     lastMessageAt: { type: Date, default: () => new Date() },
     unread: { type: Schema.Types.Mixed, default: {} },
-    group: { type: new Schema({ name: { type: String, maxlength: 60 }, ownerId: { type: Schema.Types.ObjectId, ref: "User" } }, { _id: false }), default: null },
+    group: {
+      type: new Schema(
+        {
+          name: { type: String, maxlength: 60 },
+          ownerId: { type: Schema.Types.ObjectId, ref: "User" },
+          image: { type: String, default: null, maxlength: 2000 },
+          description: { type: String, default: "", maxlength: 500 },
+          membersCanEdit: { type: Boolean, default: false },
+          pins: { type: [new Schema({ messageId: { type: Schema.Types.ObjectId, required: true }, byId: { type: Schema.Types.ObjectId, required: true }, at: { type: Date, required: true } }, { _id: false })], default: [] },
+        },
+        { _id: false },
+      ),
+      default: null,
+    },
     request: { type: new Schema({ fromId: { type: Schema.Types.ObjectId, ref: "User" }, at: Date }, { _id: false }), default: null },
   },
   { timestamps: true, minimize: false },

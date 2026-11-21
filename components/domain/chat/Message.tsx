@@ -31,6 +31,11 @@ import { Formatted } from "@/components/ui/Formatted";
 const TOKEN_RX = /(https?:\/\/[^\s<]+)|(?<![\w@])@([a-zA-Z0-9_]{3,20})(?![\w])/g;
 
 /** Plain text with clickable links and @mention chips. Never injects HTML. */
+/** A message's text with its @mentions highlighted (also used by group chats in Messages). */
+export function ChatBody(props: { text: string; mentions: MentionDTO[]; meId: string | null }) {
+  return <Body {...props} />;
+}
+
 function Body({ text, mentions, meId, mass }: { text: string; mentions: MentionDTO[]; meId: string | null; mass?: "everyone" | "here" | null }) {
   // only emoji (a few): all of them big, custom and normal, like Discord
   if (isEmojiOnly(text))

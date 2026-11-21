@@ -63,6 +63,8 @@ const PATHS = {
   mic: <><rect x="9" y="3.5" width="6" height="11" rx="3" /><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3" /></>,
   micoff: <><path d="M4 4l16 16M9 9v2.5a3 3 0 0 0 4.6 2.5M15 10.5V6.5a3 3 0 0 0-5.6-1.5M5.5 11.5a6.5 6.5 0 0 0 10 5.5M12 18v3" /></>,
   phoneoff: <path d="M4 15.5c4.5-4.5 11.5-4.5 16 0l-2 2.5-3-1.5v-2.5a10 10 0 0 0-6 0v2.5L6 18l-2-2.5z" />,
+  // a poll: three bars
+  poll: <path d="M5.5 20V12M12 20V5M18.5 20v-5" />,
   pushpin: <><path d="M9 4h6l-1 5.5 3 3.5v1H7v-1l3-3.5L9 4z" /><path d="M12 14v6" /></>,
   asterisk: <path d="M12 3.5v17M4.6 7.8l14.8 8.4M4.6 16.2 19.4 7.8" />,
   coin: <><ellipse cx="12" cy="7" rx="7" ry="3" /><path d="M5 7v5c0 1.7 3.1 3 7 3s7-1.3 7-3V7M5 12v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5" /></>,

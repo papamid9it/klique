@@ -1,7 +1,7 @@
 import ApiClient from "@/app/ApiCore";
 import type { PollInput } from "./PollService";
 import type { ReactionKind } from "@/lib/reactions";
-import type { ChatGroupDTO, ConversationDetailDTO, ConversationDTO, Envelope, MessageDTO, ReactionDTO } from "@/lib/types";
+import type { ChatGroupDTO, ChatPinDTO, ConversationDetailDTO, ConversationDTO, Envelope, MessageDTO, ReactionDTO } from "@/lib/types";
 
 const api = new ApiClient();
 
@@ -11,6 +11,10 @@ export const MessageService = {
   createGroup: (name: string, memberIds: string[]) => api.post<Envelope<ConversationDetailDTO>>("/api/conversations/groups", { name, memberIds }),
   group: (id: string) => api.get<Envelope<ChatGroupDTO>>(`/api/conversations/${id}/group`),
   renameGroup: (id: string, name: string) => api.patch<Envelope<ChatGroupDTO>>(`/api/conversations/${id}/group`, { name }),
+  /** the group's name, photo (null removes it), description, and (the owner) whether members may edit and pin */
+  editGroup: (id: string, input: { name?: string; image?: string | null; description?: string; membersCanEdit?: boolean }) => api.patch<Envelope<ChatGroupDTO>>(`/api/conversations/${id}/group`, input),
+  /** pin (on) or unpin a message at the top of a group chat */
+  pin: (id: string, messageId: string, on: boolean) => api.post<Envelope<{ pins: ChatPinDTO[] }>>(`/api/conversations/${id}/pins`, { messageId, on }),
   addToGroup: (id: string, memberIds: string[]) => api.post<Envelope<ChatGroupDTO>>(`/api/conversations/${id}/group/members`, { memberIds }),
   removeFromGroup: (id: string, userId: string) => api.delete<Envelope<{ left: boolean }>>(`/api/conversations/${id}/group/members/${userId}`),
   /** Opens (or creates) the one-to-one conversation with `handle`. Fails clearly if they can't be messaged. */

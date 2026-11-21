@@ -9,7 +9,9 @@ import { assertStickerUrl, noteStickerUse } from "./stickers.service";
 import { createPoll, deletePoll, pollPreview } from "./polls.service";
 import type { pollInput } from "../validators/schemas";
 import type { z } from "zod";
-import type { ConversationDetailDTO, ConversationDTO, MessageDTO, MessagingEligibility } from "@/lib/types";
+import type { ChatPinDTO, ConversationDetailDTO, ConversationDTO, MentionDTO, MessageDTO, MessagingEligibility } from "@/lib/types";
+import { extractMentionHandles } from "@/lib/mentions";
+import { Poll } from "../models/Poll";
 import { ApiError, badRequest, forbidden, notFound } from "../http/errors";
 import { rateLimit } from "../http/rate-limit";
 import { Conversation, participantKey, type IConversation } from "../models/Conversation";
@@ -133,7 +135,7 @@ async function toConversations(rows: IConversation[], viewer: IUser): Promise<Co
 
   return rows.map((c) => {
     const otherId = sid(otherParticipant(c, viewer._id));
-    const other = c.group ? { id: sid(c._id), handle: "", displayName: c.group.name, avatarUrl: null, country: "NG", city: "lagos" as const } : briefs.get(otherId) ?? { id: otherId, handle: "deleted", displayName: "Deleted user", avatarUrl: null, country: "NG", city: "lagos" as const };
+    const other = c.group ? { id: sid(c._id), handle: "", displayName: c.group.name, avatarUrl: c.group.image ?? null, country: "NG", city: "lagos" as const } : briefs.get(otherId) ?? { id: otherId, handle: "deleted", displayName: "Deleted user", avatarUrl: null, country: "NG", city: "lagos" as const };
     return {
       id: sid(c._id),
       other,
@@ -147,7 +149,7 @@ async function toConversations(rows: IConversation[], viewer: IUser): Promise<Co
         : null,
       unreadCount: Number(c.unread?.[sid(viewer._id)] ?? 0),
       pinned: pinnedChats.has(sid(c._id)),
-      ...(c.group ? { group: { memberCount: c.participants.length, mine: sid(c.group.ownerId) === sid(viewer._id) } } : {}),
+      ...(c.group ? { group: { memberCount: c.participants.length, mine: sid(c.group.ownerId) === sid(viewer._id), image: c.group.image ?? null, canEdit: sid(c.group.ownerId) === sid(viewer._id) || !!c.group.membersCanEdit } } : {}),
       updatedAt: c.lastMessageAt.toISOString(),
       blockedByMe: !c.group && blocked.has(otherId),
       request: c.request ? { fromMe: sid(c.request.fromId) === sid(viewer._id) } : null,
@@ -202,6 +204,41 @@ async function replyRefs(rows: IMessage[]): Promise<Map<string, ReplyRefDTO>> {
   return new Map(targets.map((t) => [sid(t._id), toReplyRef(t, name.get(sid(t.senderId)) ?? "Someone")]));
 }
 
+/** the people these messages tag, by id (one lookup for the page) */
+async function mentionsOf(messages: IMessage[]): Promise<Map<string, MentionDTO>> {
+  const ids = [...new Map(messages.flatMap((m) => (m.deletedAt ? [] : (m.mentions ?? []))).map((x) => [sid(x), x])).values()];
+  if (!ids.length) return new Map();
+  const briefs = await loadBriefs(ids);
+  return new Map([...briefs].map(([id, b]) => [id, { id: b.id, handle: b.handle, displayName: b.displayName }]));
+}
+const withMentions = (m: IMessage, tagged: Map<string, MentionDTO>) => {
+  if (m.deletedAt || !m.mentions?.length) return {};
+  const list = m.mentions.map((x) => tagged.get(sid(x))).filter((x): x is MentionDTO => !!x);
+  return list.length ? { mentions: list } : {};
+};
+
+/** each poll's question, by id */
+async function pollQuestions(ids: Types.ObjectId[]): Promise<Map<string, string>> {
+  const rows = await Poll.find({ _id: { $in: ids } }).select("question").lean<{ _id: Types.ObjectId; question: string }[]>();
+  return new Map(rows.map((r) => [sid(r._id), r.question]));
+}
+
+/** A group's pinned messages, newest first: a line of each and who sent it (deleted ones drop out). */
+export async function pinsOf(convo: IConversation): Promise<ChatPinDTO[]> {
+  const pins = convo.group?.pins ?? [];
+  if (!pins.length) return [];
+  const rows = await Message.find({ _id: { $in: pins.map((p) => p.messageId) }, conversationId: convo._id, deletedAt: null, hiddenAt: null }).lean<IMessage[]>();
+  const byId = new Map(rows.map((r) => [sid(r._id), r]));
+  const names = await loadBriefs(rows.map((r) => r.senderId));
+  const polls = rows.some((r) => r.pollId) ? await pollQuestions(rows.flatMap((r) => (r.pollId ? [r.pollId] : []))) : new Map<string, string>();
+  return pins.flatMap((p) => {
+    const m = byId.get(sid(p.messageId));
+    if (!m) return [];
+    const text = m.pollId ? pollPreview(polls.get(sid(m.pollId)) ?? "") : previewOf({ body: m.body, sticker: m.sticker ?? undefined, stickerUrl: m.stickerUrl ?? undefined, images: m.images ?? [] });
+    return [{ id: sid(m._id), text: stripFormat(text), sender: names.get(sid(m.senderId))?.displayName ?? "Someone", at: p.at.toISOString() }];
+  });
+}
+
 async function detail(viewer: IUser, convo: IConversation, messages: IMessage[], hasMore: boolean): Promise<ConversationDetailDTO> {
   const [dto] = await toConversations([convo], viewer);
   const otherId = otherParticipant(convo, viewer._id);
@@ -219,12 +256,14 @@ async function detail(viewer: IUser, convo: IConversation, messages: IMessage[],
 
   const reactionMap = await summarizeReactions("dm", messages.map((m) => m._id), viewer._id);
   const replies = await replyRefs(messages);
+  const [tagged, pins] = await Promise.all([mentionsOf(messages), convo.group ? pinsOf(convo) : Promise.resolve(undefined)]);
   return {
     conversation: dto,
-    messages: messages.map((m) => ({ ...toMessage(m, viewer._id, reactionMap.get(sid(m._id)) ?? [], m.replyToId ? (replies.get(sid(m.replyToId)) ?? null) : null), ...(senders ? { sender: senders.get(sid(m.senderId)) ?? GHOST } : {}) })),
+    messages: messages.map((m) => ({ ...toMessage(m, viewer._id, reactionMap.get(sid(m._id)) ?? [], m.replyToId ? (replies.get(sid(m.replyToId)) ?? null) : null), ...(senders ? { sender: senders.get(sid(m.senderId)) ?? GHOST } : {}), ...withMentions(m, tagged) })),
     hasMore,
     canSend: !blocked && !requestWait,
     ...(cannotSendReason ? { cannotSendReason } : {}),
+    ...(pins ? { pins } : {}),
   };
 }
 
@@ -322,9 +361,11 @@ export async function sendMessage(viewer: IUser, id: string, input: string | { b
   if (typeof input !== "string" && input.poll && convo.participants.length < 3) throw badRequest("Polls are for group chats, not one-to-one messages.");
   // a poll rides on its own message (anything else sent with it is dropped)
   const poll = typeof input !== "string" && input.poll ? await createPoll(viewer, { scope: "dm", targetId: convo._id }, input.poll) : null;
+  // group chats: @handle tags only people in the group (anyone else stays plain text)
+  const mentions = convo.group && !poll ? await groupMentions(viewer, convo, body) : [];
   const msg = poll
     ? await Message.create({ conversationId: convo._id, senderId: viewer._id, body: "", images: [], pollId: poll._id, replyToId: replyTarget?._id ?? null })
-    : await Message.create({ conversationId: convo._id, senderId: viewer._id, body, sticker: sticker ?? null, stickerUrl, images, replyToId: replyTarget?._id ?? null, ...(previewLinks(body).length ? { embedsPending: true } : {}) });
+    : await Message.create({ conversationId: convo._id, senderId: viewer._id, body, sticker: sticker ?? null, stickerUrl, images, replyToId: replyTarget?._id ?? null, ...(mentions.length ? { mentions } : {}), ...(previewLinks(body).length ? { embedsPending: true } : {}) });
   if (!poll) fetchEmbedsLater(msg._id, body, convo);
   noteStickerUse(viewer._id, stickerUrl);
   const preview = poll ? pollPreview(poll.question) : previewOf({ body, sticker, stickerUrl, images });
@@ -342,7 +383,7 @@ export async function sendMessage(viewer: IUser, id: string, input: string | { b
   );
   const row = msg.toObject() as IMessage;
   const replies = await replyRefs([row]);
-  const sent = toMessage(row, viewer._id, [], row.replyToId ? (replies.get(sid(row.replyToId)) ?? null) : null);
+  const sent = { ...toMessage(row, viewer._id, [], row.replyToId ? (replies.get(sid(row.replyToId)) ?? null) : null), ...withMentions(row, await mentionsOf([row])) };
   // the message itself rides along, so the other side's open chat shows it at once (no reload first)
   emitDm([viewer._id, ...others], convo._id, convo.group ? { ...sent, sender: toBrief(viewer) } : sent);
   // a request (someone who isn't your friend writing first): it waits in Requests, and you hear about it once, as a
@@ -350,13 +391,27 @@ export async function sendMessage(viewer: IUser, id: string, input: string | { b
   if (convo.group) {
     // someone who blocked the sender stays in the group, but isn't buzzed for them
     const blockers = new Set((await Block.find({ blockerId: { $in: others }, blockedId: viewer._id }).select("blockerId").lean<{ blockerId: Types.ObjectId }[]>()).map((b) => sid(b.blockerId)));
-    notify(others.filter((p) => !blockers.has(sid(p))), { title: convo.group.name, body: `${viewer.displayName}: ${preview}`, data: { type: "dm", conversationId: sid(convo._id) } }, { actorId: viewer._id, category: "messages", ref: `dm:${sid(convo._id)}` });
+    const tagged = new Set(mentions.map(sid));
+    const reach = others.filter((p) => !blockers.has(sid(p)));
+    // tagged people hear it as "mentioned you"; everyone else as a normal group message
+    const tagPeople = reach.filter((p) => tagged.has(sid(p)));
+    const rest = reach.filter((p) => !tagged.has(sid(p)));
+    if (tagPeople.length) notify(tagPeople, { title: convo.group.name, body: `${viewer.displayName} mentioned you: ${preview}`, data: { type: "dm", conversationId: sid(convo._id) } }, { actorId: viewer._id, category: "messages", ref: `dm:${sid(convo._id)}` });
+    if (rest.length) notify(rest, { title: convo.group.name, body: `${viewer.displayName}: ${preview}`, data: { type: "dm", conversationId: sid(convo._id) } }, { actorId: viewer._id, category: "messages", ref: `dm:${sid(convo._id)}` });
   } else if (!pendingRequest) notify([otherId], { title: viewer.displayName, body: preview, data: { type: "dm", conversationId: sid(convo._id) } }, { actorId: viewer._id, category: "messages", ref: `dm:${sid(convo._id)}` });
   else notify([otherId], { title: `${viewer.displayName} wants to message you`, body: preview, data: { type: "dm", conversationId: sid(convo._id) } }, { actorId: viewer._id, category: "friends", groupKey: "msg-req", many: (n) => `${n} new message requests`, ref: `dm:${sid(convo._id)}` });
   return sent;
 }
 
 export { toBrief };
+
+/** The group members a message tags with @handle (never yourself, never someone outside the group). */
+async function groupMentions(viewer: IUser, convo: IConversation, body: string): Promise<Types.ObjectId[]> {
+  const handles = extractMentionHandles(body);
+  if (!handles.length) return [];
+  const users = await User.find({ handle: { $in: handles }, _id: { $in: convo.participants, $ne: viewer._id } }).select("_id").lean<{ _id: Types.ObjectId }[]>();
+  return users.map((u) => u._id);
+}
 
 /* ------------------------------------------------------------------ */
 /* Reactions                                                           */

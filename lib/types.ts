@@ -910,6 +910,8 @@ export interface MessageDTO {
   deleted: boolean;
   /** a poll posted with this message */
   pollId?: Id | null;
+  /** group chats: the members it tags (@handle), so their names show highlighted */
+  mentions?: MentionDTO[];
 }
 
 /** A picture someone saved as a sticker. `url` is the file itself; thumbnails use its small copy (lib/cdn). */
@@ -928,7 +930,14 @@ export interface ConversationDTO {
   /** who it's with. In a group, `other` stands for the group: its name, with no profile behind it */
   other: UserBrief;
   /** a group of friends */
-  group?: { memberCount: number; mine: boolean } | null;
+  group?: {
+    memberCount: number;
+    mine: boolean;
+    /** its photo (none: show the members) */
+    image?: string | null;
+    /** you may change its photo, name and description, and pin messages (the owner, or everyone when allowed) */
+    canEdit?: boolean;
+  } | null;
   lastMessage: { body: string; sticker?: string | null; senderId: Id; createdAt: ISODate; mine: boolean } | null;
   unreadCount: number;
   updatedAt: ISODate;
@@ -944,7 +953,22 @@ export interface ChatGroupDTO {
   name: string;
   /** you started it: you add and remove people */
   mine: boolean;
+  image: string | null;
+  description: string;
+  /** members may change the photo, name and description, and pin messages (the owner decides) */
+  membersCanEdit: boolean;
+  /** you may: the owner, or anyone when membersCanEdit */
+  canEdit: boolean;
   members: { user: UserBrief; owner: boolean; me: boolean }[];
+}
+
+/** A message pinned at the top of a group chat: enough to show in the bar and jump to it. */
+export interface ChatPinDTO {
+  id: Id;
+  /** a line of it: its text, or "Photo", "Poll: …", "Sticker" */
+  text: string;
+  sender: string;
+  at: ISODate;
 }
 
 export interface ConversationDetailDTO {
@@ -953,6 +977,8 @@ export interface ConversationDetailDTO {
   hasMore: boolean;
   canSend: boolean;
   cannotSendReason?: string;
+  /** a group's pinned messages, newest first (at most 3) */
+  pins?: ChatPinDTO[];
 }
 
 /* ------------------------------ safety ------------------------------ */
