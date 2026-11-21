@@ -148,6 +148,14 @@ export const membersText = (n: number) => (membersShown(n) ? `${compactCount(n)}
 /** "24 going", or "New" */
 export const goingText = (n: number) => (goingShown(n) ? `${compactCount(n)} going` : "New");
 
+/** "Tobi is going", "Tobi and Amara are going", "Tobi and 3 friends are going": your friends on an event */
+export function friendsGoingText(f: { count: number; people: { displayName: string }[] }): string {
+  const first = (i: number) => f.people[i]?.displayName.split(" ")[0] ?? "A friend";
+  if (f.count <= 1) return `${first(0)} is going`;
+  if (f.count === 2) return `${first(0)} and ${first(1)} are going`;
+  return `${first(0)} and ${f.count - 1} friends are going`;
+}
+
 /** 1k, 1.2k, 125k, 1m, 1.3m, 123m, 1b. Rounds up to the next unit rather than say "1000k". */
 export function compactCount(n: number): string {
   if (n < 1000) return String(n);

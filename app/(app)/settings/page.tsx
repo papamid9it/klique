@@ -382,7 +382,7 @@ function PrefsSections({ me }: { me: UserMe }) {
       <Block title="Who can see you" intro="Choose who can see your profile.">
         <div className="space-y-5">
           <RadioCards<ProfileVisibility> name="Profile visibility" value={me.privacy.profileVisibility} options={PROFILE_VISIBILITY} disabled={busy} onChange={(v) => void patch({ profileVisibility: v }, "Privacy updated")} />
-          <Switch label="Show my RSVPs" hint="Let people who can see your profile see events you're going to." checked={me.privacy.attendancePublic} disabled={busy} onChange={(v) => void patch({ attendancePublic: v }, v ? "RSVPs are visible" : "RSVPs are private")} />
+          <Switch label="Show my RSVPs" hint="Let people see events you're going to: on your profile, and your friends see you among &quot;friends going&quot; on events." checked={me.privacy.attendancePublic} disabled={busy} onChange={(v) => void patch({ attendancePublic: v }, v ? "RSVPs are visible" : "RSVPs are private")} />
           <Switch label="Show the list of communities I created" hint="Let people who can see your profile see the list of communities you started." checked={me.privacy.createdCommunitiesPublic} disabled={busy} onChange={(v) => void patch({ createdCommunitiesPublic: v }, v ? "Your communities are visible" : "Your communities are hidden")} />
           <Switch label="Show my regulars count" hint="The total number of members across the communities you created, on your profile. It works even if you hide the list." checked={me.privacy.communityReachPublic} disabled={busy} onChange={(v) => void patch({ communityReachPublic: v }, v ? "Your community size is visible" : "Your community size is hidden")} />
           {error && (

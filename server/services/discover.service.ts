@@ -66,12 +66,14 @@ export async function discover(viewer: IUser | null, whereParam?: string): Promi
     ]),
   ]);
 
-  // Mixed, so no one event leads every time: your interests, more people going and sooner only raise the odds.
+  // Mixed, so no one event leads every time: your interests, more people going, your friends going and sooner only
+  // raise the odds.
   const who = viewer ? String(viewer._id) : scopeToString(scope);
   const nowMs = +now;
-  const weight = (e: { interest: string; goingCount?: number; startsAt: Date | string }) => {
+  const weight = (e: { interest: string; goingCount?: number; startsAt: Date | string; friendsGoing?: { count: number } }) => {
     const days = (+new Date(e.startsAt) - nowMs) / DAY_MS;
-    return (mine.has(e.interest) ? 3 : 1) * (1 + Math.log2(1 + (e.goingCount ?? 0)) / 2) * (days <= 7 ? 1.5 : 1);
+    const friends = Math.min(e.friendsGoing?.count ?? 0, 5);
+    return (mine.has(e.interest) ? 3 : 1) * (1 + Math.log2(1 + (e.goingCount ?? 0)) / 2) * (days <= 7 ? 1.5 : 1) * (1 + friends * 0.6);
   };
   const withId = (e: IEvent) => ({ ...e, id: String(e._id) });
   const ranked = mixEvents(upcoming.map(withId), weight, who, nowMs);

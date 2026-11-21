@@ -580,6 +580,8 @@ export interface EventDTO {
   subcommunity: { slug: string; name: string } | null;
   audience: EventAudience;
   goingCount: number;
+  /** your friends going (who show their RSVPs): how many, and the first few (newest first) */
+  friendsGoing?: { count: number; people: UserBrief[] };
   interestedCount: number;
   /** crews heading there together */
   crewCount: number;

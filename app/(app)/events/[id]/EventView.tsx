@@ -1,5 +1,6 @@
 "use client";
 
+import { FriendsGoing } from "@/components/domain/events/FriendsGoing";
 import { useMediaViewer } from "@/components/providers/MediaViewerProvider";
 import { ContributeCard, ContributionFields, ContributionsPanel, contributionDraftOf, contributionInput, type ContributionDraft } from "@/components/domain/money/Contribute";
 import { usePaymentReturn } from "@/components/domain/money/Donate";
@@ -458,6 +459,7 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
               </>
             ) : (
               <>
+                {event.friendsGoing && <FriendsGoing f={event.friendsGoing} />}
                 {event.isFull && !going && <p className="text-sm font-medium text-ink-muted">This event is full.</p>}
                 <Button
                   variant={going ? "primary" : "secondary"}

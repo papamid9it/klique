@@ -1,5 +1,6 @@
 "use client";
 
+import { FriendsGoing } from "@/components/domain/events/FriendsGoing";
 import { COMMUNITIES_AT, mixFeed, newFeedSeed } from "@/lib/feedMix";
 import Link from "next/link";
 import { Fragment, useEffect, useRef, useState, type RefObject } from "react";
@@ -66,9 +67,11 @@ function EventTile({ e, onChange }: { e: EventDTO; onChange: (e: EventDTO) => vo
           {formatTime(e.startsAt, e.timeZone)} · {e.online ? "Online" : e.venue}
         </p>
         <div className="mt-auto flex items-center justify-between gap-2 pt-2">
-          <span className="inline-flex items-center gap-1 font-mono text-[12px] text-ink-muted">
-            <Icon name="users" size={12} /> {compactCount(e.goingCount)} going
-          </span>
+          {e.friendsGoing ? <FriendsGoing f={e.friendsGoing} compact /> : (
+            <span className="inline-flex items-center gap-1 font-mono text-[12px] text-ink-muted">
+              <Icon name="users" size={12} /> {compactCount(e.goingCount)} going
+            </span>
+          )}
           {e.viewer.isHost ? (
             <span className="text-[12px] font-semibold text-ink-muted">Hosting</span>
           ) : e.viewer.mustJoin && !e.viewer.rsvp ? (
@@ -116,6 +119,7 @@ export function EventFeedCard({ e, onChange }: { e: EventDTO; onChange: (e: Even
           <p className="mt-1 truncate font-mono text-[12px] text-ink-muted">
             {formatTime(e.startsAt, e.timeZone)} · {e.online ? "Online" : e.venue} · {compactCount(e.goingCount)} going
           </p>
+          {e.friendsGoing && <FriendsGoing f={e.friendsGoing} compact className="mt-1.5" />}
         </div>
         {e.viewer.isHost ? (
           <span className="text-[12px] font-semibold text-ink-muted">Hosting</span>

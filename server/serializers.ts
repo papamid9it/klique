@@ -29,6 +29,7 @@ import { MembershipRequest } from "./models/MembershipRequest";
 import type { IPost } from "./models/Post";
 import { Channel, ChannelMessage } from "./models/Channel";
 import { Rsvp, SavedEvent } from "./models/Rsvp";
+import { Friendship } from "./models/Friendship";
 import { Subcommunity, type ISubcommunity } from "./models/Subcommunity";
 import { User, type IUser } from "./models/User";
 import { canCreateGroup, canSeeMembers, communityAccessFrom, gateOf, type SpaceAccess } from "./policies/access";
@@ -321,6 +322,38 @@ export async function toPosts(posts: IPost[], opts: { canDelete: (p: IPost) => b
 /* ------------------------------- events ----------------------------- */
 
 
+/** friends shown by name on an event (the rest are a count) */
+const FRIENDS_SHOWN = 12;
+
+/**
+ * For each event: how many of your friends are going, and the first few of them. Only friends who show their RSVPs
+ * ("Show my RSVPs" in Privacy) count, so turning that off keeps you out of everyone's "friends going".
+ */
+async function friendsGoingTo(eventIds: Types.ObjectId[], viewerId: Types.ObjectId): Promise<Map<string, { count: number; people: UserBrief[] }>> {
+  const out = new Map<string, { count: number; people: UserBrief[] }>();
+  if (!eventIds.length) return out;
+  const links = await Friendship.find({ status: "accepted", $or: [{ requesterId: viewerId }, { recipientId: viewerId }] })
+    .select("requesterId recipientId")
+    .limit(2000)
+    .lean<{ requesterId: Types.ObjectId; recipientId: Types.ObjectId }[]>();
+  if (!links.length) return out;
+  const friendIds = links.map((l) => (sid(l.requesterId) === sid(viewerId) ? l.recipientId : l.requesterId));
+  const rows = await Rsvp.find({ eventId: { $in: eventIds }, userId: { $in: friendIds }, status: "going" }).select("eventId userId createdAt").sort({ createdAt: -1 }).lean<{ eventId: Types.ObjectId; userId: Types.ObjectId }[]>();
+  if (!rows.length) return out;
+  const hidden = new Set((await User.find({ _id: { $in: [...new Set(rows.map((r) => sid(r.userId)))] }, attendancePublic: false }).select("_id").lean<{ _id: Types.ObjectId }[]>()).map((u) => sid(u._id)));
+  const byEvent = new Map<string, Types.ObjectId[]>();
+  for (const r of rows) {
+    if (hidden.has(sid(r.userId))) continue;
+    const list = byEvent.get(sid(r.eventId)) ?? [];
+    list.push(r.userId);
+    byEvent.set(sid(r.eventId), list);
+  }
+  const shownIds = new Map([...byEvent.values()].flatMap((l) => l.slice(0, FRIENDS_SHOWN)).map((x) => [sid(x), x]));
+  const briefs = await loadBriefs([...shownIds.values()]);
+  for (const [eventId, ids] of byEvent) out.set(eventId, { count: ids.length, people: ids.slice(0, FRIENDS_SHOWN).flatMap((x) => briefs.get(sid(x)) ?? []) });
+  return out;
+}
+
 export async function toEvents(events: IEvent[], viewer: IUser | null): Promise<EventDTO[]> {
   if (!events.length) return [];
 
@@ -373,6 +406,7 @@ export async function toEvents(events: IEvent[], viewer: IUser | null): Promise<
     : [[], []];
   const raisedMap = new Map(raisedRows.map((r) => [sid(r._id), r]));
   const mineMap = new Map(mineRows.map((r) => [sid(r._id), r.q]));
+  const friendsGoing = viewer ? await friendsGoingTo(eventIds, viewer._id) : new Map<string, { count: number; people: UserBrief[] }>();
 
   return events.map((e) => {
     const c = e.communityId ? communityMap.get(sid(e.communityId)) : undefined;
@@ -410,6 +444,8 @@ export async function toEvents(events: IEvent[], viewer: IUser | null): Promise<
       kliquesOn: c ? kliquesOn(c) : true,
       audience: e.audience,
       goingCount: e.goingCount,
+      // your friends going (only those who show their RSVPs): faces and a count on cards and the page
+      ...(friendsGoing.get(sid(e._id)) ? { friendsGoing: friendsGoing.get(sid(e._id)) } : {}),
       interestedCount: e.interestedCount,
       crewCount: crewMap.get(sid(e._id)) ?? 0,
       isPast: end < now,
