@@ -180,7 +180,8 @@ export function PostComments({ post, onCount, pinned, top, focus }: { post: Feed
   const [shown, setShown] = useState<Map<string, number>>(new Map());
   const show = (root: string, n: number) => setShown((m) => new Map(m).set(root, n));
   const [body, setBody] = useState("");
-  const [replyTo, setReplyTo] = useState<{ id: string; root: string; handle: string } | null>(null);
+  // handle: what the "@name " tag uses; name: what the strip and placeholder show (display names, as everywhere on a post)
+  const [replyTo, setReplyTo] = useState<{ id: string; root: string; handle: string; name: string } | null>(null);
   const input = useRef<HTMLTextAreaElement>(null);
   // a comment pointed out for a moment (yours just posted, or the one a notification is about)
   const [flash, setFlash] = useState<string | null>(null);
@@ -206,7 +207,7 @@ export function PostComments({ post, onCount, pinned, top, focus }: { post: Feed
 
   function startReply(c: FeedCommentDTO, root: string) {
     if (!requireAuth()) return;
-    setReplyTo({ id: c.id, root, handle: c.author.handle });
+    setReplyTo({ id: c.id, root, handle: c.author.handle, name: c.author.displayName });
     setBody(`@${c.author.handle} `);
     requestAnimationFrame(() => {
       const el = input.current;
@@ -382,7 +383,7 @@ export function PostComments({ post, onCount, pinned, top, focus }: { post: Feed
   const strip = replyTo && (
     <div className="mb-2 flex items-center justify-between gap-2 rounded-control bg-raised px-3 py-1.5 text-[12.5px] text-ink-muted">
       <span>
-        Replying to <span className="font-semibold text-ink">@{replyTo.handle}</span>
+        Replying to <span className="font-semibold text-ink">{replyTo.name}</span>
       </span>
       <button
         type="button"
@@ -398,7 +399,7 @@ export function PostComments({ post, onCount, pinned, top, focus }: { post: Feed
     </div>
   );
   const box = canWrite ? (
-    <Composer body={body} setBody={typed} inputRef={input} above={strip} placeholder={replyTo ? `Reply to @${replyTo.handle}…` : "Add a comment…"} onSend={add} />
+    <Composer body={body} setBody={typed} inputRef={input} above={strip} placeholder={replyTo ? `Reply to ${replyTo.name}…` : "Add a comment…"} onSend={add} />
   ) : !user ? (
     // signed out: the comments are there to read; writing asks them to log in or sign up
     <button type="button" onClick={() => requireAuth()} className="flex h-10 w-full items-center rounded-control border border-line bg-raised/50 px-3 text-left text-[13px] text-ink-muted transition hover:text-ink">

@@ -97,7 +97,7 @@ const DEFAULTS: { category: string; channels: { name: string; topic: string; typ
     category: "Chat",
     channels: [
       { name: "general", topic: "Say hi, talk about anything.", type: "text" },
-      { name: "meetups", topic: "Plan sessions, rides and hangs.", type: "text" },
+      // no "meetups" room: kliques are how people plan going out together
     ],
   },
 ];

@@ -446,7 +446,7 @@ export function HomeFeed({
           );
         })}
       </ul>
-      <FeedFooter hasMore={hasMore} error={error} onRetry={() => void load(false)} sentinel={sentinel} end={<>That&apos;s every new post from your communities. <FindMore /></>} />
+      <FeedFooter hasMore={hasMore} error={error} onRetry={() => void load(false)} sentinel={sentinel} end={<>You&apos;ve seen every new post from your communities. <FindMore /></>} />
       <PostDialog post={opened} onChange={patch} onClose={close} />
     </section>
   );

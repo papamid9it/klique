@@ -194,12 +194,22 @@ export function FeedFooter({ hasMore, error, onRetry, sentinel, end }: { hasMore
     );
   }
   return (
-    <div className="flex flex-col items-center gap-1.5 py-6 text-center">
-      <span className="inline-flex size-10 items-center justify-center rounded-full bg-raised text-accent-text">
-        <Icon name="check" size={18} />
-      </span>
-      <p className="text-[14px] font-semibold">You&apos;re all caught up</p>
-      <p className="text-[13px] text-ink-muted">{end}</p>
+    // the end, as Instagram marks it: a line across with a small check, the words, then somewhere to go next
+    <div className="flex flex-col items-center gap-3 py-8 text-center">
+      <div className="flex w-full items-center gap-3" aria-hidden="true">
+        <span className="h-px flex-1 bg-line" />
+        <span className="inline-flex size-9 items-center justify-center rounded-full border-[1.5px] border-ink text-ink">
+          <Icon name="check" size={16} />
+        </span>
+        <span className="h-px flex-1 bg-line" />
+      </div>
+      <div>
+        <p className="text-[15px] font-semibold">You&apos;re all caught up</p>
+        <p className="mt-0.5 text-[13px] text-ink-muted">{end}</p>
+      </div>
+      <button type="button" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} className="h-9 rounded-full border border-line px-4 text-[13px] font-semibold hover:bg-raised">
+        Back to top
+      </button>
     </div>
   );
 }
