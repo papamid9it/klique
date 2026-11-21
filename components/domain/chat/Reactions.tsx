@@ -302,8 +302,9 @@ function GiphyTab({ onPick }: { onPick: (url: string) => void }) {
           </ul>
         )}
       </div>
-      {/* GIPHY asks for this wherever its pictures show */}
-      <p className="pt-1.5 text-center text-[12px] font-semibold text-ink-muted">Powered by GIPHY</p>
+      {/* GIPHY's own badge, which they ask for wherever their stickers show */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/giphy-powered.gif" alt="Powered by GIPHY" width={96} height={20} className="mx-auto mt-1.5 block h-5 w-auto" />
     </div>
   );
 }
