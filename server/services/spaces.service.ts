@@ -415,6 +415,10 @@ export async function transferOwnership(viewer: IUser, space: Space, access: Spa
   await Membership.updateOne({ userId: viewer._id, ...spaceFilter(space) }, { role: "admin" });
   if (space.sub) await Subcommunity.updateOne({ _id: space.sub._id }, { ownerId: target.userId });
   else await Community.updateOne({ _id: space.community._id }, { ownerId: target.userId });
+  // the new owner hears about it (the old one stays on as an admin)
+  const name = space.sub?.name ?? space.community.name;
+  const href = space.sub ? `/communities/${space.community.slug}?g=${space.sub.slug}` : `/communities/${space.community.slug}`;
+  notify([target.userId], { title: `You now own ${name}`, body: `${viewer.displayName} handed ${space.sub ? "this group" : "this community"} over to you. They stay on as an admin.`, data: { href } }, { actorId: viewer._id, category: "community", ref: `community:${sid(space.community._id)}` });
   return { ownerId: userId };
 }
 
