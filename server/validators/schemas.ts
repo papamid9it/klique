@@ -764,7 +764,14 @@ const crewFields = {
 /** for an event: what it's about comes from the event's community, whatever is sent */
 export const crewCreateSchema = z.object({ ...crewFields, interest: interestId.optional() });
 /** which community it's for, by slug; null is all communities, which also needs a place (it has no community to take one from) */
-export const kliqueCreateSchema = z.object({ ...crewFields, community: z.string().trim().min(1).max(80).nullable(), country: z.string().trim().toUpperCase().max(2).optional(), city: z.string().trim().max(60).optional() });
+/** where a klique is (lib/places reach): what's set says how wide (a city, a state, a country, a continent, or none: everywhere) */
+const kliquePlace = {
+  country: z.string().trim().toUpperCase().max(2).optional(),
+  region: z.string().trim().max(60).optional(),
+  city: z.string().trim().max(60).optional(),
+  continent: z.string().trim().max(30).optional(),
+};
+export const kliqueCreateSchema = z.object({ ...crewFields, community: z.string().trim().min(1).max(80).nullable(), ...kliquePlace });
 
 /* ------------------------------- plans ------------------------------ */
 
@@ -826,6 +833,10 @@ export const crewUpdateSchema = z
     note: text(300).optional(),
     joinMode: z.enum(["open", "approval"]).optional(),
     maxMembers: z.number().int().min(2).max(100).optional(),
+    /** not an event's klique: move it to another community you're in (by slug), or null for All communities (Lite and Pro) */
+    community: z.string().trim().min(1).max(80).nullable().optional(),
+    /** not an event's klique: where it is (all four together; what's set says how wide) */
+    place: z.object(kliquePlace).optional(),
   })
   .refine((v) => Object.keys(v).length > 0, "Nothing to change");
 

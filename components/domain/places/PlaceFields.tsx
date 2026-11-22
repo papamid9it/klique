@@ -121,12 +121,17 @@ export function ReachFields({
   errors,
   neighborhood,
   onNeighborhood,
+  label = "Where it's for",
+  hint,
 }: {
   value: ReachValue;
   onChange: (p: ReachValue) => void;
   errors?: Partial<Record<"country" | "region" | "city" | "continent" | "neighborhood", string>>;
   neighborhood?: string;
   onNeighborhood?: (n: string) => void;
+  /** what to call it and what each choice means (a klique: "Where it is", and who finds it) */
+  label?: string;
+  hint?: (r: Reach) => string;
 }) {
   const reach = value.reach;
   // switching keeps what it can: the country you had, its continent, your state and city
@@ -142,8 +147,8 @@ export function ReachFields({
   return (
     <div className="space-y-4">
       <div>
-        <p className="mb-1.5 text-sm font-medium">Where it&apos;s for</p>
-        <div role="radiogroup" aria-label="Where it's for" className="flex flex-wrap gap-1.5">
+        <p className="mb-1.5 text-sm font-medium">{label}</p>
+        <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-1.5">
           {REACHES.map((r) => (
             <button key={r.id} type="button" role="radio" aria-checked={reach === r.id} onClick={() => pick(r.id)} className={cx("h-9 rounded-full border px-3.5 text-sm font-semibold transition", reach === r.id ? "border-ink bg-ink text-canvas" : "border-line text-ink hover:bg-raised")}>
               {r.label}
@@ -151,7 +156,7 @@ export function ReachFields({
           ))}
         </div>
         <p className="mt-1.5 text-xs text-ink-muted">
-          {reach === "world" ? "People anywhere find it in Discover." : reach === "continent" ? "People across the continent find it." : reach === "country" ? "People anywhere in the country find it." : reach === "region" ? "People across the state find it." : "People in and around the city find it first."}
+          {hint ? hint(reach) : reach === "world" ? "People anywhere find it in Discover." : reach === "continent" ? "People across the continent find it." : reach === "country" ? "People anywhere in the country find it." : reach === "region" ? "People across the state find it." : "People in and around the city find it first."}
         </p>
       </div>
       {reach === "continent" ? (

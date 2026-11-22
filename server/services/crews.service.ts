@@ -29,7 +29,7 @@ import { KLIQUES_OFF, kliquesOn } from "../policies/features";
 import { zoneSuffix } from "@/lib/format";
 import { friendIdSet } from "./friends.service";
 import { escapeRegex, sid } from "./helpers";
-import { isCountryCode, parseScope, scopeFilter, slugify } from "@/lib/places";
+import { citiesIn, getCityEntry, parseScope, placeForReach, placeLabel, reachError, reachFilter, reachOf, slugify, type ReachPlace, type Scope } from "@/lib/places";
 import { purgeCrewChat } from "./crew-chat-purge";
 import { kliqueBoost, kliqueCreateBlock, kliqueJoinBlock } from "./klique-limits";
 import { logModDelete } from "./admin-audit";
@@ -373,6 +373,7 @@ async function toCards(crews: ICrew[], viewer: IUser | null, known: { events?: I
       event: event ? { id: sid(event._id), title: event.title, startsAt: event.startsAt.toISOString() } : null,
       community: community ? { slug: community.slug, name: community.name, verified: !!community.verified || !!community.official } : null,
       city: c.city,
+      place: { country: c.country ?? "", region: c.region ?? "", city: c.city ?? "", continent: c.continent ?? "" },
       area: c.area,
       note: c.note,
       meetupAt: c.meetupAt.toISOString(),
@@ -549,9 +550,8 @@ export async function listKliques(viewer: IUser | null, q: z.infer<typeof klique
     if (!c) return { items: [], hasMore: false };
     filter.communityId = c._id;
   } else if (scope) {
-    // kliques keep a country and city (no state): a state counts as its country
-    Object.assign(filter, scope.level === "region" ? { country: scope.country } : scopeFilter(scope));
-  } else if (viewer?.country) filter.country = viewer.country;
+    Object.assign(filter, kliquePlaceFilter(scope));
+  } else if (viewer?.country) Object.assign(filter, kliquePlaceFilter({ level: "country", country: viewer.country }));
   if (q.mine && viewer) {
     const mine = await Membership.find({ userId: viewer._id, subcommunityId: null, status: "active" }).distinct("communityId");
     filter.communityId = filter.communityId ? (mine.some((id) => sid(id) === sid(filter.communityId as Types.ObjectId)) ? filter.communityId : null) : { $in: mine };
@@ -752,7 +752,7 @@ export async function myCommunityCrews(viewer: IUser, slug: string): Promise<MyC
 type EventKliqueInput = z.infer<typeof crewCreateSchema>;
 type KliqueInput = EventKliqueInput & { interest: NonNullable<EventKliqueInput["interest"]> };
 
-async function startKlique(viewer: IUser, input: KliqueInput, where: { event: IEvent | null; community: Pick<ICommunity, "_id" | "country" | "city"> | null; place?: { country: string; city: string } }): Promise<CrewDTO> {
+async function startKlique(viewer: IUser, input: KliqueInput, where: { event: IEvent | null; community: Pick<ICommunity, "_id" | "country" | "city"> | null; place?: { country: string; region: string; city: string; continent: string } | null }): Promise<CrewDTO> {
   const person = personBlock(viewer, "start");
   if (person) throw forbidden(person);
   assertVerified(viewer);
@@ -785,8 +785,12 @@ async function startKlique(viewer: IUser, input: KliqueInput, where: { event: IE
         audience,
         womenSpots: audience === "mixed" ? input.womenSpots : 0,
         menSpots: audience === "mixed" ? input.menSpots : 0,
-        country: event?.country ?? community?.country ?? place?.country ?? viewer.country ?? "NG",
-        city: event?.city ?? community?.city ?? place?.city ?? viewer.city ?? "",
+        // where it is: the event's; else the place its host chose; else (an older app) the community's, or the host's
+        ...(event
+          ? { country: event.country ?? "NG", city: event.city ?? "", region: getCityEntry(event.country ?? "NG", event.city)?.region ?? "", continent: "" }
+          : place
+            ? place
+            : { country: community?.country ?? viewer.country ?? "NG", city: community?.city ?? viewer.city ?? "", region: "", continent: "" }),
         area: input.area,
         meetupPoint: input.meetupPoint,
         meetupAt: input.meetupAt,
@@ -844,14 +848,14 @@ const canStartEverywhere = (viewer: IUser) => isSiteAdmin(viewer) || planOf(view
 
 /** A community's klique: anything its members want to do together. `community: null` is all communities, in a place. */
 export async function createCommunityKlique(viewer: IUser, input: z.infer<typeof kliqueCreateSchema>): Promise<CrewDTO> {
+  // where it is: a city, a state, a country, a continent or everywhere (an older app sends none for a community's)
+  const place = kliquePlaceOf(input);
   if (input.community === null) {
     if (isMinor(viewer)) throw forbidden("Kliques are for people 18 and over.");
-    // open to everyone in the city: a Lite and Pro perk (anyone can still join one)
+    // open to anyone: a Lite and Pro perk (anyone can still join one)
     if (!canStartEverywhere(viewer)) throw new ApiError(403, ALL_COMMUNITIES_PAID, { code: "plan_limit" });
-    const city = slugify(input.city ?? "");
-    if (!isCountryCode(input.country)) throw new ApiError(400, "Pick a country.", { errors: { country: "Pick a country." } });
-    if (!city) throw new ApiError(400, "Which city is it in?", { errors: { city: "Which city is it in?" } });
-    return startKlique(viewer, input, { event: null, community: null, place: { country: input.country, city } });
+    if (!place) throw new ApiError(400, "Where is it?", { errors: { city: "Where is it?" } });
+    return startKlique(viewer, input, { event: null, community: null, place });
   }
   const community = await Community.findOne({ slug: input.community.toLowerCase() }).select(COMMUNITY_FIELDS).lean<CommunityBits>();
   if (!community || isMinor(viewer)) throw notFound("We couldn't find that community.");
@@ -860,9 +864,31 @@ export async function createCommunityKlique(viewer: IUser, input: z.infer<typeof
   await assertNoCommunityTimeout(viewer._id, community._id);
   const { community: _slug, ...rest } = input;
   void _slug;
-  const made = await startKlique(viewer, rest, { event: null, community });
+  const made = await startKlique(viewer, rest, { event: null, community, place });
   void import("./bots.service").then((b) => b.emitBotEvent(community._id, "klique.create", { klique: { id: made.id, title: made.title, meetupAt: made.meetupAt, area: made.area }, host: { id: sid(viewer._id), handle: viewer.handle } }));
   return made;
+}
+
+/**
+ * Kliques in a place: there, or wider and covering it (a country-wide one shows in each of its cities, an everywhere
+ * one everywhere), like communities. Older city kliques have no state saved: a state finds them by its cities.
+ */
+function kliquePlaceFilter(scope: Scope): Record<string, unknown> {
+  const f = reachFilter(scope);
+  if (scope.level !== "region" || !Array.isArray(f.$or)) return f;
+  return { $or: [...f.$or, { country: scope.country, city: { $in: citiesIn(scope.country, scope.region).map((c) => c.slug) } }] };
+}
+
+/** A klique's place from what was sent, checked and tidied (a city keeps its state). Null: nothing was sent. */
+function kliquePlaceOf(p: ReachPlace & { city?: string | null }): { country: string; region: string; city: string; continent: string } | null {
+  if (p.country === undefined && p.region === undefined && p.city === undefined && p.continent === undefined) return null;
+  const raw = { country: p.country ?? "", region: p.region ?? "", city: slugify(p.city ?? ""), continent: p.continent ?? "" };
+  const reach = reachOf(raw);
+  const placed = placeForReach(reach, raw);
+  const wrong = reachError(placed);
+  if (wrong) throw new ApiError(400, wrong.message, { errors: { [wrong.field]: wrong.message } });
+  if (reach === "city" && !placed.region) placed.region = getCityEntry(placed.country, placed.city)?.region ?? "";
+  return placed;
 }
 
 /**
@@ -884,8 +910,34 @@ async function hostCrew(viewer: IUser, crewId: string) {
   return found;
 }
 
-export async function updateCrew(viewer: IUser, crewId: string, patch: z.infer<typeof crewUpdateSchema>): Promise<CrewDTO> {
+export async function updateCrew(viewer: IUser, crewId: string, patchIn: z.infer<typeof crewUpdateSchema>): Promise<CrewDTO> {
   const { crew, event } = await hostCrew(viewer, crewId);
+  const { community: moveTo, place: placeIn, ...patch } = patchIn;
+  const relocate: Record<string, unknown> = {};
+  // where it moved to, in words, for the people in it ("All communities", or the community's name)
+  let movedTo: string | null = null;
+  // an event's klique lives where its event does: only a community's (or All communities') can move
+  if ((moveTo !== undefined || placeIn) && event) throw badRequest("An event's klique stays with its event.");
+  if (placeIn) Object.assign(relocate, kliquePlaceOf(placeIn));
+  if (moveTo !== undefined) {
+    // only its host picks where it lives (a community's admins can edit it, not take it elsewhere)
+    if (sid(crew.hostId) !== sid(viewer._id)) throw forbidden("Only the klique's host can move it.");
+    if (moveTo === null) {
+      if (crew.communityId && !canStartEverywhere(viewer)) throw new ApiError(403, ALL_COMMUNITIES_PAID, { code: "plan_limit" });
+      Object.assign(relocate, { communityId: null, subcommunityId: null });
+      if (crew.communityId) movedTo = "All communities";
+    } else {
+      const community = await Community.findOne({ slug: moveTo.toLowerCase() }).select(COMMUNITY_FIELDS).lean<CommunityBits>();
+      if (!community) throw notFound("We couldn't find that community.");
+      if (!kliquesOn(community)) throw forbidden(`${community.name} doesn't have kliques.`);
+      if (!(await isMemberOf(viewer, community._id))) throw forbidden(`Join ${community.name} to move your klique there.`);
+      await assertNoCommunityTimeout(viewer._id, community._id);
+      Object.assign(relocate, { communityId: community._id, subcommunityId: null });
+      if (sid(community._id) !== (crew.communityId ? sid(crew.communityId) : "")) movedTo = community.name;
+    }
+    // All communities needs a place of its own (a community's could lean on the community's)
+    if (moveTo === null && !placeIn && !crew.country && !crew.continent && crew.communityId) Object.assign(relocate, { country: viewer.country ?? "NG", city: viewer.city ?? "" });
+  }
   if (patch.meetupAt) validateMeetup(patch.meetupAt, event);
   if (patch.maxMembers !== undefined && patch.maxMembers < crew.memberCount) throw badRequest(`${crew.memberCount - 1} ${crew.memberCount - 1 === 1 ? "person is" : "people are"} already in. Remove someone first, or keep at least ${crew.memberCount - 1} ${crew.memberCount - 1 === 1 ? "spot" : "spots"}.`);
   const set: Record<string, unknown> = { ...patch };
@@ -936,6 +988,7 @@ export async function updateCrew(viewer: IUser, crewId: string, patch: z.infer<t
   }
   // a community klique lasts until a day after it happens: moving it moves that too
   if (!event && patch.meetupAt) set.expiresAt = meetupExpiry(patch.meetupAt);
+  Object.assign(set, relocate);
   await Crew.updateOne({ _id: crew._id }, { $set: set });
   if (set.expiresAt) await syncKliqueExpiry(crew._id, set.expiresAt as Date);
   if (patch.coverImage && crew.coverImage && patch.coverImage !== crew.coverImage && !(await Event.exists({ coverImage: crew.coverImage }))) deleteUploads([crew.coverImage]);
@@ -944,6 +997,11 @@ export async function updateCrew(viewer: IUser, crewId: string, patch: z.infer<t
   // anything people in the klique would want to know about gets a ping: place, time, where from, the note
   const moved = (patch.meetupPoint && patch.meetupPoint !== crew.meetupPoint) || (patch.meetupAt && +patch.meetupAt !== +crew.meetupAt);
   const changes: string[] = [];
+  // moved: to another community (or All communities), or to another place
+  if (movedTo) changes.push(`moved to ${movedTo}`);
+  const was = { country: crew.country ?? "", region: crew.region ?? "", city: crew.city ?? "", continent: crew.continent ?? "" };
+  const now = { country: (relocate.country as string | undefined) ?? was.country, region: (relocate.region as string | undefined) ?? was.region, city: (relocate.city as string | undefined) ?? was.city, continent: (relocate.continent as string | undefined) ?? was.continent };
+  if (placeIn && placeLabel(now) !== placeLabel(was)) changes.push(`now in ${placeLabel(now)}`);
   if (moved) changes.push(`now meeting at ${patch.meetupPoint ?? crew.meetupPoint}, ${at(patch.meetupAt ?? crew.meetupAt, (set.timeZone as string | undefined) ?? crew.timeZone)}`);
   if (patch.area && patch.area !== crew.area) changes.push(`coming from ${patch.area}`);
   if (patch.note !== undefined && patch.note.trim() !== crew.note.trim()) changes.push(patch.note.trim() ? `new note: "${snippet(patch.note.trim(), 80)}"` : "the note was removed");

@@ -16,6 +16,9 @@ import { ConfirmModal, SpaceError } from "@/components/domain/space/parts";
 import { ShareButton } from "@/components/domain/ShareButton";
 import { ReportDialog } from "@/components/domain/ReportDialog";
 import { PlanBadge, UpgradePrompt } from "@/components/domain/account/PlanTab";
+import { SelectField } from "@/components/ui/Field";
+import { ReachFields, reachValueOf, type ReachValue } from "@/components/domain/places/PlaceFields";
+import { kliqueReachHint } from "@/lib/places";
 import { Cover } from "@/components/ui/Cover";
 import { ImageField } from "@/components/ui/ImageField";
 import { useAuth } from "@/components/providers/AuthProvider";
@@ -280,6 +283,8 @@ function Crew({ crew, tab, embedded, onChange, onGone, onRead, onMenu, reload }:
             </dd>
           </div>
         </dl>
+
+        {inCrew && <MeetupSafety crew={crew} />}
 
         {crew.note && <p className="mt-4 text-[15px] leading-relaxed whitespace-pre-line">{crew.note}</p>}
 
@@ -652,6 +657,46 @@ function AskModal({ crew, onClose, onDone }: { crew: CrewDTO; onClose: () => voi
   );
 }
 
+/**
+ * On the meetup day (from 24 hours before until a few hours after), for the people going: a reminder to meet
+ * somewhere public, and "Share my plan", which sends where and when to someone outside Klique.
+ */
+function MeetupSafety({ crew }: { crew: CrewDTO }) {
+  const toast = useToast();
+  const now = useNow();
+  if (!now) return null;
+  const until = +new Date(crew.meetupAt) - +now;
+  if (until > 24 * 60 * 60 * 1000 || until < -6 * 60 * 60 * 1000) return null;
+  async function share() {
+    const where = [crew.meetupPoint, crew.area].filter(Boolean).join(", ");
+    const text = `I'm meeting a group from Klique: ${crew.title}. ${where ? `${where}, ` : ""}${formatTime(crew.meetupAt, crew.timeZone)} on ${formatDateLong(crew.meetupAt, crew.timeZone)}. Hosted by ${crew.host.displayName}.`;
+    const url = `${window.location.origin}/kliques/${crew.id}`;
+    try {
+      if (navigator.share) return await navigator.share({ title: "My plan", text, url });
+      await navigator.clipboard.writeText(`${text}\n${url}`);
+      toast("Plan copied. Paste it to a friend.", "success");
+    } catch {
+      // they closed the share sheet
+    }
+  }
+  return (
+    <div className="mt-4 flex flex-wrap items-center gap-3 rounded-control border border-line bg-raised p-3">
+      <Icon name="shield" className="shrink-0 text-ink-muted" />
+      <p className="min-w-0 flex-1 text-[13px] leading-relaxed">
+        <span className="font-semibold">Meeting someone new?</span> <span className="text-ink-muted">Meet in a public place, and let someone you trust know where you&apos;ll be.</span>
+      </p>
+      <Button size="sm" onClick={() => void share()}>
+        Share my plan
+      </Button>
+    </div>
+  );
+}
+
+/** the "All communities" choice in the community picker */
+const ALL_COMMUNITIES = "__all";
+/** the place picked differs from the one saved */
+const placeChanged = (was: CrewDTO["place"], now: ReachValue) => was.country !== now.country || was.region !== now.region || was.city !== now.city || was.continent !== now.continent;
+
 function EditCrewModal({ crew, onClose, onSaved }: { crew: CrewDTO; onClose: () => void; onSaved: (c: CrewDTO) => void }) {
   const toast = useToast();
   // the meetup's time as it reads in its own zone
@@ -668,10 +713,25 @@ function EditCrewModal({ crew, onClose, onSaved }: { crew: CrewDTO; onClose: () 
   const [who, setWho] = useState<AudienceValue>({ spots: String(crew.maxMembers - 1), audience: crew.audience, womenSpots: String(crew.womenSpots), menSpots: String(crew.menSpots) });
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // not an event's klique: where it is, and (its host) which community it's in, or All communities
+  const own = !crew.event;
+  const isHost = crew.viewer.standing === "host";
+  const [place, setPlace] = useState<ReachValue>(() => reachValueOf(crew.place));
+  const [communitySlug, setCommunitySlug] = useState(crew.community?.slug ?? ALL_COMMUNITIES);
+  const info = useApi(own && isHost ? () => CrewService.startInfo() : null, [own, isHost], { key: "klique-start" });
+  const choices = info.data?.communities ?? [];
+  const everywhere = info.data?.allCommunities !== false;
+  const [askPlan, setAskPlan] = useState<string | null>(null);
+  const pickCommunity = (slug: string) => {
+    // All communities is a Lite and Pro perk (one that's already there stays)
+    if (slug === ALL_COMMUNITIES && !everywhere && crew.community) return setAskPlan("Kliques for All communities come with Lite and Pro.");
+    setCommunitySlug(slug);
+  };
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
     const bad = checkAudience(who);
+    if (own && place.reach === "city" && !place.city.trim()) bad.city = "Which city is it in?";
     if (Math.round(Number(who.spots)) + 1 < crew.memberCount) bad.maxMembers = `${crew.memberCount} people are in already (you included), so keep at least ${crew.memberCount - 1} ${crew.memberCount - 1 === 1 ? "spot" : "spots"}.`;
     if (Object.keys(bad).length) {
       setErrors(bad);
@@ -690,6 +750,8 @@ function EditCrewModal({ crew, onClose, onSaved }: { crew: CrewDTO; onClose: () 
         note: note.trim(),
         joinMode,
         ...audienceInput(who),
+        ...(own && placeChanged(crew.place, place) ? { place: { country: place.country, region: place.region, city: place.city, continent: place.continent } } : {}),
+        ...(own && isHost && communitySlug !== (crew.community?.slug ?? ALL_COMMUNITIES) ? { community: communitySlug === ALL_COMMUNITIES ? null : communitySlug } : {}),
       });
       toast("Klique updated", "success");
       onSaved(res.data);
@@ -703,6 +765,19 @@ function EditCrewModal({ crew, onClose, onSaved }: { crew: CrewDTO; onClose: () 
   return (
     <Modal open onClose={onClose} title="Edit klique" description="Everyone in the klique is told if the meetup point or time changes.">
       <form onSubmit={save} className="space-y-4" noValidate>
+        <UpgradePrompt message={askPlan} onClose={() => setAskPlan(null)} />
+        {own && isHost && (
+          <SelectField label="Community" value={communitySlug} onChange={(e) => pickCommunity(e.target.value)} error={errors.community} hint={communitySlug === ALL_COMMUNITIES ? "Anyone can see and join it." : "Only its members can see and join it."}>
+            <option value={ALL_COMMUNITIES}>{everywhere || !crew.community ? "All communities" : "All communities · Lite or Pro"}</option>
+            {crew.community && !choices.some((c) => c.slug === crew.community!.slug) && <option value={crew.community.slug}>{crew.community.name}</option>}
+            {choices.map((c) => (
+              <option key={c.slug} value={c.slug}>
+                {c.name}
+              </option>
+            ))}
+          </SelectField>
+        )}
+        {own && <ReachFields value={place} onChange={setPlace} errors={errors} label="Where it is" hint={kliqueReachHint} />}
         <ImageField kind="photo" label="Cover picture" value={coverImage} onChange={setCoverImage} error={errors.coverImage} required reposition={{ aspect: 4 / 5 }} />
         <TextField label="What's the plan?" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} error={errors.title} />
         <TextField label="Area" value={area} onChange={(e) => setArea(e.target.value)} maxLength={40} error={errors.area} />

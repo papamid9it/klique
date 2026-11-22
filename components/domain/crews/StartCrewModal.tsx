@@ -17,8 +17,8 @@ import type { CrewDTO, CrewJoinMode, EventDTO } from "@/lib/types";
 import { fromWall, wallInputs } from "./parts";
 import { usePlaceZone, zoneCity } from "@/components/domain/places/ZoneField";
 import { AudienceFields, audienceInput, checkAudience, type AudienceValue } from "./AudienceFields";
-import { PlaceFields } from "@/components/domain/places/PlaceFields";
-import { DEFAULT_COUNTRY, type Place } from "@/lib/places";
+import { ReachFields, reachValueOf, type ReachValue } from "@/components/domain/places/PlaceFields";
+import { DEFAULT_COUNTRY, kliqueReachHint } from "@/lib/places";
 import { useAuth } from "@/components/providers/AuthProvider";
 
 type EventBits = Pick<EventDTO, "id" | "title" | "startsAt" | "neighborhood" | "interest" | "coverImage"> & { timeZone?: string };
@@ -47,7 +47,8 @@ export function StartCrewModal({ event, community, open, onClose, onCreated }: {
   // your profile picture to start with (change it to anything); without one it starts empty and a picture is required
   // no stand-in picture: a klique needs a photo of its own
   const [coverImage, setCoverImage] = useState("");
-  const [place, setPlace] = useState<Place>({ country: user?.country || DEFAULT_COUNTRY, region: user?.region ?? "", city: user?.city ?? "" });
+  // where it is: the host's city to start with; a state, the country, a continent or everywhere if wider
+  const [place, setPlace] = useState<ReachValue>(() => reachValueOf({ country: user?.country || DEFAULT_COUNTRY, region: user?.region ?? "", city: user?.city ?? "" }));
   const [interest, setInterest] = useState(event?.interest ?? community?.interest ?? "");
   const [area, setArea] = useState("");
   const [meetupPoint, setMeetupPoint] = useState("");
@@ -81,7 +82,7 @@ export function StartCrewModal({ event, community, open, onClose, onCreated }: {
     e.preventDefault();
     const next: Record<string, string> = {};
     if (!event && !communitySlug) next.community = "Pick a community, or All communities.";
-    if (communitySlug === ALL && !place.city.trim()) next.city = "Which city is it in?";
+    if (!event && place.reach === "city" && !place.city.trim()) next.city = "Which city is it in?";
     if (title.trim().length < 8) next.title = "Say what you're doing, e.g. “Who wants to watch Dune at Filmhouse Lekki on Saturday?”";
     if (!coverImage) next.coverImage = "Add a cover picture. Kliques with a picture get far more people.";
     if (!event && !interest) next.interest = "Pick what it's about.";
@@ -99,7 +100,8 @@ export function StartCrewModal({ event, community, open, onClose, onCreated }: {
     setFormError(null);
     const input = { title: title.trim(), interest, coverImage, area: area.trim(), meetupPoint: meetupPoint.trim(), meetupAt: fromWall(date, time, zone), timeZone: zone, note: note.trim(), joinMode, ...audienceInput(who) };
     try {
-      const res = event ? await CrewService.create(event.id, input) : communitySlug === ALL ? await CrewService.createInCommunity(null, { ...input, country: place.country, city: place.city }) : await CrewService.createInCommunity(communitySlug, input);
+      const where = { country: place.country, region: place.region, city: place.city, continent: place.continent };
+      const res = event ? await CrewService.create(event.id, input) : await CrewService.createInCommunity(communitySlug === ALL ? null : communitySlug, { ...input, ...where });
       onCreated(res.data);
     } catch (err) {
       if (limit.handled(err)) return setBusy(false);
@@ -142,7 +144,7 @@ export function StartCrewModal({ event, community, open, onClose, onCreated }: {
               ))}
             </SelectField>
           )}
-          {!event && !community && communitySlug === ALL && <PlaceFields value={place} onChange={setPlace} errors={errors} />}
+          {!event && <ReachFields value={place} onChange={setPlace} errors={errors} label="Where it is" hint={kliqueReachHint} />}
           <ImageField kind="photo" label="Cover picture" value={coverImage} onChange={setCoverImage} error={errors.coverImage} required hint="Required. The place, the movie poster, the vibe. No explicit pictures." reposition={{ aspect: 4 / 5 }} />
           <TextField label="What's the plan?" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} placeholder={event ? `Who's going to ${event.title} from Yaba?` : "Who wants to watch a movie at the cinema on Saturday?"} error={errors.title} hint="Write it like a question to your friends." />
           {!event && (

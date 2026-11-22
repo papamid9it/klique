@@ -1,6 +1,9 @@
 import ApiClient from "@/app/ApiCore";
 import type { ReactionKind } from "@/lib/reactions";
 import type { ChannelMessageDTO, ChatPage, CrewDTO, CrewJoinMode, Envelope, EventCrewsDTO, JoinedKliqueDTO, KliqueListDTO, KliqueStartDTO, MyCrewDTO, ReactionDTO, UserBrief } from "@/lib/types";
+
+/** where a klique is: what's set says how wide (a city, a state, a country, a continent, or none: everywhere) */
+export type KliquePlaceInput = { country?: string; region?: string; city?: string; continent?: string };
 import type { SendInput } from "./ChannelService";
 
 const api = new ApiClient();
@@ -51,14 +54,15 @@ export const CrewService = {
   /** before the Start form: can you, Women only, your communities */
   startInfo: () => api.get<Envelope<KliqueStartDTO>>(`/api/kliques/start`),
   /** start a community's klique; `null` is all communities, with a place */
-  createInCommunity: (community: string | null, input: CrewInput & { country?: string; city?: string }) => api.post<Envelope<CrewDTO>>(`/api/kliques`, { ...input, community }),
+  createInCommunity: (community: string | null, input: CrewInput & KliquePlaceInput) => api.post<Envelope<CrewDTO>>(`/api/kliques`, { ...input, community }),
   /** the kliques you're in or asked to join */
   joined: () => api.get<Envelope<JoinedKliqueDTO[]>>(`/api/kliques/joined`),
   /** `q`: crews coming from an area ("yaba"); `limit`: how many (grows with "Load more") */
   forEvent: (eventId: string, opts: { q?: string; limit?: number } = {}) => api.get<Envelope<EventCrewsDTO>>(`/api/events/${eventId}/crews`, { ...(opts.q ? { q: opts.q } : {}), ...(opts.limit ? { limit: String(opts.limit) } : {}) }),
   create: (eventId: string, input: CrewInput) => api.post<Envelope<CrewDTO>>(`/api/events/${eventId}/crews`, input),
   get: (id: string) => api.get<Envelope<CrewDTO>>(`/api/crews/${id}`),
-  update: (id: string, patch: Partial<CrewInput>) => api.patch<Envelope<CrewDTO>>(`/api/crews/${id}`, patch),
+  /** `community`: move it (null: All communities); `place`: where it is (not for an event's klique) */
+  update: (id: string, patch: Partial<CrewInput> & { community?: string | null; place?: KliquePlaceInput }) => api.patch<Envelope<CrewDTO>>(`/api/crews/${id}`, patch),
   remove: (id: string) => api.delete<Envelope<{ deleted: true }>>(`/api/crews/${id}`),
   join: (id: string, message = "") => api.post<Envelope<CrewDTO>>(`/api/crews/${id}/join`, { message }),
   leave: (id: string) => api.delete<Envelope<CrewDTO>>(`/api/crews/${id}/join`),

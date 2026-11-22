@@ -34,8 +34,14 @@ export interface ICrew {
   womenSpots?: number;
   menSpots?: number;
   /** where it happens, for "Kliques for you" (copied from the event, else the community; all communities: the host picks) */
+  /**
+   * Where it is (lib/places reach): a city (country + city, with its state), a state (country + region), a country, a
+   * continent (continent only) or everywhere (nothing). An event's klique takes the event's.
+   */
   country: string;
+  region?: string;
   city: string;
+  continent?: string;
   /** where they're coming from, e.g. "Yaba" */
   area: string;
   /** exact place to meet: only members see it */
@@ -70,7 +76,9 @@ const CrewSchema = new Schema<ICrew>(
     womenSpots: { type: Number, default: 0, min: 0, max: 99 },
     menSpots: { type: Number, default: 0, min: 0, max: 99 },
     country: { type: String, default: "NG" },
+    region: { type: String, default: "" },
     city: { type: String, default: "" },
+    continent: { type: String, default: "" },
     area: { type: String, required: true, trim: true, maxlength: 40 },
     meetupPoint: { type: String, required: true, trim: true, maxlength: 120 },
     meetupAt: { type: Date, required: true },

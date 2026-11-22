@@ -164,7 +164,7 @@ export function CommunityWizard({ onSubmit, onCancel }: { onSubmit: (input: Comm
                 {errors.adult ?? errors.explicit}
               </p>
             )}
-            <SelectField label="Posts (pictures and videos)" value={feedPolicy} onChange={(e) => setFeedPolicy(e.target.value as GroupPolicy)} hint="An Instagram-style section with votes and comments. Its posts reach members' home feeds. You can change this later.">
+            <SelectField label="Posts (pictures and videos)" value={feedPolicy} onChange={(e) => setFeedPolicy(e.target.value as GroupPolicy)}>
               <option value="off">Off</option>
               <option value="admins">On: only owners and admins post</option>
               <option value="members">On: any member can post</option>

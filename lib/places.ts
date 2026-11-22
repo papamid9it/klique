@@ -398,3 +398,8 @@ export function scopeContains(outer: Scope, inner: Scope): boolean {
 
 /** Two places overlap when either one contains the other. */
 export const scopesOverlap = (a: Scope, b: Scope) => scopeContains(a, b) || scopeContains(b, a);
+
+/** What each reach means for a klique: who finds it in Kliques (the place filter). */
+export function kliqueReachHint(r: Reach): string {
+  return r === "world" ? "It shows in Kliques wherever people look." : r === "continent" ? "It shows for every country on the continent." : r === "country" ? "It shows for the whole country and each of its cities." : r === "region" ? "It shows for the state and each of its cities." : "It shows for the city, and for its state and country.";
+}

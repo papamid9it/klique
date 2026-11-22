@@ -644,6 +644,8 @@ export interface CrewCardDTO {
   /** the community it belongs to (the event's, for an event klique), if any */
   community: { slug: string; name: string; verified?: boolean } | null;
   city: CityId;
+  /** where it is, as wide as its host chose (lib/places reach: a city, a state, a country, a continent or everywhere) */
+  place: { country: string; region: string; city: string; continent: string };
   area: string;
   note: string;
   meetupAt: ISODate;
