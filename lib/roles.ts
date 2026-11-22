@@ -11,7 +11,7 @@ export const PERMISSIONS = [
   { id: "timeout", label: "Time out members", hint: "Stop someone posting for a while." },
   { id: "kick", label: "Remove members", hint: "Remove people (they can join again)." },
   { id: "ban", label: "Ban members", hint: "Remove people for good." },
-  { id: "manageEvents", label: "Manage events", hint: "Approve, edit and cancel other people's events." },
+  { id: "manageEvents", label: "Approve and manage events", hint: "Approve or turn down members' events (they see them in To review), and edit or cancel anyone's." },
   { id: "manageEmoji", label: "Manage emoji", hint: "Upload and delete the community's custom emoji." },
   { id: "mentionEveryone", label: "Mention @everyone and @here", hint: "Ping everyone, even when members can't." },
   { id: "manageWebhooks", label: "Manage webhooks and bots", hint: "Make and delete webhooks (normally the owner only)." },

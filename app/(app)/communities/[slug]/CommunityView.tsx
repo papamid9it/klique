@@ -59,10 +59,12 @@ import { softNavigate } from "@/lib/nav";
 import type { ChannelDTO, ChannelGroupDTO, ChannelsDTO, CommunityDTO, MyCommunityDTO } from "@/lib/types";
 import { CommunitySearchBox, CommunitySearchResults } from "@/components/domain/space/CommunitySearch";
 import { WelcomeModal } from "@/components/domain/space/Welcome";
+import { ReviewView } from "@/components/domain/space/ReviewView";
 import { ThreadSide, ThreadsModal } from "@/components/domain/chat/Threads";
 
 const VIEWS: Record<WorkspaceView, { label: string; icon: IconName }> = {
   dashboard: { label: "Dashboard", icon: "sliders" },
+  review: { label: "To review", icon: "shield" },
   topics: { label: "Topics", icon: "topics" },
   posts: { label: "Posts", icon: "image" },
   events: { label: "Events", icon: "calendar" },
@@ -177,6 +179,8 @@ function CommunityWorkspace({ slug }: { slug: string }) {
     void myCrews.reload();
   });
   // your crews changed (someone joined, you were accepted, a crew was called off): the left panel follows
+  // something new to approve (an event sent in, a join request): the "To review" badge updates
+  useRealtimeEvent(() => void reload(), { filter: (e) => !!c?.review && e.type === "notify" && e.category === "admin", debounceMs: 1200 });
   useRealtimeEvent(() => void myCrews.reload(), { filter: (e) => e.type === "crew" || (e.type === "notify" && e.category === "crews"), debounceMs: 500 });
 
   const closeLeft = useCallback(() => setLeftOpen(false), []);
@@ -550,6 +554,11 @@ function CommunityWorkspace({ slug }: { slug: string }) {
           <Scroll inner>
             <SectionHeader title="Updates" />
             <PostsPanel slug={slug} subSlug={g.slug} canPost={g.viewer.canPost} />
+          </Scroll>
+        ) : view === "review" && !g ? (
+          <Scroll inner wide>
+            <SectionHeader title="To review" />
+            <ReviewView c={c} onDecided={() => void reload()} />
           </Scroll>
         ) : view === "dashboard" && !g ? (
           <Scroll inner wide>

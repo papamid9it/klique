@@ -323,6 +323,22 @@ export interface CommunityDTO extends CommunityCardDTO {
   upcomingEventCount: number | null;
   /** only for owner/admin of a private community */
   inviteCode?: string;
+  /** "To review" (events waiting for approval, join requests): only for people who approve things here */
+  review?: ReviewCountDTO;
+}
+
+/** What's waiting in a community's "To review". `canRequests`: this viewer handles join requests too. */
+export interface ReviewCountDTO {
+  events: number;
+  requests: number;
+  canRequests: boolean;
+}
+
+/** A community's "To review" page. */
+export interface CommunityReviewDTO {
+  events: EventDTO[];
+  requests: number;
+  canRequests: boolean;
 }
 
 export interface SubcommunityDTO {

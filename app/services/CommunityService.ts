@@ -1,7 +1,7 @@
 import ApiClient from "@/app/ApiCore";
 import type { Reach } from "@/lib/places";
 import type { CityId, InterestId } from "@/lib/constants";
-import type { CommunityCardDTO, CommunityDTO, CommunityPrivacy, Envelope, GroupPolicy, MyCommunityDTO, Paginated, SidebarDTO, CommunityDashboardDTO, GrowthStatsDTO, VerificationDTO, Move } from "@/lib/types";
+import type { CommunityCardDTO, CommunityDTO, CommunityPrivacy, Envelope, GroupPolicy, MyCommunityDTO, Paginated, SidebarDTO, CommunityDashboardDTO, CommunityReviewDTO, GrowthStatsDTO, VerificationDTO, Move } from "@/lib/types";
 
 const api = new ApiClient();
 
@@ -65,6 +65,8 @@ export const CommunityService = {
   update: (slug: string, patch: Partial<CommunityInput> & { moveBoards?: Move; mainChannel?: string | null }) => api.patch<Envelope<CommunityDTO>>(`/api/communities/${slug}`, patch),
   /** the owner's dashboard: members and growth, what's waiting for approval, this week (owners and admins) */
   dashboard: (slug: string) => api.get<Envelope<CommunityDashboardDTO>>(`/api/communities/${slug}/dashboard`),
+  /** "To review": members' events waiting for approval, and how many join requests (people who approve things) */
+  review: (slug: string) => api.get<Envelope<CommunityReviewDTO>>(`/api/communities/${slug}/review`),
   growth: (slug: string) => api.get<Envelope<GrowthStatsDTO>>(`/api/communities/${slug}/growth`),
   remove: (slug: string) => api.delete<Envelope<{ deleted: boolean }>>(`/api/communities/${slug}`),
   /** the Verified check: where it stands, and applying for it (the owner) */

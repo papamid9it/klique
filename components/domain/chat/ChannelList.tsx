@@ -27,7 +27,7 @@ import { compactCount } from "@/lib/format";
 import type { BoardDTO, ChannelCategoryDTO, ChannelDTO, ChannelGroupDTO, ChannelsDTO, CommunityDTO, Move, MyCrewDTO } from "@/lib/types";
 import { CategoryModal, ChannelSettings, CreateChannelModal } from "./ChannelFormModal";
 
-export type WorkspaceView = "dashboard" | "topics" | "posts" | "events" | "kliques" | "search" | "members";
+export type WorkspaceView = "dashboard" | "review" | "topics" | "posts" | "events" | "kliques" | "search" | "members";
 export type GroupView = "updates" | "events" | "kliques" | "members";
 
 import { orderChannels } from "./order";
@@ -154,9 +154,12 @@ export function ChannelList({
     }
   }
 
+  // waiting for this viewer to approve: shown as a badge, like an unread count
+  const toReview = c.review ? c.review.events + (c.review.canRequests ? c.review.requests : 0) : 0;
   const headerMenu: MenuEntry[] = [
     // owners and admins: members and growth, events to approve, money
     ...(c.viewer.canManage ? ([{ label: "Dashboard", icon: "sliders", onSelect: () => go(`${base}?view=dashboard`) }] as MenuEntry[]) : []),
+    ...(c.review ? ([{ label: toReview ? `To review (${toReview})` : "To review", icon: "shield", onSelect: () => go(`${base}?view=review`) }] as MenuEntry[]) : []),
     { label: "About this community", icon: "info", onSelect: onAbout },
     { label: "Invite people", icon: "userplus", onSelect: inviteCommunity },
     // your own notification settings here ("Suppress @everyone and @here", an on/off switch)
@@ -173,7 +176,9 @@ export function ChannelList({
     ...(siteAdmin && !c.official ? ([{ type: "sep" }, { label: c.verified ? "Remove Verified (admin)" : "Give Verified badge (admin)", icon: "check", onSelect: () => void setVerified(!c.verified) }] as MenuEntry[]) : []),
   ];
 
-  const nav: { id: WorkspaceView; label: string; icon: IconName; count?: number | null; show: boolean }[] = [
+  const nav: { id: WorkspaceView; label: string; icon: IconName; count?: number | null; badge?: number; show: boolean }[] = [
+    // members' events waiting for approval and join requests (owners, admins, and roles with "Approve and manage events")
+    { id: "review", label: "To review", icon: "shield", badge: toReview, show: !!c.review },
     // the Posts section (pictures and videos), when the community has it turned on
     { id: "posts", label: "Posts", icon: "image", show: c.feedPolicy !== "off" },
     { id: "events", label: "Events", icon: "calendar", count: c.upcomingEventCount, show: true },
@@ -377,7 +382,7 @@ export function ChannelList({
   ];
 
   /** `unread`: new messages behind it (a group), shown like a channel's: bold, with a badge instead of the count */
-  const navLink = (href: string, on: boolean, label: string, icon: IconName, count?: number | null, unread?: { n: number; mentions: number }) => {
+  const navLink = (href: string, on: boolean, label: string, icon: IconName, count?: number | null, unread?: { n: number; mentions: number }, waiting?: number) => {
     const fresh = !on && !!unread && (unread.n > 0 || unread.mentions > 0);
     return (
       <li key={label}>
@@ -390,7 +395,9 @@ export function ChannelList({
         >
           <Icon name={icon} size={16} />
           {label}
-          {fresh ? (
+          {waiting ? (
+            <CountBadge n={waiting} mention className="ml-auto" label={`${waiting} waiting for you`} />
+          ) : fresh ? (
             <CountBadge n={Math.max(unread.n, unread.mentions)} mention={unread.mentions > 0} className="ml-auto" label={`${unread.n} unread`} />
           ) : (
             typeof count === "number" && count > 0 && <span className="ml-auto font-mono text-[12px] text-ink-muted">{compactCount(count)}</span>
@@ -661,7 +668,7 @@ export function ChannelList({
         <ul className="space-y-0.5">
           {nav
             .filter((n) => n.show)
-            .map((n) => navLink(`${base}?view=${n.id}`, view === n.id, n.label, n.icon, n.count))}
+            .map((n) => navLink(`${base}?view=${n.id}`, view === n.id, n.label, n.icon, n.count, undefined, n.badge))}
         </ul>
         {groupSection}
         {crewSection(crews)}

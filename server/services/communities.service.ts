@@ -1,3 +1,4 @@
+import { reviewCounts } from "./review.service";
 import { searchFilter } from "./search-terms";
 import { audienceRefusal } from "@/lib/constants";
 import { countriesOf, getCityEntry, getCountry, parseScope, placeForReach, reachError, reachFilter, reachOf, type Reach, type ReachPlace, type Scope } from "@/lib/places";
@@ -136,7 +137,7 @@ export async function getCommunity(viewer: IUser | null, slug: string): Promise<
   if (access.adultGate === "under_18") throw notFound("We couldn't find that community.");
 
   // the counts and your own "Suppress @everyone and @here" side by side (none depends on another)
-  const [subcommunityCount, upcomingEventCount, membership] = await Promise.all([
+  const [subcommunityCount, upcomingEventCount, membership, review] = await Promise.all([
     access.canView ? countVisibleSubs(viewer, space.community) : null,
     access.canView
       ? Event.countDocuments({
@@ -148,9 +149,12 @@ export async function getCommunity(viewer: IUser | null, slug: string): Promise<
         })
       : null,
     viewer && access.isMember ? Membership.findOne({ userId: viewer._id, communityId: space.community._id, subcommunityId: null }).select("suppressEveryone").lean<{ suppressEveryone?: boolean }>() : null,
+    // what's waiting for this viewer to approve (only people who approve things here)
+    reviewCounts(viewer, space.community, access),
   ]);
   const dto = await toCommunityDetail(space.community, access, { subcommunityCount, upcomingEventCount });
   if (viewer && access.isMember) dto.suppressEveryone = !!membership?.suppressEveryone;
+  if (review) dto.review = review;
   return dto;
 }
 

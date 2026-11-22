@@ -43,6 +43,7 @@ import { resolveSpaceFor } from "./spaces.service";
 import { purgeCrews, syncCrewExpiry } from "./crews.service";
 import { ensureKlique, isKlique } from "./klique.service";
 import { Membership } from "../models/Membership";
+import { CommunityRole } from "../models/CommunityRole";
 import { logModDelete } from "./admin-audit";
 import { emitRemoved } from "./realtime";
 
@@ -343,12 +344,20 @@ async function announceEvent(doc: IEvent, space: Space, hostId: Types.ObjectId) 
   );
 }
 
-/** The people who can approve a member's event: the space's owners and admins (and a group's community owner). */
+/**
+ * The people who can approve a member's event: the space's owners and admins (and a group's community owner), and
+ * anyone whose community role has "Manage events".
+ */
 async function reviewersOf(space: Space): Promise<Types.ObjectId[]> {
+  const approvers = await CommunityRole.find({ communityId: space.community._id, botAppId: null, permissions: "manageEvents" }).select("_id").lean<{ _id: Types.ObjectId }[]>();
   const rows = await Membership.find({
     communityId: space.community._id,
     status: "active",
-    $or: [{ subcommunityId: space.sub?._id ?? null, role: { $in: ["owner", "admin"] } }, ...(space.sub ? [{ subcommunityId: null, role: "owner" as const }] : [])],
+    $or: [
+      { subcommunityId: space.sub?._id ?? null, role: { $in: ["owner", "admin"] } },
+      ...(space.sub ? [{ subcommunityId: null, role: "owner" as const }] : []),
+      ...(approvers.length ? [{ subcommunityId: null, roleIds: { $in: approvers.map((r) => r._id) } }] : []),
+    ],
   })
     .select("userId")
     .lean<{ userId: Types.ObjectId }[]>();
