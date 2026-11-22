@@ -11,6 +11,7 @@ import { ModAction } from "../models/ModAction";
 import type { IUser } from "../models/User";
 import { ADMIN_RANK, assertPerm, rolePowers, type Space, type SpaceAccess } from "../policies/access";
 import { sid } from "./helpers";
+import { notify } from "./push.service";
 import { resolveSpaceFor } from "./spaces.service";
 
 /**
@@ -196,7 +197,8 @@ async function renumber(cid: Types.ObjectId) {
 
 /**
  * Set which roles someone holds. You can add or take away only roles below your own, for someone below you; the
- * roles above yours they already hold stay. Giving or taking the Admin role makes them an admin or a member.
+ * roles above yours they already hold stay. On yourself you may also drop your own roles, to step down. Giving or
+ * taking the Admin role makes them an admin or a member.
  */
 export async function setMemberRoles(viewer: IUser, slug: string, userId: string, roleIds: string[]): Promise<{ roleIds: string[] }> {
   const { space, access } = await manage(viewer, slug);
@@ -210,13 +212,22 @@ export async function setMemberRoles(viewer: IUser, slug: string, userId: string
   const all = await CommunityRole.find({ communityId: cid }).lean<ICommunityRole[]>();
   const byId = new Map(all.map((r) => [sid(r._id), r]));
   const wanted = new Set(roleIds.filter((id) => byId.has(id)));
-  const keep = (m.roleIds ?? []).map(String).filter((id) => (byId.get(id)?.position ?? 0) >= myRank);
+  // roles at or above your own stay as they are; on yourself you may drop them (step down), never add them
+  const self = sid(m.userId) === sid(viewer._id);
+  const keep = (m.roleIds ?? []).map(String).filter((id) => (byId.get(id)?.position ?? 0) >= myRank && (!self || wanted.has(id)));
   // a bot's own role stays with the bot
   const give = [...wanted].filter((id) => byId.get(id)!.position < myRank && !byId.get(id)!.botAppId);
   const next = [...new Set([...keep, ...give])];
   const admin = all.find((r) => r.builtin === "admin");
   const isAdmin = !!admin && next.includes(sid(admin._id));
   await Membership.updateOne({ _id: m._id }, { $set: { roleIds: next.map((id) => new Types.ObjectId(id)), role: isAdmin ? "admin" : "member" } });
+  // someone stepped down from roles of their own: the owner hears about it (only they, or someone higher, can give them back)
+  const dropped = self ? (m.roleIds ?? []).map(String).filter((id) => !next.includes(id) && (byId.get(id)?.position ?? 0) >= myRank) : [];
+  const ownerId = space.community.ownerId;
+  if (dropped.length && ownerId && sid(ownerId) !== sid(viewer._id)) {
+    const names = dropped.map((id) => byId.get(id)?.name).filter(Boolean).join(", ");
+    notify([ownerId], { title: `${viewer.displayName} stepped down in ${space.community.name}`, body: `They gave up ${names}.`, data: { href: `/communities/${space.community.slug}?settings=members` } }, { actorId: viewer._id, category: "community", ref: `community:${sid(cid)}` });
+  }
   void ModAction.create({ communityId: cid, actorId: viewer._id, action: "role.assign", targetType: "member", targetId: m.userId, label: next.map((id) => byId.get(id)?.name).filter(Boolean).join(", ") || "no roles", authorId: m.userId }).catch(() => {});
   return { roleIds: next };
 }

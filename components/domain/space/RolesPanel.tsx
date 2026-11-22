@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import ApiClient, { errorMessage, isApiError } from "@/app/ApiCore";
+import { useAuth } from "@/components/providers/AuthProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import { Button } from "@/components/ui/Button";
 import { Switch, TextField } from "@/components/ui/Field";
@@ -356,10 +357,25 @@ function RoleModal({ slug, role, onClose, onSaved }: { slug: string; role: RoleD
 /** Pick which roles someone holds (only roles below yours can be changed). */
 export function MemberRolesModal({ slug, user, current, onClose, onSaved }: { slug: string; user: { id: string; displayName: string }; current: string[]; onClose: () => void; onSaved: (roles: RoleDTO[]) => void }) {
   const toast = useToast();
+  const { user: me } = useAuth();
   const { data, loading } = useRoles(slug);
   const [picked, setPicked] = useState<Set<string>>(new Set(current));
   const [busy, setBusy] = useState(false);
   const roles = data?.items ?? [];
+  const [asking, setAsking] = useState(false);
+  // your own roles at or above your rank that you've unticked: once saved, you can't give them back to yourself
+  const stepsDown = user.id === me?.id ? roles.filter((r) => current.includes(r.id) && !picked.has(r.id) && r.position >= (data?.myRank ?? 0)) : [];
+  async function save() {
+    const res = await api.put<Envelope<{ roleIds: string[] }>>(`/api/communities/${slug}/members/${user.id}/roles`, { roleIds: [...picked] });
+    toast("Roles saved", "success");
+    onSaved(roles.filter((r) => res.data.roleIds.includes(r.id)));
+  }
+  if (asking) {
+    const names = stepsDown.map((r) => r.name).join(", ");
+    return (
+      <ConfirmModal open onClose={() => setAsking(false)} title={`Step down from ${names}?`} description={`You'll lose what ${stepsDown.length > 1 ? "these roles let" : "this role lets"} you do here. Only the owner or someone above you can give ${stepsDown.length > 1 ? "them" : "it"} back.`} confirmLabel="Step down" onConfirm={save} />
+    );
+  }
   return (
     <Modal open onClose={onClose} title={`${user.displayName}'s roles`} description="Tick the roles they should have." size="sm">
       {loading && !data ? (
@@ -368,7 +384,9 @@ export function MemberRolesModal({ slug, user, current, onClose, onSaved }: { sl
         <div className="space-y-4">
           <ul className="max-h-80 space-y-1 overflow-y-auto">
             {roles.map((r) => {
-              const locked = r.position >= (data?.myRank ?? 0);
+              // a role you hold yourself can be unticked (stepping down), and ticked again before saving
+              const stepDown = user.id === me?.id && current.includes(r.id);
+              const locked = r.position >= (data?.myRank ?? 0) && !stepDown;
               return (
                 <li key={r.id}>
                   <label className={cx("flex items-center gap-3 rounded-control px-2 py-2", locked ? "opacity-50" : "cursor-pointer hover:bg-raised")}>
@@ -386,11 +404,11 @@ export function MemberRolesModal({ slug, user, current, onClose, onSaved }: { sl
               variant="primary"
               loading={busy}
               onClick={async () => {
+                // stepping down from a role of your own: asked first, as only someone higher can give it back
+                if (stepsDown.length) return setAsking(true);
                 setBusy(true);
                 try {
-                  const res = await api.put<Envelope<{ roleIds: string[] }>>(`/api/communities/${slug}/members/${user.id}/roles`, { roleIds: [...picked] });
-                  toast("Roles saved", "success");
-                  onSaved(roles.filter((r) => res.data.roleIds.includes(r.id)));
+                  await save();
                 } catch (e) {
                   toast(errorMessage(e), "error");
                   setBusy(false);
