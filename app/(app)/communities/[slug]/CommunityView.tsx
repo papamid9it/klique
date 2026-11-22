@@ -35,7 +35,7 @@ import { noteCommunityOpened } from "@/components/layout/prefetchCommunity";
 import { JoinButton } from "@/components/domain/JoinButton";
 import { ReportDialog } from "@/components/domain/ReportDialog";
 import { SectionHeader } from "@/components/domain/SectionHeader";
-import { DashboardView } from "@/components/domain/space/DashboardView";
+import { DashboardNav, DashboardView } from "@/components/domain/space/DashboardView";
 import { CommunitySettings } from "@/components/domain/space/CommunitySettings";
 import { MembersPanel } from "@/components/domain/space/MembersPanel";
 import { ConfirmModal, SpaceError } from "@/components/domain/space/parts";
@@ -361,7 +361,10 @@ function CommunityWorkspace({ slug }: { slug: string }) {
       channelTree(onNavigate)
     );
   const channelTree = (onNavigate?: () => void) =>
-    listData ? (
+    // the dashboard takes the channels' place, with a way back (like Discord's server settings)
+    view === "dashboard" && !gSlug && c?.viewer.canManage ? (
+      <DashboardNav c={c} onNavigate={onNavigate} />
+    ) : listData ? (
       <ChannelList community={c} data={listData} activeChannel={activeChannel?.slug ?? null} activeGroup={gSlug} view={view} boards={boards} activeBoard={activeBoard?.slug ?? null} activeTopic={view === "topics" ? sp.get("t") : null} onBoardsChanged={() => void boardsApi.reload()} onChanged={() => void reloadChannels()} onNavigate={onNavigate} onLeave={() => setLeaving(true)} onReport={() => setReporting(true)} onAbout={() => (onNavigate?.(), setAboutOpen(true))} crews={myCrews.data ?? []} activeCrew={crewOpen} />
     ) : channels.error ? (
       <div className="p-4">

@@ -28,55 +28,88 @@ type Section = "overview" | "members" | "activity" | "events" | "money";
  * a glance and what's waiting; Members is growth; Activity is chat (by the owner's plan); Events is what's waiting for
  * approval; Money is donations, contributions and payouts. The section is in the address (`d`), so Back works.
  */
+const sectionsFor = (c: CommunityDTO): { id: Section; label: string; icon: IconName; badge?: number; show: boolean }[] => [
+  { id: "overview", label: "Overview", icon: "home", show: true },
+  { id: "members", label: "Members", icon: "users", show: true },
+  { id: "activity", label: "Activity", icon: "topics", show: true },
+  { id: "events", label: "Events", icon: "calendar", badge: c.review?.events, show: true },
+  // no money in Klique HQ or a community with explicit content
+  { id: "money", label: "Money", icon: "coin", show: !c.official && !c.explicit },
+];
+const sectionHref = (c: CommunityDTO, id: Section) => `/communities/${c.slug}?view=dashboard${id === "overview" ? "" : `&d=${id}`}`;
+/** the section in the address (`d`), so Back works */
+function useSection(c: CommunityDTO): Section {
+  const asked = useSearchParams().get("d") as Section | null;
+  return sectionsFor(c).some((s) => s.show && s.id === asked) ? asked! : "overview";
+}
+
+/** The sections as links: down the side (the panel that replaces the community's channels) or across the top. */
+function SectionLinks({ c, across, onNavigate }: { c: CommunityDTO; across?: boolean; onNavigate?: () => void }) {
+  const section = useSection(c);
+  return (
+    <ul className={across ? "-mx-1 flex gap-1 overflow-x-auto px-1 pb-1" : "space-y-0.5"}>
+      {sectionsFor(c)
+        .filter((s) => s.show)
+        .map((s) => {
+          const on = s.id === section;
+          return (
+            <li key={s.id} className="shrink-0">
+              <SoftLink
+                href={sectionHref(c, s.id)}
+                scroll={false}
+                onClick={onNavigate}
+                aria-current={on ? "page" : undefined}
+                className={cx("flex h-9 items-center gap-2.5 rounded-control px-2.5 text-[14px] whitespace-nowrap transition", on ? "bg-raised font-semibold text-ink" : "font-medium text-ink-muted hover:bg-raised/60 hover:text-ink")}
+              >
+                <Icon name={s.icon} size={16} />
+                {s.label}
+                {s.badge ? <CountBadge n={s.badge} mention className="ml-auto" label={`${s.badge} waiting`} /> : null}
+              </SoftLink>
+            </li>
+          );
+        })}
+    </ul>
+  );
+}
+
+/**
+ * While the dashboard is open it takes the place of the community's channels on the left, like Discord's server
+ * settings: a way back to the community at the top, then the dashboard's sections.
+ */
+export function DashboardNav({ c, onNavigate }: { c: CommunityDTO; onNavigate?: () => void }) {
+  return (
+    <nav aria-label="Dashboard" className="flex h-full flex-col overflow-y-auto px-3 py-3">
+      <SoftLink href={`/communities/${c.slug}`} onClick={onNavigate} className="flex h-9 items-center gap-2 rounded-control px-2.5 text-[13px] font-semibold text-ink-muted transition hover:bg-raised/60 hover:text-ink">
+        <Icon name="arrowdown" size={15} className="rotate-90" />
+        <span className="truncate">Back to {c.name}</span>
+      </SoftLink>
+      <p className="mt-3 mb-1.5 px-2.5 eyebrow">Dashboard</p>
+      <SectionLinks c={c} onNavigate={onNavigate} />
+    </nav>
+  );
+}
+
+/**
+ * A community's dashboard, for its owner and admins, laid out like YouTube Studio or Discord's insights: its sections
+ * replace the community's channels on the left (DashboardNav; tabs across the top on narrow screens) and the section
+ * shows here. Overview is the week at a glance and what's waiting; Members is growth; Activity is chat (by the owner's
+ * plan); Events is what's waiting for approval; Money is donations, contributions and payouts.
+ */
 export function DashboardView({ c }: { c: CommunityDTO }) {
-  const sp = useSearchParams();
   const { data: d, loading, error, reload, setData } = useApi(() => CommunityService.dashboard(c.slug), [c.slug], { key: `dashboard:${c.slug}` });
   // a member sent an event in, someone asked to join: refresh
   useRealtimeEvent(() => void reload(), { filter: (e) => e.type === "notify" && e.category === "admin", debounceMs: 800 });
-
-  const money = !c.official && !c.explicit;
+  const section = useSection(c);
   const waiting = d ? d.pendingEvents.length + d.pendingRequests : 0;
-  const sections: { id: Section; label: string; icon: IconName; badge?: number; show: boolean }[] = [
-    { id: "overview", label: "Overview", icon: "home", show: true },
-    { id: "members", label: "Members", icon: "users", show: true },
-    { id: "activity", label: "Activity", icon: "topics", show: true },
-    { id: "events", label: "Events", icon: "calendar", badge: d?.pendingEvents.length, show: true },
-    { id: "money", label: "Money", icon: "coin", show: money },
-  ];
-  const asked = sp.get("d") as Section | null;
-  const section: Section = sections.some((s) => s.show && s.id === asked) ? asked! : "overview";
-  const href = (id: Section) => `/communities/${c.slug}?view=dashboard${id === "overview" ? "" : `&d=${id}`}`;
-  const shown = sections.filter((s) => s.show);
+  const href = (id: Section) => sectionHref(c, id);
 
   return (
-    <div className="md:flex md:items-start md:gap-6">
-      {/* the left panel; on narrow screens, tabs across the top */}
-      <nav aria-label="Dashboard sections" className="mb-4 md:sticky md:top-0 md:mb-0 md:w-48 md:shrink-0">
-        <ul className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1 md:mx-0 md:flex-col md:gap-0.5 md:overflow-visible md:p-0">
-          {shown.map((s) => {
-            const on = s.id === section;
-            return (
-              <li key={s.id} className="shrink-0">
-                <SoftLink
-                  href={href(s.id)}
-                  scroll={false}
-                  aria-current={on ? "page" : undefined}
-                  className={cx(
-                    "flex h-9 items-center gap-2.5 rounded-control px-3 text-[14px] whitespace-nowrap transition",
-                    on ? "bg-raised font-semibold text-ink" : "font-medium text-ink-muted hover:bg-raised/60 hover:text-ink",
-                  )}
-                >
-                  <Icon name={s.icon} size={16} />
-                  {s.label}
-                  {s.badge ? <CountBadge n={s.badge} mention className="ml-auto" label={`${s.badge} waiting`} /> : null}
-                </SoftLink>
-              </li>
-            );
-          })}
-        </ul>
-      </nav>
-
-      <div className="min-w-0 flex-1">
+    <div>
+      {/* narrow screens: the side panel is tucked away, so the sections go across the top */}
+      <div className="mb-4 lg:hidden">
+        <SectionLinks c={c} across />
+      </div>
+      <div className="min-w-0">
         {loading && !d ? (
           <div className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-28 rounded-card" />)}</div>
