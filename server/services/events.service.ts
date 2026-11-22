@@ -597,6 +597,8 @@ export async function removeRsvp(viewer: IUser, id: string): Promise<EventDTO> {
 
 export async function setSaved(viewer: IUser, id: string, saved: boolean): Promise<EventDTO> {
   const event = await loadVisibleEvent(viewer, id);
+  // not out yet (waiting for approval, or turned down): nothing to save
+  if (saved && event.review) throw conflict(event.review === "pending" ? "This event is waiting for an admin to approve it." : "This event wasn't approved.");
   if (saved) await assertCanJoinIn(viewer, event, "save its events");
   if (saved) await SavedEvent.updateOne({ eventId: event._id, userId: viewer._id }, {}, { upsert: true });
   else await SavedEvent.deleteOne({ eventId: event._id, userId: viewer._id });

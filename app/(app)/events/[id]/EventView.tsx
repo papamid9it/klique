@@ -490,7 +490,8 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
                 <Icon name="users" size={15} /> Who came?
               </Button>
             )}
-            {(!event.viewer.mustJoin || event.viewer.saved) && (
+            {/* waiting for approval (or turned down): not out yet, so nothing to save, share or go together to */}
+            {!event.review && (!event.viewer.mustJoin || event.viewer.saved) && (
               <Button className="w-full" onClick={toggleSave} loading={busy === "save"} aria-pressed={event.viewer.saved}>
                 <Icon name="bookmark" /> {event.viewer.saved ? "Saved" : "Save for later"}
               </Button>
@@ -512,7 +513,7 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
               <p className="truncate text-center font-mono text-[12px] text-ink-muted">{[...new Set([event.ticketUrl, event.onlineUrl].map((u) => (u ? domainOf(u) : null)).filter(Boolean))].join(" · ")}</p>
             </div>
           )}
-          {!event.online && event.kliquesOn && !event.isPast && !cancelled && (
+          {!event.online && event.kliquesOn && !event.isPast && !cancelled && !event.review && (
             <div className="space-y-2 rounded-card border border-line bg-surface p-4">
               <p className="flex items-center gap-2 text-sm font-semibold">
                 <Icon name="pin" size={16} className="text-accent-text" />
@@ -536,7 +537,7 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
             </div>
           )}
           <div className="flex flex-wrap gap-2">
-            <ShareButton path={`/events/${event.id}`} text={`${event.title} — ${formatDateShort(event.startsAt, event.timeZone)}`} />
+            {!event.review && <ShareButton path={`/events/${event.id}`} text={`${event.title} — ${formatDateShort(event.startsAt, event.timeZone)}`} />}
             {event.viewer.canEdit || isHost ? (
               <HostMenu event={event} onEdit={() => setEditing(true)} onCancel={() => setCancelling(true)} onDelete={() => setDeleting(true)} />
             ) : (
