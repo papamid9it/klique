@@ -33,7 +33,7 @@ export async function eventJsonLd(id: string): Promise<Record<string, unknown> |
       location: e.online
         ? { "@type": "VirtualLocation", url }
         : { "@type": "Place", name: e.venue || place, address: { "@type": "PostalAddress", ...(e.neighborhood ? { streetAddress: e.neighborhood } : {}), addressLocality: place, ...(e.region ? { addressRegion: e.region } : {}), addressCountry: e.country } },
-      image: [abs(e.coverImage) ?? `${url}/opengraph-image`],
+      ...(abs(e.coverImage) ? { image: [abs(e.coverImage)] } : {}),
       url,
       organizer: e.organizer
         ? { "@type": "Organization", name: e.organizer.name, ...(e.organizer.url ? { url: e.organizer.url } : {}) }

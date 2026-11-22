@@ -169,13 +169,16 @@ async function ownPreview(url: URL): Promise<LinkPreviewDTO | null | undefined> 
   if (!id) return undefined;
   const found =
     kind === "p" ? { info: await postShare(id), image: `${base}/og/post/${id}` }
-    : kind === "events" ? { info: await eventShare(id), image: `${base}/events/${id}/opengraph-image` }
+    // an event: its own flyer (its share picture's address carries a build-made code, so it can't be guessed here)
+    : kind === "events" ? await eventShare(id).then((info) => ({ info, image: info?.image ?? null }))
     : kind === "kliques" ? { info: await crewShare(id), image: `${base}/og/klique/${id}` }
     : kind === "communities" ? { info: await communityShare(id), image: `${base}/og/community/${id}` }
     : null;
   if (!found) return undefined;
   if (!found.info) return null;
-  return { url: url.toString(), siteName: "Klique", title: found.info.title, description: found.info.description, image: found.image, imageWidth: 1200, imageHeight: 630, videoUrl: null };
+  // share pictures are 1200×630; a flyer's own size isn't known here, so it's left to the card
+  const own = kind === "events";
+  return { url: url.toString(), siteName: "Klique", title: found.info.title, description: found.info.description, image: found.image, imageWidth: own ? null : 1200, imageHeight: own ? null : 630, videoUrl: null };
 }
 
 async function previewOfUrl(url: URL): Promise<LinkPreviewDTO | null> {
