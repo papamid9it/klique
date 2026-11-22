@@ -486,6 +486,8 @@ export const pollVoteSchema = z.object({ answerIds: z.array(z.string().max(12)).
 export const editMessageSchema = z.object({ body: z.string().trim().min(1, "A message can't be empty.").max(2000) });
 export const messageListQuery = z.object({
   before: z.preprocess(blankToUndef, objectId.optional()),
+  /** the app loading a chat ahead of time: doesn't count as reading it */
+  peek: z.preprocess((v) => v === "1" || v === "true" || v === true, z.boolean()).default(false),
 });
 
 /* -------------------------------- safety ---------------------------- */

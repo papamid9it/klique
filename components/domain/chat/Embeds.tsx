@@ -6,6 +6,7 @@ import { LinkService } from "@/app/services/LinkService";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { Icon } from "@/components/ui/Icon";
 import { useNearScreen } from "@/lib/hooks/useNearScreen";
+import { usePauseOnLeave } from "@/lib/hooks/usePauseOnLeave";
 import type { LinkPreviewDTO } from "@/lib/types";
 import { classifyUrl, linksIn, previewAspect } from "@/lib/embed-links";
 
@@ -118,6 +119,7 @@ function LinkCard({ url, enabled, near }: { url: string; enabled: boolean; near:
 function Embed({ url, signedIn, saved }: { url: string; signedIn: boolean; saved: Saved }) {
   const box = useRef<HTMLDivElement>(null);
   const near = useNearScreen(box);
+  usePauseOnLeave(box);
   return (
     <div ref={box}>
       <EmbedBody url={url} signedIn={signedIn} near={near} saved={saved} />

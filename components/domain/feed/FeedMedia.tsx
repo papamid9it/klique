@@ -143,6 +143,8 @@ const FeedVideo = forwardRef<VideoHandle, { url: string; poster: string | null; 
   useEffect(() => {
     const el = v.current;
     return () => {
+      // the page was left: Next keeps it mounted but hidden, so stop the sound here
+      el?.pause();
       if (el && playingNow === el) {
         playingNow = null;
         window.dispatchEvent(new Event(FREED));

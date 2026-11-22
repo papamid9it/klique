@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useNearScreen } from "@/lib/hooks/useNearScreen";
+import { usePauseOnLeave } from "@/lib/hooks/usePauseOnLeave";
 import { cdn, videoPoster, videoSrc } from "@/lib/cdn";
 import { isGif } from "@/lib/data-saver";
 import { useDataSaver } from "@/lib/hooks/useDataSaver";
@@ -27,6 +28,7 @@ export function TopicMedia({ media, tall, className, mine }: { media: TopicMedia
   // a long board of videos only asks for each one's data as it comes near the screen
   const box = useRef<HTMLDivElement>(null);
   const near = useNearScreen(box);
+  usePauseOnLeave(box);
   const view = useMediaViewer();
   const vid = useRef<HTMLVideoElement>(null);
   // data saver: videos load nothing until played, GIFs wait for a tap

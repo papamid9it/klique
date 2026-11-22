@@ -267,7 +267,7 @@ async function detail(viewer: IUser, convo: IConversation, messages: IMessage[],
   };
 }
 
-export async function getConversation(viewer: IUser, id: string, before?: string): Promise<ConversationDetailDTO> {
+export async function getConversation(viewer: IUser, id: string, before?: string, peek = false): Promise<ConversationDetailDTO> {
   const convo = await loadMyConversation(viewer, id);
   const rows = await Message.find({ conversationId: convo._id, ...(before ? { _id: { $lt: before } } : {}) })
     .sort({ _id: -1 })
@@ -276,8 +276,8 @@ export async function getConversation(viewer: IUser, id: string, before?: string
   const hasMore = rows.length > PAGE;
   const messages = rows.slice(0, PAGE).reverse();
 
-  // Opening the latest page counts as reading.
-  if (!before) {
+  // Opening the latest page counts as reading (not when the app is only loading it ahead of time).
+  if (!before && !peek) {
     await Conversation.updateOne({ _id: convo._id }, { $set: { [`unread.${sid(viewer._id)}`]: 0 } });
     convo.unread = { ...(convo.unread ?? {}), [sid(viewer._id)]: 0 };
   }
@@ -385,7 +385,12 @@ export async function sendMessage(viewer: IUser, id: string, input: string | { b
   const replies = await replyRefs([row]);
   const sent = { ...toMessage(row, viewer._id, [], row.replyToId ? (replies.get(sid(row.replyToId)) ?? null) : null), ...withMentions(row, await mentionsOf([row])) };
   // the message itself rides along, so the other side's open chat shows it at once (no reload first)
-  emitDm([viewer._id, ...others], convo._id, convo.group ? { ...sent, sender: toBrief(viewer) } : sent);
+  const live = convo.group ? { ...sent, sender: toBrief(viewer) } : sent;
+  emitDm([viewer._id, ...others], convo._id, live);
+  // and in the phone notification too (when it's small: a notification holds about 4KB in all), so tapping it opens
+  // the chat with the message already there, even when the app was closed
+  const asText = JSON.stringify(live);
+  const dmData = { type: "dm", conversationId: sid(convo._id), ...(asText.length <= 2000 ? { message: asText } : {}) };
   // a request (someone who isn't your friend writing first): it waits in Requests, and you hear about it once, as a
   // decision to make (the Friends setting), not as a chat buzz
   if (convo.group) {
@@ -396,9 +401,9 @@ export async function sendMessage(viewer: IUser, id: string, input: string | { b
     // tagged people hear it as "mentioned you"; everyone else as a normal group message
     const tagPeople = reach.filter((p) => tagged.has(sid(p)));
     const rest = reach.filter((p) => !tagged.has(sid(p)));
-    if (tagPeople.length) notify(tagPeople, { title: convo.group.name, body: `${viewer.displayName} mentioned you: ${preview}`, data: { type: "dm", conversationId: sid(convo._id) } }, { actorId: viewer._id, category: "messages", ref: `dm:${sid(convo._id)}` });
-    if (rest.length) notify(rest, { title: convo.group.name, body: `${viewer.displayName}: ${preview}`, data: { type: "dm", conversationId: sid(convo._id) } }, { actorId: viewer._id, category: "messages", ref: `dm:${sid(convo._id)}` });
-  } else if (!pendingRequest) notify([otherId], { title: viewer.displayName, body: preview, data: { type: "dm", conversationId: sid(convo._id) } }, { actorId: viewer._id, category: "messages", ref: `dm:${sid(convo._id)}` });
+    if (tagPeople.length) notify(tagPeople, { title: convo.group.name, body: `${viewer.displayName} mentioned you: ${preview}`, data: dmData }, { actorId: viewer._id, category: "messages", ref: `dm:${sid(convo._id)}` });
+    if (rest.length) notify(rest, { title: convo.group.name, body: `${viewer.displayName}: ${preview}`, data: dmData }, { actorId: viewer._id, category: "messages", ref: `dm:${sid(convo._id)}` });
+  } else if (!pendingRequest) notify([otherId], { title: viewer.displayName, body: preview, data: dmData }, { actorId: viewer._id, category: "messages", ref: `dm:${sid(convo._id)}` });
   else notify([otherId], { title: `${viewer.displayName} wants to message you`, body: preview, data: { type: "dm", conversationId: sid(convo._id) } }, { actorId: viewer._id, category: "friends", groupKey: "msg-req", many: (n) => `${n} new message requests`, ref: `dm:${sid(convo._id)}` });
   return sent;
 }
