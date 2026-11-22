@@ -20,7 +20,7 @@ import "../landing.css";
 const display = Bricolage_Grotesque({ subsets: ["latin"], weight: ["600", "800"], variable: "--font-display", display: "swap" });
 
 export const metadata: Metadata = {
-  title: { absolute: "Klique · Find your klique in Lagos and Abuja" },
+  title: { absolute: "Klique · Find your klique" },
   description: "Communities with real chat rooms, the events on this week, and kliques: small groups heading out together. On Android, desktop and the web.",
   alternates: { canonical: "/" },
 };
@@ -147,7 +147,7 @@ export default async function About() {
       <main className="wrap">
         <section className="hero">
           <div>
-            <div className="eyebrow">Lagos · Abuja</div>
+            <div className="eyebrow">In your city, anywhere</div>
             <h1>
               Find your
               <br />
@@ -306,7 +306,7 @@ export default async function About() {
             <article className="card">
               <div className="eyebrow">Events</div>
               <h3>What&apos;s on, near you</h3>
-              <p>Concerts, runs, meetups and parties in Lagos and Abuja, with the ones your friends are going to first.</p>
+              <p>Concerts, runs, meetups and parties in your city, with the ones your friends are going to first.</p>
               <div className="mini">
                 {(events.length ? events.slice(0, 3) : []).map((e) => (
                   <a key={e.id} className="row" href={`/events/${e.id}`}>
@@ -597,7 +597,7 @@ export default async function About() {
             <div className="shade" />
             <div className="finaltext">
               <h2>Find your Klique.</h2>
-              <p>Free to join. Lagos and Abuja, with more cities coming.</p>
+              <p>Free to join, in any city in the world.</p>
               <div className="ctas">
                 {signedIn ? (
                   <Link className="btn solid" href="/">
