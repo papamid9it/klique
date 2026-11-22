@@ -101,7 +101,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setUserState(null);
       setStatus("anon");
-      router.push("/");
+      // the website: a full load of "/", which is the landing page again (signed out); the desktop app: its Home
+      // (a full load on purpose: the proxy decides what "/" is, which a client-side move wouldn't ask it)
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      if (typeof window !== "undefined" && !("kliqueDesktop" in window)) window.location.assign("/");
+      else router.push("/");
     }
   }, [router]);
 

@@ -45,7 +45,7 @@ function frontDoor(req: NextRequest): NextResponse | null {
   if (req.cookies.has("klique_session") || req.cookies.has(GO_IN)) return null;
   if (/KliqueDesktop\//.test(req.headers.get("user-agent") ?? "")) return null;
   const to = req.nextUrl.clone();
-  to.pathname = "/welcome";
+  to.pathname = "/about";
   return NextResponse.rewrite(to);
 }
 

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Bricolage_Grotesque } from "next/font/google";
 import Link from "next/link";
 import { connection } from "next/server";
+import { cookies } from "next/headers";
 import { ANDROID_APP_URL } from "@/lib/constants";
 import { cdn } from "@/lib/cdn";
 import { dateChip, eventPrice, formatTime, goingShown, goingText } from "@/lib/format";
@@ -11,7 +12,7 @@ import { communitiesForLanding, upcomingForLanding } from "@/server/services/lan
 import "../landing.css";
 
 /**
- * getklique.app for visitors (the proxy shows this at "/" to anyone signed out who hasn't gone in yet): what Klique
+ * getklique.app for visitors (the proxy shows this at "/" to anyone signed out who hasn't gone in yet; also at /about): what Klique
  * is, the phone and desktop apps, real upcoming events and real communities, and the downloads. "Log in" and "Open
  * Klique" go into the app; the desktop app never sees this page.
  */
@@ -101,9 +102,11 @@ function DateChip({ e }: { e: EventDTO }) {
 
 const where = (e: EventDTO) => (e.online ? "Online" : e.neighborhood || e.venue || placeLabel(e));
 
-export default async function Welcome() {
+export default async function About() {
   // read when someone visits (not while the site builds); the lists themselves are kept an hour
   await connection();
+  // signed in (looking at /about): one button back to your Klique, as Slack's "Launch Slack"
+  const signedIn = (await cookies()).has("klique_session");
   const [events, communities] = await Promise.all([upcomingForLanding(4), communitiesForLanding(5)]);
   const first = events[0] ?? null;
 
@@ -123,12 +126,20 @@ export default async function Welcome() {
             <a href="#download">Download</a>
           </div>
           <div className="navend">
-            <a className="login" href="/login">
-              Log in
-            </a>
-            <a className="btn solid" href={IN}>
-              Open Klique
-            </a>
+            {signedIn ? (
+              <Link className="btn solid" href="/">
+                Go to your Klique
+              </Link>
+            ) : (
+              <>
+                <a className="login" href="/login">
+                  Log in
+                </a>
+                <a className="btn solid" href={IN}>
+                  Open Klique
+                </a>
+              </>
+            )}
           </div>
         </div>
       </nav>
@@ -588,12 +599,20 @@ export default async function Welcome() {
               <h2>Find your Klique.</h2>
               <p>Free to join. Lagos and Abuja, with more cities coming.</p>
               <div className="ctas">
-                <a className="btn solid" href={IN}>
-                  Open Klique
-                </a>
-                <a className="btn" href="/signup">
-                  Create an account
-                </a>
+                {signedIn ? (
+                  <Link className="btn solid" href="/">
+                    Go to your Klique
+                  </Link>
+                ) : (
+                  <>
+                    <a className="btn solid" href={IN}>
+                      Open Klique
+                    </a>
+                    <a className="btn" href="/signup">
+                      Create an account
+                    </a>
+                  </>
+                )}
               </div>
             </div>
           </div>

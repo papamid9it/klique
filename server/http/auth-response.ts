@@ -20,5 +20,7 @@ export function authResponse(req: NextRequest, result: AuthResult, status = 200)
 export function signedOutResponse() {
   const res = respond({ signedOut: true });
   clearSessionCookie(res);
+  // and the "gone in" choice, so "/" is the landing page again on the website (the desktop app never shows it)
+  res.cookies.delete("klique_in");
   return res;
 }
