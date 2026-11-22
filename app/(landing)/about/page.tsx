@@ -265,7 +265,7 @@ export default async function About() {
         <section className="band" aria-label="What people go out for">
           {[
             ["concert", "Concerts"],
-            ["football", "Matchdays"],
+            ["alte", "Alte"],
             ["skate", "Skate"],
             ["friends", "Picnics"],
             ["books", "Book clubs"],
