@@ -159,7 +159,6 @@ export function ChannelList({
   const headerMenu: MenuEntry[] = [
     // owners and admins: members and growth, events to approve, money
     ...(c.viewer.canManage ? ([{ label: "Dashboard", icon: "sliders", onSelect: () => go(`${base}?view=dashboard`) }] as MenuEntry[]) : []),
-    ...(c.review ? ([{ label: toReview ? `To review (${toReview})` : "To review", icon: "shield", onSelect: () => go(`${base}?view=review`) }] as MenuEntry[]) : []),
     { label: "About this community", icon: "info", onSelect: onAbout },
     { label: "Invite people", icon: "userplus", onSelect: inviteCommunity },
     // your own notification settings here ("Suppress @everyone and @here", an on/off switch)

@@ -334,9 +334,12 @@ export interface ReviewCountDTO {
   canRequests: boolean;
 }
 
-/** A community's "To review" page. */
+/** A community's "To review" page: 20 events at a time (`nextCursor`: ask with `after` for the next 20). */
 export interface CommunityReviewDTO {
   events: EventDTO[];
+  nextCursor: string | null;
+  /** events waiting in all */
+  total: number;
   requests: number;
   canRequests: boolean;
 }

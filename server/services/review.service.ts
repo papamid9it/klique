@@ -7,7 +7,7 @@ import type { ICommunity } from "../models/Community";
 import type { IUser } from "../models/User";
 import { can, type SpaceAccess } from "../policies/access";
 import { isSiteAdmin } from "../policies/hosting";
-import { pendingEvents } from "./events.service";
+import { pendingEventsPage } from "./events.service";
 import { resolveSpaceFor } from "./spaces.service";
 
 /**
@@ -29,11 +29,12 @@ export async function reviewCounts(viewer: IUser | null, community: Pick<ICommun
   return { events: e, requests: r, canRequests: requests };
 }
 
-/** The list itself: the events waiting (oldest first, only those this viewer may decide on) and the request count. */
-export async function communityReview(viewer: IUser, slug: string): Promise<CommunityReviewDTO> {
+/** The list itself: a page of the events waiting (oldest first, only those this viewer may decide on), how many in all, and the request count. */
+export async function communityReview(viewer: IUser, slug: string, after?: string | null): Promise<CommunityReviewDTO> {
   const { space, access } = await resolveSpaceFor(viewer, slug);
   if (!reviewsEvents(access, viewer) && !reviewsRequests(access, viewer)) throw forbidden("Only people who approve things here see this.");
   const c = space.community;
-  const [events, counts] = await Promise.all([reviewsEvents(access, viewer) ? pendingEvents(viewer, c._id) : [], reviewCounts(viewer, c, access)]);
-  return { events, requests: counts?.requests ?? 0, canRequests: !!counts?.canRequests };
+  // 20 at a time; `after`: the last event already shown
+  const [page, counts] = await Promise.all([reviewsEvents(access, viewer) ? pendingEventsPage(viewer, c._id, { limit: 20, after }) : { events: [], nextCursor: null }, reviewCounts(viewer, c, access)]);
+  return { events: page.events, nextCursor: page.nextCursor, total: counts?.events ?? 0, requests: counts?.requests ?? 0, canRequests: !!counts?.canRequests };
 }

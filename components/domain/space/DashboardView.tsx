@@ -5,18 +5,16 @@ import { useSearchParams } from "next/navigation";
 import { CommunityService } from "@/app/services/CommunityService";
 import { Panel, StatCard } from "@/components/domain/admin/AdminParts";
 import { SignupChart } from "@/components/domain/admin/SignupChart";
-import { ReviewButtons } from "@/components/domain/events/ReviewBar";
 import { MoneySummary } from "@/components/domain/money/CommunityMoney";
 import { GrowthStats } from "./GrowthStats";
+import { ReviewView } from "./ReviewView";
 import { useRealtimeEvent } from "@/components/providers/RealtimeProvider";
-import { Avatar } from "@/components/ui/Avatar";
 import { CountBadge } from "@/components/ui/CountBadge";
 import { Icon, type IconName } from "@/components/ui/Icon";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { SoftLink } from "@/components/ui/SoftLink";
-import { EmptyState, ErrorState } from "@/components/ui/States";
+import { ErrorState } from "@/components/ui/States";
 import { cx } from "@/components/ui/cx";
-import { formatDateShort } from "@/lib/format";
 import { useApi } from "@/lib/hooks/useApi";
 import type { CommunityDashboardDTO, CommunityDTO } from "@/lib/types";
 
@@ -96,7 +94,7 @@ export function DashboardNav({ c, onNavigate }: { c: CommunityDTO; onNavigate?: 
  * plan); Events is what's waiting for approval; Money is donations, contributions and payouts.
  */
 export function DashboardView({ c }: { c: CommunityDTO }) {
-  const { data: d, loading, error, reload, setData } = useApi(() => CommunityService.dashboard(c.slug), [c.slug], { key: `dashboard:${c.slug}` });
+  const { data: d, loading, error, reload } = useApi(() => CommunityService.dashboard(c.slug), [c.slug], { key: `dashboard:${c.slug}` });
   // a member sent an event in, someone asked to join: refresh
   useRealtimeEvent(() => void reload(), { filter: (e) => e.type === "notify" && e.category === "admin", debounceMs: 800 });
   const section = useSection(c);
@@ -130,7 +128,14 @@ export function DashboardView({ c }: { c: CommunityDTO }) {
             <GrowthStats slug={c.slug} />
           </div>
         ) : section === "events" ? (
-          <PendingEvents c={c} d={d} onDecided={(id) => setData((x) => (x ? { ...x, pendingEvents: x.pendingEvents.filter((p) => p.id !== id) } : x))} />
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <StatCard label="Upcoming events" value={d.activity.upcomingEvents} hint="Posted and coming up" icon="calendar" href={`/communities/${c.slug}?view=events`} />
+              <StatCard label="Join requests" value={d.pendingRequests} hint={c.privacy === "private" ? "Waiting to be let in" : "A public community: anyone can join"} icon="userplus" href={c.privacy === "private" ? `/communities/${c.slug}?settings=requests` : undefined} />
+            </div>
+            {/* the same list as To review, 20 at a time */}
+            <ReviewView c={c} onDecided={() => void reload()} />
+          </div>
         ) : (
           <MoneySummary slug={c.slug} />
         )}
@@ -206,46 +211,6 @@ function Members({ c, d }: { c: CommunityDTO; d: CommunityDashboardDTO }) {
             </li>
           ))}
         </ul>
-      </Panel>
-    </div>
-  );
-}
-
-/** Members' events waiting for approval, decided right here. */
-function PendingEvents({ c, d, onDecided }: { c: CommunityDTO; d: CommunityDashboardDTO; onDecided: (id: string) => void }) {
-  return (
-    <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <StatCard label="Waiting for approval" value={d.pendingEvents.length} hint="Sent in by members" icon="clock" tone={d.pendingEvents.length ? "attention" : undefined} />
-        <StatCard label="Upcoming events" value={d.activity.upcomingEvents} hint="Posted and coming up" icon="calendar" href={`/communities/${c.slug}?view=events`} />
-      </div>
-      <Panel title={d.pendingEvents.length ? `Waiting for approval · ${d.pendingEvents.length}` : "Waiting for approval"}>
-        {d.pendingEvents.length === 0 ? (
-          <div className="p-6">
-            <EmptyState icon="calendar" title="Nothing to approve" compact>
-              {c.memberEvents ? "When a member sends an event in, it waits here for you or another admin." : "Members can't send events in. Turn it on in Settings → Groups & events."}
-            </EmptyState>
-          </div>
-        ) : (
-          <ul className="divide-y divide-line">
-            {d.pendingEvents.map((e) => (
-              <li key={e.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
-                <Avatar name={e.host.displayName} src={e.host.avatarUrl} size={34} />
-                <div className="min-w-0 flex-1">
-                  <Link href={`/events/${e.id}`} className="block truncate text-[14px] font-semibold hover:underline">
-                    {e.title}
-                  </Link>
-                  <p className="truncate text-[12.5px] text-ink-muted">
-                    {e.host.displayName} · {formatDateShort(e.startsAt, e.timeZone)} · {e.online ? "Online" : e.venue}
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <ReviewButtons event={e} size="sm" onDone={() => onDecided(e.id)} />
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
       </Panel>
     </div>
   );

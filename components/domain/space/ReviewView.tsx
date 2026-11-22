@@ -1,6 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
+import { errorMessage } from "@/app/ApiCore";
+import { useToast } from "@/components/providers/ToastProvider";
+import { Button } from "@/components/ui/Button";
 import { CommunityService } from "@/app/services/CommunityService";
 import { ReviewButtons } from "@/components/domain/events/ReviewBar";
 import { useRealtimeEvent } from "@/components/providers/RealtimeProvider";
@@ -18,7 +22,21 @@ import type { CommunityDTO } from "@/lib/types";
  * `onDecided`: the badge beside "To review" counts down.
  */
 export function ReviewView({ c, onDecided }: { c: CommunityDTO; onDecided: () => void }) {
+  const toast = useToast();
   const { data: d, loading, error, reload, setData } = useApi(() => CommunityService.review(c.slug), [c.slug], { key: `review:${c.slug}` });
+  const [more, setMore] = useState(false);
+  // the next 20, after the last one showing
+  async function seeMore() {
+    if (!d?.nextCursor || more) return;
+    setMore(true);
+    try {
+      const next = (await CommunityService.review(c.slug, d.nextCursor)).data;
+      setData((x) => (x ? { ...x, events: [...x.events, ...next.events.filter((e) => !x.events.some((y) => y.id === e.id))], nextCursor: next.nextCursor } : x));
+    } catch (e) {
+      toast(errorMessage(e), "error");
+    }
+    setMore(false);
+  }
   // a member sent an event in, someone asked to join: refresh
   useRealtimeEvent(() => void reload(), { filter: (e) => e.type === "notify" && e.category === "admin", debounceMs: 800 });
   if (loading && !d) return <RowSkeleton rows={3} />;
@@ -41,7 +59,7 @@ export function ReviewView({ c, onDecided }: { c: CommunityDTO; onDecided: () =>
         </EmptyState>
       ) : d.events.length ? (
         <section>
-          <h2 className="mb-2 text-[13px] font-semibold text-ink-muted">Events waiting for approval · {d.events.length}</h2>
+          <h2 className="mb-2 text-[13px] font-semibold text-ink-muted">Events waiting for approval · {Math.max(d.total, d.events.length)}</h2>
           <ul className="divide-y divide-line rounded-card border border-line bg-surface">
             {d.events.map((e) => (
               <li key={e.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
@@ -59,7 +77,7 @@ export function ReviewView({ c, onDecided }: { c: CommunityDTO; onDecided: () =>
                     event={e}
                     size="sm"
                     onDone={() => {
-                      setData((x) => (x ? { ...x, events: x.events.filter((p) => p.id !== e.id) } : x));
+                      setData((x) => (x ? { ...x, events: x.events.filter((p) => p.id !== e.id), total: Math.max(0, x.total - 1) } : x));
                       onDecided();
                     }}
                   />
@@ -67,6 +85,13 @@ export function ReviewView({ c, onDecided }: { c: CommunityDTO; onDecided: () =>
               </li>
             ))}
           </ul>
+          {d.nextCursor && (
+            <div className="mt-3 flex justify-center">
+              <Button size="sm" loading={more} onClick={() => void seeMore()}>
+                See more
+              </Button>
+            </div>
+          )}
         </section>
       ) : null}
     </div>

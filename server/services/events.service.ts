@@ -398,6 +398,20 @@ export async function reviewEvent(viewer: IUser, id: string, decision: "approve"
   return getEvent(viewer, id);
 }
 
+/**
+ * A page of members' events waiting in a community (and its groups) for this person, oldest first: `after` is the
+ * last one already shown. Only those they may decide on are sent, so a page can hold fewer than `limit`.
+ */
+export async function pendingEventsPage(viewer: IUser, communityId: Types.ObjectId, opts: { limit?: number; after?: string | null } = {}): Promise<{ events: EventDTO[]; nextCursor: string | null }> {
+  const limit = opts.limit ?? 20;
+  const after = opts.after && Types.ObjectId.isValid(opts.after) ? new Types.ObjectId(opts.after) : null;
+  const rows = await Event.find({ communityId, review: "pending", cancelled: false, ...(after ? { _id: { $gt: after } } : {}) }).sort({ _id: 1 }).limit(limit + 1).lean<IEvent[]>();
+  const page = rows.slice(0, limit);
+  const mine: IEvent[] = [];
+  for (const e of page) if (await canReviewEvent(e, viewer)) mine.push(e);
+  return { events: await toEvents(mine, viewer), nextCursor: rows.length > limit ? sid(page[page.length - 1]._id) : null };
+}
+
 /** Members' events waiting in a community (and its groups) for this owner or admin, oldest first. */
 export async function pendingEvents(viewer: IUser, communityId: Types.ObjectId): Promise<EventDTO[]> {
   const rows = await Event.find({ communityId, review: "pending", cancelled: false }).sort({ createdAt: 1 }).limit(100).lean<IEvent[]>();
