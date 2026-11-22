@@ -225,7 +225,7 @@ function SearchView() {
   const panel = <SearchFiltersList f={f} />;
   const total = counts.communities + counts.events + counts.people + counts.posts + counts.tags;
   const show = (t: Exclude<Tab, "all">) => (tab === "all" || tab === t || (tagMode && t === "tags")) && counts[t] > 0;
-  // your last 5 searches (this browser): kept once a search with results has been looked at for a moment
+  // your last 3 searches (this browser): kept once a search with results has been looked at for a moment
   const recent = useRecent();
   useEffect(() => {
     if (!q || !total) return;
@@ -427,7 +427,7 @@ function useRecent() {
       const t = term.trim();
       if (t.length < 2) return;
       setList((now) => {
-        const next = [t, ...now.filter((x) => x.toLowerCase() !== t.toLowerCase())].slice(0, 5);
+        const next = [t, ...now.filter((x) => x.toLowerCase() !== t.toLowerCase())].slice(0, 3);
         try {
           localStorage.setItem(RECENT_KEY, JSON.stringify(next));
         } catch {}
