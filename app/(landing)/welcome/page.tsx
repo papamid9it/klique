@@ -256,7 +256,7 @@ export default async function Welcome() {
             ["concert", "Concerts"],
             ["football", "Matchdays"],
             ["skate", "Skate"],
-            ["picnic", "Picnics"],
+            ["friends", "Picnics"],
             ["books", "Book clubs"],
           ].map(([img, label]) => (
             <figure key={img}>
@@ -355,7 +355,7 @@ export default async function Welcome() {
           <div className="split rev">
             <div className="photo tall">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/landing/dinner.webp" alt="" loading="lazy" />
+              <img src="/landing/friends.webp" alt="" loading="lazy" />
               <div className="kcard">
                 <div className="eyebrow">Klique</div>
                 <b>{first ? `Who's going to ${first.title}?` : "Dinner before the show, from Lekki?"}</b>
@@ -489,7 +489,7 @@ export default async function Welcome() {
             {communities.map((c, i) => (
               <a key={c.slug} href={`/communities/${c.slug}`}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={c.cover ? cdn(c.cover, { w: 640 }) : `/landing/${["concert2", "football", "skate", "books", "picnic"][i % 5]}.webp`} alt="" loading="lazy" />
+                <img src={c.cover ? cdn(c.cover, { w: 640 }) : `/landing/${["concert2", "football", "skate", "books", "friends"][i % 5]}.webp`} alt="" loading="lazy" />
                 <b>{c.name}</b>
                 <small>{[c.line, c.members >= 10 ? `${c.members.toLocaleString("en-NG")} members` : ""].filter(Boolean).join(" · ") || "Community"}</small>
               </a>
