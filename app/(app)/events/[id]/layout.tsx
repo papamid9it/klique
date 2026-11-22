@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { cacheLife } from "next/cache";
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
+import { JsonLd } from "@/components/seo/JsonLd";
+import { eventJsonLd } from "@/server/services/seo.service";
 import { eventShare } from "@/server/services/share.service";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
@@ -18,6 +20,24 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   };
 }
 
-export default function Layout({ children }: { children: ReactNode }) {
-  return children;
+/** the event's facts for Google (its event listings), from public data, cached like the title and description */
+async function EventFacts({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  return <JsonLd data={await factsFor(id)} />;
+}
+async function factsFor(id: string) {
+  "use cache";
+  cacheLife("minutes");
+  return eventJsonLd(id);
+}
+
+export default function Layout({ children, params }: { children: ReactNode; params: Promise<{ id: string }> }) {
+  return (
+    <>
+      {children}
+      <Suspense fallback={null}>
+        <EventFacts params={params} />
+      </Suspense>
+    </>
+  );
 }

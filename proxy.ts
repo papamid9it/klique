@@ -25,7 +25,34 @@ const CORS_HEADERS = {
 /** Link-preview fetchers (WhatsApp, X, Slack, Discord…) that read a page's title and picture without being a browser. */
 const PREVIEW_BOT = /bot|crawler|spider|facebookexternalhit|whatsapp|slack|discord|telegram|embedly|preview|skype|vkshare|pinterest|linkedin/i;
 
+/**
+ * The front door: "/" shows the landing page (what Klique is, the apps, downloads) to people who aren't signed in and
+ * haven't chosen to go in yet. Signed in, the desktop app, or "Open Klique" clicked once (a cookie): the app's Home.
+ * Any "/?…" link (a profile, a post) goes straight to the app as before.
+ */
+const GO_IN = "klique_in";
+function frontDoor(req: NextRequest): NextResponse | null {
+  if (req.nextUrl.pathname !== "/") return null;
+  // "Open Klique": remember it (a year) and go in, with a clean address
+  if (req.nextUrl.searchParams.get("app") === "1") {
+    const to = req.nextUrl.clone();
+    to.searchParams.delete("app");
+    const res = NextResponse.redirect(to);
+    res.cookies.set(GO_IN, "1", { path: "/", maxAge: 60 * 60 * 24 * 365, sameSite: "lax" });
+    return res;
+  }
+  if (req.nextUrl.search) return null;
+  if (req.cookies.has("klique_session") || req.cookies.has(GO_IN)) return null;
+  if (/KliqueDesktop\//.test(req.headers.get("user-agent") ?? "")) return null;
+  const to = req.nextUrl.clone();
+  to.pathname = "/welcome";
+  return NextResponse.rewrite(to);
+}
+
 export function proxy(req: NextRequest) {
+  const door = frontDoor(req);
+  if (door) return door;
+
   // There's no profile page: a profile is the pop-up card. Old and shared /people/<handle> links open that card on
   // Home. Preview bots still get the old address, whose metadata describes the person (app/(app)/people).
   const person = /^\/people\/([^/]+)\/?$/.exec(req.nextUrl.pathname);
@@ -53,4 +80,4 @@ export function proxy(req: NextRequest) {
   return res;
 }
 
-export const config = { matcher: ["/api/:path*", "/people/:path*"] };
+export const config = { matcher: ["/", "/api/:path*", "/people/:path*"] };
