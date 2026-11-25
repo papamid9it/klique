@@ -29,6 +29,8 @@ export interface IDonationButton {
   imageUrl?: string | null;
   goalHype?: number | null;
   raisedHype?: number;
+  /** the one word on its button ("Give", "Donate", "Support"…) */
+  verb?: string;
 }
 
 const DonationButtonSchema = new Schema<IDonationButton>(
@@ -46,6 +48,7 @@ const DonationButtonSchema = new Schema<IDonationButton>(
     imageUrl: { type: String, default: null },
     goalHype: { type: Number, default: null, min: 1 },
     raisedHype: { type: Number, default: 0, min: 0 },
+    verb: { type: String, default: "Give", maxlength: 12 },
   },
   { timestamps: { createdAt: true, updatedAt: false } },
 );

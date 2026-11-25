@@ -3,7 +3,7 @@ import type { Reach } from "@/lib/places";
 import type { CityId, InterestId } from "@/lib/constants";
 
 /** a cause as its owner writes it: goal in Hype (null: no goal) */
-export type CauseInput = { label: string; title: string; description?: string; imageUrl?: string | null; goalHype?: number | null; main?: boolean };
+export type CauseInput = { label: string; verb?: string; title: string; description?: string; imageUrl?: string | null; goalHype?: number | null; main?: boolean };
 import type { CommunityCardDTO, CommunityDTO, CommunityPrivacy, Envelope, GroupPolicy, MyCommunityDTO, Paginated, SidebarDTO, CommunityDashboardDTO, CommunityReviewDTO, CauseDTO, CausesDTO, GrowthStatsDTO, VerificationDTO, Move } from "@/lib/types";
 
 const api = new ApiClient();

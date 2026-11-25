@@ -63,6 +63,7 @@ export function CauseButtons({ c, compact }: { c: CommunityDTO; compact?: boolea
           <span className="block truncate text-[13.5px] font-semibold">{main.label}</span>
           <CauseBar cause={main} compact className="mt-1" />
         </span>
+        <span className="shrink-0 rounded-full bg-ink px-2.5 py-1 text-[12px] font-semibold text-canvas">{main.verb}</span>
       </button>
       {(c.causeCount ?? 0) > 1 && (
         <button type="button" onClick={() => setOpen("all")} className="mt-1.5 px-1 text-[12.5px] font-semibold text-ink-muted hover:text-ink">
@@ -201,7 +202,7 @@ function GiveModal({ c, cause: start, onClose }: { c: CommunityDTO; cause: Cause
             </Button>
           ) : (
             <Button variant="primary" loading={busy} disabled={!!bad || !agree} onClick={() => void give()}>
-              Give {hype(n)} Hype
+              {cause.verb} {hype(n)} Hype
             </Button>
           )}
         </div>
@@ -270,6 +271,7 @@ export function CausesSettings({ c }: { c: CommunityDTO }) {
 function CauseForm({ c, cause, first, onClose, onSaved }: { c: CommunityDTO; cause: CauseDTO | null; first: boolean; onClose: () => void; onSaved: () => void }) {
   const toast = useToast();
   const [label, setLabel] = useState(cause?.label ?? "");
+  const [verb, setVerb] = useState(cause?.verb ?? "Give");
   const [title, setTitle] = useState(cause?.title ?? "");
   const [description, setDescription] = useState(cause?.description ?? "");
   const [imageUrl, setImageUrl] = useState(cause?.imageUrl ?? "");
@@ -282,7 +284,8 @@ function CauseForm({ c, cause, first, onClose, onSaved }: { c: CommunityDTO; cau
     e.preventDefault();
     const goalHype = hasGoal ? Math.floor(Number(goal.replace(/[^\d]/g, "")) || 0) : null;
     if (hasGoal && (!goalHype || goalHype < 10)) return setErrors({ goalHype: "A goal of at least 10 Hype, or pick No goal." });
-    const input: CauseInput = { label: label.trim(), title: title.trim(), description: description.trim(), imageUrl: imageUrl || null, goalHype, main };
+    if (!/^\p{L}{2,12}$/u.test(verb.trim())) return setErrors({ verb: "One word, letters only (up to 12)." });
+    const input: CauseInput = { label: label.trim(), verb: verb.trim(), title: title.trim(), description: description.trim(), imageUrl: imageUrl || null, goalHype, main };
     setBusy(true);
     setErrors({});
     try {
@@ -299,6 +302,16 @@ function CauseForm({ c, cause, first, onClose, onSaved }: { c: CommunityDTO; cau
     <Modal open onClose={onClose} title={cause ? "Edit cause" : "Start a cause"} size="md">
       <form onSubmit={save} className="space-y-4" noValidate>
         <TextField label="Button name" value={label} onChange={(e) => setLabel(e.target.value)} maxLength={40} placeholder="Support the venue fund" error={errors.label} hint="What the button says, in your community's left panel." />
+        <div>
+          <TextField label="Button word" value={verb} onChange={(e) => setVerb(e.target.value.replace(/\s/g, "").slice(0, 12))} maxLength={12} error={errors.verb} hint="One word on the button people press." />
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {["Give", "Donate", "Support", "Back", "Fund"].map((w) => (
+              <button key={w} type="button" onClick={() => setVerb(w)} aria-pressed={verb === w} className={cx("h-8 rounded-full border px-3 text-[13px] font-semibold transition", verb === w ? "border-ink bg-ink text-canvas" : "border-line hover:bg-raised")}>
+                {w}
+              </button>
+            ))}
+          </div>
+        </div>
         <TextField label="What it's for" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={60} placeholder="Venue fund for December" error={errors.title} />
         <TextArea label="Tell people about it" value={description} onChange={(e) => setDescription(e.target.value)} maxLength={300} counter={300} error={errors.description} />
         <ImageField kind="photo" label="Picture (optional)" value={imageUrl} onChange={setImageUrl} error={errors.imageUrl} reposition={{ aspect: 16 / 9 }} />

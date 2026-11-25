@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { identify, replayFor, resetAnalytics, startAnalytics } from "@/lib/analytics";
+import { notePath } from "@/lib/entry";
 import { useAuth } from "./AuthProvider";
 
 /** Starts usage analytics (lib/analytics), tells it who's signed in, and switches replay off on private pages. */
@@ -24,6 +25,8 @@ export function AnalyticsProvider() {
   }, [user]);
 
   useEffect(() => replayFor(path ?? "/"), [path]);
+  // where the visit came in, and whether it has moved on inside Klique since (lib/entry: invite card or preview)
+  useEffect(() => notePath(path ?? "/"), [path]);
 
   return null;
 }

@@ -22,7 +22,7 @@ import { spaceAccess } from "../policies/access";
 import { ensureDefaultChannels } from "./channels.service";
 import { Channel, ChannelCategory } from "../models/Channel";
 import { emitChannel } from "./realtime";
-import { toCommunityCards, toCommunityDetail } from "../serializers";
+import { ONLINE_WINDOW_MS, toCommunityCards, toCommunityDetail } from "../serializers";
 import type { communityCreateSchema, communityListQuery, communityUpdateSchema } from "../validators/schemas";
 import { PAGE_SIZE, purgeSpaceData, recountMembers, sid, uniqueCommunitySlug } from "./helpers";
 import { resolveSpace } from "./spaces.service";
@@ -161,6 +161,12 @@ export async function getCommunity(viewer: IUser | null, slug: string): Promise<
   if (viewer && access.isMember) dto.suppressEveryone = !!membership?.suppressEveryone;
   if (review) dto.review = review;
   if (causes) Object.assign(dto, causes);
+  // not in it yet: the invite card says how many are online now, like Discord's (unless the owner hid it)
+  if (!access.isMember && access.canView && !space.community.onlineHidden && space.community.memberCount > 0) {
+    // who's online on Klique, kept for a minute (shared by every invite card), then how many of them are in this one
+    const online: string[] = await remember("online-users", "all", 60, async () => (await User.find({ lastSeenAt: { $gte: new Date(Date.now() - ONLINE_WINDOW_MS) }, presence: { $ne: "invisible" } }).select("_id").limit(5000).lean<{ _id: Types.ObjectId }[]>()).map((u) => String(u._id)));
+    dto.onlineCount = online.length ? await Membership.countDocuments({ communityId: space.community._id, subcommunityId: null, status: "active", userId: { $in: online.map((id) => new Types.ObjectId(id)) } }) : 0;
+  }
   // in trouble with Klique: a suspension shows to everyone, a restriction only to the people who run it
   const standing = standingOf(space.community);
   if (standing && (standing.state === "suspended" || access.canManage)) dto.standing = { state: standing.state, until: standing.until ? new Date(standing.until).toISOString() : null, reason: standing.reason };

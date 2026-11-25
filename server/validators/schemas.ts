@@ -978,6 +978,8 @@ export const adminCommunityStandingSchema = z.object({
 /** a community's cause: what the button says, what it's for, a goal in Hype (none: no goal), main or not */
 export const causeSchema = z.object({
   label: z.string().trim().min(2, "Say what the button says").max(40),
+  /** one word for its Give button: Give, Donate, Support… */
+  verb: z.string().trim().regex(/^\p{L}{2,12}$/u, "One word, letters only (up to 12)").optional(),
   title: z.string().trim().min(3, "Say what it's for").max(60),
   description: z.string().trim().max(300).optional(),
   imageUrl: z.union([mediaUrl, z.null()]).optional(),

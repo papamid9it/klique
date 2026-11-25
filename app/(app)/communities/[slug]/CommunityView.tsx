@@ -59,6 +59,8 @@ import { softNavigate } from "@/lib/nav";
 import type { ChannelDTO, ChannelGroupDTO, ChannelsDTO, CommunityDTO, MyCommunityDTO } from "@/lib/types";
 import { CommunitySearchBox, CommunitySearchResults } from "@/components/domain/space/CommunitySearch";
 import { WelcomeModal } from "@/components/domain/space/Welcome";
+import { InviteCard } from "@/components/domain/space/InviteCard";
+import { openedFromOutside } from "@/lib/entry";
 import { ReviewView } from "@/components/domain/space/ReviewView";
 import { ThreadSide, ThreadsModal } from "@/components/domain/chat/Threads";
 
@@ -155,6 +157,10 @@ function CommunityWorkspace({ slug }: { slug: string }) {
   // Refresh unread dots while the tab is visible.
   const reloadChannels = channels.reload;
   const member = !!c?.viewer.isMember;
+  // a link from outside Klique (shared, a new tab) opens the invite card; browsing inside Klique previews it instead
+  // (worked out once it's on the page, so the server's copy and the browser's match)
+  const [invite, setInvite] = useState(false);
+  useEffect(() => setInvite(openedFromOutside(window.location.pathname)), []);
   const { connected } = useRealtime();
   useEffect(() => {
     if (!canUse || !member) return;
@@ -280,6 +286,9 @@ function CommunityWorkspace({ slug }: { slug: string }) {
       </Scroll>
     );
   }
+
+  // opened from a link outside Klique, and not in it yet: its invite card first, like Discord (nothing inside shows)
+  if (invite && !c.viewer.isMember && !c.locked) return <InviteCard c={c} onJoined={(next) => (setInvite(false), joined(next))} />;
 
   if (c.locked) {
     return (
@@ -479,6 +488,15 @@ function CommunityWorkspace({ slug }: { slug: string }) {
       <aside className="hidden w-64 shrink-0 border-r border-line bg-surface/40 lg:block">{list()}</aside>
 
       <section className="flex min-w-0 flex-1 flex-col" aria-label={view ? viewTable[view].label : "Conversation"}>
+        {/* not in it: previewing, like Discord's preview mode (read only until you join) */}
+        {!member && (
+          <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line bg-raised/60 px-3 py-2 sm:px-5">
+            <p className="min-w-0 flex-1 text-[13px]">
+              You&apos;re previewing <span className="font-semibold">{c.name}</span>. Join to chat, post and go to its events.
+            </p>
+            <JoinButton community={c} onChange={(next) => joined(next as CommunityDTO)} />
+          </div>
+        )}
         {/* an open crew brings its own header (with the info button), like a channel's */}
         {!(crewOpen && !gp) && (
         <header className={cx("flex min-h-14 items-center gap-2 border-b border-line px-3 sm:px-5", postFull && "lg:hidden")}>

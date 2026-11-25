@@ -33,6 +33,7 @@ const naira = (n: number) => `₦${n.toLocaleString("en-NG")}`;
 export const causeDto = (b: IDonationButton): CauseDTO => ({
   id: sid(b._id),
   label: b.label || b.title,
+  verb: b.verb || "Give",
   title: b.title,
   description: b.description,
   imageUrl: b.imageUrl ?? null,
@@ -85,7 +86,7 @@ export async function saveCause(viewer: IUser, slug: string, input: z.infer<type
   const community = await managed(viewer, slug);
   const cfg = await getMoneyConfig();
   if (!id && !unlockedFor(community, cfg) && !isSiteAdmin(viewer)) throw forbidden(`Causes open once your community has ${cfg.causeMinMembers.toLocaleString("en-NG")} members and is ${cfg.causeMinDays} days old.`);
-  const set = { label: input.label, title: input.title, description: input.description ?? "", ...(input.imageUrl !== undefined ? { imageUrl: input.imageUrl } : {}), goalHype: input.goalHype ?? null, active: true };
+  const set = { label: input.label, ...(input.verb ? { verb: input.verb[0].toUpperCase() + input.verb.slice(1).toLowerCase() } : {}), title: input.title, description: input.description ?? "", ...(input.imageUrl !== undefined ? { imageUrl: input.imageUrl } : {}), goalHype: input.goalHype ?? null, active: true };
   let row: IDonationButton | null;
   if (id) {
     row = Types.ObjectId.isValid(id) ? await DonationButton.findOneAndUpdate({ _id: id, communityId: community._id, active: true }, { $set: set }, { returnDocument: "after" }).lean<IDonationButton>() : null;

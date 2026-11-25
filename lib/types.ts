@@ -325,6 +325,8 @@ export interface CommunityDTO extends CommunityCardDTO {
   inviteCode?: string;
   /** "To review" (events waiting for approval, join requests): only for people who approve things here */
   review?: ReviewCountDTO;
+  /** for someone not in it yet (the invite card, like Discord's): how many of its members are online now */
+  onlineCount?: number;
   /** set by Klique for breaking the rules: everyone sees a suspension; only its owner and admins see a restriction */
   standing?: { state: "restricted" | "suspended"; until: ISODate | null; reason: string } | null;
   /** the cause shown under its name (the main one), and how many it has; absent: none */
@@ -1356,6 +1358,8 @@ export interface CauseDTO {
   id: Id;
   /** the button's own words: "Support the venue fund" */
   label: string;
+  /** the one word on its Give button ("Give", "Donate", "Support"…) */
+  verb: string;
   title: string;
   description: string;
   imageUrl: string | null;
