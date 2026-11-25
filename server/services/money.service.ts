@@ -161,12 +161,10 @@ async function checkout(viewer: IUser, p: Pick<IPayment, "kind" | "communityId" 
 }
 
 /** Start a donation to one of a community's buttons. They agree no refunds first (the form asks). */
-export async function startDonation(viewer: IUser, slug: string, buttonId: string, input: { amount: number; message?: string }) {
-  const { space, access } = await resolveSpaceFor(viewer, slug);
-  if (space.sub || !access.canView || isKlique(space.community)) throw notFound("We couldn't find that community.");
-  const b = Types.ObjectId.isValid(buttonId) ? await DonationButton.findOne({ _id: buttonId, communityId: space.community._id, active: true }).lean<IDonationButton>() : null;
-  if (!b) throw notFound("That donation button isn't there any more.");
-  return checkout(viewer, { kind: "donation", communityId: space.community._id, buttonId: b._id, eventId: null, quantity: 1, amount: Math.round(input.amount), message: (input.message ?? "").trim().slice(0, 200) }, `/communities/${space.community.slug}`);
+/** Donations are now causes, given in Hype (causes.service): the old Paystack checkout is closed (older pages get this). */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export async function startDonation(..._: [IUser, string, string, { amount: number; message?: string }]): Promise<never> {
+  throw new ApiError(410, "Donations are now causes: give Hype from the community's page.", { code: "donations_moved" });
 }
 
 /** Start a contribution toward an event: `quantity` units at its price, up to its maximum. */

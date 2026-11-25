@@ -1,6 +1,7 @@
 "use client";
 
 import { createPortal } from "react-dom";
+import { HypeCoin } from "./HypeCoin";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { errorMessage, isApiError } from "@/app/ApiCore";
@@ -301,98 +302,132 @@ function GiftTray({ target, anchor, initial, onClose, onSent }: { target: GiftTa
   }
 
   const short = picked && data ? picked.hype > data.balance : false;
+  // the Hype packs, in the same box: Send while short of Hype, or the + by your balance
+  const [packsOpen, setPacksOpen] = useState(false);
   useEffect(() => {
-    if (short && !wallet) GiftService.wallet().then((r) => setWallet(r.data), () => {});
-  }, [short, wallet]);
+    if (packsOpen && !wallet) GiftService.wallet().then((r) => setWallet(r.data), () => {});
+  }, [packsOpen, wallet]);
+  const pressSend = () => {
+    if (!picked) return;
+    if (short) {
+      setPackNaira(null);
+      return setPacksOpen(true);
+    }
+    void send();
+  };
   const need = short && picked && data ? picked.hype - data.balance : 0;
   // the packs, and the smallest one that covers it ("Covers it"); none big enough: exactly what's missing
   const packs = wallet ? wallet.webPacks : [];
-  const covers = packs.find((p) => p.hype >= need) ?? null;
+  const covers = short ? (packs.find((p) => p.hype >= need) ?? null) : null;
   const exact = Math.min(wallet?.customMax ?? Infinity, Math.max(wallet?.customMin ?? 0, need * HYPE_NAIRA));
-  const chosen = packNaira ?? covers?.naira ?? exact;
-  const enough = hypeForNaira(chosen) >= need;
+  // short and no pack is big enough: exactly what's missing, as one more choice
+  const choices = short && !packs.some((p) => p.hype >= need) ? [...packs, { naira: exact, hype: hypeForNaira(exact) }] : packs;
+  const chosen = packNaira ?? covers?.naira ?? (short ? exact : (packs[1] ?? packs[0])?.naira ?? 0);
+  const enough = !short || hypeForNaira(chosen) >= need;
   async function topUpAndSend() {
-    if (!picked || !data || paying) return;
+    if (!data || paying || !chosen) return;
     setPaying(true);
     try {
       const here = window.location.pathname + window.location.search;
       const res = await GiftService.topup(chosen, undefined, here);
-      rememberAward({ reference: res.data.reference, giftId: picked.id, giftName: picked.name, target, anonymous, clientKey: key.current });
+      // short of Hype for an award: it goes out as soon as the payment's back
+      if (short && picked) rememberAward({ reference: res.data.reference, giftId: picked.id, giftName: picked.name, target, anonymous, clientKey: key.current });
       window.location.href = res.data.authorizationUrl;
     } catch (e) {
       toast(errorMessage(e), "error");
       setPaying(false);
     }
   }
+  const balance = data ? data.balance.toLocaleString("en-NG") : "";
   return (
-    <div ref={ref} role="dialog" aria-label="Send an award" style={style} className="fixed z-50 flex w-[21rem] max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden rounded-card border border-line bg-surface p-3 shadow-xl">
-      <TrayReceived target={target} />
-      <div className="mb-2 flex shrink-0 items-center gap-2">
-        <p className="flex-1 text-sm font-semibold">Send an award</p>
-        <span className="font-mono text-[12px] text-ink-muted">{data ? `${data.balance.toLocaleString("en-NG")} Hype` : ""}</span>
-        <Link href="/settings?tab=hype" className="rounded-full bg-raised px-2.5 py-1 text-[12px] font-semibold hover:bg-line">
-          Top up
-        </Link>
-      </div>
-      {!data ? (
-        error ? <p className="p-2 text-sm text-danger">{error}</p> : <Skeleton className="h-40" />
-      ) : !data.enabled ? (
-        <p className="p-2 text-sm text-ink-muted">Awards are switched off for now.</p>
+    <div ref={ref} role="dialog" aria-label={packsOpen ? "Hype packs" : "Send an award"} style={style} className="fixed z-50 flex w-[22rem] max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden rounded-card border border-line bg-surface shadow-xl">
+      {!packsOpen ? (
+        <>
+          <div className="px-3 pt-3"><TrayReceived target={target} /></div>
+          <p className="shrink-0 px-3 pb-1 pt-1 text-sm font-semibold">Awards</p>
+          {!data ? (
+            <div className="p-3">{error ? <p className="text-sm text-danger">{error}</p> : <Skeleton className="h-40" />}</div>
+          ) : !data.enabled ? (
+            <p className="p-3 text-sm text-ink-muted">Awards are switched off for now.</p>
+          ) : (
+            <>
+              <div className="grid min-h-0 flex-1 grid-cols-4 content-start gap-1.5 overflow-y-auto px-2 pb-2 no-bar">
+                {data.gifts.map((g) => (
+                  <button
+                    key={g.id}
+                    type="button"
+                    onClick={() => setPicked(g)}
+                    aria-pressed={picked?.id === g.id}
+                    title={`${g.name}: ${g.hype.toLocaleString("en-NG")} Hype`}
+                    className={cx("flex flex-col items-center gap-0.5 rounded-control p-1.5 transition hover:bg-raised", picked?.id === g.id && "bg-raised ring-2 ring-ink")}
+                  >
+                    <GiftArt gift={g} size={34} animate />
+                    <span className="w-full truncate text-center text-[12px] font-medium">{g.name}</span>
+                    <span className="flex items-center gap-1 font-mono text-[12px] text-ink-muted"><HypeCoin size={11} />{g.hype.toLocaleString("en-NG")}</span>
+                  </button>
+                ))}
+              </div>
+              <label className="flex shrink-0 items-center gap-2 px-3 pb-2 text-[13px]">
+                <input type="checkbox" checked={anonymous} onChange={(e) => setAnonymous(e.target.checked)} className="size-4 accent-[var(--color-accent-text)]" />
+                Send anonymously
+                <span className="text-ink-muted">(they see “Someone”)</span>
+              </label>
+            </>
+          )}
+          {/* your Hype and a way to top up, then Send */}
+          <div className="flex shrink-0 items-center gap-2 border-t border-line px-3 py-2.5">
+            <HypeCoin size={18} />
+            <span className="font-mono text-sm font-semibold tabular-nums">{balance}</span>
+            <button type="button" onClick={() => (setPackNaira(null), setPacksOpen(true))} aria-label="Top up Hype" title="Top up Hype" className="inline-flex size-6 items-center justify-center rounded-full bg-ink text-canvas transition hover:opacity-80">
+              <Icon name="plus" size={13} />
+            </button>
+            <span className="flex-1" />
+            <button type="button" onClick={pressSend} disabled={!picked || busy || !data?.enabled} className="inline-flex h-9 items-center justify-center rounded-full bg-ink px-4 text-sm font-semibold text-canvas transition disabled:opacity-40">
+              {busy ? "Sending…" : picked ? `Send ${picked.name}` : "Send"}
+            </button>
+          </div>
+        </>
       ) : (
         <>
-          <div className="-mx-1 grid min-h-0 flex-1 grid-cols-4 content-start gap-1.5 overflow-y-auto p-1.5 no-bar">
-            {data.gifts.map((g) => (
-              <button
-                key={g.id}
-                type="button"
-                onClick={() => setPicked(g)}
-                aria-pressed={picked?.id === g.id}
-                title={`${g.name}: ${g.hype.toLocaleString("en-NG")} Hype (₦${g.price.toLocaleString("en-NG")})`}
-                className={cx("flex flex-col items-center gap-0.5 rounded-control p-1.5 transition hover:bg-raised", picked?.id === g.id && "bg-raised ring-2 ring-accent-text")}
-              >
-                <GiftArt gift={g} size={32} animate />
-                <span className="w-full truncate text-center text-[12px] font-medium">{g.name}</span>
-                <span className="font-mono text-[12px] text-ink-muted">{g.hype.toLocaleString("en-NG")} Hype</span>
-              </button>
-            ))}
+          {/* the Hype packs: short of Hype for the award picked, or topping up */}
+          <div className="flex shrink-0 items-center gap-2 px-3 pb-1 pt-3">
+            <button type="button" onClick={() => setPacksOpen(false)} aria-label="Back to awards" className="inline-flex size-7 items-center justify-center rounded-full transition hover:bg-raised">
+              <Icon name="arrowdown" size={15} className="rotate-90" />
+            </button>
+            <p className="flex-1 text-sm font-semibold">{short ? "Not enough Hype" : "Top up Hype"}</p>
+            <span className="text-[12px] text-ink-muted">Balance</span>
+            <HypeCoin size={14} />
+            <span className="font-mono text-[12px] font-semibold">{balance}</span>
           </div>
-          <label className="mt-2 flex shrink-0 items-center gap-2 text-[13px]">
-            <input type="checkbox" checked={anonymous} onChange={(e) => setAnonymous(e.target.checked)} className="size-4 accent-[var(--color-accent-text)]" />
-            Send anonymously
-            <span className="text-ink-muted">(they see “Someone”)</span>
-          </label>
-          {short && (
-            <div className="mt-2 shrink-0 rounded-control bg-raised/70 p-2.5">
-              <p className="text-[13px]">
-                You need <strong>{need.toLocaleString("en-NG")} more Hype</strong> for {picked!.name}.
-              </p>
-              {!wallet ? (
-                <Skeleton className="mt-2 h-14" />
-              ) : !wallet.canBuyWeb ? (
-                <p className="mt-1 text-[12.5px] text-ink-muted">For now, buy Hype in the Klique app.</p>
-              ) : (
-                <div role="radiogroup" aria-label="How much Hype" className="mt-2 flex gap-1.5 overflow-x-auto no-bar">
-                  {(packs.some((p) => p.hype >= need) ? packs.filter((p) => p.hype >= need) : [{ naira: exact, hype: hypeForNaira(exact) }]).slice(0, 3).map((p) => {
-                    const on = chosen === p.naira;
-                    return (
-                      <button key={p.naira} type="button" role="radio" aria-checked={on} onClick={() => setPackNaira(p.naira)} className={cx("relative min-w-[5.5rem] flex-1 rounded-control border bg-surface px-2 py-1.5 text-left transition", on ? "border-2 border-ink px-[7px] py-[5px]" : "border-line hover:bg-raised")}>
-                        <span className="block font-mono text-[14px] font-semibold tabular-nums">{p.hype.toLocaleString("en-NG")}</span>
-                        <span className="block text-[12px] text-ink-muted">₦{p.naira.toLocaleString("en-NG")}{covers?.naira === p.naira ? " · covers it" : ""}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
+          {short && picked && <p className="px-3 pb-1 text-[13px] text-ink-muted">{picked.name} needs {need.toLocaleString("en-NG")} more Hype. Pick a pack: it sends as soon as it&apos;s paid.</p>}
+          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2 no-bar">
+            {!wallet ? (
+              <Skeleton className="h-32" />
+            ) : !wallet.canBuyWeb ? (
+              <p className="text-[13px] text-ink-muted">For now, buy Hype in the Klique app.</p>
+            ) : (
+              <div role="radiogroup" aria-label="How much Hype" className="grid grid-cols-3 gap-1.5">
+                {choices.map((p) => {
+                  const on = chosen === p.naira;
+                  return (
+                    <button key={p.naira} type="button" role="radio" aria-checked={on} onClick={() => setPackNaira(p.naira)} className={cx("flex flex-col items-center justify-center gap-0.5 rounded-control border bg-raised/60 px-1 py-2.5 transition", on ? "border-2 border-ink" : "border-line hover:bg-raised")}>
+                      <span className="flex items-center gap-1 font-mono text-[14px] font-semibold tabular-nums"><HypeCoin size={14} />{p.hype.toLocaleString("en-NG")}</span>
+                      <span className="text-[12px] text-ink-muted">₦{p.naira.toLocaleString("en-NG")}</span>
+                      {covers?.naira === p.naira && <span className="text-[11px] font-semibold">Covers it</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            <Link href="/settings?tab=hype" className="mt-3 block text-[12.5px] text-ink-muted hover:text-ink">Your Hype history and earnings</Link>
+          </div>
+          {wallet?.canBuyWeb && (
+            <div className="shrink-0 border-t border-line px-3 py-2.5">
+              <button type="button" onClick={() => void topUpAndSend()} disabled={paying || !enough || !chosen} className="inline-flex min-h-9 w-full items-center justify-center rounded-full bg-ink px-3 py-1.5 text-sm font-semibold text-canvas transition disabled:opacity-40">
+                {paying ? "Opening checkout…" : short && picked ? `Get ${picked.name} - ₦${chosen.toLocaleString("en-NG")}` : `Get ${hypeForNaira(chosen).toLocaleString("en-NG")} Hype - ₦${chosen.toLocaleString("en-NG")}`}
+              </button>
+              <p className="mt-1.5 text-center text-[11.5px] text-ink-muted">Hype can&apos;t be refunded or swapped for cash.</p>
             </div>
-          )}
-          {short && wallet?.canBuyWeb ? (
-            <button type="button" onClick={() => void topUpAndSend()} disabled={paying || !enough} className="mt-2 inline-flex min-h-9 w-full shrink-0 items-center justify-center gap-2 rounded-full bg-accent px-3 py-1.5 text-sm font-semibold text-accent-ink transition disabled:opacity-40">
-              {paying ? "Opening checkout…" : `Get ${hypeForNaira(chosen).toLocaleString("en-NG")} Hype and send ${picked!.name} · ₦${chosen.toLocaleString("en-NG")}`}
-            </button>
-          ) : (
-            <button type="button" onClick={() => void send()} disabled={!picked || busy || short} className="mt-2 inline-flex h-9 w-full shrink-0 items-center justify-center gap-2 rounded-full bg-accent text-sm font-semibold text-accent-ink transition disabled:opacity-40">
-              {busy ? "Sending…" : picked ? `Send ${picked.name} · ${picked.hype.toLocaleString("en-NG")} Hype` : "Pick an award"}
-            </button>
           )}
         </>
       )}

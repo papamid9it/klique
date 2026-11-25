@@ -146,6 +146,8 @@ export async function adminReorderGifts(ids: string[]) {
 /* ------------------------------- balance ------------------------------- */
 
 /** Add (+) or take (−) Hype and write it in the history. Taking never goes below zero: null when there's too little. */
+/** Moves someone's Hype (never below zero): the new balance, or null when there isn't enough. Causes use it too. */
+export const moveHype = (...a: Parameters<typeof move>) => move(...a);
 async function move(userId: Types.ObjectId, amount: number, kind: HypeEntryKind, note: string, ref: string | null = null, byId: Types.ObjectId | null = null): Promise<number | null> {
   const filter = amount < 0 ? { _id: userId, giftHype: { $gte: -amount } } : { _id: userId };
   const u = await User.findOneAndUpdate(filter, { $inc: { giftHype: amount } }, { returnDocument: "after" }).select("giftHype").lean<Pick<IUser, "giftHype">>();

@@ -1,4 +1,5 @@
 import { reviewCounts } from "./review.service";
+import { mainCauseOf } from "./causes.service";
 import { searchFilter } from "./search-terms";
 import { audienceRefusal } from "@/lib/constants";
 import { countriesOf, getCityEntry, getCountry, parseScope, placeForReach, reachError, reachFilter, reachOf, type Reach, type ReachPlace, type Scope } from "@/lib/places";
@@ -26,6 +27,7 @@ import type { communityCreateSchema, communityListQuery, communityUpdateSchema }
 import { PAGE_SIZE, purgeSpaceData, recountMembers, sid, uniqueCommunitySlug } from "./helpers";
 import { resolveSpace } from "./spaces.service";
 import { countVisibleSubs } from "./subcommunities.service";
+import { listedFilter, standingOf } from "../policies/standing";
 import { assertCanCreateCommunity } from "./space-limits";
 
 type ListQuery = z.infer<typeof communityListQuery>;
@@ -110,13 +112,14 @@ export async function listCommunities(viewer: IUser | null, q: ListQuery): Promi
   if (q.verified) filter.$or = [{ verified: true }, { official: true }];
 
   const rows = q.sort === "new" || q.scope === "joined"
-    ? await Community.find({ $and: [allowed, filter] })
+    ? await Community.find({ $and: [allowed, filter, ...(q.scope === "joined" ? [] : [listedFilter()])] })
         .sort(q.sort === "new" ? { createdAt: -1 } : { memberCount: -1, createdAt: -1 })
         .skip((q.page - 1) * PAGE_SIZE)
         .limit(PAGE_SIZE + 1)
         .lean<ICommunity[]>()
     : await Community.aggregate<ICommunity>([
-        { $match: { $and: [allowed, filter] } },
+        // restricted and suspended communities stay out of what people browse (their members still have them)
+        { $match: { $and: [allowed, filter, listedFilter()] } },
         await communityRankStage(where),
         { $sort: { rank: -1, createdAt: -1 } },
         { $skip: (q.page - 1) * PAGE_SIZE },
@@ -137,7 +140,7 @@ export async function getCommunity(viewer: IUser | null, slug: string): Promise<
   if (access.adultGate === "under_18") throw notFound("We couldn't find that community.");
 
   // the counts and your own "Suppress @everyone and @here" side by side (none depends on another)
-  const [subcommunityCount, upcomingEventCount, membership, review] = await Promise.all([
+  const [subcommunityCount, upcomingEventCount, membership, review, causes] = await Promise.all([
     access.canView ? countVisibleSubs(viewer, space.community) : null,
     access.canView
       ? Event.countDocuments({
@@ -151,10 +154,16 @@ export async function getCommunity(viewer: IUser | null, slug: string): Promise<
     viewer && access.isMember ? Membership.findOne({ userId: viewer._id, communityId: space.community._id, subcommunityId: null }).select("suppressEveryone").lean<{ suppressEveryone?: boolean }>() : null,
     // what's waiting for this viewer to approve (only people who approve things here)
     reviewCounts(viewer, space.community, access),
+    // the cause shown under its name (the main one), for people who can see inside
+    access.canView ? mainCauseOf(space.community) : null,
   ]);
   const dto = await toCommunityDetail(space.community, access, { subcommunityCount, upcomingEventCount });
   if (viewer && access.isMember) dto.suppressEveryone = !!membership?.suppressEveryone;
   if (review) dto.review = review;
+  if (causes) Object.assign(dto, causes);
+  // in trouble with Klique: a suspension shows to everyone, a restriction only to the people who run it
+  const standing = standingOf(space.community);
+  if (standing && (standing.state === "suspended" || access.canManage)) dto.standing = { state: standing.state, until: standing.until ? new Date(standing.until).toISOString() : null, reason: standing.reason };
   return dto;
 }
 

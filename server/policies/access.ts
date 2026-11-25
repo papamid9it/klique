@@ -12,6 +12,7 @@ import type { IUser } from "../models/User";
 import { isSiteAdmin } from "./hosting";
 import { kliqueId } from "../services/klique-id";
 import { CommunityRole, type ICommunityRole } from "../models/CommunityRole";
+import { isSuspended } from "./standing";
 import { GROUP_POWERS, ADMIN_PERMISSIONS, ALL_PERMISSIONS, isPermission, type Permission } from "@/lib/roles";
 
 /**
@@ -252,7 +253,9 @@ export function subAccessFrom(
  * else they'd have; site admins pass, to moderate.
  */
 export async function spaceAccess(space: Space, viewer: IUser | null): Promise<SpaceAccess> {
-  const access = await rawSpaceAccess(space, viewer);
+  const raw = await rawSpaceAccess(space, viewer);
+  // suspended by Klique (Admin → Communities): read only, and nobody joins (site admins still act, to moderate)
+  const access = isSuspended(space.community) && !(viewer && isSiteAdmin(viewer)) ? { ...raw, canPost: false, canJoinDirectly: false } : raw;
   const gate = viewer && isSiteAdmin(viewer) ? null : adultGate(space.community, viewer);
   if (!gate) return access;
   return { ...access, role: null, isMember: false, canView: false, canPost: false, canManage: false, canJoinDirectly: false, canModerate: false, pendingRequest: false, adultGate: gate };

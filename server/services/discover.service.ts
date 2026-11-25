@@ -23,6 +23,7 @@ import { kliqueId } from "./klique-id";
 import { mixEvents, mixEventsSteady } from "./event-mix";
 import { matchScore, searchFilter } from "./search-terms";
 import type { z } from "zod";
+import { listedFilter } from "../policies/standing";
 import type { searchQuery } from "../validators/schemas";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -121,7 +122,7 @@ export async function discover(viewer: IUser | null, whereParam?: string): Promi
 
   // Communities
   const [newRows, suggestedPool] = await Promise.all([
-    Community.find({ privacy: "public", ...place }).sort({ createdAt: -1 }).limit(4).lean<ICommunity[]>(),
+    Community.find({ privacy: "public", ...place, ...listedFilter() }).sort({ createdAt: -1 }).limit(4).lean<ICommunity[]>(),
     // suggestions come from anywhere: the ones based in this place rank higher (communityRankStage), they aren't the only ones
     communityRankStage(scope).then((rank) => Community.aggregate<ICommunity & { rank: number }>([{ $match: { privacy: "public", _id: { $nin: joinedIds } } }, rank, { $sort: { rank: -1, memberCount: -1 } }, { $limit: 30 }])),
   ]);

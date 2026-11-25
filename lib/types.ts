@@ -325,6 +325,11 @@ export interface CommunityDTO extends CommunityCardDTO {
   inviteCode?: string;
   /** "To review" (events waiting for approval, join requests): only for people who approve things here */
   review?: ReviewCountDTO;
+  /** set by Klique for breaking the rules: everyone sees a suspension; only its owner and admins see a restriction */
+  standing?: { state: "restricted" | "suspended"; until: ISODate | null; reason: string } | null;
+  /** the cause shown under its name (the main one), and how many it has; absent: none */
+  mainCause?: CauseDTO | null;
+  causeCount?: number;
 }
 
 /** What's waiting in a community's "To review". `canRequests`: this viewer handles join requests too. */
@@ -1346,6 +1351,36 @@ export interface EventContributionDTO {
   withdrawn: boolean;
 }
 
+/** A community's cause (people give Hype to it). `goalHype` null: no goal. */
+export interface CauseDTO {
+  id: Id;
+  /** the button's own words: "Support the venue fund" */
+  label: string;
+  title: string;
+  description: string;
+  imageUrl: string | null;
+  goalHype: number | null;
+  raisedHype: number;
+  supporters: number;
+  main: boolean;
+}
+
+/** A community's causes, and what giving and making them takes. */
+export interface CausesDTO {
+  items: CauseDTO[];
+  /** the viewer runs the community: may make, change and remove causes */
+  canManage: boolean;
+  /** causes are open for this community (enough members, old enough) */
+  unlocked: boolean;
+  /** what it takes to open them */
+  unlock: { members: number; days: number };
+  /** Klique's share of what's given, percent */
+  feePercent: number;
+  max: number;
+  /** the viewer's Hype (signed in) */
+  balance: number | null;
+}
+
 export interface DonationButtonDTO {
   id: Id;
   title: string;
@@ -1878,6 +1913,8 @@ export interface AdminCommunityRow {
   official: boolean;
   /** its owner applied to be verified, and is waiting */
   verificationPending: boolean;
+  /** restricted or suspended by Klique (and until when; null: until lifted) */
+  standing: { state: "restricted" | "suspended"; until: ISODate | null; reason: string } | null;
 }
 
 export interface SystemStatusDTO {
@@ -2194,7 +2231,7 @@ export interface HypeEntryDTO {
   id: Id;
   amount: number;
   balanceAfter: number;
-  kind: "topup" | "gift" | "grant" | "revoke" | "refund";
+  kind: "topup" | "gift" | "grant" | "revoke" | "refund" | "cause";
   note: string;
   createdAt: ISODate;
 }

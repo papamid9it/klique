@@ -37,7 +37,7 @@ const GiftSchema = new Schema<IGift>(
 GiftSchema.index({ active: 1, position: 1 });
 export const Gift: Model<IGift> = defineModel<IGift>("Gift", GiftSchema);
 
-export type HypeEntryKind = "topup" | "gift" | "grant" | "revoke" | "refund";
+export type HypeEntryKind = "topup" | "gift" | "grant" | "revoke" | "refund" | "cause";
 
 /** One change to someone's gift Hype. */
 export interface IHypeEntry {
@@ -59,7 +59,7 @@ const HypeEntrySchema = new Schema<IHypeEntry>(
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     amount: { type: Number, required: true },
     balanceAfter: { type: Number, required: true },
-    kind: { type: String, enum: ["topup", "gift", "grant", "revoke", "refund"], required: true },
+    kind: { type: String, enum: ["topup", "gift", "grant", "revoke", "refund", "cause"], required: true },
     note: { type: String, default: "", maxlength: 300 },
     ref: { type: String, default: null },
     byId: { type: Schema.Types.ObjectId, ref: "User", default: null },

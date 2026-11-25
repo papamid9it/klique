@@ -1,7 +1,7 @@
 "use client";
 
 import { SetupChecklist } from "@/components/domain/space/SetupChecklist";
-import { SupportButtons } from "@/components/domain/money/Donate";
+import { CauseButtons } from "@/components/domain/money/Causes";
 import { KLIQUE_SLUG, LIMITS } from "@/lib/constants";
 import { SoftLink } from "@/components/ui/SoftLink";
 import { isSamePage, softNavigate } from "@/lib/nav";
@@ -657,11 +657,18 @@ export function ChannelList({
       <div className="min-h-0 flex-1 overflow-y-auto px-2 py-3">
         {/* a new community's owner: the first steps (the server sends them only to the owner, for two weeks) */}
         {c.setup && <SetupChecklist c={c} onGo={go} onInvite={inviteCommunity} />}
-        {/* the community's donation buttons, when it has any */}
+        {/* set by Klique for breaking the rules: a suspension shows to everyone, a restriction to the people who run it */}
+        {c.standing && (
+          <div role="status" className="mx-1 mb-3 rounded-control border border-danger/50 bg-danger/5 px-3 py-2.5 text-[12.5px] leading-relaxed">
+            <p className="font-semibold text-danger">{c.standing.state === "suspended" ? "Suspended by Klique" : "Restricted by Klique"}{c.standing.until ? ` until ${new Date(c.standing.until).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}` : ""}</p>
+            <p className="mt-0.5 text-ink-muted">{c.standing.state === "suspended" ? "Read only for now: nobody can post or join." : "Out of Discover and search, and causes are paused."} {c.standing.reason}</p>
+          </div>
+        )}
+        {/* the community's main cause (and "All causes"), when it has any */}
         {/* no money in a community with explicit content */}
         {!c.locked && !c.explicit && (
           <div className="mb-3 px-1 empty:hidden">
-            <SupportButtons slug={c.slug} communityName={c.name} compact />
+            <CauseButtons c={c} compact />
           </div>
         )}
         <ul className="space-y-0.5">

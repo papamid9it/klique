@@ -84,6 +84,11 @@ export interface ICommunity {
   verified?: boolean;
   /** its owner asked to be verified (server/services/verification.service): a site admin checks it by hand */
   verificationRequest?: { status: "pending" | "rejected"; requestedAt: Date; note?: string } | null;
+  /**
+   * Set by a site admin for breaking the rules (Admin → Communities): "restricted" is left out of Discover and search
+   * and can't take causes; "suspended" is also read only and nobody joins. `until` null: until lifted.
+   */
+  standing?: { state: "restricted" | "suspended"; until: Date | null; reason: string; at: Date } | null;
   /** the emoji on the owner's picture inside this community; the owner chooses it, and it stays if ownership moves */
   ownerIcon?: string | null;
   /**
@@ -127,6 +132,7 @@ const CommunitySchema = new Schema<ICommunity>(
     audience: { type: String, enum: ["everyone", "women", "men"], default: "everyone" },
     verified: { type: Boolean, default: false },
     verificationRequest: { type: { status: String, requestedAt: Date, note: String, _id: false }, default: null },
+    standing: { type: { state: { type: String, enum: ["restricted", "suspended"] }, until: Date, reason: String, at: Date, _id: false }, default: null },
     ownerIcon: { type: String, default: null, maxlength: 16 },
     membersMassMention: { type: Boolean, default: false },
     onlineHidden: { type: Boolean, default: undefined },

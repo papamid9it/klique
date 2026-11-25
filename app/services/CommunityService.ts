@@ -1,7 +1,10 @@
 import ApiClient from "@/app/ApiCore";
 import type { Reach } from "@/lib/places";
 import type { CityId, InterestId } from "@/lib/constants";
-import type { CommunityCardDTO, CommunityDTO, CommunityPrivacy, Envelope, GroupPolicy, MyCommunityDTO, Paginated, SidebarDTO, CommunityDashboardDTO, CommunityReviewDTO, GrowthStatsDTO, VerificationDTO, Move } from "@/lib/types";
+
+/** a cause as its owner writes it: goal in Hype (null: no goal) */
+export type CauseInput = { label: string; title: string; description?: string; imageUrl?: string | null; goalHype?: number | null; main?: boolean };
+import type { CommunityCardDTO, CommunityDTO, CommunityPrivacy, Envelope, GroupPolicy, MyCommunityDTO, Paginated, SidebarDTO, CommunityDashboardDTO, CommunityReviewDTO, CauseDTO, CausesDTO, GrowthStatsDTO, VerificationDTO, Move } from "@/lib/types";
 
 const api = new ApiClient();
 
@@ -66,6 +69,12 @@ export const CommunityService = {
   /** the owner's dashboard: members and growth, what's waiting for approval, this week (owners and admins) */
   dashboard: (slug: string) => api.get<Envelope<CommunityDashboardDTO>>(`/api/communities/${slug}/dashboard`),
   /** "To review": members' events waiting for approval, and how many join requests (people who approve things) */
+  /** causes: what the community raises Hype for (anyone who can see it), and making, changing and ending them (owner, admins) */
+  causes: (slug: string) => api.get<Envelope<CausesDTO>>(`/api/communities/${slug}/causes`),
+  saveCause: (slug: string, input: CauseInput, id?: string) => (id ? api.patch<Envelope<CauseDTO>>(`/api/communities/${slug}/causes/${id}`, input) : api.post<Envelope<CauseDTO>>(`/api/communities/${slug}/causes`, input)),
+  endCause: (slug: string, id: string) => api.delete<Envelope<{ ended: boolean }>>(`/api/communities/${slug}/causes/${id}`),
+  /** give Hype to a cause: a gift, never refunded */
+  giveToCause: (slug: string, id: string, input: { hype: number; clientKey: string; anonymous?: boolean; agree: true }) => api.post<Envelope<{ balance: number; cause: CauseDTO }>>(`/api/communities/${slug}/causes/${id}/give`, input),
   review: (slug: string, after?: string | null) => api.get<Envelope<CommunityReviewDTO>>(`/api/communities/${slug}/review`, after ? { after } : undefined),
   growth: (slug: string) => api.get<Envelope<GrowthStatsDTO>>(`/api/communities/${slug}/growth`),
   remove: (slug: string) => api.delete<Envelope<{ deleted: boolean }>>(`/api/communities/${slug}`),

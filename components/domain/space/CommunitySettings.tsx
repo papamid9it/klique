@@ -1,5 +1,4 @@
 "use client";
-import { usePayments } from "@/lib/hooks/usePayments";
 
 import { useRouter } from "next/navigation";
 import { audienceLabel } from "@/lib/constants";
@@ -19,7 +18,8 @@ import { CommunityForm } from "./CommunityForm";
 import { InvitesPanel } from "./InvitesPanel";
 import { MembersPanel } from "./MembersPanel";
 import { MinPointField } from "./MinPoints";
-import { DonationsSettings, PayoutsSettings } from "@/components/domain/money/CommunityMoney";
+import { PayoutsSettings } from "@/components/domain/money/CommunityMoney";
+import { CausesSettings } from "@/components/domain/money/Causes";
 import { RequestsPanel } from "./RequestsPanel";
 import { ConfirmModal } from "./parts";
 import { ModLogPanel } from "./ModLogPanel";
@@ -36,7 +36,7 @@ export type CommunityTab = "overview" | "joining" | "events" | "kliques" | "ment
 const TITLES: Record<CommunityTab, string> = {
   overview: "Name, picture and description", joining: "Who can join", welcome: "Welcome message", posts: "Posts and board", events: "Events", kliques: "Kliques",
   members: "Members", roles: "Roles and permissions", automod: "Auto-filters", mentions: "Who can ping everyone", modlog: "Removed content log", emoji: "Custom emoji",
-  webhooks: "Bots and connections", donations: "Donations", payouts: "Payouts", requests: "Join requests", delete: "Delete community",
+  webhooks: "Bots and connections", donations: "Causes", payouts: "Payouts", requests: "Join requests", delete: "Delete community",
   // older links still open
   groups: "Events and mentions", sections: "Board and kliques", privacy: "Privacy", invites: "Invite links", screening: "Questions for new members", notifications: "Your notifications",
 };
@@ -91,7 +91,6 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
   const setMass = (next: boolean) => massSave.run(() => saveTo({ membersMassMention: next }, next ? "Members can mention everyone" : "Only owners and admins can mention everyone"), next);
   const setPrivacy = (next: boolean) => privacySave.run(() => saveTo({ privacy: next ? "private" : "public" }, next ? "Community is now private" : "Community is now public"), next);
 
-  const donationsOn = !!usePayments()?.donations;
   // people waiting to be let in: shown first, with a count, like the app
   const [waiting, setWaiting] = useState(0);
   useEffect(() => {
@@ -134,8 +133,8 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
         { id: "modlog", label: "Removed content log", icon: "topics", hint: "What was removed, and by whom", hidden: !may("viewModLog") },
       ],
     },
-    // Klique itself takes no donations; donations and payouts only while they're switched on (Admin → System)
-    ...(c.official || !admin || !donationsOn ? [] : [{ title: "Money", items: [{ id: "donations", label: "Donations", icon: "heart" as const, hint: "Let members support the community" }, { id: "payouts", label: "Payouts", icon: "coin" as const, hint: "Where the money goes" }] }]),
+    // Klique itself has no causes (and explicit communities no money); causes are given in Hype, paid out to the bank
+    ...(c.official || c.explicit || !admin ? [] : [{ title: "Money", items: [{ id: "donations", label: "Causes", icon: "heart" as const, hint: "What members can give Hype to" }, { id: "payouts", label: "Payouts", icon: "coin" as const, hint: "Where the money goes" }] }]),
     {
       title: "Extras",
       items: [
@@ -262,8 +261,8 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
         </SettingsBlock>
       )}
 
-      {active === "donations" && !c.official && donationsOn && <DonationsSettings slug={c.slug} />}
-      {active === "payouts" && !c.official && donationsOn && <PayoutsSettings slug={c.slug} />}
+      {active === "donations" && !c.official && <CausesSettings c={c} />}
+      {active === "payouts" && !c.official && <PayoutsSettings slug={c.slug} />}
 
       {active === "members" && isOwner && (
         <SettingsBlock title="Who's online" intro="While the community is new, few people may be online at once. You can hide the online count until it grows.">

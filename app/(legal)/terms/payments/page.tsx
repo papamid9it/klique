@@ -13,10 +13,10 @@ export default function PaymentTermsPage() {
   return (
     <LegalDoc
       title="Payment terms"
-      updated="17 November 2026"
+      updated="25 November 2026"
       intro={
         <p>
-          These terms cover what you can buy on klique: the Lite and Pro plans and Hype. They add to our <Link href="/terms" className="font-medium text-accent-text underline">Terms of Service</Link>. In the phone app, payments are handled by Apple or Google; on the website, when card payments are available there, by Paystack, Flutterwave or OPay (you choose which at checkout when there&apos;s more than one). klique never sees or keeps your card details.
+          These terms cover what you can buy on klique (the Lite and Pro plans and Hype) and giving Hype to a community&apos;s cause. They add to our <Link href="/terms" className="font-medium text-accent-text underline">Terms of Service</Link>. In the phone app, payments are handled by Apple or Google; on the website, when card payments are available there, by Paystack, Flutterwave or OPay (you choose which at checkout when there&apos;s more than one). klique never sees or keeps your card details.
         </p>
       }
     >
@@ -80,9 +80,18 @@ export default function PaymentTermsPage() {
         </ul>
       </Section>
 
-      <Section n={3} title="Donations, contributions and payouts">
+      <Section n={3} title="Causes" id="causes">
         <p>
-          klique doesn&apos;t currently take donations to communities or contributions toward events, and doesn&apos;t pay money out to communities. klique doesn&apos;t sell event tickets either: when an event costs money, you pay its organiser on their own site. If we bring donations or contributions back, we&apos;ll update these terms first.
+          A community can raise Hype for up to three causes (for example a venue fund). When you give Hype to a cause, it&apos;s a <strong>gift</strong> to that community, not a purchase: you get nothing in return, and it <strong>can&apos;t be refunded</strong> or taken back, even if the cause doesn&apos;t reach its goal or ends early.
+        </p>
+        <ul className="list-disc space-y-1.5 pl-5">
+          <li>klique keeps a share of every gift to a cause. The share is shown before you give, and it&apos;s fixed at that moment.</li>
+          <li>The rest is the community&apos;s. Its owner can ask for it to be paid to a bank account; klique sends payouts by bank transfer, after checks.</li>
+          <li>A community&apos;s owner is responsible for using what&apos;s given as the cause describes. klique doesn&apos;t check how it&apos;s spent and doesn&apos;t make causes charities: don&apos;t give more than you&apos;re happy to gift.</li>
+          <li>klique can pause or end a cause, hold its payouts, or suspend the community, when a cause looks misleading or breaks our rules.</li>
+        </ul>
+        <p>
+          klique doesn&apos;t currently take contributions toward events, and doesn&apos;t sell event tickets: when an event costs money, you pay its organiser on their own site.
         </p>
       </Section>
 

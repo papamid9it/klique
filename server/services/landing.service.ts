@@ -5,6 +5,7 @@ import { connectDb } from "../db";
 import { Community } from "../models/Community";
 import { Event, type IEvent } from "../models/Event";
 import { notAdult } from "../policies/adult";
+import { listedFilter } from "../policies/standing";
 import { toEvents } from "../serializers";
 
 /**
@@ -34,7 +35,7 @@ export async function communitiesForLanding(limit = 5): Promise<LandingCommunity
   cacheLife("hours");
   await connectDb();
   const { KLIQUE_SLUG } = await import("@/lib/constants");
-  const rows = await Community.find({ privacy: "public", ...notAdult, explicit: { $ne: true }, official: { $ne: true }, slug: { $ne: KLIQUE_SLUG } })
+  const rows = await Community.find({ privacy: "public", ...notAdult, explicit: { $ne: true }, official: { $ne: true }, slug: { $ne: KLIQUE_SLUG }, ...listedFilter() })
     .sort({ coverImage: -1, memberCount: -1 })
     .limit(limit)
     .select("slug name description interest city memberCount coverImage")

@@ -51,6 +51,7 @@ import { checkAnswers } from "./screening.service";
 import { timeoutOf } from "../policies/access";
 import { ModAction } from "../models/ModAction";
 import { isSiteAdmin } from "../policies/hosting";
+import { isSuspended } from "../policies/standing";
 import { ADMIN_RANK, can } from "../policies/access";
 
 /* ------------------------------------------------------------------ */
@@ -145,6 +146,8 @@ export async function joinSpace(
   // groups are private: its owner or admins add people from the community, or send them its invite link
   if (space.sub && !input.inviteCode) throw forbidden("Groups are private. Ask one of the group's admins to add you or send you a link.");
   if (access.banned) throw forbidden("You can't join this one.");
+  // suspended by Klique: nobody joins until it's lifted
+  if (isSuspended(space.community)) throw forbidden(`${space.community.name} is suspended for breaking Klique's rules, so nobody can join right now.`);
   // before anything else, so an invite link is no way round it either
   const refusal = audienceRefusal(space.community.audience, viewer.gender);
   if (refusal) throw forbidden(refusal);

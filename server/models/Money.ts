@@ -20,6 +20,15 @@ export interface IDonationButton {
   active: boolean;
   position: number;
   createdAt: Date;
+  /**
+   * Causes (they replaced donation buttons: people give Hype). `label`: the button's own words ("Support the venue
+   * fund"); `main`: the one shown under the community's name; goal and total in Hype.
+   */
+  label?: string;
+  main?: boolean;
+  imageUrl?: string | null;
+  goalHype?: number | null;
+  raisedHype?: number;
 }
 
 const DonationButtonSchema = new Schema<IDonationButton>(
@@ -32,6 +41,11 @@ const DonationButtonSchema = new Schema<IDonationButton>(
     donors: { type: Number, default: 0, min: 0 },
     active: { type: Boolean, default: true },
     position: { type: Number, default: 0 },
+    label: { type: String, default: "", maxlength: 40 },
+    main: { type: Boolean, default: false },
+    imageUrl: { type: String, default: null },
+    goalHype: { type: Number, default: null, min: 1 },
+    raisedHype: { type: Number, default: 0, min: 0 },
   },
   { timestamps: { createdAt: true, updatedAt: false } },
 );
@@ -58,6 +72,8 @@ export interface IPayment {
   fee: number;
   /** amount − fee: the community's */
   net: number;
+  /** a gift to a cause: the Hype given (amount is its naira worth then) */
+  hype?: number;
   message: string;
   reference: string;
   status: "pending" | "paid" | "refunded";
@@ -81,6 +97,7 @@ const PaymentSchema = new Schema<IPayment>(
     feePercent: { type: Number, required: true, min: 0 },
     fee: { type: Number, required: true, min: 0 },
     net: { type: Number, required: true, min: 0 },
+    hype: { type: Number, default: 0, min: 0 },
     message: { type: String, default: "", maxlength: 200 },
     reference: { type: String, required: true, unique: true },
     status: { type: String, enum: ["pending", "paid", "refunded"], default: "pending" },

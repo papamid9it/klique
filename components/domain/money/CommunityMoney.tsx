@@ -286,7 +286,7 @@ export function MoneySummary({ slug }: { slug: string }) {
     >
       <div className="grid gap-3 p-4 sm:grid-cols-3">
         <StatCard label="Available" value={naira(data.available)} hint={data.requested ? `${naira(data.requested)} requested` : "After Klique's fee"} icon="coin" />
-        <StatCard label="Donations" value={naira(data.totals.donations)} hint={`${data.buttons.filter((b) => b.active).length} buttons`} icon="heart" />
+        <StatCard label="Causes" value={naira(data.totals.donations)} hint={`${data.buttons.filter((b) => b.active).length} running`} icon="heart" />
         <StatCard label="Contributions" value={naira(data.totals.contributions)} hint={`${naira(data.totals.last30)} in 30 days, all kinds`} icon="ticket" />
       </div>
       {data.buttons.some((b) => b.goal && b.active) && (
@@ -308,11 +308,11 @@ export function MoneySummary({ slug }: { slug: string }) {
               <Avatar name={p.user.displayName} src={p.user.avatarUrl} size={28} />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[13px]">
-                  <span className="font-semibold">{p.user.displayName}</span> <span className="text-ink-muted">{p.kind === "donation" ? "donated to" : "chipped in for"}</span> {p.forTitle}
+                  <span className="font-semibold">{p.user.displayName}</span> <span className="text-ink-muted">{p.kind === "donation" ? "gave to" : "chipped in for"}</span> {p.forTitle}
                 </span>
                 <span className="block font-mono text-[12px] text-ink-muted">{now ? relativeStamp(p.createdAt, now) : ""}</span>
               </span>
-              <span className="font-mono text-[13px] font-semibold">{p.status === "refunded" ? <s className="text-ink-muted">{naira(p.amount)}</s> : naira(p.amount)}</span>
+              <span className="font-mono text-[13px] font-semibold">{p.status === "refunded" ? <s className="text-ink-muted">{naira(p.amount)}</s> : naira(p.net)}</span>
             </li>
           ))}
         </ul>
@@ -320,9 +320,9 @@ export function MoneySummary({ slug }: { slug: string }) {
         <p className="border-t border-line p-4 text-sm text-ink-muted">
           Nothing yet.{" "}
           <Link href={`/communities/${slug}?settings=donations`} className="font-semibold text-accent-text hover:underline">
-            Add a donation button
+            Start a cause
           </Link>{" "}
-          or let people chip in toward an event.
+          that members can give Hype to.
         </p>
       )}
     </Panel>

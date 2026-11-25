@@ -52,6 +52,7 @@ import { purgeEvent } from "./events.service";
 import { deleteUploads } from "./media.service";
 import { AdCampaign } from "../models/AdCampaign";
 import { Crew, type ICrew } from "../models/Crew";
+import { standingOf } from "../policies/standing";
 import { purgeCrews } from "./crews.service";
 
 /** Everything here is for site admins only (ADMIN_EMAILS). */
@@ -512,6 +513,10 @@ export async function listAdminCommunities(q: { q: string; sort: "members" | "ne
       verified: !!c.verified || !!c.official,
       official: !!c.official,
       verificationPending: c.verificationRequest?.status === "pending",
+      standing: (() => {
+        const s = standingOf(c);
+        return s ? { state: s.state, until: s.until ? new Date(s.until).toISOString() : null, reason: s.reason } : null;
+      })(),
     })),
     page: q.page,
     hasMore: rows.length > size,
@@ -546,12 +551,48 @@ export async function adminCommunityFlags(admin: IUser, id: string, input: { adu
   return { ...set };
 }
 
-export async function adminDeleteCommunity(admin: IUser, id: string, note = "") {
+/**
+ * Act on a community that broke the rules, as Discord's Trust & Safety does, in steps: warn its owner (a message from
+ * the Klique Team), restrict it (out of Discover and search, causes paused), suspend it for a while or until lifted
+ * (also read only, nobody joins), or lift what's on it. Banning is deleting it (below), with its owner's account
+ * suspended too if asked. The owner is told each time, with the reason, and it all goes in the audit log.
+ */
+export async function adminCommunityStanding(admin: IUser, id: string, input: { action: "warn" | "restrict" | "suspend" | "lift"; days?: number | null; reason: string }) {
+  const c = await (Types.ObjectId.isValid(id) ? Community.findById(id) : Community.findOne({ slug: id.toLowerCase() })).lean<ICommunity>();
+  if (!c) throw notFound("That community is gone.");
+  if (c.official && input.action !== "warn") throw forbidden("Klique HQ can't be restricted or suspended.");
+  const reason = input.reason.trim().slice(0, 300);
+  if (input.action !== "lift" && !reason) throw badRequest("Say why: the owner sees it.");
+  const href = `/communities/${c.slug}`;
+  const until = input.days ? new Date(Date.now() + input.days * 24 * 60 * 60 * 1000) : null;
+  const when = until ? ` until ${until.toLocaleDateString("en-GB", { day: "numeric", month: "long", timeZone: "Africa/Lagos" })}` : "";
+  if (input.action === "warn") {
+    notify([c.ownerId], { title: `A warning from the Klique Team about ${c.name}`, body: reason, data: { href } }, { category: "admin", ref: `standing:${sid(c._id)}` });
+  } else if (input.action === "lift") {
+    await Community.updateOne({ _id: c._id }, { $set: { standing: null } });
+    if (standingOf(c)) notify([c.ownerId], { title: `${c.name} is back to normal`, body: "The Klique Team lifted what was on your community. Thanks for sorting it out.", data: { href } }, { category: "admin", ref: `standing:${sid(c._id)}` });
+  } else {
+    await Community.updateOne({ _id: c._id }, { $set: { standing: { state: input.action === "restrict" ? "restricted" : "suspended", until, reason, at: new Date() } } });
+    notify(
+      [c.ownerId],
+      input.action === "restrict"
+        ? { title: `${c.name} is restricted${when}`, body: `It's out of Discover and search, and its causes are paused. Reason: ${reason}`, data: { href } }
+        : { title: `${c.name} is suspended${when}`, body: `It's read only and nobody can join. Reason: ${reason}`, data: { href } },
+      { category: "admin", ref: `standing:${sid(c._id)}` },
+    );
+  }
+  await logAction(admin, `community.${input.action}`, "community", c._id, c.name, [reason, input.days ? `${input.days} days` : ""].filter(Boolean).join(" · "), href);
+  return { standing: input.action === "warn" ? (standingOf(c) ? c.standing : null) : input.action === "lift" ? null : { state: input.action === "restrict" ? "restricted" : "suspended", until: until?.toISOString() ?? null, reason } };
+}
+
+export async function adminDeleteCommunity(admin: IUser, id: string, note = "", banOwner = false) {
   const c = await Community.findById(id).lean<ICommunity>();
   if (!c) throw notFound("That community is gone.");
   if (c.official) throw forbidden("Official Klique communities can't be deleted: Klique's own events live there.");
   await purgeCommunity(c);
   await logAction(admin, "community.delete", "community", c._id, c.name, note, null);
+  // banned for good: its owner's account goes too, when asked (they're told on the sign-in screen)
+  if (banOwner && sid(c.ownerId) !== sid(admin._id)) await setSuspended(admin, sid(c.ownerId), true, `Owner of ${c.name}, removed for breaking the rules. ${note}`.trim()).catch(() => {});
   return { deleted: true };
 }
 

@@ -10,9 +10,23 @@ export interface MoneyConfig {
   contributionFeePercent: number;
   /** smallest payout, naira */
   minPayout: number;
+  /** causes: Klique's share of what's given, percent */
+  causeFeePercent: number;
+  /** causes: what 1 Hype given is worth to the community, naira (before Klique's share) */
+  causeNairaPerHype: number;
+  /** causes open for a community with at least this many members… */
+  causeMinMembers: number;
+  /** …that's at least this many days old */
+  causeMinDays: number;
 }
 
-export const DEFAULT_MONEY_CONFIG: MoneyConfig = { donationFeePercent: 8, contributionFeePercent: 10, minPayout: 1000 };
+export const DEFAULT_MONEY_CONFIG: MoneyConfig = { donationFeePercent: 8, contributionFeePercent: 10, minPayout: 1000, causeFeePercent: 20, causeNairaPerHype: 10, causeMinMembers: 50, causeMinDays: 30 };
+
+/** a community can have up to this many causes running, and one gift to a cause is at most this much Hype */
+export const MAX_CAUSES = 3;
+export const MAX_CAUSE_GIFT = 100_000;
+/** quick amounts in the give popup, Hype */
+export const CAUSE_PRESETS = [50, 250, 1000, 5000];
 
 /** smallest and largest single payment, naira */
 export const MIN_PAYMENT = 100;
@@ -28,6 +42,10 @@ export function moneyConfigOf(stored: unknown): MoneyConfig {
     donationFeePercent: Math.round(num(s.donationFeePercent, 0, 50, DEFAULT_MONEY_CONFIG.donationFeePercent) * 10) / 10,
     contributionFeePercent: Math.round(num(s.contributionFeePercent, 0, 50, DEFAULT_MONEY_CONFIG.contributionFeePercent) * 10) / 10,
     minPayout: Math.round(num(s.minPayout, 100, 10_000_000, DEFAULT_MONEY_CONFIG.minPayout)),
+    causeFeePercent: Math.round(num(s.causeFeePercent, 0, 90, DEFAULT_MONEY_CONFIG.causeFeePercent) * 10) / 10,
+    causeNairaPerHype: Math.round(num(s.causeNairaPerHype, 0.01, 10_000, DEFAULT_MONEY_CONFIG.causeNairaPerHype) * 100) / 100,
+    causeMinMembers: Math.round(num(s.causeMinMembers, 0, 1_000_000, DEFAULT_MONEY_CONFIG.causeMinMembers)),
+    causeMinDays: Math.round(num(s.causeMinDays, 0, 3650, DEFAULT_MONEY_CONFIG.causeMinDays)),
   };
 }
 

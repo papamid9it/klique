@@ -964,6 +964,32 @@ export const moneyConfigSchema = z.object({
   donationFeePercent: z.number().min(0).max(50).optional(),
   contributionFeePercent: z.number().min(0).max(50).optional(),
   minPayout: z.number().int().min(100).max(10_000_000).optional(),
+  causeFeePercent: z.number().min(0).max(90).optional(),
+  causeNairaPerHype: z.number().min(0.01).max(10_000).optional(),
+  causeMinMembers: z.number().int().min(0).max(1_000_000).optional(),
+  causeMinDays: z.number().int().min(0).max(3650).optional(),
+});
+/** Admin: warn, restrict, suspend (for so many days, or until lifted) or lift, with the reason the owner sees */
+export const adminCommunityStandingSchema = z.object({
+  action: z.enum(["warn", "restrict", "suspend", "lift"]),
+  days: z.number().int().min(1).max(3650).nullable().optional(),
+  reason: z.string().trim().max(300).default(""),
+});
+/** a community's cause: what the button says, what it's for, a goal in Hype (none: no goal), main or not */
+export const causeSchema = z.object({
+  label: z.string().trim().min(2, "Say what the button says").max(40),
+  title: z.string().trim().min(3, "Say what it's for").max(60),
+  description: z.string().trim().max(300).optional(),
+  imageUrl: z.union([mediaUrl, z.null()]).optional(),
+  goalHype: z.number().int().min(10).max(100_000_000).nullable().optional(),
+  main: z.boolean().optional(),
+});
+/** giving to a cause: any whole amount up to 100,000 Hype; they must tick that it's a gift (no refunds) */
+export const causeGiveSchema = z.object({
+  hype: z.number().int().min(1, "Give at least 1 Hype").max(100_000, "Up to 100,000 Hype at once"),
+  clientKey: z.string().trim().min(8).max(64),
+  anonymous: z.boolean().optional(),
+  agree: z.literal(true, { message: "Tick that you understand gifts can't be refunded." }),
 });
 export const donationButtonSchema = z.object({
   title: z.string().trim().min(1, "Give it a name").max(60),

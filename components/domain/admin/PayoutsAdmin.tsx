@@ -154,6 +154,19 @@ export function FeesSettings() {
           <TextField label="Smallest payout (₦)" type="number" min={100} value={String(c.minPayout)} onChange={(e) => setDraft({ ...c, minPayout: n(e.target.value) })} />
         </div>
         <p className="text-sm text-ink-muted">Klique&apos;s share of each payment. It&apos;s fixed when someone pays, so changing it never touches money already paid. A refunded contribution goes back minus this fee.</p>
+        {/* causes: what communities raise Hype for (they replaced donations) */}
+        <div className="border-t border-line pt-4">
+          <p className="mb-3 text-sm font-semibold">Causes</p>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <TextField label="Klique's share (%)" type="number" min={0} max={90} step={0.5} value={String(c.causeFeePercent)} onChange={(e) => setDraft({ ...c, causeFeePercent: n(e.target.value) })} />
+            <TextField label="1 Hype is worth (₦)" type="number" min={0.01} step={0.01} value={String(c.causeNairaPerHype)} onChange={(e) => setDraft({ ...c, causeNairaPerHype: n(e.target.value) })} hint="To the community, before Klique's share" />
+            <TextField label="Open at members" type="number" min={0} value={String(c.causeMinMembers)} onChange={(e) => setDraft({ ...c, causeMinMembers: n(e.target.value) })} />
+            <TextField label="Community at least (days old)" type="number" min={0} value={String(c.causeMinDays)} onChange={(e) => setDraft({ ...c, causeMinDays: n(e.target.value) })} />
+          </div>
+          <p className="mt-2 text-sm text-ink-muted">
+            A gift of 100 Hype gives the community ₦{Math.floor(100 * c.causeNairaPerHype * (1 - c.causeFeePercent / 100)).toLocaleString("en-NG")} after Klique&apos;s share. Both are fixed when it&apos;s given. Communities make causes once they have this many members and are this old.
+          </p>
+        </div>
         <div className="flex gap-2">
           <Button variant="primary" onClick={() => void save()} loading={busy} disabled={!draft}>
             Save

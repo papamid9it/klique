@@ -10,6 +10,7 @@ import { Membership } from "../models/Membership";
 import { User, type IUser } from "../models/User";
 import { notAdult } from "../policies/adult";
 import { loadBriefs } from "../serializers";
+import { listedFilter } from "../policies/standing";
 import { hiddenUserIds } from "./blocks";
 
 /**
@@ -124,7 +125,7 @@ export async function suggest(viewer: IUser, kind: "@" | "#", q: string) {
   const mine = await Membership.find({ userId: viewer._id, subcommunityId: null, status: "active" }).distinct("communityId");
   const [people, communities] = await Promise.all([
     User.find({ $or: [{ handle: rx }, { displayName: rx }], _id: { $nin: [...hidden, viewer._id] }, suspendedAt: null }).select("_id").limit(6).lean<{ _id: Types.ObjectId }[]>(),
-    Community.find({ $and: [{ $or: [{ slug: rx }, { name: rx }] }, { $or: [{ privacy: "public", ...notAdult }, { _id: { $in: mine } }] }] }).select("slug name verified official").limit(4).lean<Pick<ICommunity, "slug" | "name" | "verified" | "official">[]>(),
+    Community.find({ $and: [{ $or: [{ slug: rx }, { name: rx }] }, { $or: [{ privacy: "public", ...notAdult, ...listedFilter() }, { _id: { $in: mine } }] }] }).select("slug name verified official").limit(4).lean<Pick<ICommunity, "slug" | "name" | "verified" | "official">[]>(),
   ]);
   const briefs = await loadBriefs(people.map((p) => p._id));
   return { tags: [], people: [...briefs.values()], communities: communities.map((c) => ({ slug: c.slug, name: c.name, verified: !!c.verified || !!c.official })) };

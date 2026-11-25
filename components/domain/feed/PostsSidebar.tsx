@@ -4,7 +4,7 @@ import Link from "next/link";
 import { EventService } from "@/app/services/EventService";
 import { FeedService } from "@/app/services/FeedService";
 import { JoinButton } from "@/components/domain/JoinButton";
-import { SupportButtons } from "@/components/domain/money/Donate";
+import { CauseButtons } from "@/components/domain/money/Causes";
 import { ProfileTrigger } from "@/components/providers/ProfileCardProvider";
 import { Avatar } from "@/components/ui/Avatar";
 import { Cover } from "@/components/ui/Cover";
@@ -40,7 +40,7 @@ export function PostsSidebar({ c, onCommunity }: { c: CommunityDTO; onCommunity:
         </div>
         {c.description && <p className="mt-3 line-clamp-4 text-[13px] text-ink-muted">{c.description}</p>}
         <div className="mt-3 empty:hidden">
-          <SupportButtons slug={c.slug} communityName={c.name} />
+          <CauseButtons c={c} />
         </div>
         <dl className="mt-3 grid grid-cols-2 gap-2 text-[13px]">
           <div className="rounded-control bg-raised px-3 py-2">
