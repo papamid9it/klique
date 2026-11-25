@@ -102,7 +102,7 @@ export function PostView({ post, onChange, onClose, focusComment }: { post: Feed
           top={
             <div className="space-y-3 border-b border-line pb-4">
               {style === "long" ? (
-                <ExplicitCover explicit={post.explicit}>
+                <ExplicitCover explicit={post.explicit} spoiler={post.spoiler}>
                   <LongPost post={post} />
                 </ExplicitCover>
               ) : style === null && post.caption && <p className="text-[15px] leading-snug font-semibold break-words whitespace-pre-wrap">{post.caption}</p>}

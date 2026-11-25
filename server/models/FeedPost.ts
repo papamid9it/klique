@@ -27,6 +27,8 @@ export interface IFeedPost {
   /** how the media shows in its frame (lib/constants MEDIA_FITS); missing on old posts = "cover" */
   mediaFit?: "cover" | "black" | "backdrop";
   explicit?: boolean;
+  /** a spoiler (a film, a match…): its picture, video or text card is blurred until tapped, like Reddit's */
+  spoiler?: boolean;
   /** hidden pending review (a "minor or non-consensual" report): nobody but site admins sees it */
   hiddenAt?: Date | null;
   /** a one-off id the app sends with "Post", so a repeat of the same send never makes a second post */
@@ -51,6 +53,7 @@ const FeedPostSchema = new Schema<IFeedPost>(
     title: { type: String, default: "", trim: true, maxlength: 120 },
     textBg: { type: String, default: null },
     explicit: { type: Boolean, default: false },
+    spoiler: { type: Boolean, default: false },
     plainBackdrop: { type: Boolean, default: false },
     mediaFit: { type: String, enum: ["cover", "black", "backdrop"], default: "cover" },
     hiddenAt: { type: Date, default: null },

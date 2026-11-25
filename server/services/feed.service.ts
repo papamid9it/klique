@@ -93,6 +93,7 @@ async function toPosts(rows: IFeedPost[], viewer: IUser | null): Promise<FeedPos
         refs: refOf(p),
         title: p.title ?? "",
         explicit: !!p.explicit,
+        spoiler: !!p.spoiler,
         ...(p.plainBackdrop ? { plainBackdrop: true } : {}),
         mediaFit: p.mediaFit ?? "cover",
         textBg: p.media.length ? null : (p.textBg ?? null),
@@ -217,6 +218,7 @@ export async function createPost(viewer: IUser, space: Space, access: SpaceAcces
     textBg: style === "card" ? (input.textBg ?? "sunset") : null,
     // only a community that allows explicit content takes explicit posts
     explicit: !!space.community.explicit && input.explicit,
+    spoiler: !!input.spoiler,
     media: input.media.map((m) => ({ kind: m.kind, url: m.url, poster: m.poster ?? null, aspect: m.aspect ?? null, frame: m.frame ?? null })),
     });
   } catch (e) {
@@ -293,6 +295,15 @@ export async function setPostExplicit(viewer: IUser, space: Space, access: Space
   const p = await loadPost(space, postId);
   if (!((sid(p.authorId) === sid(viewer._id) && access.isMember) || access.canManage)) throw forbidden("Only the poster and this community's owner and admins can do that.");
   await FeedPost.updateOne({ _id: p._id }, { $set: { explicit: on } });
+  return getPost(viewer, space, access, postId);
+}
+
+/** Mark a post a spoiler or not (blurred until tapped): its author, or the community's owner and admins, like Reddit. */
+export async function setPostSpoiler(viewer: IUser, space: Space, access: SpaceAccess, postId: string, on: boolean): Promise<FeedPostDTO> {
+  assertFeed(space);
+  const p = await loadPost(space, postId);
+  if (!((sid(p.authorId) === sid(viewer._id) && access.isMember) || access.canManage)) throw forbidden("Only the poster and this community's owner and admins can do that.");
+  await FeedPost.updateOne({ _id: p._id }, { $set: { spoiler: on } });
   return getPost(viewer, space, access, postId);
 }
 
@@ -586,7 +597,7 @@ const SUGGEST_EVERY = 5;
 const reelCommunities = (mineIds: Types.ObjectId[]): QueryFilter<ICommunity> => ({ adult: { $ne: true }, explicit: { $ne: true }, feedPolicy: { $in: ["admins", "members"] }, $or: [{ _id: { $in: mineIds } }, { privacy: "public" }] });
 
 const REELS_SETTING = "reelsEnabled";
-const recentVideos = () => ({ "media.kind": "video" as const, explicit: { $ne: true }, hiddenAt: null, createdAt: { $gte: new Date(Date.now() - 30 * 24 * HOUR) } });
+const recentVideos = () => ({ "media.kind": "video" as const, explicit: { $ne: true }, spoiler: { $ne: true }, hiddenAt: null, createdAt: { $gte: new Date(Date.now() - 30 * 24 * HOUR) } });
 
 /** Klique's own switch for reels: off until the team decides there's enough on the app. Tapping a post then just opens it. */
 export async function reelsSetting(): Promise<{ on: boolean; recentVideos: number }> {
@@ -623,7 +634,7 @@ export async function reelsFeed(viewer: IUser, page: number, at?: number, start?
     hiddenUserIds(viewer._id),
   ]);
   const now = at && at <= Date.now() && at > Date.now() - 24 * HOUR ? at : Date.now();
-  const rows = await FeedPost.find({ communityId: { $in: communities.map((c) => c._id) }, "media.0": { $exists: true }, explicit: { $ne: true }, hiddenAt: null, createdAt: { $gte: new Date(now - 90 * 24 * HOUR), $lte: new Date(now) }, ...(hidden.length ? { authorId: { $nin: hidden } } : {}) }).select(RANK_FIELDS).sort({ createdAt: -1 }).limit(500).lean<IFeedPost[]>();
+  const rows = await FeedPost.find({ communityId: { $in: communities.map((c) => c._id) }, "media.0": { $exists: true }, explicit: { $ne: true }, spoiler: { $ne: true }, hiddenAt: null, createdAt: { $gte: new Date(now - 90 * 24 * HOUR), $lte: new Date(now) }, ...(hidden.length ? { authorId: { $nin: hidden } } : {}) }).select(RANK_FIELDS).sort({ createdAt: -1 }).limit(500).lean<IFeedPost[]>();
   const yours = new Set(mineIds.map(sid));
   const lifted = verifiedSet(communities);
   // already shown on an earlier visit: further down; your interests: a little higher
@@ -640,7 +651,7 @@ export async function reelsFeed(viewer: IUser, page: number, at?: number, start?
     if (ph < photos.length) mixed.push(photos[ph++]);
   }
   // the post they tapped comes first if they may see it, even from a community reels leave out (their own 18+ one)
-  const startRow = start && Types.ObjectId.isValid(start) ? await FeedPost.findOne({ _id: start, "media.0": { $exists: true }, hiddenAt: null, explicit: { $ne: true } }).select(RANK_FIELDS).lean<IFeedPost>() : null;
+  const startRow = start && Types.ObjectId.isValid(start) ? await FeedPost.findOne({ _id: start, "media.0": { $exists: true }, hiddenAt: null, explicit: { $ne: true }, spoiler: { $ne: true } }).select(RANK_FIELDS).lean<IFeedPost>() : null;
   const tapped = startRow && (await Community.exists({ _id: startRow.communityId, explicit: { $ne: true }, $or: [{ _id: { $in: mineIds } }, { privacy: "public", adult: { $ne: true } }] })) ? startRow : null;
   const ordered = tapped ? [tapped, ...mixed.filter((p) => sid(p._id) !== sid(tapped._id))] : mixed;
   const slice = await fullPosts(ordered.slice((page - 1) * PAGE, page * PAGE));

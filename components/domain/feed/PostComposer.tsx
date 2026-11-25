@@ -40,6 +40,7 @@ export function PostComposer({ slug, communityName, explicitAllowed, onClose, on
   const [title, setTitle] = useState("");
   const [textBg, setTextBg] = useState<TextBackgroundId>("sunset");
   const [explicit, setExplicit] = useState(false);
+  const [spoiler, setSpoiler] = useState(false);
   const [media, setMedia] = useState<TopicMediaDTO[]>([]);
   // pictures or a video: first choose them, then a second page to see how it looks and finish it
   const [step, setStep] = useState<1 | 2>(1);
@@ -92,7 +93,7 @@ export function PostComposer({ slug, communityName, explicitAllowed, onClose, on
     sending.current = true;
     setBusy(true);
     try {
-      const res = await FeedService.create(slug, { ...(mode === "media" ? { caption: caption.trim(), media: media.map((m, i) => (i === 0 && frame ? { ...m, frame } : m)), plainBackdrop, mediaFit } : { caption: caption.trim(), title: title.trim(), textBg, media: [] }), ...(explicitAllowed ? { explicit } : {}), clientKey });
+      const res = await FeedService.create(slug, { ...(mode === "media" ? { caption: caption.trim(), media: media.map((m, i) => (i === 0 && frame ? { ...m, frame } : m)), plainBackdrop, mediaFit } : { caption: caption.trim(), title: title.trim(), textBg, media: [] }), ...(explicitAllowed ? { explicit } : {}), spoiler, clientKey });
       toast("Posted", "success");
       onPosted(res.data);
     } catch (err) {
@@ -191,6 +192,16 @@ export function PostComposer({ slug, communityName, explicitAllowed, onClose, on
             </div>}
           </div>
         </div>
+        )}
+        {/* a spoiler (a film, a match): blurred until someone taps, like Reddit's */}
+        {(mode === "text" || step === 2) && (
+          <label className="flex items-start gap-2.5 rounded-control border border-line bg-raised/40 p-3 text-sm">
+            <input type="checkbox" checked={spoiler} onChange={(e) => setSpoiler(e.target.checked)} className="mt-0.5 size-4 accent-[var(--accent-text)]" />
+            <span>
+              <span className="block font-semibold">Spoiler</span>
+              <span className="block text-xs text-ink-muted">Its picture, video or text card shows blurred until someone taps it. The caption still shows.</span>
+            </span>
+          </label>
         )}
         {/* a community that allows explicit content: the poster says whether this post is (it's blurred until tapped) */}
         {explicitAllowed && (mode === "text" || step === 2) && (

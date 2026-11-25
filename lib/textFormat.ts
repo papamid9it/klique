@@ -1,9 +1,9 @@
 /**
  * Bold, italic and the rest in what people write, with the same marks as Discord: **bold**, *italic*, __underline__,
- * ~~strike~~, `code`, and "> " at the start of a line for a quote. The words stay plain text, so nothing can inject code.
+ * ~~strike~~, `code`, ||spoiler|| (hidden until tapped), and "> " at the start of a line for a quote. The words stay plain text, so nothing can inject code.
  * Comments on posts don't use this.
  */
-export type FormatKind = "bold" | "italic" | "underline" | "strike" | "code" | "quote";
+export type FormatKind = "bold" | "italic" | "underline" | "strike" | "code" | "spoiler" | "quote";
 
 export const FORMAT_TOOLS: { id: FormatKind; label: string; hint: string }[] = [
   { id: "bold", label: "Bold", hint: "B" },
@@ -11,6 +11,7 @@ export const FORMAT_TOOLS: { id: FormatKind; label: string; hint: string }[] = [
   { id: "underline", label: "Underline", hint: "U" },
   { id: "strike", label: "Strikethrough", hint: "S" },
   { id: "code", label: "Code", hint: "</>" },
+  { id: "spoiler", label: "Spoiler", hint: "||" },
   { id: "quote", label: "Quote", hint: "❝" },
 ];
 
@@ -21,6 +22,8 @@ export interface FormatSpan {
   underline?: boolean;
   strike?: boolean;
   code?: boolean;
+  /** hidden behind a bar until it's tapped (Discord's ||spoiler||) */
+  spoiler?: boolean;
 }
 export interface FormatLine {
   quote: boolean;
@@ -28,14 +31,14 @@ export interface FormatLine {
 }
 
 // links, @names and #tags come first, so the marks inside them (a_b__c) stay as they are
-const RX = /(https?:\/\/[^\s<]+)|(?<![\w@])([@#][\w-]+)|`([^`\n]+)`|\*\*\*(?=\S)(.+?)(?<=\S)\*\*\*|\*\*(?=\S)(.+?)(?<=\S)\*\*|(?<!\w)__(?=\S)(.+?)(?<=\S)__(?!\w)|~~(?=\S)(.+?)(?<=\S)~~|(?<![\w*])\*(?=\S)([^*\n]+?)(?<=\S)\*(?![\w*])/g;
+const RX = /(https?:\/\/[^\s<]+)|(?<![\w@])([@#][\w-]+)|`([^`\n]+)`|\*\*\*(?=\S)(.+?)(?<=\S)\*\*\*|\*\*(?=\S)(.+?)(?<=\S)\*\*|(?<!\w)__(?=\S)(.+?)(?<=\S)__(?!\w)|~~(?=\S)(.+?)(?<=\S)~~|(?<![\w*])\*(?=\S)([^*\n]+?)(?<=\S)\*(?![\w*])|\|\|(?=\S)(.+?)(?<=\S)\|\|/g;
 
 function spansOf(text: string, marks: Omit<FormatSpan, "text">, out: FormatSpan[]) {
   let last = 0;
   const plain = (t: string) => {
     if (!t) return;
     const prev = out[out.length - 1];
-    if (prev && !prev.code && !prev.bold === !marks.bold && !prev.italic === !marks.italic && !prev.underline === !marks.underline && !prev.strike === !marks.strike) prev.text += t;
+    if (prev && !prev.code && !prev.bold === !marks.bold && !prev.italic === !marks.italic && !prev.underline === !marks.underline && !prev.strike === !marks.strike && !prev.spoiler === !marks.spoiler) prev.text += t;
     else out.push({ text: t, ...marks });
   };
   for (const m of text.matchAll(RX)) {
@@ -48,13 +51,14 @@ function spansOf(text: string, marks: Omit<FormatSpan, "text">, out: FormatSpan[
     else if (m[6]) spansOf(m[6], { ...marks, underline: true }, out);
     else if (m[7]) spansOf(m[7], { ...marks, strike: true }, out);
     else if (m[8]) spansOf(m[8], { ...marks, italic: true }, out);
+    else if (m[9]) spansOf(m[9], { ...marks, spoiler: true }, out);
     last = at + m[0].length;
   }
   plain(text.slice(last));
 }
 
 /** Quick check, so most messages skip the work. */
-export const hasFormat = (text: string) => /[*_~`]|^>/m.test(text);
+export const hasFormat = (text: string) => /[*_~`]|\|\||^>/m.test(text);
 
 /** A line this full of marks isn't formatting, it's someone typing a wall of stars: it would take long to pick apart. */
 const MAX_MARKS = 200;
@@ -71,13 +75,19 @@ export function formatLines(text: string): FormatLine[] {
   });
 }
 
-/** The words without the marks: for previews and notifications, and for AutoMod (b**a**d is still bad). */
-export function stripFormat(text: string): string {
+/**
+ * The words without the marks: for previews and notifications, where a spoiler says "[spoiler]" (a push can't give it
+ * away); AutoMod passes `keepSpoilers` to check the real words (b**a**d, or a spoiler, is still bad).
+ */
+export function stripFormat(text: string, opts: { keepSpoilers?: boolean } = {}): string {
   if (!hasFormat(text)) return text;
-  return formatLines(text).map((l) => l.spans.map((s) => s.text).join("")).join("\n");
+  return formatLines(text).map((l) => l.spans.map((s, i) => (s.spoiler && !opts.keepSpoilers ? (l.spans[i - 1]?.spoiler ? "" : "[spoiler]") : s.text)).join("")).join("\n");
 }
 
-const MARK: Record<Exclude<FormatKind, "quote">, string> = { bold: "**", italic: "*", underline: "__", strike: "~~", code: "`" };
+/** Hides ||spoilers|| in text that's shown somewhere they can't be tapped open (a push, a preview): "[spoiler]". */
+export const hideSpoilers = (text: string) => text.replace(/\|\|(?=\S)(.+?)(?<=\S)\|\|/g, "[spoiler]");
+
+const MARK: Record<Exclude<FormatKind, "quote">, string> = { bold: "**", italic: "*", underline: "__", strike: "~~", code: "`", spoiler: "||" };
 
 const starsAtEnd = (s: string) => /\*+$/.exec(s)?.[0].length ?? 0;
 const starsAtStart = (s: string) => /^\*+/.exec(s)?.[0].length ?? 0;

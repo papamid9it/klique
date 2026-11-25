@@ -119,6 +119,10 @@ export function PostCard({ post: p, onChange, onRemoved, onOpenComments, showCom
     ...(p.community.explicit && p.canDelete
       ? [{ label: p.explicit ? "Not explicit" : "Mark as explicit", icon: "eye" as const, onSelect: () => void FeedService.setExplicit(p.community.slug, p.id, !p.explicit).then((r) => onChange(r.data), (e) => toast(errorMessage(e), "error")) }]
       : []),
+    // the poster, and the community's owner and admins: mark it a spoiler (blurred until tapped), like Reddit
+    ...(p.canDelete
+      ? [{ label: p.spoiler ? "Not a spoiler" : "Mark as spoiler", icon: "eye" as const, onSelect: () => void FeedService.setSpoiler(p.community.slug, p.id, !p.spoiler).then((r) => onChange(r.data), (e) => toast(errorMessage(e), "error")) }]
+      : []),
     // the poster: change how the picture or video shows in the post (cover, black background, backdrop)
     ...(p.canEdit && p.media.length ? [{ label: "How it shows", icon: "image" as const, onSelect: () => setFitting(true) }] : []),
     ...(p.canDelete ? [{ label: "Delete post", icon: "trash" as const, danger: true, onSelect: () => setDeleting(true) }] : []),
@@ -184,14 +188,14 @@ export function PostCard({ post: p, onChange, onRemoved, onOpenComments, showCom
       {/* a tap opens the post; a double tap loves it (love is never taken back by a double tap) */}
       {(p.media.length > 0 || style === "card") && (
         <div className="mt-3">
-          <ExplicitCover explicit={p.explicit}>
+          <ExplicitCover explicit={p.explicit} spoiler={p.spoiler}>
             {p.media.length > 0 ? <FeedMedia media={p.media} fit={p.mediaFit} onOpen={p.explicit || !user || !reelsReady() ? onOpenComments : () => router.push(`/reels?start=${p.id}&from=${Date.now()}`)} onDoubleTap={() => p.myVote !== 1 && void vote(1)} /> : <TextCard post={p} onOpen={onOpenComments} onDoubleTap={() => p.myVote !== 1 && void vote(1)} />}
           </ExplicitCover>
         </div>
       )}
       {style === "long" && (
         <div className="mt-2.5">
-          <ExplicitCover explicit={p.explicit}>
+          <ExplicitCover explicit={p.explicit} spoiler={p.spoiler}>
             <LongPost post={p} clamp onOpen={onOpenComments} />
           </ExplicitCover>
         </div>

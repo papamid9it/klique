@@ -395,6 +395,8 @@ export interface FeedPostDTO {
   textBg: string | null;
   /** marked explicit (in a community that allows it): blurred until tapped */
   explicit: boolean;
+  /** a spoiler: blurred until tapped (the title and caption still show), like Reddit's */
+  spoiler?: boolean;
   /** in reels: plain black behind a wider picture or video, not a blurred copy of it */
   plainBackdrop?: boolean;
   /** how a picture or video shows in the post's frame: cover (cropped to fill), black (whole, black bars), backdrop (whole, blurred copy behind) */

@@ -277,6 +277,8 @@ export const feedPostSchema = z
     textBg: z.enum(TEXT_BACKGROUND_IDS, { error: "Pick one of the card colours." }).optional(),
     /** explicit (only in a community that allows explicit content): blurred until tapped */
     explicit: z.boolean().default(false),
+    /** a spoiler: blurred until tapped */
+    spoiler: z.boolean().default(false),
     /** in reels: plain black behind a wider picture or video, not a blurred copy of it */
     plainBackdrop: z.boolean().default(false),
     mediaFit: z.enum(MEDIA_FIT_IDS).default("cover"),
@@ -287,7 +289,7 @@ export const feedPostSchema = z
   .refine((v) => v.media.length > 0 || v.caption.length > 0, { path: ["caption"], message: "Add a picture, a video or some text." })
   .refine((v) => v.media.length > 0 || v.caption.length <= TEXT_CARD_MAX || v.title.length > 0, { path: ["title"], message: "Add a title for a longer post." });
 /** edit a post: its caption (its author), or whether it's explicit (its author, or the community's owner and admins) */
-export const feedCaptionSchema = z.object({ caption: text(LIMITS.feedCaption).optional(), explicit: z.boolean().optional(), mediaFit: z.enum(MEDIA_FIT_IDS).optional() }).refine((v) => v.caption !== undefined || v.explicit !== undefined || v.mediaFit !== undefined, "Nothing to change.");
+export const feedCaptionSchema = z.object({ caption: text(LIMITS.feedCaption).optional(), explicit: z.boolean().optional(), spoiler: z.boolean().optional(), mediaFit: z.enum(MEDIA_FIT_IDS).optional() }).refine((v) => v.caption !== undefined || v.explicit !== undefined || v.spoiler !== undefined || v.mediaFit !== undefined, "Nothing to change.");
 /** edit your own comment's text */
 export const feedCommentEditSchema = z.object({ body: text(LIMITS.feedComment) });
 export const feedVoteSchema = z.object({ value: z.union([z.literal(1), z.literal(-1), z.literal(0)]) });

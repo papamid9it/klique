@@ -6,6 +6,9 @@ import { CommunityService } from "@/app/services/CommunityService";
 import { Panel, StatCard } from "@/components/domain/admin/AdminParts";
 import { SignupChart } from "@/components/domain/admin/SignupChart";
 import { MoneySummary } from "@/components/domain/money/CommunityMoney";
+import { MoneyService } from "@/app/services/MoneyService";
+import { HypeCoin } from "@/components/domain/gifts/HypeCoin";
+import { Button } from "@/components/ui/Button";
 import { GrowthStats } from "./GrowthStats";
 import { ReviewView } from "./ReviewView";
 import { useRealtimeEvent } from "@/components/providers/RealtimeProvider";
@@ -28,11 +31,11 @@ type Section = "overview" | "members" | "activity" | "events" | "money";
  */
 const sectionsFor = (c: CommunityDTO): { id: Section; label: string; icon: IconName; badge?: number; show: boolean }[] => [
   { id: "overview", label: "Overview", icon: "home", show: true },
+  // money near the top: what the community earns is a reason to run one here (none in Klique HQ or explicit ones)
+  { id: "money", label: "Money", icon: "coin", show: !c.official && !c.explicit },
   { id: "members", label: "Members", icon: "users", show: true },
   { id: "activity", label: "Activity", icon: "topics", show: true },
   { id: "events", label: "Events", icon: "calendar", badge: c.review?.events, show: true },
-  // no money in Klique HQ or a community with explicit content
-  { id: "money", label: "Money", icon: "coin", show: !c.official && !c.explicit },
 ];
 const sectionHref = (c: CommunityDTO, id: Section) => `/communities/${c.slug}?view=dashboard${id === "overview" ? "" : `&d=${id}`}`;
 /** the section in the address (`d`), so Back works */
@@ -144,11 +147,50 @@ export function DashboardView({ c }: { c: CommunityDTO }) {
   );
 }
 
+/**
+ * Money first on the Overview: what the community can be paid now, what came in over 30 days and its causes, with
+ * the way to see it all and to the payouts. Nothing in yet: how to start (a cause).
+ */
+function MoneyGlance({ c, href }: { c: CommunityDTO; href: string }) {
+  const { data } = useApi(() => MoneyService.money(c.slug), [c.slug], { key: `money:${c.slug}` });
+  const naira = (n: number) => `₦${n.toLocaleString("en-NG")}`;
+  if (!data) return <Skeleton className="h-28 w-full rounded-card" />;
+  const running = data.buttons.filter((b) => b.active).length;
+  return (
+    <section aria-label="Money" className="rounded-card border border-line bg-surface p-4">
+      <div className="flex flex-wrap items-end gap-x-8 gap-y-3">
+        <div className="min-w-0">
+          <p className="eyebrow flex items-center gap-1.5"><HypeCoin size={14} /> Ready to pay out</p>
+          <p className="mt-1.5 font-mono text-[34px] leading-none font-semibold tracking-tight tabular-nums">{naira(data.available)}</p>
+        </div>
+        <div className="min-w-0">
+          <p className="eyebrow">Last 30 days</p>
+          <p className="mt-1.5 font-mono text-[20px] leading-none font-semibold tabular-nums">{naira(data.totals.last30)}</p>
+        </div>
+        <div className="min-w-0">
+          <p className="eyebrow">Causes</p>
+          <p className="mt-1.5 font-mono text-[20px] leading-none font-semibold tabular-nums">{running} running</p>
+        </div>
+        <div className="ml-auto flex flex-wrap gap-2">
+          <Button size="sm" href={href}>See money</Button>
+          {running === 0 ? (
+            <Button size="sm" variant="primary" href={`/communities/${c.slug}?settings=donations`}>Start a cause</Button>
+          ) : (
+            <Button size="sm" variant="primary" href={`/communities/${c.slug}?settings=payouts`}>Payouts</Button>
+          )}
+        </div>
+      </div>
+      {data.requested > 0 && <p className="mt-3 text-[12.5px] text-ink-muted">{naira(data.requested)} is on its way to your bank.</p>}
+    </section>
+  );
+}
+
 /** The week at a glance, and what's waiting for you. */
 function Overview({ c, d, waiting, href }: { c: CommunityDTO; d: CommunityDashboardDTO; waiting: number; href: (s: Section) => string }) {
   const m = d.members;
   return (
     <div className="space-y-4">
+      {!c.official && !c.explicit && <MoneyGlance c={c} href={href("money")} />}
       {waiting > 0 && (
         <SoftLink href={`/communities/${c.slug}?view=review`} className="flex items-center gap-3 rounded-card border border-line bg-surface px-4 py-3 transition hover:bg-raised">
           <span className="inline-flex size-9 items-center justify-center rounded-full bg-accent text-accent-ink">

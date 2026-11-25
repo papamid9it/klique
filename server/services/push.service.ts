@@ -9,6 +9,7 @@ import { User, type IUser } from "../models/User";
 import { Notification, type NotifyAction } from "../models/Notification";
 import { notifyPrefsOf, type NotifyCategory } from "@/lib/notifications";
 import { publish, rtChannel } from "./realtime";
+import { hideSpoilers } from "@/lib/textFormat";
 import { sid } from "./helpers";
 
 /**
@@ -199,7 +200,8 @@ async function fanOut(userIds: (Types.ObjectId | string)[], payload: PushPayload
   const ids = [...new Set(userIds.map(sid))];
   if (!ids.length) return;
   // a community with explicit content: the notification says nothing of it (no text, no picture), on any screen
-  const scrubbed = await explicitScrub(payload, metaIn);
+  // a ||spoiler|| never shows in a notification (it can't be tapped open there)
+  const scrubbed = await explicitScrub({ ...payload, title: hideSpoilers(payload.title), body: hideSpoilers(payload.body) }, metaIn);
   const p = scrubbed.payload;
   const meta = scrubbed.meta;
   const alert = { title: p.title, body: p.body, href: urlFor(p.data) };
