@@ -64,12 +64,12 @@ export function LongPost({ post, clamp, onOpen }: { post: Pick<FeedPostDTO, "tit
   return (
     <div className="space-y-1.5">
       {post.title && <h3 className={cx("text-[18px] leading-snug font-semibold tracking-[-0.01em] [overflow-wrap:anywhere] text-ink", clamp && onOpen && "cursor-pointer hover:underline")} onClick={clamp ? onOpen : undefined}>{post.title}</h3>}
-      <p className={cx("text-[14.5px] leading-relaxed [overflow-wrap:anywhere] whitespace-pre-wrap text-ink/85", clamp && "line-clamp-4")}>
+      <p className={cx("text-[14.5px] leading-relaxed [overflow-wrap:anywhere] whitespace-pre-wrap text-ink/85", clamp && "line-clamp-6")}>
         <RichText text={post.caption} refs={post.refs} formatted />
       </p>
       {clamp && onOpen && post.caption.length > 180 && (
         <button type="button" onClick={onOpen} className="text-[13px] font-semibold text-ink-muted hover:text-ink">
-          Read more
+          … more
         </button>
       )}
     </div>

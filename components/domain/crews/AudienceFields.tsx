@@ -43,13 +43,14 @@ export function audienceInput(v: AudienceValue) {
 export function AudienceFields({ value, onChange, canWomen, canMen, errors, minSpots = 1 }: { value: AudienceValue; onChange: (v: AudienceValue) => void; canWomen: boolean; canMen: boolean; errors: Record<string, string>; minSpots?: number }) {
   const set = (patch: Partial<AudienceValue>) => onChange({ ...value, ...patch });
   const spots = Math.round(Number(value.spots)) || 0;
-  // all four are always shown; women-only / men-only are greyed out, with a note, when the host's gender doesn't match
+  // everyone, women only, men only; women-only / men-only are greyed out, with a note, when the host's gender doesn't match
   const noGender = !canWomen && !canMen;
   const choices: { id: Audience; label: string; hint: string; off?: string }[] = [
     { id: "everyone", label: "Everyone", hint: "Anyone can join." },
     { id: "women", label: "Women only", hint: "Only people whose profile says woman.", off: canWomen || value.audience === "women" ? undefined : noGender ? "gender" : "Only women can start a women-only klique." },
     { id: "men", label: "Men only", hint: "Only people whose profile says man.", off: canMen || value.audience === "men" ? undefined : noGender ? "gender" : "Only men can start a men-only klique." },
-    { id: "mixed", label: "Mixed, set numbers", hint: "So many spots for women and for men; any left over are open to anyone." },
+    // set numbers of women and men are gone: only an older klique that already uses them still shows it
+    ...(value.audience === "mixed" ? [{ id: "mixed" as Audience, label: "Mixed, set numbers", hint: "So many spots for women and for men; any left over are open to anyone." }] : []),
   ];
   const w = Math.round(Number(value.womenSpots) || 0);
   const m = Math.round(Number(value.menSpots) || 0);

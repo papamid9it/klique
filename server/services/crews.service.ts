@@ -758,6 +758,8 @@ async function startKlique(viewer: IUser, input: KliqueInput, where: { event: IE
   assertVerified(viewer);
   // older apps send womenOnly; the form now sends who can join
   const audience: Audience = input.audience !== "everyone" ? input.audience : input.womenOnly ? "women" : "everyone";
+  // set numbers of women and men aren't offered any more: everyone, women only or men only
+  if ((audience as string) === "mixed") throw badRequest("Pick everyone, women only or men only.");
   assertAudience(viewer, { audience, womenSpots: input.womenSpots, menSpots: input.menSpots, maxMembers: input.maxMembers });
   const limit = await kliqueCreateBlock(viewer);
   if (limit) throw new ApiError(403, limit, { code: "plan_limit" });
