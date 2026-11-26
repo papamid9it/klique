@@ -46,7 +46,7 @@ import { useAuth } from "@/components/providers/AuthProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import { Button } from "@/components/ui/Button";
 import { Icon, type IconName } from "@/components/ui/Icon";
-import { ChannelListSkeleton, ChatSkeleton } from "@/components/ui/Skeleton";
+import { ChannelListSkeleton, ChatSkeleton, CommunitySkeleton } from "@/components/ui/Skeleton";
 import { cx } from "@/components/ui/cx";
 import { slowModeLabel, audienceLabel, audienceRefusal } from "@/lib/constants";
 import { SlideOver } from "@/components/ui/SlideOver";
@@ -260,17 +260,7 @@ function CommunityWorkspace({ slug }: { slug: string }) {
 
   /* ---------------------------- states ---------------------------- */
 
-  if (loading) {
-    return (
-      // the channel list and a chat, where they'll be
-      <div className="flex h-dvh" role="status" aria-label="Loading community">
-        <div className="hidden w-64 shrink-0 border-r border-line bg-surface/40 lg:block">
-          <ChannelListSkeleton />
-        </div>
-        <ChatSkeleton />
-      </div>
-    );
-  }
+  if (loading) return <CommunitySkeleton />;
   if (error || !c) {
     return (
       <Scroll>

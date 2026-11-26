@@ -220,3 +220,15 @@ export function ProfileSkeleton() {
     </div>
   );
 }
+
+/** A community while it loads: the channel list and a chat, where they'll be (its route's loading screen uses it too). */
+export function CommunitySkeleton() {
+  return (
+    <div className="flex h-dvh" role="status" aria-label="Loading community">
+      <div className="hidden w-64 shrink-0 border-r border-line bg-surface/40 lg:block">
+        <ChannelListSkeleton />
+      </div>
+      <ChatSkeleton />
+    </div>
+  );
+}
