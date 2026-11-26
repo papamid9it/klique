@@ -317,6 +317,8 @@ export interface CommunityDTO extends CommunityCardDTO {
   feedPolicy: GroupPolicy;
   /** the community has a board / kliques of its own (owners switch them in settings) */
   boardsOn: boolean;
+  /** its tags for posts (lib/postTags), in the order set; empty when it has none */
+  postTags?: PostTagDTO[];
   kliquesOn: boolean;
   /** the viewer may post there */
   canPostToFeed: boolean;
@@ -381,9 +383,18 @@ export interface PostTargetDTO {
   slug: string;
   name: string;
   coverImage: string | null;
+  /** its tags for posts (lib/postTags), to pick one */
+  postTags?: PostTagDTO[];
 }
 
 /** A post in a community's Posts section (Instagram style). */
+/** One of a community's tags for posts (lib/postTags): its name and a colour id from POST_TAG_COLORS. */
+export interface PostTagDTO {
+  id: Id;
+  name: string;
+  color: string;
+}
+
 export interface FeedPostDTO {
   id: Id;
   /** #tags in the caption, and the @people and @communities it names */
@@ -396,6 +407,8 @@ export interface FeedPostDTO {
   caption: string;
   /** a text-only post's title ("" otherwise; lib/feedText) */
   title: string;
+  /** the community's tag on it (lib/postTags: Reddit's flair), shown above the title */
+  postTag?: PostTagDTO | null;
   /** a short text-only post's card background (lib/feedText), null otherwise */
   textBg: string | null;
   /** marked explicit (in a community that allows it): blurred until tapped */
@@ -1529,7 +1542,10 @@ export interface TopicDTO {
   likeCount: number;
   /** replies in its chat */
   commentCount: number;
+  /** older posts' own typed tags (grey); new ones use the community's tags (postTag) */
   tags: string[];
+  /** the community's tag on it (lib/postTags), coloured, like on posts */
+  postTag?: PostTagDTO | null;
   /** the viewer upvoted it */
   liked: boolean;
   /** the viewer hears about new replies */

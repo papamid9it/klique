@@ -1,5 +1,6 @@
 "use client";
 
+import { postTagColor } from "@/lib/postTags";
 import { FormatButton } from "@/components/ui/FormatButton";
 import { useRef, useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
@@ -21,7 +22,7 @@ import { cdn, videoPoster } from "@/lib/cdn";
 import { LIMITS, POST_FRAMES, postFrame } from "@/lib/constants";
 import { useUploadStatus } from "@/lib/hooks/useUploads";
 import { checkFile } from "@/lib/uploads";
-import type { FeedPostDTO, TopicMediaDTO } from "@/lib/types";
+import type { FeedPostDTO, PostTagDTO, TopicMediaDTO } from "@/lib/types";
 import { useTagSuggest } from "./TagSuggest";
 
 /**
@@ -29,7 +30,8 @@ import { useTagSuggest } from "./TagSuggest";
  * Home and add the caption. The Text tab is one page: short text shows as a coloured card, longer text as a title and
  * body (lib/feedText), and its preview shows which it'll be.
  */
-export function PostComposer({ slug, communityName, explicitAllowed, onClose, onPosted }: { slug: string; communityName: string; explicitAllowed?: boolean; onClose: () => void; onPosted: (p: FeedPostDTO) => void }) {
+export function PostComposer({ slug, communityName, explicitAllowed, postTags = [], onClose, onPosted }: { slug: string; communityName: string; explicitAllowed?: boolean; /** the community's tags (lib/postTags), to pick one */ postTags?: PostTagDTO[]; onClose: () => void; onPosted: (p: FeedPostDTO) => void }) {
+  const [tagId, setTagId] = useState<string | null>(null);
   const toast = useToast();
   const status = useUploadStatus();
   const [mode, setMode] = useState<"media" | "text">("text");
@@ -95,7 +97,7 @@ export function PostComposer({ slug, communityName, explicitAllowed, onClose, on
     sending.current = true;
     setBusy(true);
     try {
-      const res = await FeedService.create(slug, { title: title.trim(), ...(mode === "media" ? { caption: caption.trim(), media: media.map((m, i) => (i === 0 && frame ? { ...m, frame } : m)), plainBackdrop, mediaFit } : { caption: caption.trim(), media: [], ...(textBg && !caption.trim() ? { textBg } : {}) }), ...(explicitAllowed ? { explicit } : {}), spoiler, clientKey });
+      const res = await FeedService.create(slug, { title: title.trim(), ...(mode === "media" ? { caption: caption.trim(), media: media.map((m, i) => (i === 0 && frame ? { ...m, frame } : m)), plainBackdrop, mediaFit } : { caption: caption.trim(), media: [], ...(textBg && !caption.trim() ? { textBg } : {}) }), ...(explicitAllowed ? { explicit } : {}), spoiler, clientKey, ...(tagId ? { tagId } : {}) });
       toast("Posted", "success");
       onPosted(res.data);
     } catch (err) {
@@ -115,6 +117,22 @@ export function PostComposer({ slug, communityName, explicitAllowed, onClose, on
           <input id="post-title" value={title} onChange={(e) => setTitle(e.target.value.slice(0, FEED_TITLE_MAX))} maxLength={FEED_TITLE_MAX} placeholder="Title" autoFocus className="w-full border-0 bg-transparent px-0 text-[22px] font-bold text-ink placeholder:text-ink-muted/70 focus:outline-none" />
           <p className="text-right font-mono text-[11px] text-ink-muted">{title.length}/{FEED_TITLE_MAX}</p>
         </div>
+        {/* the community's tags (Reddit's flair): pick one, or none */}
+        {postTags.length > 0 && (
+          <div role="radiogroup" aria-label="Tag" className="-mt-2 flex flex-wrap items-center gap-2">
+            <span className="text-[13px] font-semibold text-ink-muted">Tag</span>
+            {postTags.map((g) => {
+              const on = tagId === g.id;
+              const col = postTagColor(g.color);
+              return (
+                <button key={g.id} type="button" role="radio" aria-checked={on} onClick={() => setTagId(on ? null : g.id)} className={cx("inline-flex h-7 items-center rounded-[6px] border px-2.5 text-[12.5px] font-bold transition", on ? "border-transparent" : "border-line text-ink hover:bg-raised")} style={on ? { background: col.bg, color: col.ink } : undefined}>
+                  {!on && <span aria-hidden="true" className="mr-1.5 size-2.5 rounded-[3px]" style={{ background: col.bg }} />}
+                  {g.name}
+                </button>
+              );
+            })}
+          </div>
+        )}
         {step === 1 && (
         <div role="tablist" aria-label="What to post" className="flex border-b border-line">
           {(
@@ -266,7 +284,7 @@ function TextFields({ title, caption, setCaption, textBg, setTextBg, captionRef,
           <div role="radiogroup" aria-label="Background" className="flex flex-wrap items-center gap-2">
             <button type="button" role="radio" aria-checked={!textBg} onClick={() => setTextBg(null)} className={cx("h-8 rounded-control border-2 px-2.5 text-[12px] font-semibold transition", !textBg ? "border-ink" : "border-line text-ink-muted")}>None</button>
             {TEXT_BACKGROUNDS.map((b) => (
-              <button key={b.id} type="button" role="radio" aria-checked={textBg === b.id} aria-label={b.name} title={b.name} onClick={() => setTextBg(b.id)} className={cx("size-8 rounded-full border-2 transition", textBg === b.id ? "border-ink" : "border-line")} style={{ background: b.css }} />
+              <button key={b.id} type="button" role="radio" aria-checked={textBg === b.id} aria-label={b.name} title={b.name} onClick={() => setTextBg(b.id)} className={cx("h-8 w-11 rounded-[6px] border-2 transition", textBg === b.id ? "border-ink" : "border-line")} style={{ background: b.css }} />
             ))}
           </div>
           {textBg && title.trim() && <div className="w-48"><TextCard post={{ caption: "", title: title.trim(), textBg, refs: { users: [], communities: [] } }} className="[&_p]:text-[14px]" /></div>}

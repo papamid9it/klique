@@ -12,6 +12,8 @@ export interface TopicInput {
   /** at most one picture */
   media?: TopicMediaDTO[];
   tags?: string[];
+  /** one of the community's tags (null on an edit: none) */
+  tagId?: string | null;
 }
 
 /** A community's boards: posts (Discord forum style) with upvotes, tags, follows and a chat of replies. Same service for web, mobile and desktop. */

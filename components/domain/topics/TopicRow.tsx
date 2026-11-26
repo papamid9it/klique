@@ -13,6 +13,7 @@ import { TopicMenu, topicHref } from "./TopicMenu";
 import { prefetchTopic, seedTopic } from "./TopicThread";
 import { UserName } from "@/components/ui/UserName";
 import { GiftButton } from "@/components/domain/gifts/Gifts";
+import { PostTag } from "@/components/domain/feed/PostTag";
 
 /**
  * One post in a board, like a Discord forum post card: tags, title, who wrote it and the start of the text, a
@@ -35,11 +36,19 @@ export function TopicRow({ topic: t, onChange, onRemoved, onTag, active }: { top
       {/* the whole card opens the post; buttons and tags sit above this link */}
       <SoftLink href={href} scroll={false} onClick={() => seedTopic(t)} onPointerEnter={() => prefetchTopic(t.community.slug, t.id)} onFocus={() => prefetchTopic(t.community.slug, t.id)} aria-label={`Open ${t.title}`} className="absolute inset-0 rounded-card" />
       <div className="min-w-0 flex-1">
-        {t.tags.length > 0 && (
+        {/* its community tag (coloured, as on posts); older posts' typed tags in grey */}
+        {(t.postTag || t.tags.length > 0) && (
           <ul className="relative mb-1.5 flex flex-wrap gap-1.5" aria-label="Tags">
+            {t.postTag && (
+              <li>
+                <button type="button" onClick={() => onTag?.(t.postTag!.id)} title={`Show posts tagged ${t.postTag.name}`} className="flex hover:opacity-85">
+                  <PostTag tag={t.postTag} />
+                </button>
+              </li>
+            )}
             {t.tags.map((tag) => (
               <li key={tag}>
-                <button type="button" onClick={() => onTag?.(tag)} title={`Show posts tagged ${tag}`} className="rounded-full bg-raised px-2 py-0.5 text-[12px] font-medium text-ink-muted transition hover:bg-line hover:text-ink">
+                <button type="button" onClick={() => onTag?.(tag)} title={`Show posts tagged ${tag}`} className="inline-flex h-6 items-center rounded-[6px] bg-raised px-2 text-[12px] font-medium text-ink-muted transition hover:bg-line hover:text-ink">
                   {tag}
                 </button>
               </li>

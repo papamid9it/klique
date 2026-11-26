@@ -1,5 +1,6 @@
 "use client";
 
+import { PostTag } from "./PostTag";
 import { checkReels, reelsReady } from "@/lib/reels-ready";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -116,10 +117,7 @@ export function PostCard({ post: p, onChange, onRemoved, onOpenComments, showCom
     ...(p.community.explicit && p.canDelete
       ? [{ label: p.explicit ? "Not explicit" : "Mark as explicit", icon: "eye" as const, onSelect: () => void FeedService.setExplicit(p.community.slug, p.id, !p.explicit).then((r) => onChange(r.data), (e) => toast(errorMessage(e), "error")) }]
       : []),
-    // the poster, and the community's owner and admins: mark it a spoiler (blurred until tapped), like Reddit
-    ...(p.canDelete
-      ? [{ label: p.spoiler ? "Not a spoiler" : "Mark as spoiler", icon: "eye" as const, onSelect: () => void FeedService.setSpoiler(p.community.slug, p.id, !p.spoiler).then((r) => onChange(r.data), (e) => toast(errorMessage(e), "error")) }]
-      : []),
+    // (spoiler is chosen when the post is made, not changed from here)
     // the poster: change how the picture or video shows in the post (cover, black background, backdrop)
     ...(p.canEdit && p.media.length ? [{ label: "How it shows", icon: "image" as const, onSelect: () => setFitting(true) }] : []),
     ...(p.canDelete ? [{ label: "Delete post", icon: "trash" as const, danger: true, onSelect: () => setDeleting(true) }] : []),
@@ -168,6 +166,12 @@ export function PostCard({ post: p, onChange, onRemoved, onOpenComments, showCom
         <OverflowMenu items={menu} label="Post options" />
       </header>
 
+      {/* the community's tag (Reddit's flair), above the title; it shows the community's posts with that tag */}
+      {p.postTag && (
+        <div className="mt-2.5 flex">
+          <PostTag tag={p.postTag} href={`/communities/${p.community.slug}?view=posts&tag=${p.postTag.id}`} />
+        </div>
+      )}
       {/* the title leads (every post has one now); the caption shows only when the post is opened. Older posts
           without a title show their caption's start instead */}
       {!style && (p.title || p.caption) && (

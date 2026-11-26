@@ -28,6 +28,8 @@ export interface ICommunity {
   feedPolicy?: "admins" | "members" | "off";
   /** no board (policies/features); unset = on */
   boardsOff?: boolean;
+  /** the community's own tags for posts (Reddit's flair, lib/postTags): up to 10, set by owners and admins */
+  postTags?: { _id: Types.ObjectId; name: string; color: string }[];
   /**
    * Where the Boards section sits in the channel list: how many sections come above it, counting the loose
    * channels ("Channels") as the first section and then each category. Unset or 0: at the top.
@@ -122,6 +124,7 @@ const CommunitySchema = new Schema<ICommunity>(
     groupPolicy: { type: String, enum: ["admins", "members", "off"], default: "admins" },
     feedPolicy: { type: String, enum: ["admins", "members", "off"], default: "off" },
     boardsOff: { type: Boolean, default: undefined },
+    postTags: { type: [new Schema({ name: { type: String, required: true, trim: true, maxlength: 24 }, color: { type: String, required: true } })], default: undefined },
     boardsAt: { type: Number, default: undefined, min: 0, max: 1000 },
     mainChannelId: { type: Schema.Types.ObjectId, ref: "Channel", default: null },
     kliquesOff: { type: Boolean, default: undefined },

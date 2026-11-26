@@ -1,6 +1,6 @@
 import { feedCaptionSchema, feedCommentEditSchema, feedCommentSchema, feedPostSchema, feedReactSchema, feedVoteSchema, homeFeedQuery, reelsQuery } from "../validators/schemas";
 import { resolveSpaceFor } from "../services/spaces.service";
-import { assertReelsOn, addComment, createPost, deleteComment, deletePost, editCaption, editComment, feedSidebar, getPost, homeFeed, popularFeed, reelsFeed, reelsReady, postCommunitySlug, listComments, listPosts, reactToComment, setPostExplicit, setPostMediaFit, setPostSpoiler, vote } from "../services/feed.service";
+import { assertReelsOn, addComment, createPost, deleteComment, deletePost, editCaption, editComment, feedSidebar, getPost, homeFeed, popularFeed, reelsFeed, reelsReady, postCommunitySlug, listComments, listPosts, reactToComment, setPostExplicit, setPostMediaFit, setPostSpoiler, setPostTag, vote } from "../services/feed.service";
 import { created, readJson, readQuery, withApi } from "./api";
 
 /** Handlers for a community's Posts section (`/api/communities/[slug]/feed/…`) and the home feed. Authorization lives in the service. */
@@ -9,9 +9,9 @@ type Post = Slug & { postId: string };
 type Comment = Post & { commentId: string };
 
 export const feedList = withApi<Slug>({ auth: "optional" }, async ({ req, params, viewer }) => {
-  const { page, at } = readQuery(req, homeFeedQuery);
+  const { page, at, tag } = readQuery(req, homeFeedQuery);
   const { space, access } = await resolveSpaceFor(viewer, params.slug);
-  return listPosts(viewer, space, access, page, at);
+  return listPosts(viewer, space, access, page, at, tag);
 });
 
 /** GET …/feed/sidebar — top posters this week, for the panel beside Posts. */
@@ -38,8 +38,12 @@ export const postById = withApi<{ id: string }>({ auth: "optional", limit: { nam
 });
 
 export const feedEdit = withApi<Post, "required">({ auth: "required" }, async ({ req, params, viewer }) => {
-  const { caption, explicit, spoiler, mediaFit } = await readJson(req, feedCaptionSchema);
+  const { caption, explicit, spoiler, mediaFit, tagId } = await readJson(req, feedCaptionSchema);
   const { space, access } = await resolveSpaceFor(viewer, params.slug);
+  if (tagId !== undefined) {
+    const p = await setPostTag(viewer, space, access, params.postId, tagId);
+    if (caption === undefined && explicit === undefined && mediaFit === undefined && spoiler === undefined) return p;
+  }
   if (spoiler !== undefined) {
     const p = await setPostSpoiler(viewer, space, access, params.postId, spoiler);
     if (caption === undefined && explicit === undefined && mediaFit === undefined) return p;

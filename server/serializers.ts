@@ -256,6 +256,7 @@ export async function toCommunityDetail(
     canCreateGroup: canCreateGroup(access),
     feedPolicy: c.feedPolicy ?? "off",
     boardsOn: boardsOn(c),
+    postTags: (c.postTags ?? []).map((g) => ({ id: sid(g._id), name: g.name, color: g.color })),
     kliquesOn: kliquesOn(c),
     // the Posts section: owners/admins when it's on, everyone who's a member when members may post
     canPostToFeed: (c.feedPolicy ?? "off") !== "off" && !access.banned && !access.postBan && (access.canManage || (c.feedPolicy === "members" && access.canPost && !access.pointsToPost)),

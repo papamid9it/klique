@@ -10,6 +10,7 @@ import { REACTION_IDS, STICKER_IDS } from "@/lib/reactions";
 import { SOCIAL_IDS, socialHandle, socialOf, type SocialId } from "@/lib/socials";
 import { FEED_TITLE_MAX, TEXT_BACKGROUND_IDS, TEXT_CARD_MAX } from "@/lib/feedText";
 import { NOTIFY_CATEGORY_IDS } from "@/lib/notifications";
+import { POST_TAG_COLOR_IDS, POST_TAG_NAME_MAX, POST_TAGS_MAX } from "@/lib/postTags";
 import { blankToUndef, handle, httpUrl, interestId, objectId, pageQuery, placeDefault, placeOptional, placeReach, placeReachOptional, placeRequired, whereParam } from "./common";
 
 const text = (max: number, min = 0) => z.string().trim().min(min).max(max);
@@ -149,6 +150,12 @@ export const communityUpdateSchema = z.object({
   feedPolicy: z.enum(["admins", "members", "off"]).optional(),
   /** the community's board and its kliques (policies/features): on or off */
   boardsOn: z.boolean().optional(),
+  /** its tags for posts, the whole list in order (lib/postTags); a tag kept keeps its id, so its posts keep it */
+  postTags: z
+    .array(z.object({ id: objectId.optional(), name: text(POST_TAG_NAME_MAX, 1), color: z.enum(POST_TAG_COLOR_IDS) }))
+    .max(POST_TAGS_MAX, `Up to ${POST_TAGS_MAX} tags`)
+    .refine((l) => new Set(l.map((g) => g.name.toLowerCase())).size === l.length, "Two tags have the same name.")
+    .optional(),
   kliquesOn: z.boolean().optional(),
   /** move the Boards section up, down, to the top or the bottom of the channel list */
   moveBoards: z.enum(["top", "up", "down", "bottom"]).optional(),
@@ -253,7 +260,8 @@ export const topicListQuery = pageQuery.extend({
   sort: z.enum(["active", "hot", "new", "top"]).default("active"),
   board: z.preprocess(blankToUndef, z.string().trim().max(40).optional()),
   q: z.preprocess(blankToUndef, z.string().trim().max(60).optional()),
-  tag: z.preprocess(blankToUndef, z.string().trim().toLowerCase().max(LIMITS.topicTag).optional()),
+  /** a community tag's id (lib/postTags), or an older post's typed tag */
+  tag: z.preprocess(blankToUndef, z.string().trim().toLowerCase().max(40).optional()),
   /** only the posts you follow (yours are followed for you) */
   following: z.preprocess((v) => v === "true" || v === "1" || v === true, z.boolean()).optional(),
 });
@@ -283,6 +291,8 @@ export const feedPostSchema = z
     plainBackdrop: z.boolean().default(false),
     mediaFit: z.enum(MEDIA_FIT_IDS).default("cover"),
     media: mediaList.default([]),
+    /** one of the community's tags (lib/postTags), or none */
+    tagId: z.preprocess(blankToUndef, objectId.optional()),
     /** a random id per "New post" box: the same send twice makes one post */
     clientKey: clientKey.optional(),
   })
@@ -297,7 +307,7 @@ export const feedPostSchema = z
   .refine((v) => v.title.trim().length > 0, { path: ["title"], message: "Add a title." })
   .refine((v) => v.media.length > 0 || v.caption.length <= TEXT_CARD_MAX || v.title.length > 0, { path: ["title"], message: "Add a title for a longer post." });
 /** edit a post: its caption (its author), or whether it's explicit (its author, or the community's owner and admins) */
-export const feedCaptionSchema = z.object({ caption: text(LIMITS.feedCaption).optional(), explicit: z.boolean().optional(), spoiler: z.boolean().optional(), mediaFit: z.enum(MEDIA_FIT_IDS).optional() }).refine((v) => v.caption !== undefined || v.explicit !== undefined || v.spoiler !== undefined || v.mediaFit !== undefined, "Nothing to change.");
+export const feedCaptionSchema = z.object({ caption: text(LIMITS.feedCaption).optional(), explicit: z.boolean().optional(), spoiler: z.boolean().optional(), mediaFit: z.enum(MEDIA_FIT_IDS).optional(), /** change the post's tag (null: none) */ tagId: objectId.nullable().optional() }).refine((v) => v.caption !== undefined || v.explicit !== undefined || v.spoiler !== undefined || v.mediaFit !== undefined || v.tagId !== undefined, "Nothing to change.");
 /** edit your own comment's text */
 export const feedCommentEditSchema = z.object({ body: text(LIMITS.feedComment) });
 export const feedVoteSchema = z.object({ value: z.union([z.literal(1), z.literal(-1), z.literal(0)]) });
@@ -321,6 +331,8 @@ export const homeFeedQuery = pageQuery.extend({
   sort: z.enum(["foryou", "popular"]).default("foryou"),
   /** "auto": today, or the last 7 days when today is quiet */
   range: z.enum(["auto", "today", "week"]).default("auto"),
+  /** a community's posts: only those with this tag of its own (lib/postTags) */
+  tag: z.preprocess(blankToUndef, objectId.optional()),
 });
 
 export const reelsQuery = homeFeedQuery.extend({ start: z.string().max(40).optional() });
@@ -353,12 +365,16 @@ export const topicCreateSchema = z.object({
   body: text(LIMITS.topicBody).default(""),
   media: postImage.optional(),
   tags: postTags.optional(),
+  /** one of the community's tags (lib/postTags) */
+  tagId: z.preprocess(blankToUndef, objectId.optional()),
 }).refine((v) => v.body.length > 0 || (v.media?.length ?? 0) > 0, { path: ["body"], message: "Write something, or add a picture or video" });
 export const topicUpdateSchema = z.object({
   title: text(LIMITS.topicTitle, 3).optional(),
   body: text(LIMITS.topicBody).optional(),
   media: postImage.optional(),
   tags: postTags.optional(),
+  /** change its community tag (null: none) */
+  tagId: objectId.nullable().optional(),
   /** owners/admins only */
   pinned: z.boolean().optional(),
   locked: z.boolean().optional(),

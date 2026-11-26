@@ -63,7 +63,7 @@ async function toPosts(rows: IFeedPost[], viewer: IUser | null): Promise<FeedPos
   const communityIds = [...new Set(rows.map((r) => sid(r.communityId)))];
   const [authors, communities, votes, roles, authorRoles] = await Promise.all([
     loadBriefs(rows.map((r) => r.authorId)),
-    Community.find({ _id: { $in: communityIds } }).select("slug name interest coverImage privacy explicit verified official").lean<Pick<ICommunity, "_id" | "slug" | "name" | "interest" | "coverImage" | "privacy" | "explicit" | "verified" | "official">[]>(),
+    Community.find({ _id: { $in: communityIds } }).select("slug name interest coverImage privacy explicit verified official postTags").lean<Pick<ICommunity, "_id" | "slug" | "name" | "interest" | "coverImage" | "privacy" | "explicit" | "verified" | "official" | "postTags">[]>(),
     viewer ? FeedVote.find({ userId: viewer._id, postId: { $in: rows.map((r) => r._id) } }).select("postId value").lean<{ postId: Types.ObjectId; value: 1 | -1 }[]>() : [],
     viewer ? Membership.find({ userId: viewer._id, communityId: { $in: communityIds }, subcommunityId: null, status: "active" }).select("communityId role").lean<Pick<IMembership, "communityId" | "role">[]>() : [],
     Membership.find({ communityId: { $in: communityIds }, subcommunityId: null, status: "active", userId: { $in: rows.map((r) => r.authorId) } }).select("communityId userId role").lean<Pick<IMembership, "communityId" | "userId" | "role">[]>(),
@@ -82,6 +82,8 @@ async function toPosts(rows: IFeedPost[], viewer: IUser | null): Promise<FeedPos
     const role = roleIn.get(sid(p.communityId));
     const mine = !!me && sid(p.authorId) === me;
     const target = authorRole.get(`${sid(p.communityId)}:${sid(p.authorId)}`);
+    // its tag as the community has it now (renamed: the new name; removed: none)
+    const tag = p.tagId ? c.postTags?.find((g) => sid(g._id) === sid(p.tagId!)) : undefined;
     return [
       {
         id: sid(p._id),
@@ -92,6 +94,7 @@ async function toPosts(rows: IFeedPost[], viewer: IUser | null): Promise<FeedPos
         tags: p.tags ?? [],
         refs: refOf(p),
         title: p.title ?? "",
+        postTag: tag ? { id: sid(tag._id), name: tag.name, color: tag.color } : null,
         explicit: !!p.explicit,
         spoiler: !!p.spoiler,
         ...(p.plainBackdrop ? { plainBackdrop: true } : {}),
@@ -156,12 +159,12 @@ async function toComments(rows: IFeedComment[], viewer: IUser | null, managerRol
 /* ------------------------------------------------------------------ */
 
 /** Newest first. `at` (from page 1) leaves out what was posted since, so later pages don't shift. */
-export async function listPosts(viewer: IUser | null, space: Space, access: SpaceAccess, page: number, at?: number): Promise<Paginated<FeedPostDTO> & { at: number }> {
+export async function listPosts(viewer: IUser | null, space: Space, access: SpaceAccess, page: number, at?: number, tag?: string): Promise<Paginated<FeedPostDTO> & { at: number }> {
   assertFeed(space);
   assertCanView(access, "posts");
   const hidden = await hiddenUserIds(viewer?._id ?? null);
   const now = at && at <= Date.now() && at > Date.now() - 24 * HOUR ? at : Date.now();
-  const rows = await FeedPost.find({ communityId: space.community._id, createdAt: { $lte: new Date(now) }, hiddenAt: null, ...(hidden.length ? { authorId: { $nin: hidden } } : {}) })
+  const rows = await FeedPost.find({ communityId: space.community._id, ...(tag ? { tagId: new Types.ObjectId(tag) } : {}), createdAt: { $lte: new Date(now) }, hiddenAt: null, ...(hidden.length ? { authorId: { $nin: hidden } } : {}) })
     .sort({ createdAt: -1 })
     .skip((page - 1) * PAGE)
     .limit(PAGE + 1)
@@ -186,7 +189,7 @@ export async function postTargets(viewer: IUser): Promise<PostTargetDTO[]> {
       }
     }),
   );
-  return communities.filter((_, i) => allowed[i]).map((c) => ({ slug: c.slug, name: c.name, coverImage: c.coverImage ?? null }));
+  return communities.filter((_, i) => allowed[i]).map((c) => ({ slug: c.slug, name: c.name, coverImage: c.coverImage ?? null, postTags: (c.postTags ?? []).map((g) => ({ id: sid(g._id), name: g.name, color: g.color })) }));
 }
 
 export async function createPost(viewer: IUser, space: Space, access: SpaceAccess, input: z.infer<typeof feedPostSchema>): Promise<FeedPostDTO> {
@@ -214,6 +217,7 @@ export async function createPost(viewer: IUser, space: Space, access: SpaceAcces
     communityRefIds: refs.communityIds,
     // every post has a title now (pictures and videos too, shown above them)
     title: input.title,
+    tagId: tagIdIn(space, input.tagId),
     plainBackdrop: input.plainBackdrop,
     mediaFit: input.media.length ? input.mediaFit : "cover",
     textBg: style === "card" ? (input.textBg ?? "sunset") : null,
@@ -230,6 +234,14 @@ export async function createPost(viewer: IUser, space: Space, access: SpaceAcces
   }
   await tellTagged(viewer, space, refs.userIds, `/p/${sid(doc._id)}`, input.caption, "post");
   return (await toPosts([doc.toObject() as IFeedPost], viewer))[0];
+}
+
+/** One of the community's own tags (lib/postTags), checked; none when not given. */
+function tagIdIn(space: Space, tagId: string | null | undefined): Types.ObjectId | null {
+  if (!tagId) return null;
+  const tag = (space.community.postTags ?? []).find((g) => sid(g._id) === tagId);
+  if (!tag) throw badRequest("That tag isn't in this community any more. Pick another.");
+  return tag._id;
 }
 
 /** "X tagged you in a post/comment" to the people tagged who can see it (never the author). */
@@ -296,6 +308,15 @@ export async function setPostExplicit(viewer: IUser, space: Space, access: Space
   const p = await loadPost(space, postId);
   if (!((sid(p.authorId) === sid(viewer._id) && access.isMember) || access.canManage)) throw forbidden("Only the poster and this community's owner and admins can do that.");
   await FeedPost.updateOne({ _id: p._id }, { $set: { explicit: on } });
+  return getPost(viewer, space, access, postId);
+}
+
+/** Change a post's tag (or take it off): its author, or the community's owner and admins, like Reddit's flair. */
+export async function setPostTag(viewer: IUser, space: Space, access: SpaceAccess, postId: string, tagId: string | null): Promise<FeedPostDTO> {
+  assertFeed(space);
+  const p = await loadPost(space, postId);
+  if (!((sid(p.authorId) === sid(viewer._id) && access.isMember) || access.canManage)) throw forbidden("Only the poster and this community's owner and admins can do that.");
+  await FeedPost.updateOne({ _id: p._id }, { $set: { tagId: tagIdIn(space, tagId) } });
   return getPost(viewer, space, access, postId);
 }
 

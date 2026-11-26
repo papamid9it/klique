@@ -7,7 +7,8 @@ const base = (slug: string) => `/api/communities/${slug}/feed`;
 
 /** A community's Posts section (pictures and videos, votes, nested comments) and the home feed. Same service for web, mobile and desktop. */
 export const FeedService = {
-  list: (slug: string, page = 1, at?: number) => api.get<Envelope<Paginated<FeedPostDTO> & { at: number }>>(base(slug), at ? { page, at } : { page }),
+  /** `tag`: only posts with one of the community's tags (lib/postTags) */
+  list: (slug: string, page = 1, at?: number, tag?: string | null) => api.get<Envelope<Paginated<FeedPostDTO> & { at: number }>>(base(slug), { page, ...(at ? { at } : {}), ...(tag ? { tag } : {}) }),
   sidebar: (slug: string) => api.get<Envelope<FeedSidebarDTO>>(`${base(slug)}/sidebar`),
   /** pictures or a video (caption optional), or text: a title (needed past lib/feedText TEXT_CARD_MAX) and a card colour */
   create: (slug: string, input: { caption: string; title?: string; textBg?: string; explicit?: boolean; spoiler?: boolean; plainBackdrop?: boolean; mediaFit?: "cover" | "black" | "backdrop"; media: TopicMediaDTO[]; clientKey?: string }) => api.post<Envelope<FeedPostDTO>>(base(slug), input),

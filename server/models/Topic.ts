@@ -61,6 +61,8 @@ export interface ITopic {
   commentCount: number;
   /** a few short labels the poster picks, shown on the card and used to filter the board */
   tags: string[];
+  /** one of the community's tags (Community.postTags; lib/postTags), like a post's: the board's tags since Nov 2026 */
+  tagId?: Types.ObjectId | null;
   editedAt: Date | null;
   /** newest comment (or the topic itself): drives "recently active" */
   lastActivityAt: Date;
@@ -81,6 +83,7 @@ const TopicSchema = new Schema<ITopic>(
     likeCount: { type: Number, default: 0 },
     commentCount: { type: Number, default: 0 },
     tags: { type: [String], default: [] },
+    tagId: { type: Schema.Types.ObjectId, default: null },
     editedAt: { type: Date, default: null },
     lastActivityAt: { type: Date, default: Date.now },
   },
@@ -98,6 +101,7 @@ TopicSchema.index({ communityId: 1, pinned: -1, lastActivityAt: -1 });
 TopicSchema.index({ authorId: 1, createdAt: -1 });
 
 TopicSchema.index({ boardId: 1, tags: 1 });
+TopicSchema.index({ boardId: 1, tagId: 1 }, { partialFilterExpression: { tagId: { $type: "objectId" } } });
 
 export const Topic: Model<ITopic> = defineModel<ITopic>("Topic", TopicSchema);
 

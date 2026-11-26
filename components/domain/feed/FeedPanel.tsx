@@ -19,6 +19,8 @@ import { BackToTop } from "./BackToTop";
 import { NewPostsPill, useNewerPosts, useRefreshKeys } from "./NewPosts";
 import { FeedFooter, scrollerOf, useInfiniteFeed } from "./useInfiniteFeed";
 import { useInDesktopApp } from "@/lib/hooks/useInDesktopApp";
+import { postTagColor } from "@/lib/postTags";
+import { cx } from "@/components/ui/cx";
 import type { UserBrief } from "@/lib/types";
 
 /**
@@ -30,7 +32,10 @@ export function FeedPanel({ c }: { c: CommunityDTO }) {
   const { user } = useAuth();
   const openId = sp.get("p");
   const [composing, setComposing] = useState(false);
-  const feed = useInfiniteFeed<FeedPostDTO>(`feed:${c.slug}`, async (page, at) => (await FeedService.list(c.slug, page, at)).data, (p) => p.id);
+  // a community tag picked (?tag=<id>, from the row below or a post's tag): only its posts
+  const tags = c.postTags ?? [];
+  const tagId = tags.some((g) => g.id === sp.get("tag")) ? sp.get("tag") : null;
+  const feed = useInfiniteFeed<FeedPostDTO>(`feed:${c.slug}:${tagId ?? ""}`, async (page, at) => (await FeedService.list(c.slug, page, at, tagId)).data, (p) => p.id);
   const items = feed.items ?? [];
   const setItems = feed.setItems;
   const [opened, setOpened] = useState<FeedPostDTO | null>(null);
@@ -72,7 +77,7 @@ export function FeedPanel({ c }: { c: CommunityDTO }) {
       busy.current = false;
     }
   };
-  useNewerPosts(feed.items, async () => (await FeedService.list(c.slug, 1)).data.items, setNewer);
+  useNewerPosts(feed.items, async () => (await FeedService.list(c.slug, 1, undefined, tagId)).data.items, setNewer);
   useRefreshKeys(() => void refresh(), {
     inApp,
     // the Posts link of this community, while Posts is what's on screen (and no post is open over it)
@@ -83,8 +88,9 @@ export function FeedPanel({ c }: { c: CommunityDTO }) {
     },
   });
 
-  const open = (p: FeedPostDTO) => softNavigate(`/communities/${c.slug}?view=posts&p=${p.id}`);
-  const close = () => softNavigate(`/communities/${c.slug}?view=posts`);
+  const tagQ = tagId ? `&tag=${tagId}` : "";
+  const open = (p: FeedPostDTO) => softNavigate(`/communities/${c.slug}?view=posts${tagQ}&p=${p.id}`);
+  const close = () => softNavigate(`/communities/${c.slug}?view=posts${tagQ}`);
 
   return (
     <div ref={feed.anchor as React.RefObject<HTMLDivElement>} className="mx-auto max-w-[730px] space-y-5">
@@ -109,6 +115,21 @@ export function FeedPanel({ c }: { c: CommunityDTO }) {
         ) : null}
       </div>
 
+      {/* the community's tags: All, then each; picking one shows only its posts */}
+      {tags.length > 0 && (
+        <div role="tablist" aria-label="Filter by tag" className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5">
+          <Link role="tab" aria-selected={!tagId} href={`/communities/${c.slug}?view=posts`} scroll={false} className={cx("inline-flex h-8 shrink-0 items-center rounded-[6px] border px-3 text-[13.5px] font-semibold", !tagId ? "border-ink bg-ink text-canvas" : "border-line text-ink hover:bg-raised")}>
+            All
+          </Link>
+          {tags.map((g) => (
+            <Link key={g.id} role="tab" aria-selected={tagId === g.id} href={`/communities/${c.slug}?view=posts&tag=${g.id}`} scroll={false} className={cx("inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[6px] border px-3 text-[13.5px] font-semibold", tagId === g.id ? "border-ink bg-ink text-canvas" : "border-line text-ink hover:bg-raised")}>
+              <span aria-hidden="true" className="size-2.5 rounded-[3px]" style={{ background: postTagColor(g.color).bg }} />
+              {g.name}
+            </Link>
+          ))}
+        </div>
+      )}
+
       {/* new posts since the newest one on screen: a pill that stays at the top as you scroll, like Reddit */}
       {newer.length > 0 && (
         <div className="pointer-events-none sticky top-3 z-20 -my-2.5 flex h-0 justify-center">
@@ -119,7 +140,7 @@ export function FeedPanel({ c }: { c: CommunityDTO }) {
       {!feed.items ? (
         feed.error ? <ErrorState message={feed.error} onRetry={() => void feed.load(true)} /> : <RowSkeleton rows={3} />
       ) : !items.length ? (
-        <EmptyState icon="image" title="No posts yet" action={c.canPostToFeed ? <Button variant="primary" onClick={() => setComposing(true)}>Share the first one</Button> : undefined}>
+        <EmptyState icon="image" title={tagId ? "No posts with this tag yet" : "No posts yet"} action={c.canPostToFeed ? <Button variant="primary" onClick={() => setComposing(true)}>Share the first one</Button> : undefined}>
           {c.feedPolicy === "admins" ? "The organisers' pictures and videos will show up here." : "Pictures and videos from members will show up here."}
         </EmptyState>
       ) : (
@@ -139,6 +160,7 @@ export function FeedPanel({ c }: { c: CommunityDTO }) {
           slug={c.slug}
           communityName={c.name}
           explicitAllowed={c.explicit}
+          postTags={tags}
           onClose={() => setComposing(false)}
           onPosted={(p) => {
             setComposing(false);

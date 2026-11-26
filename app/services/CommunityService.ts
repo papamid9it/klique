@@ -42,6 +42,8 @@ export interface CommunityInput {
   /** the board and the community's own kliques, on or off */
   boardsOn?: boolean;
   kliquesOn?: boolean;
+  /** its tags for posts, the whole list in order (lib/postTags); a kept tag keeps its id */
+  postTags?: { id?: string; name: string; color: string }[];
   /** points needed to join and to post (0: anyone) */
   minPointsJoin?: number;
   minPointsPost?: number;

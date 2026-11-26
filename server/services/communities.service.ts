@@ -289,6 +289,11 @@ export async function updateCommunity(viewer: IUser, slug: string, patch: z.infe
   if (patch.groupPolicy !== undefined) set.groupPolicy = patch.groupPolicy;
   if (patch.feedPolicy !== undefined) set.feedPolicy = patch.feedPolicy;
   if (patch.boardsOn !== undefined) set.boardsOff = !patch.boardsOn;
+  // the tags list, whole: a tag sent back with its id keeps it (and its posts keep it); new ones get one
+  if (patch.postTags !== undefined) {
+    const had = new Set((space.community.postTags ?? []).map((g) => sid(g._id)));
+    set.postTags = patch.postTags.map((g) => ({ _id: g.id && had.has(g.id) ? new Types.ObjectId(g.id) : new Types.ObjectId(), name: g.name, color: g.color }));
+  }
   if (patch.kliquesOn !== undefined) set.kliquesOff = !patch.kliquesOn;
   if (patch.memberEvents !== undefined) set.memberEvents = patch.memberEvents;
   if (patch.membersMassMention !== undefined) set.membersMassMention = patch.membersMassMention;

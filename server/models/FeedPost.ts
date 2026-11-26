@@ -17,6 +17,8 @@ export interface IFeedPost {
   /** people and communities the caption names (@handle, @community) */
   mentionIds?: Types.ObjectId[];
   communityRefIds?: Types.ObjectId[];
+  /** the community's tag it was given (Community.postTags; lib/postTags), if any */
+  tagId?: Types.ObjectId | null;
   /** a text post's title (needed when its text is long: lib/feedText) */
   title: string;
   /** a short text post's card background (lib/feedText TEXT_BACKGROUNDS) */
@@ -51,6 +53,7 @@ const FeedPostSchema = new Schema<IFeedPost>(
     mentionIds: { type: [Schema.Types.ObjectId], default: [] },
     communityRefIds: { type: [Schema.Types.ObjectId], default: [] },
     title: { type: String, default: "", trim: true, maxlength: 120 },
+    tagId: { type: Schema.Types.ObjectId, default: null },
     textBg: { type: String, default: null },
     explicit: { type: Boolean, default: false },
     spoiler: { type: Boolean, default: false },
@@ -70,6 +73,8 @@ FeedPostSchema.index({ communityId: 1, createdAt: -1 });
 FeedPostSchema.index({ createdAt: -1 });
 FeedPostSchema.index({ authorId: 1, createdAt: -1 });
 FeedPostSchema.index({ tags: 1, createdAt: -1 });
+// a community's posts with one of its tags (tap a tag); only posts that have one
+FeedPostSchema.index({ communityId: 1, tagId: 1, createdAt: -1 }, { partialFilterExpression: { tagId: { $type: "objectId" } } });
 // search: words in captions (global search's Posts); run `npm run db:indexes` once to create it
 FeedPostSchema.index({ caption: "text" }, { default_language: "none", name: "caption_text" });
 // one post per send (only rows that have a key)

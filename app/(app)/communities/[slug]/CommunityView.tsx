@@ -564,7 +564,7 @@ function CommunityWorkspace({ slug }: { slug: string }) {
         ) : view === "topics" && !g ? (
           // the post list fills the room between the channels and an open post
           <Scroll inner fill>
-            <TopicsPanel slug={slug} communityName={c.name} isMember={member} openId={threadId} board={activeBoard} />
+            <TopicsPanel slug={slug} communityName={c.name} isMember={member} openId={threadId} board={activeBoard} postTags={c.postTags} />
           </Scroll>
         ) : view === "updates" && g ? (
           <Scroll inner>

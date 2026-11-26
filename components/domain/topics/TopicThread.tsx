@@ -1,5 +1,6 @@
 "use client";
 
+import { PostTag } from "@/components/domain/feed/PostTag";
 import { useSearchParams } from "next/navigation";
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { errorMessage } from "@/app/ApiCore";
@@ -262,10 +263,15 @@ function PostIntro({ t, empty, count, full }: { t: TopicDTO; empty: boolean; /**
         )}
       </div>
       <h1 className="mt-2.5 text-xl leading-snug font-bold tracking-[-0.02em] break-words">{t.title}</h1>
-      {t.tags.length > 0 && (
+      {(t.postTag || t.tags.length > 0) && (
         <ul className="mt-2 flex flex-wrap gap-1.5" aria-label="Tags">
+          {t.postTag && (
+            <li className="flex">
+              <PostTag tag={t.postTag} />
+            </li>
+          )}
           {t.tags.map((tag) => (
-            <li key={tag} className="rounded-full bg-raised px-2.5 py-0.5 text-[12px] font-medium text-ink-muted">
+            <li key={tag} className="inline-flex h-6 items-center rounded-[6px] bg-raised px-2 text-[12px] font-medium text-ink-muted">
               {tag}
             </li>
           ))}

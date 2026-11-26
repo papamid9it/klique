@@ -1,6 +1,9 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { CommunityService } from "@/app/services/CommunityService";
+import { postTagColor } from "@/lib/postTags";
+import { cx } from "@/components/ui/cx";
 import { errorMessage } from "@/app/ApiCore";
 import { UploadService } from "@/app/services/UploadService";
 import { useUploadStatus } from "@/lib/hooks/useUploads";
@@ -15,18 +18,26 @@ import { MOCK_IMAGES, MOCK_VIDEOS, looksLikeVideo } from "./TopicMedia";
 import { Icon } from "@/components/ui/Icon";
 import { LIMITS } from "@/lib/constants";
 import { cdn } from "@/lib/cdn";
-import type { TopicDTO, TopicMediaDTO } from "@/lib/types";
+import type { PostTagDTO, TopicDTO, TopicMediaDTO } from "@/lib/types";
 
-/** Write a post, or edit your own: a title, some text, and if you like a few pictures or one video, plus a few tags. */
-export function TopicFormModal({ slug, communityName, board, topic, onClose, onSaved }: { slug: string; communityName: string; /** board slug the new post goes in */ board?: string; topic?: TopicDTO; onClose: () => void; onSaved: (t: TopicDTO) => void }) {
+/** Write a post, or edit your own: a title, some text, and if you like a few pictures or one video, plus one of the community's tags. */
+export function TopicFormModal({ slug, communityName, board, topic, postTags: given, onClose, onSaved }: { slug: string; communityName: string; /** board slug the new post goes in */ board?: string; topic?: TopicDTO; /** the community's tags (fetched when left out) */ postTags?: PostTagDTO[]; onClose: () => void; onSaved: (t: TopicDTO) => void }) {
   const toast = useToast();
   const [title, setTitle] = useState(topic?.title ?? "");
   const [body, setBody] = useState(topic?.body ?? "");
   const bodyArea = useRef<HTMLTextAreaElement>(null);
   // up to a few pictures, or one video on its own (the same rule as community posts)
   const [media, setMedia] = useState<TopicMediaDTO[]>(() => topic?.media.slice(0, LIMITS.topicMedia) ?? []);
-  const [tags, setTags] = useState<string[]>(topic?.tags ?? []);
-  const [tagDraft, setTagDraft] = useState("");
+  // the community's tags (lib/postTags), like on its posts; older posts' typed tags are kept as they are
+  const [tagId, setTagId] = useState<string | null>(topic?.postTag?.id ?? null);
+  const [fetched, setFetched] = useState<PostTagDTO[] | null>(null);
+  useEffect(() => {
+    if (given) return;
+    let on = true;
+    CommunityService.get(slug).then((r) => on && setFetched(r.data.postTags ?? []), () => {});
+    return () => void (on = false);
+  }, [given, slug]);
+  const postTags = given ?? fetched ?? [];
   const [link, setLink] = useState("");
   const status = useUploadStatus();
   const photoRef = useRef<HTMLInputElement>(null);
@@ -59,21 +70,13 @@ export function TopicFormModal({ slug, communityName, board, topic, onClose, onS
     }
   }
 
-  function addTag(raw: string) {
-    const t = raw.trim().toLowerCase().replace(/\s+/g, " ").slice(0, LIMITS.topicTag);
-    if (!t || tags.includes(t) || tags.length >= LIMITS.topicTags) return;
-    setTags((x) => [...x, t]);
-    setTagDraft("");
-  }
-
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setErrs({});
     try {
-      const pending = tagDraft.trim() ? [...tags, tagDraft.trim().toLowerCase()].slice(0, LIMITS.topicTags) : tags;
-      const input = { title: title.trim(), body: body.trim(), media: media.map((m) => ({ kind: m.kind, url: m.url, poster: m.poster ?? null })), tags: pending };
-      const res = topic ? await TopicService.update(slug, topic.id, input) : await TopicService.create(slug, { ...input, board });
+      const input = { title: title.trim(), body: body.trim(), media: media.map((m) => ({ kind: m.kind, url: m.url, poster: m.poster ?? null })) };
+      const res = topic ? await TopicService.update(slug, topic.id, { ...input, tagId }) : await TopicService.create(slug, { ...input, board, ...(tagId ? { tagId } : {}) });
       toast(topic ? "Post updated" : "Posted", "success");
       onSaved(res.data);
     } catch (err) {
@@ -162,40 +165,25 @@ export function TopicFormModal({ slug, communityName, board, topic, onClose, onS
           {errs.media && <p role="alert" className="mt-1.5 text-sm text-danger">{errs.media}</p>}
         </fieldset>
 
-        <fieldset>
-          <legend className="mb-1.5 text-sm font-medium">
-            Tags <span className="font-normal text-ink-muted">(up to {LIMITS.topicTags}, helps people find it)</span>
-          </legend>
-          <div className="flex flex-wrap items-center gap-1.5 rounded-control border border-line bg-surface p-1.5 focus-within:border-accent-text">
-            {tags.map((t) => (
-              <span key={t} className="inline-flex items-center gap-1 rounded-full bg-raised py-0.5 pr-1 pl-2.5 text-[13px] font-medium">
-                {t}
-                <button type="button" onClick={() => setTags((x) => x.filter((y) => y !== t))} aria-label={`Remove the tag ${t}`} className="inline-flex size-5 items-center justify-center rounded-full text-ink-muted hover:bg-line hover:text-ink">
-                  <Icon name="x" size={10} />
-                </button>
-              </span>
-            ))}
-            {tags.length < LIMITS.topicTags && (
-              <input
-                value={tagDraft}
-                onChange={(e) => setTagDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === ",") {
-                    e.preventDefault();
-                    addTag(tagDraft);
-                  } else if (e.key === "Backspace" && !tagDraft && tags.length) setTags((x) => x.slice(0, -1));
-                }}
-                onBlur={() => addTag(tagDraft)}
-                maxLength={LIMITS.topicTag}
-                placeholder={tags.length ? "Add another" : "e.g. question, gear, meetup"}
-                aria-label="Add a tag"
-                className="h-7 min-w-32 flex-1 bg-transparent px-1.5 text-sm placeholder:text-ink-muted/70 focus:outline-none"
-              />
-            )}
-          </div>
-          {errs.tags && <p role="alert" className="mt-1.5 text-sm text-danger">{errs.tags}</p>}
-          <p className="mt-1.5 text-xs text-ink-muted">Press Enter or a comma after each tag.</p>
-        </fieldset>
+        {/* the community's tags (as on its posts): pick one, or none */}
+        {postTags.length > 0 && (
+          <fieldset>
+            <legend className="mb-1.5 text-sm font-medium">Tag</legend>
+            <div role="radiogroup" aria-label="Tag" className="flex flex-wrap gap-2">
+              {postTags.map((g) => {
+                const on = tagId === g.id;
+                const col = postTagColor(g.color);
+                return (
+                  <button key={g.id} type="button" role="radio" aria-checked={on} onClick={() => setTagId(on ? null : g.id)} className={cx("inline-flex h-7 items-center rounded-[6px] border px-2.5 text-[12.5px] font-bold transition", on ? "border-transparent" : "border-line text-ink hover:bg-raised")} style={on ? { background: col.bg, color: col.ink } : undefined}>
+                    {!on && <span aria-hidden="true" className="mr-1.5 size-2.5 rounded-[3px]" style={{ background: col.bg }} />}
+                    {g.name}
+                  </button>
+                );
+              })}
+            </div>
+            {errs.tagId && <p role="alert" className="mt-1.5 text-sm text-danger">{errs.tagId}</p>}
+          </fieldset>
+        )}
 
         <div className="flex justify-end gap-2 pt-1">
           <Button variant="ghost" onClick={onClose}>

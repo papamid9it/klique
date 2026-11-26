@@ -1,5 +1,6 @@
 "use client";
 
+import { postTagColor } from "@/lib/postTags";
 import { useState } from "react";
 import { TopicService } from "@/app/services/TopicService";
 import { useAuth } from "@/components/providers/AuthProvider";
@@ -11,7 +12,7 @@ import { EmptyState, ErrorState } from "@/components/ui/States";
 import { RowSkeleton } from "@/components/ui/Skeleton";
 import { cx } from "@/components/ui/cx";
 import { useDebounced, usePaged } from "@/lib/hooks/useApi";
-import type { BoardDTO, TopicDTO, TopicSort } from "@/lib/types";
+import type { BoardDTO, PostTagDTO, TopicDTO, TopicSort } from "@/lib/types";
 import { TopicFormModal } from "./TopicFormModal";
 import { TopicRow } from "./TopicRow";
 import { emitTopic, seedTopic, useTopicEvents } from "./TopicThread";
@@ -30,12 +31,12 @@ const SORTS: { id: TopicSort; label: string }[] = [
  * upvotes, replies, last activity). Opening one (`openId`) shows the post and its chat in the right-hand panel;
  * the list stays here, scrolled where it was. Tags filter the board.
  */
-export function TopicsPanel({ slug, communityName, isMember, openId, board }: { slug: string; communityName: string; isMember: boolean; openId: string | null; board: BoardDTO | null }) {
+export function TopicsPanel({ slug, communityName, isMember, openId, board, postTags = [] }: { slug: string; communityName: string; isMember: boolean; openId: string | null; board: BoardDTO | null; /** the community's tags (lib/postTags) */ postTags?: PostTagDTO[] }) {
   if (!board) return <EmptyState icon="topics" title="No boards yet">Admins can add boards from the sidebar, like Updates or Projects.</EmptyState>;
-  return <Board key={board.slug} slug={slug} communityName={communityName} isMember={isMember} board={board} openId={openId} />;
+  return <Board key={board.slug} slug={slug} communityName={communityName} isMember={isMember} board={board} openId={openId} postTags={postTags} />;
 }
 
-function Board({ slug, communityName, isMember, board, openId }: { slug: string; communityName: string; isMember: boolean; board: BoardDTO; openId: string | null }) {
+function Board({ slug, communityName, isMember, board, openId, postTags }: { slug: string; communityName: string; isMember: boolean; board: BoardDTO; openId: string | null; postTags: PostTagDTO[] }) {
   const { requireAuth } = useAuth();
   const [sort, setSort] = useState<TopicSort>("active");
   const [q, setQ] = useState("");
@@ -107,7 +108,22 @@ function Board({ slug, communityName, isMember, board, openId }: { slug: string;
         )}
       </div>
 
-      {tag && (
+      {/* the community's tags: All, then each (as on its Posts) */}
+      {postTags.length > 0 && (
+        <div role="tablist" aria-label="Filter by tag" className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5">
+          <button type="button" role="tab" aria-selected={!tag} onClick={() => setTag(null)} className={cx("inline-flex h-8 shrink-0 items-center rounded-[6px] border px-3 text-[13.5px] font-semibold", !tag ? "border-ink bg-ink text-canvas" : "border-line text-ink hover:bg-raised")}>
+            All
+          </button>
+          {postTags.map((g) => (
+            <button key={g.id} type="button" role="tab" aria-selected={tag === g.id} onClick={() => setTag(tag === g.id ? null : g.id)} className={cx("inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[6px] border px-3 text-[13.5px] font-semibold", tag === g.id ? "border-ink bg-ink text-canvas" : "border-line text-ink hover:bg-raised")}>
+              <span aria-hidden="true" className="size-2.5 rounded-[3px]" style={{ background: postTagColor(g.color).bg }} />
+              {g.name}
+            </button>
+          ))}
+        </div>
+      )}
+      {/* an older post's typed tag picked */}
+      {tag && !postTags.some((g) => g.id === tag) && (
         <p className="flex items-center gap-2 text-sm text-ink-muted">
           Tagged
           <button type="button" onClick={() => setTag(null)} className="inline-flex items-center gap-1.5 rounded-full bg-accent px-2.5 py-0.5 text-[12.5px] font-semibold text-accent-ink" aria-label={`Clear the tag filter ${tag}`}>
@@ -142,6 +158,7 @@ function Board({ slug, communityName, isMember, board, openId }: { slug: string;
           slug={slug}
           communityName={communityName}
           board={board.slug}
+          postTags={postTags}
           onClose={() => setCreating(false)}
           onSaved={(t) => {
             setCreating(false);

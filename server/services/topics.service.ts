@@ -4,7 +4,7 @@ import { withoutAdult } from "../policies/adult";
 import { deleteUploads } from "./media.service";
 import type { z } from "zod";
 import type { Paginated, TopicCommentDTO, TopicDTO, TopicDetailDTO } from "@/lib/types";
-import { ApiError, forbidden, notFound } from "../http/errors";
+import { ApiError, badRequest, forbidden, notFound } from "../http/errors";
 import { rateLimit } from "../http/rate-limit";
 import { Community, type ICommunity } from "../models/Community";
 import { Membership, type IMembership } from "../models/Membership";
@@ -53,7 +53,7 @@ async function toTopics(rows: ITopic[], viewer: IUser | null): Promise<TopicDTO[
   const boardIds = [...new Set(rows.flatMap((r) => (r.boardId ? [sid(r.boardId)] : [])))];
   const [authors, communities, liked, roles, authorRoles, boards, follows] = await Promise.all([
     loadBriefs(rows.map((r) => r.authorId)),
-    Community.find({ _id: { $in: communityIds } }).select("slug name interest coverImage").lean<Pick<ICommunity, "_id" | "slug" | "name" | "interest" | "coverImage">[]>(),
+    Community.find({ _id: { $in: communityIds } }).select("slug name interest coverImage postTags").lean<Pick<ICommunity, "_id" | "slug" | "name" | "interest" | "coverImage" | "postTags">[]>(),
     viewer ? TopicLike.find({ userId: viewer._id, targetType: "topic", targetId: { $in: rows.map((r) => r._id) } }).select("targetId").lean<{ targetId: Types.ObjectId }[]>() : [],
     viewer ? Membership.find({ userId: viewer._id, communityId: { $in: communityIds }, subcommunityId: null, status: "active" }).select("communityId role status postBan").lean<Pick<IMembership, "communityId" | "role" | "status" | "postBan">[]>() : [],
     Membership.find({ communityId: { $in: communityIds }, subcommunityId: null, status: "active", userId: { $in: rows.map((r) => r.authorId) } }).select("communityId userId role").lean<Pick<IMembership, "communityId" | "userId" | "role">[]>(),
@@ -78,6 +78,8 @@ async function toTopics(rows: ITopic[], viewer: IUser | null): Promise<TopicDTO[
     const mine = !!me && sid(t.authorId) === me;
     const target = authorRole.get(`${sid(t.communityId)}:${sid(t.authorId)}`);
     const moderator = isManager(role);
+    // its community tag as the community has it now (renamed: the new name; removed: none)
+    const tag = t.tagId ? c.postTags?.find((g) => sid(g._id) === sid(t.tagId!)) : undefined;
     return [
       {
         id: sid(t._id),
@@ -93,6 +95,7 @@ async function toTopics(rows: ITopic[], viewer: IUser | null): Promise<TopicDTO[
         likeCount: t.likeCount,
         commentCount: t.commentCount,
         tags: t.tags ?? [],
+        postTag: tag ? { id: sid(tag._id), name: tag.name, color: tag.color } : null,
         liked: likedSet.has(sid(t._id)),
         following: followed.has(sid(t._id)),
         createdAt: t.createdAt.toISOString(),
@@ -171,7 +174,11 @@ export async function listTopics(viewer: IUser | null, space: Space, access: Spa
     const rx = new RegExp(escapeRegex(q.q), "i");
     match.$or = [{ title: rx }, { body: rx }, { tags: q.q.toLowerCase() }];
   }
-  if (q.tag) match.tags = q.tag;
+  // a community tag (its id), or an older post's typed tag
+  if (q.tag) {
+    if (/^[a-f0-9]{24}$/.test(q.tag)) match.tagId = new Types.ObjectId(q.tag);
+    else match.tags = q.tag;
+  }
   // "Following": only the posts you follow (signed out: none)
   if (q.following) {
     const ids = viewer ? (await TopicFollow.find({ userId: viewer._id }).select("topicId").lean<{ topicId: Types.ObjectId }[]>()).map((x) => x.topicId) : [];
@@ -264,6 +271,14 @@ export async function getTopic(viewer: IUser | null, space: Space, access: Space
 /** "Hot sauce", "Lagos " → "hot sauce", "lagos": short, lowercase, at most three, no repeats. */
 const cleanTags = (tags: string[] | undefined) => [...new Set((tags ?? []).map((t) => t.trim().toLowerCase().replace(/\s+/g, " ").slice(0, LIMITS.topicTag)).filter(Boolean))].slice(0, LIMITS.topicTags);
 
+/** One of the community's tags (lib/postTags), checked; none when not given. */
+function tagIdIn(space: Space, tagId: string | null | undefined): Types.ObjectId | null {
+  if (!tagId) return null;
+  const tag = (space.community.postTags ?? []).find((g) => sid(g._id) === tagId);
+  if (!tag) throw badRequest("That tag isn't in this community any more. Pick another.");
+  return tag._id;
+}
+
 /** Follow a post (hear about new replies) or stop. */
 export async function setFollow(viewer: IUser, space: Space, access: SpaceAccess, topicId: string, on: boolean): Promise<{ following: boolean }> {
   assertCommunity(space);
@@ -282,7 +297,7 @@ export async function createTopic(viewer: IUser, space: Space, access: SpaceAcce
   await checkAutoMod(space, viewer, access, { text: `${input.title} ${input.body ?? ""}`.trim(), where: `the ${board.name} board` });
   if (!canPostIn(board, access)) throw forbidden(`Only owners and admins can post in ${board.name}.`);
   rateLimit(`topic:${sid(viewer._id)}`, 10, 10 * 60_000);
-  const doc = await Topic.create({ communityId: space.community._id, boardId: board._id, authorId: viewer._id, title: input.title, body: input.body ?? "", media: (input.media ?? []).map((m) => ({ kind: m.kind, url: m.url, poster: m.poster ?? null })), tags: cleanTags(input.tags) });
+  const doc = await Topic.create({ communityId: space.community._id, boardId: board._id, authorId: viewer._id, title: input.title, body: input.body ?? "", media: (input.media ?? []).map((m) => ({ kind: m.kind, url: m.url, poster: m.poster ?? null })), tags: cleanTags(input.tags), tagId: tagIdIn(space, input.tagId) });
   await TopicFollow.create({ topicId: doc._id, userId: viewer._id }); // you hear about replies to your own post
   return (await toTopics([doc.toObject() as ITopic], viewer))[0];
 }
@@ -295,7 +310,7 @@ export async function updateTopic(viewer: IUser, space: Space, access: SpaceAcce
   if (mine) assertNotPostBanned(access);
   const set: Record<string, unknown> = {};
 
-  const touchesContent = patch.title !== undefined || patch.body !== undefined || patch.media !== undefined || patch.tags !== undefined;
+  const touchesContent = patch.title !== undefined || patch.body !== undefined || patch.media !== undefined || patch.tags !== undefined || patch.tagId !== undefined;
   if (touchesContent) {
     if (!(mine && access.isMember)) {
       const authorM = mine ? null : await Membership.findOne({ communityId: t.communityId, subcommunityId: null, userId: t.authorId, status: "active" }).select("role").lean<Pick<IMembership, "role">>();
@@ -304,6 +319,7 @@ export async function updateTopic(viewer: IUser, space: Space, access: SpaceAcce
     if (patch.title !== undefined) set.title = patch.title;
     if (patch.body !== undefined) set.body = patch.body;
     if (patch.tags !== undefined) set.tags = cleanTags(patch.tags);
+    if (patch.tagId !== undefined) set.tagId = tagIdIn(space, patch.tagId);
     if (patch.media !== undefined) {
       set.media = patch.media.map((m) => ({ kind: m.kind, url: m.url, poster: m.poster ?? null }));
       set.imageUrl = null;

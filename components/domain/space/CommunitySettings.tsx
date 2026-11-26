@@ -31,6 +31,7 @@ import { AutoModPanel } from "./AutoModPanel";
 import { VerificationBlock } from "./VerificationBlock";
 import { WelcomePanel } from "./Welcome";
 import { EmojiPanel } from "./EmojiPanel";
+import { PostTagsEditor } from "./PostTagsEditor";
 
 export type CommunityTab = "overview" | "joining" | "events" | "kliques" | "mentions" | "groups" | "posts" | "donations" | "payouts" | "members" | "requests" | "invites" | "screening" | "roles" | "automod" | "welcome" | "emoji" | "modlog" | "webhooks" | "notifications" | "privacy" | "delete" | "sections";
 const TITLES: Record<CommunityTab, string> = {
@@ -235,6 +236,12 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
               }}
             />
           )}
+        </SettingsBlock>
+      )}
+
+      {active === "posts" && (c.feedPolicy !== "off" || c.boardsOn) && (
+        <SettingsBlock title="Tags" intro="Your community's own labels for posts, like Reddit's flair. Whoever posts picks one; it shows above the title, and tapping it shows every post here with that tag.">
+          <PostTagsEditor c={c} onChanged={onChanged} />
         </SettingsBlock>
       )}
 
