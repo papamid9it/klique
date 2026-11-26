@@ -157,11 +157,19 @@ export function AttachedSticker({ choice, onRemove }: { choice: StickerChoice | 
  * A sticker as it appears in a conversation, without a bubble: a big, gently animated emoji, or a saved picture
  * (tap it to see it full size and save it to your own stickers).
  */
+/** stickers already shown once on this page: drawn at once after that, never a ring again (a chat redraws its rows) */
+const shownStickers = new Set<string>();
+
 export function StickerView({ id, url, size = 72 }: { id?: string | null; url?: string | null; size?: number }) {
   const view = useMediaViewer();
   const [broken, setBroken] = useState(false);
   // while it downloads, a turning ring holds its place (the box keeps its size, so nothing jumps when it arrives)
-  const [loaded, setLoaded] = useState(false);
+  const thumb = url ? stickerThumb(url) : "";
+  const [loaded, setLoadedState] = useState(() => !!thumb && shownStickers.has(thumb));
+  const setLoaded = (v: boolean) => {
+    if (v && thumb) shownStickers.add(thumb);
+    setLoadedState(v);
+  };
   const quick = useQuickSave(url ?? "");
   if (url) {
     if (broken) return <span className="text-sm text-ink-muted italic">Sticker unavailable</span>;
@@ -170,7 +178,7 @@ export function StickerView({ id, url, size = 72 }: { id?: string | null; url?: 
       <span className="group/stk relative inline-block" {...quick.handlers}>
         <button type="button" onClick={() => view([url])} aria-label="Sticker. Open it to save it" className="relative block cursor-zoom-in rounded-control transition active:scale-95">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={stickerThumb(url)} alt="" loading="lazy" decoding="async" draggable={false} onError={() => setBroken(true)} onLoad={() => setLoaded(true)} ref={(el) => { if (el?.complete && el.naturalWidth && !loaded) setLoaded(true); }} style={{ width: box, height: box }} className={cx("block object-contain drop-shadow-sm transition-opacity select-none [-webkit-touch-callout:none]", loaded ? "opacity-100" : "opacity-0")} />
+          <img src={thumb} alt="" loading="lazy" decoding="async" draggable={false} onError={() => setBroken(true)} onLoad={() => setLoaded(true)} ref={(el) => { if (el?.complete && el.naturalWidth && !loaded) setLoaded(true); }} style={{ width: box, height: box }} className={cx("block object-contain drop-shadow-sm transition-opacity select-none [-webkit-touch-callout:none]", loaded ? "opacity-100" : "opacity-0")} />
           {!loaded && (
             <span role="status" aria-label="Loading sticker" className="pointer-events-none absolute inset-0 flex items-center justify-center">
               <span className="size-8 animate-spin rounded-full border-[3px] border-line border-t-ink-muted" />
