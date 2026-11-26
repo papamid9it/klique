@@ -413,6 +413,11 @@ export async function toEvents(events: IEvent[], viewer: IUser | null): Promise<
   const liveRows = streamedIds.length ? await LiveStream.find({ eventId: { $in: streamedIds }, status: "live" }).lean<ILiveStream[]>() : [];
   const liveHosts = liveRows.length ? await loadBriefs(liveRows.map((l) => l.hostId)) : new Map<string, UserBrief>();
   const liveMap = new Map(liveRows.map((l) => [sid(l.eventId!), l]));
+  const liveViewers = new Map<string, number>();
+  if (liveRows.length) {
+    const { viewersOf } = await import("./services/live.service");
+    await Promise.all(liveRows.map(async (l) => liveViewers.set(sid(l._id), await viewersOf(l._id))));
+  }
 
   return events.map((e) => {
     const c = e.communityId ? communityMap.get(sid(e.communityId)) : undefined;
@@ -438,7 +443,7 @@ export async function toEvents(events: IEvent[], viewer: IUser | null): Promise<
             const l = liveMap.get(sid(e._id));
             return {
               streamed: true,
-              live: l ? { id: sid(l._id), provider: l.provider, channel: l.channel, title: l.title, status: "live" as const, host: liveHosts.get(sid(l.hostId)) ?? GHOST, startedAt: l.startedAt?.toISOString() ?? null, eventId: sid(e._id), canEnd: !!viewer && sid(l.hostId) === sid(viewer._id) } : null,
+              live: l ? { id: sid(l._id), provider: l.provider, channel: l.channel, title: l.title, status: "live" as const, host: liveHosts.get(sid(l.hostId)) ?? GHOST, startedAt: l.startedAt?.toISOString() ?? null, eventId: sid(e._id), canEnd: !!viewer && sid(l.hostId) === sid(viewer._id), viewers: liveViewers.get(sid(l._id)) ?? 0 } : null,
               ...(isHost && !e.cancelled && end >= now ? { canStream: true } : {}),
             };
           })()

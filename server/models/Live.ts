@@ -54,6 +54,9 @@ export interface ILiveStream {
   endedById: Types.ObjectId | null;
   /** removed from this stream by its host or a moderator: no player or live chat for them in Klique */
   kickedIds?: Types.ObjectId[];
+  /** the most people watching at once, and how many different people watched (for the "how it went" summary) */
+  peakViewers?: number;
+  watched?: number;
   createdAt: Date;
 }
 
@@ -70,6 +73,8 @@ const LiveStreamSchema = new Schema<ILiveStream>(
     endedAt: { type: Date, default: null },
     endedById: { type: Schema.Types.ObjectId, ref: "User", default: null },
     kickedIds: { type: [Schema.Types.ObjectId], default: [] },
+    peakViewers: { type: Number, default: 0 },
+    watched: { type: Number, default: 0 },
   },
   { timestamps: { createdAt: true, updatedAt: false } },
 );
@@ -80,3 +85,23 @@ LiveStreamSchema.index({ hostId: 1, status: 1 });
 LiveStreamSchema.index({ eventId: 1, status: 1 }, { partialFilterExpression: { eventId: { $type: "objectId" } } });
 
 export const LiveStream: Model<ILiveStream> = defineModel<ILiveStream>("LiveStream", LiveStreamSchema);
+
+/**
+ * Someone watching a stream right now: the player says so every 30 seconds, and a row older than a minute no longer
+ * counts (and goes by itself). `key`: the person's id, or a random one for people who aren't signed in.
+ */
+export interface ILiveViewer {
+  _id: Types.ObjectId;
+  liveId: Types.ObjectId;
+  key: string;
+  seenAt: Date;
+}
+const LiveViewerSchema = new Schema<ILiveViewer>({
+  liveId: { type: Schema.Types.ObjectId, required: true },
+  key: { type: String, required: true, maxlength: 64 },
+  seenAt: { type: Date, required: true },
+});
+LiveViewerSchema.index({ liveId: 1, key: 1 }, { unique: true });
+LiveViewerSchema.index({ liveId: 1, seenAt: -1 });
+LiveViewerSchema.index({ seenAt: 1 }, { expireAfterSeconds: 120 });
+export const LiveViewer: Model<ILiveViewer> = defineModel<ILiveViewer>("LiveViewer", LiveViewerSchema);

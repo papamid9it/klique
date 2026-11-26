@@ -1,6 +1,6 @@
 import "server-only";
 import { Types } from "mongoose";
-import type { LiveDTO, LiveNowDTO } from "@/lib/types";
+import type { LiveDTO, LiveNowDTO, LiveSummaryDTO } from "@/lib/types";
 import { badRequest, conflict, forbidden, notFound } from "../http/errors";
 import { rateLimit } from "../http/rate-limit";
 import type { ICommunity } from "../models/Community";
@@ -54,8 +54,59 @@ async function stale(s: ILiveStream): Promise<boolean> {
 }
 
 async function toLive(s: ILiveStream, viewer: IUser | null, staff: boolean): Promise<LiveDTO> {
-  const host = (await loadBriefs([s.hostId])).get(sid(s.hostId)) ?? GHOST;
-  return { id: sid(s._id), provider: s.provider, channel: s.channel, title: s.title, status: s.status === "live" ? "live" : "waiting", host, startedAt: s.startedAt?.toISOString() ?? null, eventId: s.eventId ? sid(s.eventId) : null, canEnd: staff || (!!viewer && sid(viewer._id) === sid(s.hostId)) };
+  const [briefs, viewers] = await Promise.all([loadBriefs([s.hostId]), viewersOf(s._id)]);
+  const host = briefs.get(sid(s.hostId)) ?? GHOST;
+  return { id: sid(s._id), provider: s.provider, channel: s.channel, title: s.title, status: s.status === "live" ? "live" : "waiting", host, startedAt: s.startedAt?.toISOString() ?? null, eventId: s.eventId ? sid(s.eventId) : null, canEnd: staff || (!!viewer && sid(viewer._id) === sid(s.hostId)), viewers };
+}
+
+/** a player that hasn't said "still watching" for this long no longer counts */
+const WATCHING_MS = 70_000;
+/** People watching a stream right now. */
+export async function viewersOf(liveId: Types.ObjectId): Promise<number> {
+  const { LiveViewer } = await import("../models/Live");
+  return LiveViewer.countDocuments({ liveId, seenAt: { $gte: new Date(Date.now() - WATCHING_MS) } });
+}
+
+/**
+ * The player says "still watching" every 30 seconds (signed in: by person; otherwise a random key of the browser's).
+ * Counts them, keeps the stream's peak and how many different people watched, and answers how many are on now.
+ */
+export async function watching(viewer: IUser | null, slug: string, input: { liveId: string; key?: string }) {
+  const { space, access } = await resolveSpaceFor(viewer, slug);
+  if (!access.canView || !Types.ObjectId.isValid(input.liveId)) throw notFound("We couldn't find that stream.");
+  const key = viewer ? sid(viewer._id) : input.key && /^[A-Za-z0-9_-]{8,64}$/.test(input.key) ? `anon:${input.key}` : null;
+  const liveId = new Types.ObjectId(input.liveId);
+  const s = await LiveStream.findOne({ _id: liveId, communityId: space.community._id, status: "live" }).select("_id hostId").lean<{ _id: Types.ObjectId; hostId: Types.ObjectId }>();
+  if (!s) return { viewers: 0, live: false };
+  // the person streaming isn't one of their own viewers
+  if (key && key !== sid(s.hostId)) {
+    rateLimit(`watching:${key}`, 20, 60_000);
+    const { LiveViewer } = await import("../models/Live");
+    const r = await LiveViewer.updateOne({ liveId, key }, { $set: { seenAt: new Date() } }, { upsert: true });
+    if (r.upsertedCount) await LiveStream.updateOne({ _id: liveId }, { $inc: { watched: 1 } });
+  }
+  const viewers = await viewersOf(liveId);
+  await LiveStream.updateOne({ _id: liveId, peakViewers: { $lt: viewers } }, { $set: { peakViewers: viewers } });
+  return { viewers, live: true };
+}
+
+/** "How it went": for its host (and the people who run the community), once it's over or any time during it. */
+export async function liveSummary(viewer: IUser, slug: string, liveId: string): Promise<LiveSummaryDTO> {
+  const { space, access } = await resolveSpaceFor(viewer, slug);
+  if (!Types.ObjectId.isValid(liveId)) throw notFound("We couldn't find that stream.");
+  const s = await LiveStream.findOne({ _id: liveId, communityId: space.community._id }).lean<ILiveStream>();
+  if (!s) throw notFound("We couldn't find that stream.");
+  if (sid(s.hostId) !== sid(viewer._id) && !staffOf(access, viewer)) throw forbidden("Only its host sees this.");
+  const [{ Channel, ChannelMessage }, { GiftSend }] = await Promise.all([import("../models/Channel"), import("../models/Gift")]);
+  const chat = await Channel.findOne({ topicId: s._id }).select("_id").lean<{ _id: Types.ObjectId }>();
+  const [messages, gifts] = await Promise.all([
+    chat ? ChannelMessage.countDocuments({ channelId: chat._id, deletedAt: null, webhook: null }) : 0,
+    GiftSend.aggregate<{ hype: number; earned: number; givers: Types.ObjectId[] }>([{ $match: { "target.type": "live", "target.id": s._id, status: "sent" } }, { $group: { _id: null, hype: { $sum: "$hype" }, earned: { $sum: "$receiverAmount" }, givers: { $addToSet: "$fromId" } } }]),
+  ]);
+  const from = s.startedAt ?? s.createdAt;
+  const to = s.endedAt ?? new Date();
+  const g = gifts[0];
+  return { title: s.title, communityName: space.community.name, duration: Math.max(0, Math.round((+to - +from) / 1000)), peakViewers: s.peakViewers ?? 0, watched: s.watched ?? 0, messages, hype: g?.hype ?? 0, givers: g?.givers.length ?? 0, earned: g?.earned ?? 0 };
 }
 
 /** The community's stream now, for its page: live for everyone who can see it; waiting only for its host and staff. */
@@ -245,10 +296,11 @@ export async function liveNow(viewer: IUser): Promise<LiveNowDTO[]> {
     loadBriefs(fresh.map((r) => r.hostId)),
   ]);
   const byId = new Map(communities.map((c) => [sid(c._id), c]));
+  const counts = new Map(await Promise.all(fresh.map(async (s) => [sid(s._id), await viewersOf(s._id)] as const)));
   return fresh.flatMap((s) => {
     const c = byId.get(sid(s.communityId));
     if (!c || c.adult) return [];
-    return [{ community: { id: sid(c._id), slug: c.slug, name: c.name, coverImage: c.coverImage ?? null }, live: { id: sid(s._id), provider: s.provider, channel: s.channel, title: s.title, status: "live" as const, host: briefs.get(sid(s.hostId)) ?? GHOST, startedAt: s.startedAt?.toISOString() ?? null, eventId: s.eventId ? sid(s.eventId) : null, canEnd: sid(s.hostId) === sid(viewer._id) } }];
+    return [{ community: { id: sid(c._id), slug: c.slug, name: c.name, coverImage: c.coverImage ?? null }, live: { id: sid(s._id), provider: s.provider, channel: s.channel, title: s.title, status: "live" as const, host: briefs.get(sid(s.hostId)) ?? GHOST, startedAt: s.startedAt?.toISOString() ?? null, eventId: s.eventId ? sid(s.eventId) : null, canEnd: sid(s.hostId) === sid(viewer._id), viewers: counts.get(sid(s._id)) ?? 0 } }];
   });
 }
 

@@ -68,6 +68,23 @@ function WatchModal({ c, live, onClose, onEnded }: { c: Pick<CommunityDTO, "slug
   const { user } = useAuth();
   const [reporting, setReporting] = useState(false);
   const chat = useApi(() => LiveService.chat(c.slug), [c.slug, live.id], { key: `live-chat:${live.id}` });
+  // "still watching" every 30 seconds: counts you, and shows how many are watching
+  const [viewers, setViewers] = useState(live.viewers ?? 0);
+  useEffect(() => {
+    let key: string | undefined;
+    if (!user) {
+      try {
+        key = localStorage.getItem("klique-watch-key") ?? undefined;
+        if (!key) localStorage.setItem("klique-watch-key", (key = crypto.randomUUID().replace(/-/g, "")));
+      } catch {
+        key = undefined;
+      }
+    }
+    const ping = () => void LiveService.watching(c.slug, live.id, key).then((r) => setViewers(r.data.viewers), () => {});
+    ping();
+    const t = window.setInterval(() => document.visibilityState === "visible" && ping(), 30_000);
+    return () => window.clearInterval(t);
+  }, [c.slug, live.id, user]);
   // the page underneath stays put; Escape closes (unless a dialog on top of this is open)
   useEffect(() => {
     const before = document.body.style.overflow;
@@ -87,6 +104,11 @@ function WatchModal({ c, live, onClose, onEnded }: { c: Pick<CommunityDTO, "slug
             <Icon name="arrow-left" size={20} />
           </button>
           <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{c.name}</span>
+          {viewers > 0 && (
+            <span className="inline-flex items-center gap-1 text-[13px] font-semibold text-ink-muted" title={`${viewers} watching`}>
+              <Icon name="eye" size={15} /> {viewers.toLocaleString()}
+            </span>
+          )}
           <span className="rounded-[5px] bg-danger px-1.5 py-px font-mono text-[11px] font-bold text-white">LIVE</span>
         </div>
         <div className="px-0 sm:px-4">

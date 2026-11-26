@@ -1,5 +1,5 @@
 import ApiClient from "@/app/ApiCore";
-import type { ChannelDTO, Envelope, LiveDTO, LiveNowDTO, TwitchStatusDTO } from "@/lib/types";
+import type { ChannelDTO, Envelope, LiveDTO, LiveNowDTO, LiveSummaryDTO, TwitchStatusDTO } from "@/lib/types";
 
 const api = new ApiClient();
 
@@ -18,6 +18,9 @@ export const LiveService = {
   chat: (slug: string) => api.get<Envelope<{ liveId: string; isMember: boolean; canModerate: boolean; channel: ChannelDTO }>>(`/api/communities/${slug}/live/chat`),
   /** moderating from the live chat: remove someone from the stream (or let them back), or time them out for 10 minutes */
   moderate: (slug: string, userId: string, action: "remove" | "allow" | "timeout") => api.post<Envelope<unknown>>(`/api/communities/${slug}/live/moderate`, { userId, action }),
+  /** "still watching" (every 30 seconds): counts viewers; answers how many are on now */
+  watching: (slug: string, liveId: string, key?: string) => api.post<Envelope<{ viewers: number; live: boolean }>>(`/api/communities/${slug}/live/watching`, { liveId, ...(key ? { key } : {}) }),
+  summary: (slug: string, liveId: string) => api.get<Envelope<LiveSummaryDTO>>(`/api/communities/${slug}/live/summary`, { id: liveId }),
   end: (slug: string) => api.delete<Envelope<{ ended: boolean }>>(`/api/communities/${slug}/live`),
   /** let a member go live for so many hours (0 takes it back) */
   pass: (slug: string, userId: string, hours: number) => api.post<Envelope<{ userId: string; until: string | null }>>(`/api/communities/${slug}/live/pass`, { userId, hours }),

@@ -2390,6 +2390,23 @@ export interface LiveDTO {
   eventId: Id | null;
   /** the viewer may end it (its host, or the people who run the community) */
   canEnd: boolean;
+  /** people watching right now (in Klique) */
+  viewers?: number;
+}
+
+/** "How it went", for the person streaming once it ends. */
+export interface LiveSummaryDTO {
+  title: string;
+  communityName: string;
+  /** seconds live */
+  duration: number;
+  peakViewers: number;
+  watched: number;
+  messages: number;
+  /** awards sent to the host during it: Hype, how many people, and what the host earns (naira) */
+  hype: number;
+  givers: number;
+  earned: number;
 }
 
 /** Your Twitch connection (Settings, Go live). */
