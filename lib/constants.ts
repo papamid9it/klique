@@ -294,7 +294,8 @@ export const TRENDING_MIN_COMMENTS = 30;
 export const VOICE_ENABLED = false;
 
 /** Where "Get it in the app" sends people. */
-export const ANDROID_APP_URL = "https://play.google.com/store/apps/details?id=app.getklique.mobile";
+export const ANDROID_PACKAGE = "app.getklique.mobile";
+export const ANDROID_APP_URL = `https://play.google.com/store/apps/details?id=${ANDROID_PACKAGE}`;
 
 /** Slow mode choices for a channel, in seconds (0 = off): how long each person waits between messages. */
 export const SLOW_MODE_STEPS = [0, 5, 10, 30, 60, 120, 300, 600, 900, 1800, 3600] as const;

@@ -14,6 +14,10 @@ const nextConfig: NextConfig = {
       { source: "/og/crew/:id", destination: "/og/klique/:id", permanent: true },
     ];
   },
+  // Android App Links: the file that lets the Klique app open getklique.app links (app/api/app/assetlinks)
+  async rewrites() {
+    return [{ source: "/.well-known/assetlinks.json", destination: "/api/app/assetlinks" }];
+  },
   // Pictures that never change under the same name are cached for a year; the browser never re-asks.
   async headers() {
     return [
