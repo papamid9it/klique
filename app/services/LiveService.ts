@@ -23,9 +23,9 @@ export const LiveService = {
   pass: (slug: string, userId: string, hours: number) => api.post<Envelope<{ userId: string; until: string | null }>>(`/api/communities/${slug}/live/pass`, { userId, hours }),
 };
 
-/** The player's address: Twitch's (it must be told which site it's on) or YouTube's. */
+/** The player's address: Twitch's (it must be told which site it's on) or YouTube's. Muted, because browsers only start video by itself when it's muted (their players show an unmute button). */
 export function livePlayerUrl(live: Pick<LiveDTO, "provider" | "channel">, host: string): string {
   return live.provider === "twitch"
-    ? `https://player.twitch.tv/?${new URLSearchParams({ channel: live.channel, parent: host, autoplay: "true", muted: "false" })}`
-    : `https://www.youtube.com/embed/${encodeURIComponent(live.channel)}?autoplay=1&playsinline=1`;
+    ? `https://player.twitch.tv/?${new URLSearchParams({ channel: live.channel, parent: host, autoplay: "true", muted: "true" })}`
+    : `https://www.youtube.com/embed/${encodeURIComponent(live.channel)}?autoplay=1&mute=1&playsinline=1`;
 }

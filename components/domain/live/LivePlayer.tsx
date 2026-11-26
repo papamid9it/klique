@@ -4,13 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import { preconnect } from "react-dom";
 import { livePlayerUrl } from "@/app/services/LiveService";
 import type { LiveDTO } from "@/lib/types";
+import { Icon } from "@/components/ui/Icon";
 
 /** Twitch's player script (its own CDN): tells us the moment video is actually playing */
 const TWITCH_JS = "https://player.twitch.tv/js/embed/v1.js";
 /** the cover goes after this long whatever happens (the player shows its own state from then) */
 const COVER_MAX_MS = 15_000;
 
-type TwitchPlayer = { addEventListener: (e: string, fn: () => void) => void; destroy?: () => void };
+type TwitchPlayer = { addEventListener: (e: string, fn: () => void) => void; destroy?: () => void; setMuted?: (m: boolean) => void; setVolume?: (v: number) => void; play?: () => void };
 type TwitchNS = { Player: (new (el: HTMLElement, opts: Record<string, unknown>) => TwitchPlayer) & { PLAYING: string; READY: string; PLAY: string; PAUSE: string } };
 
 let twitchScript: Promise<TwitchNS | null> | null = null;
@@ -54,6 +55,11 @@ export function LivePlayer({ live, poster }: { live: Pick<LiveDTO, "id" | "provi
   const [fallback, setFallback] = useState(false);
   // pressed Play (or it's catching up): a spinner over the picture until it moves again
   const [buffering, setBuffering] = useState(false);
+  // browsers only start video by itself when it's muted: it starts muted, and "Tap for sound" turns it on
+  const [muted, setMuted] = useState(true);
+  const playerRef = useRef<TwitchPlayer | null>(null);
+  // the picture is moving right now (Twitch says so); a tap into the player while it isn't shows the spinner at once
+  const moving = useRef(false);
   useEffect(() => setHost(window.location.hostname), []);
   useEffect(() => {
     const t = window.setTimeout(() => setPlaying(true), COVER_MAX_MS);
@@ -70,20 +76,50 @@ export function LivePlayer({ live, poster }: { live: Pick<LiveDTO, "id" | "provi
       if (dead) return;
       if (!T) return setFallback(true);
       el.innerHTML = "";
-      player = new T.Player(el, { channel: live.channel, parent: [host], width: "100%", height: "100%", autoplay: true, muted: false });
+      player = new T.Player(el, { channel: live.channel, parent: [host], width: "100%", height: "100%", autoplay: true, muted: true });
+      playerRef.current = player;
       player.addEventListener(T.Player.PLAYING, () => {
+        moving.current = true;
         setPlaying(true);
         setBuffering(false);
       });
-      player.addEventListener(T.Player.PLAY, () => setBuffering(true));
-      player.addEventListener(T.Player.PAUSE, () => setBuffering(false));
+      player.addEventListener(T.Player.PLAY, () => !moving.current && setBuffering(true));
+      player.addEventListener(T.Player.PAUSE, () => {
+        moving.current = false;
+        setBuffering(false);
+      });
     });
     return () => {
       dead = true;
       player?.destroy?.();
+      playerRef.current = null;
       el.innerHTML = "";
     };
   }, [live.provider, live.channel, host, fallback]);
+
+  // a tap into the player (its play button) while the picture isn't moving: the spinner shows straight away, before
+  // Twitch says anything, and stays until the picture moves (or 12 seconds, whatever happens)
+  useEffect(() => {
+    if (live.provider !== "twitch") return;
+    let t: number | undefined;
+    const onBlur = () => {
+      window.setTimeout(() => {
+        const a = document.activeElement;
+        if (!(a instanceof HTMLIFrameElement) || !box.current?.contains(a) || moving.current) return;
+        setPlaying(true);
+        setBuffering(true);
+        window.clearTimeout(t);
+        t = window.setTimeout(() => setBuffering(false), 12_000);
+        // let the next tap count too
+        window.setTimeout(() => a.blur(), 50);
+      }, 0);
+    };
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("blur", onBlur);
+      window.clearTimeout(t);
+    };
+  }, [live.provider]);
 
   const iframe = host && (live.provider === "youtube" || fallback);
   return (
@@ -98,6 +134,21 @@ export function LivePlayer({ live, poster }: { live: Pick<LiveDTO, "id" | "provi
           // YouTube's page can't tell us when it plays: a moment after it loads is close enough
           onLoad={() => window.setTimeout(() => setPlaying(true), 1500)}
         />
+      )}
+      {/* started muted (so it plays at once): one tap for sound */}
+      {live.provider === "twitch" && !fallback && playing && muted && (
+        <button
+          type="button"
+          onClick={() => {
+            playerRef.current?.setMuted?.(false);
+            playerRef.current?.setVolume?.(1);
+            playerRef.current?.play?.();
+            setMuted(false);
+          }}
+          className="absolute top-3 left-3 z-10 inline-flex h-9 items-center gap-2 rounded-full bg-black/70 px-3.5 text-[13px] font-semibold text-white backdrop-blur-sm transition hover:bg-black/85"
+        >
+          <Icon name="volumeoff" size={16} /> Tap for sound
+        </button>
       )}
       {playing && buffering && (
         <div role="status" aria-label="Loading" className="pointer-events-none absolute inset-0 flex items-center justify-center">

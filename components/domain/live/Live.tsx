@@ -79,7 +79,6 @@ function WatchModal({ c, live, onClose, onEnded }: { c: Pick<CommunityDTO, "slug
       document.removeEventListener("keydown", onKey);
     };
   }, [onClose]);
-  const where = live.provider === "twitch" ? "Twitch" : "YouTube";
   return (
     <div role="dialog" aria-modal="true" aria-label={live.title || `${live.host.displayName} is live`} className="fixed inset-0 z-[60] flex flex-col bg-canvas lg:flex-row">
       <div className="flex min-h-0 min-w-0 flex-col overflow-y-auto lg:flex-1">
@@ -102,9 +101,6 @@ function WatchModal({ c, live, onClose, onEnded }: { c: Pick<CommunityDTO, "slug
             <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{live.host.displayName}</span>
             {/* an award for the person streaming (shows in the live chat for everyone) */}
             {user && user.id !== live.host.id && live.status === "live" && <GiftButton target={{ type: "live", id: live.id }} authorId={live.host.id} variant="pill" />}
-            <a href={live.provider === "twitch" ? `https://www.twitch.tv/${live.channel}` : `https://www.youtube.com/watch?v=${live.channel}`} target="_blank" rel="noreferrer" className="text-[13px] font-semibold text-ink-muted hover:text-ink">
-              Open on {where}
-            </a>
             {/* anyone watching can report it (Klique's admins can end it from the reports queue) */}
             {user && user.id !== live.host.id && (
               <button type="button" onClick={() => setReporting(true)} className="inline-flex items-center gap-1 text-[13px] font-semibold text-ink-muted hover:text-ink">
