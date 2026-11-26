@@ -29,6 +29,11 @@ function config() {
 }
 export const twitchReady = () => !!twitchConfig();
 const redirectUri = () => `${appUrl()}/api/twitch/callback`;
+/**
+ * Where Twitch sends "went live" / "went off". It must answer without a redirect (Twitch doesn't follow them), and
+ * getklique.app redirects to www, so the www address is used. TWITCH_WEBHOOK_BASE overrides it if that ever changes.
+ */
+const webhookUrl = () => `${(process.env.TWITCH_WEBHOOK_BASE?.trim() || appUrl()).replace(/\/$/, "").replace("://getklique.app", "://www.getklique.app")}/api/twitch/eventsub`;
 
 /* ------------------------------ connecting ------------------------------ */
 
@@ -168,7 +173,7 @@ async function subscribeLive(twitchId: string): Promise<string[]> {
     const res = await fetch(`${HELIX}/eventsub/subscriptions`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}`, "Client-Id": c.clientId, "Content-Type": "application/json" },
-      body: JSON.stringify({ type, version: "1", condition: { broadcaster_user_id: twitchId }, transport: { method: "webhook", callback: `${appUrl()}/api/twitch/eventsub`, secret: c.eventsubSecret } }),
+      body: JSON.stringify({ type, version: "1", condition: { broadcaster_user_id: twitchId }, transport: { method: "webhook", callback: webhookUrl(), secret: c.eventsubSecret } }),
     });
     if (res.ok) {
       const j = (await res.json()) as { data?: { id: string }[] };
@@ -202,4 +207,27 @@ export async function twitchIsLive(twitchId: string): Promise<boolean> {
   if (!res?.ok) return false;
   const j = (await res.json()) as { data?: unknown[] };
   return !!j.data?.length;
+}
+
+/**
+ * Makes sure Twitch will tell us when this person's channel goes live or off: subscriptions that failed (sent to an
+ * address that redirected, revoked, or never made) are replaced. Run on Go live; quick when all is well.
+ */
+export async function ensureLiveSubscriptions(userId: Types.ObjectId): Promise<void> {
+  const c = twitchConfig();
+  if (!c) return;
+  const link = await TwitchLink.findOne({ userId }).lean<ITwitchLink>();
+  if (!link) return;
+  const token = await appToken().catch(() => null);
+  if (!token) return;
+  const res = await fetch(`${HELIX}/eventsub/subscriptions?user_id=${encodeURIComponent(link.twitchId)}`, { headers: { Authorization: `Bearer ${token}`, "Client-Id": c.clientId } }).catch(() => null);
+  if (!res?.ok) return;
+  const j = (await res.json()) as { data?: { id: string; type: string; status: string; transport?: { callback?: string } }[] };
+  const subs = j.data ?? [];
+  const good = (type: string) => subs.some((s) => s.type === type && (s.status === "enabled" || s.status === "webhook_callback_verification_pending") && s.transport?.callback === webhookUrl());
+  if (good("stream.online") && good("stream.offline")) return;
+  // start clean: drop every subscription for this channel, then ask again
+  for (const s of subs) await fetch(`${HELIX}/eventsub/subscriptions?id=${encodeURIComponent(s.id)}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}`, "Client-Id": c.clientId } }).catch(() => {});
+  const ids = await subscribeLive(link.twitchId).catch(() => [] as string[]);
+  await TwitchLink.updateOne({ _id: link._id }, { $set: { subscriptionIds: ids } });
 }

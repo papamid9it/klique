@@ -17,7 +17,7 @@ import { sid } from "./helpers";
 import { notify } from "./push.service";
 import { publish, rtChannel } from "./realtime";
 import { resolveSpaceFor } from "./spaces.service";
-import { twitchIsLive, twitchLinkOf, twitchSetTitle } from "./twitch.service";
+import { ensureLiveSubscriptions, twitchIsLive, twitchLinkOf, twitchSetTitle } from "./twitch.service";
 
 /**
  * Live streams in communities: one at a time per community (or from one of its events), streamed on Twitch or
@@ -61,11 +61,62 @@ async function toLive(s: ILiveStream, viewer: IUser | null, staff: boolean): Pro
 /** The community's stream now, for its page: live for everyone who can see it; waiting only for its host and staff. */
 export async function liveOf(viewer: IUser | null, community: ICommunity, access: SpaceAccess): Promise<LiveDTO | null> {
   if (!access.canView) return null;
-  const s = await LiveStream.findOne({ communityId: community._id, status: { $in: ["waiting", "live"] } }).lean<ILiveStream>();
+  let s = await LiveStream.findOne({ communityId: community._id, status: { $in: ["waiting", "live"] } }).lean<ILiveStream>();
   if (!s || (await stale(s))) return null;
+  // in case Twitch's own message doesn't reach us: ask Twitch now and then (the waiting screens check every few seconds)
+  if (s.provider === "twitch") {
+    s = await checkTwitch(s);
+    if (!s) return null;
+  }
   const staff = staffOf(access, viewer);
   if (s.status === "waiting" && !staff && !(viewer && sid(viewer._id) === sid(s.hostId))) return null;
   return toLive(s, viewer, staff);
+}
+
+/** when each Twitch stream was last checked with Twitch (per server; enough to keep it to a few calls a minute) */
+const lastCheck = new Map<string, number>();
+/** a stream that went quiet on Twitch: ended after this long off (a short drop while live isn't the end) */
+const OFF_GRACE_MS = 3 * 60 * 1000;
+const offSince = new Map<string, number>();
+
+/**
+ * Asks Twitch whether a stream is on (every 8 seconds while it's starting, every minute while it's live): a waiting
+ * stream that's on goes LIVE and members are told; a live one that's been off for a few minutes ends. Twitch's own
+ * messages (EventSub) normally do this first; this is the backup. Returns the stream as it is now (null: ended).
+ */
+async function checkTwitch(s: ILiveStream): Promise<ILiveStream | null> {
+  const key = sid(s._id);
+  const every = s.status === "waiting" ? 8_000 : 60_000;
+  if (Date.now() - (lastCheck.get(key) ?? 0) < every) return s;
+  lastCheck.set(key, Date.now());
+  if (lastCheck.size > 500) lastCheck.clear();
+  const link = await (await import("../models/Live")).TwitchLink.findOne({ userId: s.hostId }).select("twitchId").lean<{ twitchId: string }>();
+  if (!link) return s;
+  const on = await twitchIsLive(link.twitchId);
+  if (s.status === "waiting" && on) {
+    const now = await LiveStream.findOneAndUpdate({ _id: s._id, status: "waiting" }, { $set: { status: "live", startedAt: new Date() } }, { returnDocument: "after" }).lean<ILiveStream>();
+    if (now) {
+      const [{ Community }, host] = await Promise.all([import("../models/Community"), User.findById(s.hostId).select("displayName").lean<Pick<IUser, "_id" | "displayName">>()]);
+      const community = await Community.findById(s.communityId).lean<ICommunity>();
+      if (community && host) await tellMembers(now, community, host);
+      return now;
+    }
+    return (await LiveStream.findById(s._id).lean<ILiveStream>()) ?? s;
+  }
+  if (s.status === "live") {
+    if (on) offSince.delete(key);
+    else {
+      const since = offSince.get(key) ?? Date.now();
+      offSince.set(key, since);
+      if (Date.now() - since > OFF_GRACE_MS) {
+        offSince.delete(key);
+        await LiveStream.updateOne({ _id: s._id, status: "live" }, { $set: { status: "ended", endedAt: new Date() } });
+        emitLive(s.communityId, false);
+        return null;
+      }
+    }
+  }
+  return s;
 }
 
 /** The id of a YouTube video from any link to it (watch, youtu.be, /live/, /shorts/, an embed), or null. */
@@ -134,6 +185,8 @@ export async function startLive(viewer: IUser, slug: string, input: { provider: 
   } else {
     const link = await twitchLinkOf(viewer._id);
     if (!link) throw badRequest("Connect Twitch first (Settings → Connected accounts).");
+    // Twitch's "went live" message must be able to reach us: mend it now if it can't (in the background)
+    void ensureLiveSubscriptions(viewer._id).catch((err) => console.warn("[twitch] subscriptions:", (err as Error)?.message));
     void twitchSetTitle(viewer._id, title);
     const already = await twitchIsLive(link.twitchId);
     row = (await LiveStream.create({ communityId: community._id, eventId, hostId: viewer._id, provider: "twitch", channel: link.login, title, status: already ? "live" : "waiting", startedAt: already ? new Date() : null })).toObject() as ILiveStream;
