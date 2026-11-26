@@ -1,5 +1,6 @@
 "use client";
 
+import { BrandButton, TWITCH, TwitchLogo, YOUTUBE, YouTubeLogo } from "./BrandButtons";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { errorMessage, isApiError } from "@/app/ApiCore";
@@ -282,9 +283,9 @@ function GoLiveModal({ c, live, onLive, onClose, onChanged, eventId, eventTitle 
             ) : (
               <div className="rounded-control border border-line p-3">
                 <p className="text-[13.5px] text-ink-muted">Connect your Twitch account once. Then stream from OBS, or from your phone&apos;s camera in the Klique app.</p>
-                <Button className="mt-3" variant="primary" onClick={() => void connect()}>
+                <BrandButton brand="twitch" className="mt-3" onClick={() => void connect()}>
                   Connect Twitch
-                </Button>
+                </BrandButton>
               </div>
             )
           ) : (
@@ -300,7 +301,7 @@ function GoLiveModal({ c, live, onLive, onClose, onChanged, eventId, eventTitle 
             (others ? (
               <div className="rounded-control border border-line p-1">
                 <button type="button" onClick={() => setProvider("youtube")} className="flex w-full items-center gap-2.5 rounded-[8px] px-3 py-2.5 text-left text-[14px] font-medium hover:bg-raised">
-                  <Icon name="link" size={16} /> <span className="flex-1">YouTube live link</span> <Icon name="chevron-right" size={15} className="text-ink-muted" />
+                  <span className="inline-flex size-7 items-center justify-center rounded-[6px] text-white" style={{ background: YOUTUBE }}><YouTubeLogo size={16} /></span> <span className="flex-1">YouTube live link</span> <Icon name="chevron-right" size={15} className="text-ink-muted" />
                 </button>
               </div>
             ) : (
@@ -406,8 +407,8 @@ export function ConnectionsTab() {
           // eslint-disable-next-line @next/next/no-img-element
           <img src={t.avatarUrl} alt="" className="size-10 rounded-full" />
         ) : (
-          <span className="inline-flex size-10 items-center justify-center rounded-full bg-raised">
-            <Icon name="live" size={18} />
+          <span className="inline-flex size-10 items-center justify-center rounded-full text-white" style={{ background: TWITCH }}>
+            <TwitchLogo size={18} />
           </span>
         )}
         <span className="min-w-0 flex-1">
@@ -420,9 +421,9 @@ export function ConnectionsTab() {
               Disconnect
             </Button>
           ) : (
-            <Button size="sm" variant="primary" onClick={() => void connect()}>
+            <BrandButton brand="twitch" size="sm" onClick={() => void connect()}>
               Connect
-            </Button>
+            </BrandButton>
           ))}
       </div>
     </section>
