@@ -9,6 +9,11 @@ const nextConfig: NextConfig = {
   // crews became kliques (Nov 2026): old links keep working
   async redirects() {
     return [
+      // getklique.app → www, everything except the App Links file: Android checks /.well-known/assetlinks.json on
+      // both addresses and refuses a redirect, which turned the Klique app's links off. (Needs getklique.app connected
+      // to Production in Vercel → Domains, not set to redirect there.)
+      { source: "/", has: [{ type: "host", value: "getklique.app" }], destination: "https://www.getklique.app/", permanent: true },
+      { source: "/:path((?!\\.well-known/).*)", has: [{ type: "host", value: "getklique.app" }], destination: "https://www.getklique.app/:path", permanent: true },
       { source: "/crews/:id", destination: "/kliques/:id", permanent: true },
       { source: "/events/:id/crews", destination: "/events/:id/kliques", permanent: true },
       { source: "/og/crew/:id", destination: "/og/klique/:id", permanent: true },
