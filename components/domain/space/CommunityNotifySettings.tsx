@@ -11,7 +11,41 @@ import type { CommunityDTO } from "@/lib/types";
  * Your own notification settings in one community (every member has their own): for now, "Suppress @everyone and
  * @here", an on/off switch, so turning it back off is plain to see.
  */
-export function CommunityNotifySettings({ c, onChanged }: { c: Pick<CommunityDTO, "slug" | "suppressEveryone">; onChanged: () => void | Promise<void> }) {
+export function CommunityNotifySettings({ c, onChanged }: { c: Pick<CommunityDTO, "slug" | "suppressEveryone" | "liveNotify" | "adult">; onChanged: () => void | Promise<void> }) {
+  return (
+    <div className="space-y-5">
+      {/* "… is live in …": on unless you turn it off (no live in 18+ communities) */}
+      {!c.adult && <LiveNotifySwitch c={c} onChanged={onChanged} />}
+      <SuppressSwitch c={c} onChanged={onChanged} />
+    </div>
+  );
+}
+
+function LiveNotifySwitch({ c, onChanged }: { c: Pick<CommunityDTO, "slug" | "liveNotify">; onChanged: () => void | Promise<void> }) {
+  const toast = useToast();
+  const [on, setOn] = useState(c.liveNotify !== false);
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  async function set(next: boolean) {
+    setOn(next);
+    setBusy(true);
+    try {
+      await new ApiClient().put(`/api/communities/${c.slug}/notify`, { liveNotify: next });
+      setSaved(true);
+      window.setTimeout(() => setSaved(false), 1600);
+      toast(next ? "You'll be told when someone goes live here" : "No more live notifications from here", "success");
+      await onChanged();
+    } catch (e) {
+      setOn(!next);
+      toast(errorMessage(e), "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return <Switch checked={on} status={busy ? "saving" : saved ? "saved" : undefined} onChange={(v) => void set(v)} label="Live streams" hint="A notification when someone goes live here. Off: LIVE still shows on the community, without the buzz." />;
+}
+
+function SuppressSwitch({ c, onChanged }: { c: Pick<CommunityDTO, "slug" | "suppressEveryone">; onChanged: () => void | Promise<void> }) {
   const toast = useToast();
   const [on, setOn] = useState(!!c.suppressEveryone);
   const [busy, setBusy] = useState(false);
@@ -44,7 +78,7 @@ export function CommunityNotifySettings({ c, onChanged }: { c: Pick<CommunityDTO
 }
 
 /** The same, in a small window (from the community's menu, for every member). */
-export function CommunityNotifyModal({ c, open, onClose, onChanged }: { c: Pick<CommunityDTO, "slug" | "name" | "suppressEveryone">; open: boolean; onClose: () => void; onChanged: () => void | Promise<void> }) {
+export function CommunityNotifyModal({ c, open, onClose, onChanged }: { c: Pick<CommunityDTO, "slug" | "name" | "suppressEveryone" | "liveNotify" | "adult">; open: boolean; onClose: () => void; onChanged: () => void | Promise<void> }) {
   return (
     <Modal open={open} onClose={onClose} title="Notification settings" description={`Just for you, in ${c.name}.`} size="sm">
       <CommunityNotifySettings c={c} onChanged={onChanged} />

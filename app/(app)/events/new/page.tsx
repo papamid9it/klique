@@ -57,6 +57,8 @@ function NewEventForm() {
     return { country: base.country, region: "", city: base.city };
   });
   const [online, setOnline] = useState(false);
+  // streamed live on Klique: no venue or link, the host goes live from the event
+  const [streamed, setStreamed] = useState(false);
   const [currency, setCurrency] = useState<string | null>(null);
   const [neighborhood, setNeighborhood] = useState("");
   const [venue, setVenue] = useState("");
@@ -122,9 +124,9 @@ function NewEventForm() {
     const to = endIso();
     if (to && from && to <= from) next.endsAt = endDate && endDate !== date ? "The end has to be after the start." : "End time must be after the start.";
     if (upTo === 1) return next;
-    if (!venue.trim()) next.venue = online ? "Where do people join? A link or a platform name." : "Where is it happening?";
+    if (!venue.trim() && !(online && streamed)) next.venue = online ? "Where do people join? A link or a platform name." : "Where is it happening?";
     if (!place.city) next.city = "Which city or town is it in?";
-    const joinLink = online ? normalizeLink(onlineUrl) : "";
+    const joinLink = online && !streamed ? normalizeLink(onlineUrl) : "";
     if (joinLink && !isHttpLink(joinLink)) next.onlineUrl = "Enter a valid link, like https://meet.google.com/abc-defg-hij";
     if (priceMode === "paid" && !(Number(price) > 0)) next.priceNaira = "Add the price, or pick Free or Not sure yet.";
     const tix = normalizeLink(ticketUrl);
@@ -160,7 +162,7 @@ function NewEventForm() {
     const startsAt = toIso(date, start, zone);
     const endsAt = endIso();
     const tickets = normalizeLink(ticketUrl);
-    const joinLink = online ? normalizeLink(onlineUrl) : "";
+    const joinLink = online && !streamed ? normalizeLink(onlineUrl) : "";
     const cap = capacity.trim() ? Math.round(Number(capacity)) : null;
     if (Object.keys(next).length || !startsAt) {
       setErrors(next);
@@ -178,8 +180,9 @@ function NewEventForm() {
       ticketUrl: tickets || null,
       ticketLabel: ticketLabel.trim(),
       onlineUrl: joinLink || null,
+      streamed: online && streamed,
       currency: cur,
-      venue: venue.trim(),
+      venue: online && streamed ? "Live on Klique" : venue.trim(),
       startsAt,
       endsAt,
       timeZone: zone,
@@ -200,6 +203,14 @@ function NewEventForm() {
     setErrors({});
     setFormError(null);
     try {
+      // streamed on Klique: in a community, not a group (one stream at a time is the community's)
+      if (input.streamed && (!communitySlug || subSlug)) {
+        const m = !communitySlug ? "Pick the community to stream this event in." : "Stream events in the community, not a group.";
+        setErrors({ communitySlug: m });
+        setFormError(m);
+        setBusy(false);
+        return;
+      }
       if (groupsOnly && !subSlug) {
         setErrors({ subSlug: "Pick the group this event is for." });
         setFormError("Pick the group this event is for.");
@@ -295,9 +306,19 @@ function NewEventForm() {
           <span className="block text-xs text-ink-muted">It still shows under your city, but is marked Online and can be filtered.</span>
         </span>
       </label>
+      {/* an online event can be streamed live right here: people press Going, and are told the moment it's on */}
+      {online && (
+        <label className="flex cursor-pointer items-start gap-3 rounded-control border border-line bg-raised p-3.5 has-[:checked]:border-accent-text">
+          <input type="checkbox" checked={streamed} onChange={(e) => setStreamed(e.target.checked)} className="mt-1 accent-[var(--accent-text)]" />
+          <span>
+            <span className="flex items-center gap-1.5 text-sm font-semibold"><Icon name="live" size={15} /> Stream it live on Klique</span>
+            <span className="block text-xs text-ink-muted">You go live from the event (Twitch or a YouTube link). Everyone going gets a notification when you start. In a community, not a group.</span>
+          </span>
+        </label>
+      )}
       <PlaceFields value={place} onChange={setPlace} neighborhood={neighborhood} onNeighborhood={setNeighborhood} errors={errors} />
-      <TextField label={online ? "Where to join" : "Venue"} value={venue} onChange={(e) => setVenue(e.target.value)} maxLength={LIMITS.venue} error={errors.venue} placeholder={online ? "Zoom, Google Meet, a Discord server…" : "Name of the spot"} />
-      {online && <TextField label="Join link (optional)" type="url" inputMode="url" value={onlineUrl} onChange={(e) => setOnlineUrl(e.target.value)} onBlur={() => setOnlineUrl((v) => normalizeLink(v))} error={errors.onlineUrl} placeholder="https://meet.google.com/…" hint="Shows as a Join online button on the event." />}
+      {!(online && streamed) && <TextField label={online ? "Where to join" : "Venue"} value={venue} onChange={(e) => setVenue(e.target.value)} maxLength={LIMITS.venue} error={errors.venue} placeholder={online ? "Zoom, Google Meet, a Discord server…" : "Name of the spot"} />}
+      {online && !streamed && <TextField label="Join link (optional)" type="url" inputMode="url" value={onlineUrl} onChange={(e) => setOnlineUrl(e.target.value)} onBlur={() => setOnlineUrl((v) => normalizeLink(v))} error={errors.onlineUrl} placeholder="https://meet.google.com/…" hint="Shows as a Join online button on the event." />}
       {/* the price, as one choice */}
       <fieldset className="space-y-3">
         <legend className="mb-1.5 text-[13px] font-medium">Price</legend>

@@ -60,9 +60,10 @@ import { useApi } from "@/lib/hooks/useApi";
 import { MOODS } from "@/lib/moods";
 import type { UserMe } from "@/lib/types";
 import { DevelopersTab } from "@/components/domain/account/DevelopersTab";
+import { ConnectionsTab } from "@/components/domain/live/Live";
 import { PerksTab } from "@/components/domain/account/PerksTab";
 
-type Tab = "account" | "profile" | "gallery" | "socials" | "style" | "perks" | "plan" | "hype" | "earnings" | "developers" | "privacy" | "blocked" | "notifications" | "appearance";
+type Tab = "account" | "profile" | "gallery" | "socials" | "style" | "perks" | "plan" | "hype" | "earnings" | "developers" | "connections" | "privacy" | "blocked" | "notifications" | "appearance";
 const GROUPS: { title: string; items: { id: Tab; label: string; icon: "user" | "edit" | "image" | "link" | "asterisk" | "coin" | "code" | "shield" | "ban" | "sliders" | "bell" | "gift" }[] }[] = [
   {
     title: "User settings",
@@ -73,6 +74,7 @@ const GROUPS: { title: string; items: { id: Tab; label: string; icon: "user" | "
       { id: "socials", label: "Socials", icon: "link" },
       // profile designs are off for now (PROFILE_DESIGNS_ENABLED)
       ...(PROFILE_DESIGNS_ENABLED ? [{ id: "style" as const, label: "Profile style", icon: "asterisk" as const }] : []),
+      { id: "connections", label: "Connections", icon: "link" },
       { id: "developers", label: "Developers", icon: "code" },
       { id: "privacy", label: "Privacy & Safety", icon: "shield" },
       { id: "blocked", label: "Blocked people", icon: "ban" },
@@ -90,9 +92,9 @@ const GROUPS: { title: string; items: { id: Tab; label: string; icon: "user" | "
   },
   { title: "App settings", items: [{ id: "notifications", label: "Notifications", icon: "bell" }, { id: "appearance", label: "Appearance", icon: "sliders" }] },
 ];
-const TITLES: Record<Tab, string> = { account: "My Account", profile: "Profile", gallery: "Gallery", socials: "Socials", style: "Profile style", perks: "Your perks", plan: "Plan & points", hype: "Hype", earnings: "Earnings", developers: "Developers", privacy: "Privacy & Safety", blocked: "Blocked people", notifications: "Notifications", appearance: "Appearance" };
+const TITLES: Record<Tab, string> = { account: "My Account", profile: "Profile", gallery: "Gallery", socials: "Socials", style: "Profile style", perks: "Your perks", plan: "Plan & points", hype: "Hype", earnings: "Earnings", developers: "Developers", connections: "Connections", privacy: "Privacy & Safety", blocked: "Blocked people", notifications: "Notifications", appearance: "Appearance" };
 /** old anchors (#messages, #safety, #mood…) still land somewhere sensible */
-const HASH: Record<string, Tab> = { account: "account", profile: "profile", gallery: "gallery", socials: "socials", photos: "gallery", media: "gallery", ...(PROFILE_DESIGNS_ENABLED ? { style: "style" as const, design: "style" as const } : {}), perks: "perks", plan: "plan", developers: "developers", bots: "developers", subscription: "plan", hype: "hype", gifts: "hype", earnings: "earnings", points: "plan", wallet: "hype", rank: "plan", privacy: "privacy", messages: "privacy", safety: "privacy", blocked: "blocked", blocks: "blocked", appearance: "appearance", mood: "appearance", notifications: "notifications" };
+const HASH: Record<string, Tab> = { account: "account", profile: "profile", gallery: "gallery", socials: "socials", photos: "gallery", media: "gallery", ...(PROFILE_DESIGNS_ENABLED ? { style: "style" as const, design: "style" as const } : {}), perks: "perks", plan: "plan", developers: "developers", bots: "developers", connections: "connections", twitch: "connections", subscription: "plan", hype: "hype", gifts: "hype", earnings: "earnings", points: "plan", wallet: "hype", rank: "plan", privacy: "privacy", messages: "privacy", safety: "privacy", blocked: "blocked", blocks: "blocked", appearance: "appearance", mood: "appearance", notifications: "notifications" };
 
 /** A titled block inside a tab: small caps heading, optional intro, then the content. */
 function Block({ title, intro, children }: { title: string; intro?: string; children: React.ReactNode }) {
@@ -866,6 +868,7 @@ export default function SettingsPage() {
             {tab === "hype" && <HypeTab />}
             {tab === "earnings" && <EarningsTab />}
             {tab === "developers" && <DevelopersTab />}
+            {tab === "connections" && <ConnectionsTab />}
             {tab === "privacy" && (
               <div className="space-y-6">
                 <PrefsSections me={user} />

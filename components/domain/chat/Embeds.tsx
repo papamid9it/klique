@@ -1,5 +1,6 @@
 "use client";
 
+import { useLinksOff } from "./linksOff";
 import { isDataSaver } from "@/lib/data-saver";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { LinkService } from "@/app/services/LinkService";
@@ -163,7 +164,12 @@ function EmbedBody({ url, signedIn, near, saved }: { url: string; signedIn: bool
 }
 
 /** Rich previews under a message: video players, images and OpenGraph cards for its links. */
-export function Embeds({ body, embeds, pending }: { body: string; /** previews saved with the message (community chat) */ embeds?: LinkPreviewDTO[]; pending?: boolean }) {
+export function Embeds(p: { body: string; /** previews saved with the message (community chat) */ embeds?: LinkPreviewDTO[]; pending?: boolean }) {
+  // a live stream's chat: no link previews (nothing there takes you away from the stream)
+  return useLinksOff() ? null : <EmbedList {...p} />;
+}
+
+function EmbedList({ body, embeds, pending }: { body: string; embeds?: LinkPreviewDTO[]; pending?: boolean }) {
   const { user } = useAuth();
   const links = useMemo(() => linksIn(body), [body]);
   const saved = useMemo<Saved>(() => (embeds ? { kind: "saved", byUrl: new Map(embeds.map((e) => [e.url, e])) } : pending ? { kind: "pending" } : { kind: "none" }), [embeds, pending]);

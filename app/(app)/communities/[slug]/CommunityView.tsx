@@ -1,5 +1,6 @@
 "use client";
 
+import { LiveBar } from "@/components/domain/live/Live";
 import { mainRoom } from "@/components/domain/chat/order";
 import { HeaderIcons } from "@/components/layout/HeaderIcons";
 import { AgeGate } from "@/components/domain/space/AgeGate";
@@ -170,6 +171,8 @@ function CommunityWorkspace({ slug }: { slug: string }) {
   // activity in this community: refresh unread badges and the channel list right away
   const communityId = c?.id;
   useRealtimeEvent(() => void reloadChannels(), { filter: (e) => e.type === "channel" && e.communityId === communityId, debounceMs: 1200 });
+  // someone went live here (or stopped): LIVE shows or goes without a refresh
+  useRealtimeEvent(() => void reload(), { filter: (e) => e.type === "live" && e.communityId === communityId, debounceMs: 500 });
   // you were let in (or added to a group): the community opens up without a refresh
   useRealtimeEvent(
     () => {
@@ -497,6 +500,8 @@ function CommunityWorkspace({ slug }: { slug: string }) {
             <JoinButton community={c} onChange={(next) => joined(next as CommunityDTO)} />
           </div>
         )}
+        {/* someone's live here: who, and Watch */}
+        {member && <LiveBar c={c} onChanged={() => void reload()} />}
         {/* an open crew brings its own header (with the info button), like a channel's */}
         {!(crewOpen && !gp) && (
         <header className={cx("flex min-h-14 items-center gap-2 border-b border-line px-3 sm:px-5", postFull && "lg:hidden")}>

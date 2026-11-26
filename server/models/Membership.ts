@@ -23,6 +23,10 @@ export interface IMembership {
    * in the community or its groups. Set by an owner or admin above them; cleared early with "Remove timeout".
    */
   timeoutUntil?: Date | null;
+  /** the owner let this member go live until then (a pass for a time, without a role) */
+  livePassUntil?: Date | null;
+  /** turned off "… is live in …" notifications for this community */
+  liveMuted?: boolean;
   timeoutReason?: string | null;
   timeoutById?: Types.ObjectId | null;
   /**
@@ -54,6 +58,8 @@ const MembershipSchema = new Schema<IMembership>(
     muted: { type: Boolean, default: false },
     answers: { type: [{ _id: false, prompt: { type: String, maxlength: 200 }, answer: { type: String, maxlength: 500 } }], default: [] },
     timeoutUntil: { type: Date, default: null },
+    livePassUntil: { type: Date, default: null },
+    liveMuted: { type: Boolean, default: false },
     timeoutReason: { type: String, default: null, maxlength: 300 },
     timeoutById: { type: Schema.Types.ObjectId, default: null },
     roleIds: { type: [Schema.Types.ObjectId], default: [] },

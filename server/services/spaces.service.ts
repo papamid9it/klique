@@ -351,6 +351,8 @@ export async function listMembers(
         canChangeRole: !isSelf && canSetRole(access.role, m.role, m.role === "admin" ? "member" : "admin"),
         canRemove: below && (can(access, "kick") || can(access, "ban")),
         ...(!space.sub && (access.canManage || isSiteAdmin(viewer)) ? { postBan: postBanOf(m), canPostBan: !isSelf && m.role !== "owner" && (isSiteAdmin(viewer) || theirRank < myRank) } : {}),
+        // a pass to go live for a while (only plain members need one: the owner and admins can always)
+        ...(!space.sub && (access.canManage || isSiteAdmin(viewer)) && m.role === "member" && !space.community.adult ? { livePassUntil: m.livePassUntil && +new Date(m.livePassUntil) > Date.now() ? new Date(m.livePassUntil).toISOString() : null, canLivePass: !isSelf } : {}),
         ...(space.sub ? { title: m.title ?? null, powers: groupPowersOf(m) as GroupPower[], canEditMod: access.role === "owner" || access.canModerate } : {}),
         ...(!space.sub ? { roles: st?.roles ?? [], roleBadge: st?.badge ?? null, canEditRoles: can(access, "manageRoles") && (below || (isSelf && m.role !== "owner")) } : {}),
         // timeouts are community-wide (set from the community, not a group)

@@ -12,6 +12,7 @@ import { Reaction } from "../models/Reaction";
 import { VOICE_ENABLED } from "@/lib/constants";
 import { liveProviders, PROVIDER_LABEL } from "./payments-setting";
 import { Types } from "mongoose";
+import { publish, rtChannel } from "./realtime";
 import type {
   AdminCommunityRow,
   AdminEventFilter,
@@ -116,6 +117,16 @@ async function describeTarget(r: IReport, briefs: Map<string, UserBrief>): Promi
       const author = (await loadBriefs([k.hostId])).get(sid(k.hostId)) ?? null;
       return { title: `Klique: ${k.title}${k.womenOnly ? " · women only" : ""}`, body: [`From ${k.area}`, k.note].filter(Boolean).join("\n\n"), images: k.coverImage ? [k.coverImage] : [], author, href: `/kliques/${sid(k._id)}`, gone: false, removable: true };
     }
+    case "live": {
+      const { LiveStream } = await import("../models/Live");
+      const l = await LiveStream.findById(r.targetId).lean<import("../models/Live").ILiveStream>();
+      if (!l) return none;
+      const c = await Community.findById(l.communityId).select("slug name").lean<Pick<ICommunity, "slug" | "name">>();
+      const author = (await loadBriefs([l.hostId])).get(sid(l.hostId)) ?? null;
+      const watch = l.provider === "twitch" ? `https://www.twitch.tv/${l.channel}` : `https://www.youtube.com/watch?v=${l.channel}`;
+      const on = l.status !== "ended";
+      return { title: `Live stream${on ? "" : " (ended)"}: ${l.title || "no title"} in ${c?.name ?? "a community"}`, body: `On ${l.provider === "twitch" ? "Twitch" : "YouTube"}: ${watch}`, images: [], author, href: c ? `/communities/${c.slug}?live=1` : null, gone: !on, removable: on };
+    }
     case "ad": {
       const a = await Ad.findById(r.targetId).lean<IAd>();
       if (!a) return none;
@@ -217,6 +228,13 @@ async function removeTarget(r: IReport, admin: IUser) {
       await purgeCrews({ _id: r.targetId });
       return;
     }
+    case "live": {
+      // removing a stream ends it in Klique (the video itself is on Twitch or YouTube); suspend its host to stop more
+      const { LiveStream } = await import("../models/Live");
+      const l = await LiveStream.findOneAndUpdate({ _id: r.targetId, status: { $in: ["waiting", "live"] } }, { $set: { status: "ended", endedAt: new Date(), endedById: admin._id } }).lean<{ communityId: Types.ObjectId }>();
+      if (l) publish([rtChannel.community(l.communityId)], { type: "live", communityId: sid(l.communityId), on: false });
+      return;
+    }
     case "ad":
       // reported ads are paused, not deleted, so the advertiser's record and numbers survive
       await Ad.updateOne({ _id: r.targetId }, { status: "paused" });
@@ -248,6 +266,10 @@ async function authorOf(r: IReport): Promise<Types.ObjectId | null> {
       return (await FeedPost.findById(r.targetId).select("authorId").lean<Pick<IFeedPost, "authorId">>())?.authorId ?? null;
     case "klique":
       return (await Crew.findById(r.targetId).select("hostId").lean<Pick<ICrew, "hostId">>())?.hostId ?? null;
+    case "live": {
+      const { LiveStream } = await import("../models/Live");
+      return (await LiveStream.findById(r.targetId).select("hostId").lean<{ hostId: Types.ObjectId }>())?.hostId ?? null;
+    }
     case "ad":
       return null;
   }

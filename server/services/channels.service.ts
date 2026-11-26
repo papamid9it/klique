@@ -1227,6 +1227,25 @@ export async function ensureTopicThread(viewer: IUser | null, access: SpaceAcces
   return toChannel(channel, { access, readBy: new Map(read ? [[sid(channel._id), read]] : []), invited: new Set(), mentionCounts: new Map(), siteAdmin: !!viewer && isSiteAdmin(viewer) });
 }
 
+/**
+ * A live stream's chat ("Live chat", beside the player, like YouTube's): an ordinary channel that never shows in the
+ * channel list (it hangs off the stream the way a post's chat hangs off the post), so it gets reactions, @mentions,
+ * stickers, moderation and live updates like any chat. Members chat; anyone who can see the community reads along.
+ */
+export async function ensureLiveChat(viewer: IUser | null, access: SpaceAccess, live: { _id: Types.ObjectId; communityId: Types.ObjectId; hostId: Types.ObjectId }): Promise<ChannelDTO> {
+  let channel = await Channel.findOne({ topicId: live._id }).lean<IChannel>();
+  if (!channel) {
+    try {
+      channel = (await Channel.create({ communityId: live.communityId, subcommunityId: null, categoryId: null, slug: `live-${sid(live._id)}`, name: "Live chat", type: "text", visibility: "all", position: 0, createdById: live.hostId, topicId: live._id })).toObject() as IChannel;
+    } catch (err) {
+      if ((err as { code?: number }).code !== 11000) throw err;
+      channel = (await Channel.findOne({ topicId: live._id }).lean<IChannel>())!; // opened twice at once
+    }
+  }
+  const read = viewer && access.isMember ? await ChannelRead.findOne({ userId: viewer._id, channelId: channel._id }).lean<IChannelRead>() : null;
+  return toChannel(channel, { access, readBy: new Map(read ? [[sid(channel._id), read]] : []), invited: new Set(), mentionCounts: new Map(), siteAdmin: !!viewer && isSiteAdmin(viewer) });
+}
+
 async function moveOldComments(topic: Pick<ITopic, "_id" | "communityId">, channel: IChannel) {
   const comments = await TopicComment.find({ topicId: topic._id, deletedAt: null }).sort({ _id: 1 }).limit(2000).lean<ITopicComment[]>();
   if (!comments.length) return;

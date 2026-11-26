@@ -16,6 +16,7 @@ export const PERMISSIONS = [
   { id: "mentionEveryone", label: "Mention @everyone and @here", hint: "Ping everyone, even when members can't." },
   { id: "manageWebhooks", label: "Manage webhooks and bots", hint: "Make and delete webhooks (normally the owner only)." },
   { id: "viewModLog", label: "See the moderation log", hint: "Read who removed or timed out what." },
+  { id: "goLive", label: "Go live", hint: "Stream live in the community, on Twitch or YouTube (one stream at a time)." },
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number]["id"];
@@ -37,5 +38,5 @@ export const isPermission = (p: string): p is Permission => (ALL_PERMISSIONS as 
  */
 export const READ_MESSAGES = { id: "readMessages", label: "Read messages", hint: "See what people write in the channels it can see, from now on. It can never read older messages or private channels it isn't added to." } as const;
 /** what a bot can ask for */
-export const BOT_PERMISSIONS = [...PERMISSIONS.filter((p) => p.id !== "manageWebhooks"), READ_MESSAGES];
+export const BOT_PERMISSIONS = [...PERMISSIONS.filter((p) => p.id !== "manageWebhooks" && p.id !== "goLive"), READ_MESSAGES];
 export const isBotPermission = (p: string) => BOT_PERMISSIONS.some((x) => x.id === p);

@@ -23,6 +23,7 @@ import type {
 import { Community, type ICommunity } from "./models/Community";
 import { Crew } from "./models/Crew";
 import { Event, type IEvent } from "./models/Event";
+import { LiveStream, type ILiveStream } from "./models/Live";
 import { FeedPost } from "./models/FeedPost";
 import { Membership, type IMembership } from "./models/Membership";
 import { MembershipRequest } from "./models/MembershipRequest";
@@ -407,6 +408,11 @@ export async function toEvents(events: IEvent[], viewer: IUser | null): Promise<
   const raisedMap = new Map(raisedRows.map((r) => [sid(r._id), r]));
   const mineMap = new Map(mineRows.map((r) => [sid(r._id), r.q]));
   const friendsGoing = viewer ? await friendsGoingTo(eventIds, viewer._id) : new Map<string, { count: number; people: UserBrief[] }>();
+  // streamed on Klique: which are live right now (with who's on)
+  const streamedIds = events.filter((e) => e.streamed).map((e) => e._id);
+  const liveRows = streamedIds.length ? await LiveStream.find({ eventId: { $in: streamedIds }, status: "live" }).lean<ILiveStream[]>() : [];
+  const liveHosts = liveRows.length ? await loadBriefs(liveRows.map((l) => l.hostId)) : new Map<string, UserBrief>();
+  const liveMap = new Map(liveRows.map((l) => [sid(l.eventId!), l]));
 
   return events.map((e) => {
     const c = e.communityId ? communityMap.get(sid(e.communityId)) : undefined;
@@ -427,6 +433,16 @@ export async function toEvents(events: IEvent[], viewer: IUser | null): Promise<
       ticketUrl: e.ticketUrl ?? null,
       ticketLabel: e.ticketLabel || null,
       onlineUrl: e.online ? (e.onlineUrl ?? null) : null,
+      ...(e.streamed
+        ? (() => {
+            const l = liveMap.get(sid(e._id));
+            return {
+              streamed: true,
+              live: l ? { id: sid(l._id), provider: l.provider, channel: l.channel, title: l.title, status: "live" as const, host: liveHosts.get(sid(l.hostId)) ?? GHOST, startedAt: l.startedAt?.toISOString() ?? null, eventId: sid(e._id), canEnd: !!viewer && sid(l.hostId) === sid(viewer._id) } : null,
+              ...(isHost && !e.cancelled && end >= now ? { canStream: true } : {}),
+            };
+          })()
+        : {}),
       venue: e.venue,
       startsAt: e.startsAt.toISOString(),
       timeZone: e.timeZone || DEFAULT_ZONE,

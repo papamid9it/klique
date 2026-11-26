@@ -309,6 +309,8 @@ export interface CommunityDTO extends CommunityCardDTO {
   setup?: CommunitySetupDTO;
   /** you've muted @everyone and @here in this community */
   suppressEveryone?: boolean;
+  /** your "Live streams" notifications here (on unless you turned them off); members only */
+  liveNotify?: boolean;
   /** the viewer is a member who can send an event in for the owner or an admin to approve */
   canSubmitEvents: boolean;
   /** the Posts section: "off", or who may post ("admins" or "members") */
@@ -329,6 +331,9 @@ export interface CommunityDTO extends CommunityCardDTO {
   onlineCount?: number;
   /** set by Klique for breaking the rules: everyone sees a suspension; only its owner and admins see a restriction */
   standing?: { state: "restricted" | "suspended"; until: ISODate | null; reason: string } | null;
+  /** its live stream now (absent: nobody's live), and whether the viewer may go live here */
+  live?: LiveDTO | null;
+  canGoLive?: boolean;
   /** the cause shown under its name (the main one), and how many it has; absent: none */
   mainCause?: CauseDTO | null;
   causeCount?: number;
@@ -486,6 +491,9 @@ export interface MemberDTO {
   /** stopped from writing in Posts and on Boards, and whether you can change that */
   postBan?: { until: ISODate | null; reason: string | null } | null;
   canPostBan?: boolean;
+  /** may go live here until then (a pass from the owner or admins), and whether you can give or take it */
+  livePassUntil?: ISODate | null;
+  canLivePass?: boolean;
   /** in a group: the title its owner gave them, what it lets them do, and whether you can change those */
   title?: string | null;
   powers?: import("./roles").GroupPower[];
@@ -588,6 +596,10 @@ export interface EventDTO {
   ticketLabel: string | null;
   /** the link to join an online event ("Join online") */
   onlineUrl: string | null;
+  /** streamed live on Klique: watched from the event page; `live` while it's on; `canStream`: you're its host */
+  streamed?: boolean;
+  live?: LiveDTO | null;
+  canStream?: boolean;
   venue: string;
   startsAt: ISODate;
   endsAt: ISODate | null;
@@ -1021,7 +1033,7 @@ export interface ConversationDetailDTO {
 
 /* ------------------------------ safety ------------------------------ */
 
-export type ReportTargetType = "user" | "post" | "event" | "community" | "subcommunity" | "message" | "channelMessage" | "ad" | "feedPost" | "klique";
+export type ReportTargetType = "user" | "post" | "event" | "community" | "subcommunity" | "message" | "channelMessage" | "ad" | "feedPost" | "klique" | "live";
 
 export interface ReportInput {
   targetType: ReportTargetType;
@@ -1189,6 +1201,8 @@ export interface MyCommunityDTO {
   mentions: number;
   /** you muted it */
   muted?: boolean;
+  /** someone's live in it right now */
+  live?: boolean;
   lastActivityAt: ISODate | null;
 }
 
@@ -1626,7 +1640,9 @@ export type RealtimeEvent =
   /** someone started (`on`) or stopped typing in a chat (`where`: see TypingDTO) */
   | { type: "typing"; where: string; user: { id: Id; name: string }; on: boolean }
   /** something was deleted (a post, board post, event or klique): open lists drop it at once */
-  | { type: "removed"; what: "post" | "topic" | "event" | "klique"; id: Id };
+  | { type: "removed"; what: "post" | "topic" | "event" | "klique"; id: Id }
+  /** someone went live in a community (`on`), or its stream ended: open pages show or drop LIVE at once */
+  | { type: "live"; communityId: Id; on: boolean };
 
 /** A chat to type in: a community or group channel, a DM conversation, or a crew's chat. */
 export type TypingTarget = { kind: "channel"; slug: string; sub?: string | null; channel: string } | { kind: "dm"; id: Id } | { kind: "crew"; id: Id };
@@ -2358,4 +2374,36 @@ export interface CauseSupporterDTO {
   anonymous: boolean;
   hype: number;
   at: ISODate;
+}
+
+/** A community's live stream (one at a time): on Twitch (its channel) or YouTube (its video). */
+export interface LiveDTO {
+  id: Id;
+  provider: "twitch" | "youtube";
+  /** Twitch: the channel's login; YouTube: the video's id */
+  channel: string;
+  title: string;
+  /** "waiting": the host pressed Go live and Klique is waiting for Twitch to say the stream started (only the host and the people who run it see this) */
+  status: "waiting" | "live";
+  host: UserBrief;
+  startedAt: ISODate | null;
+  eventId: Id | null;
+  /** the viewer may end it (its host, or the people who run the community) */
+  canEnd: boolean;
+}
+
+/** Your Twitch connection (Settings, Go live). */
+export interface TwitchStatusDTO {
+  /** Twitch is set up on Klique */
+  ready: boolean;
+  connected: boolean;
+  login: string | null;
+  displayName: string | null;
+  avatarUrl: string | null;
+}
+
+/** "Live now" on Home: a stream in one of your communities. */
+export interface LiveNowDTO {
+  community: { id: Id; slug: string; name: string; coverImage: string | null };
+  live: LiveDTO;
 }

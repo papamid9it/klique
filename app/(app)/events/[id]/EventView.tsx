@@ -1,5 +1,6 @@
 "use client";
 
+import { EventLive } from "@/components/domain/live/Live";
 import { useMediaViewer } from "@/components/providers/MediaViewerProvider";
 import { ContributeCard, ContributionFields, ContributionsPanel, contributionDraftOf, contributionInput, type ContributionDraft } from "@/components/domain/money/Contribute";
 import { usePaymentReturn } from "@/components/domain/money/Donate";
@@ -62,6 +63,7 @@ function EditModal({ event, open, onClose, onSaved }: { event: EventDTO; open: b
   const [place, setPlace] = useState<Place>({ country: event.country, region: event.region, city: event.city });
   const { zone, choices: zoneChoices, setZone } = usePlaceZone(place, startZone);
   const [online, setOnline] = useState(event.online);
+  const [streamed, setStreamed] = useState(!!event.streamed);
   const [currency, setCurrency] = useState(event.currency);
   const [neighborhood, setNeighborhood] = useState(event.neighborhood);
   const [venue, setVenue] = useState(event.venue);
@@ -83,7 +85,7 @@ function EditModal({ event, open, onClose, onSaved }: { event: EventDTO; open: b
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!title.trim() || !venue.trim() || !date || !start) {
+    if (!title.trim() || (!venue.trim() && !(online && streamed)) || !date || !start) {
       setErrors({
         ...(title.trim() ? {} : { title: "Title is required." }),
         ...(venue.trim() ? {} : { venue: "Venue is required." }),
@@ -98,7 +100,7 @@ function EditModal({ event, open, onClose, onSaved }: { event: EventDTO; open: b
       return;
     }
     const tickets = normalizeLink(ticketUrl);
-    const joinLink = online ? normalizeLink(onlineUrl) : "";
+    const joinLink = online && !streamed ? normalizeLink(onlineUrl) : "";
     if ((tickets && !isHttpLink(tickets)) || (joinLink && !isHttpLink(joinLink))) {
       setErrors({ ...(tickets && !isHttpLink(tickets) ? { ticketUrl: "Enter a valid link, like https://tix.africa/your-event" } : {}), ...(joinLink && !isHttpLink(joinLink) ? { onlineUrl: "Enter a valid link" } : {}) });
       return;
@@ -125,8 +127,9 @@ function EditModal({ event, open, onClose, onSaved }: { event: EventDTO; open: b
         ticketUrl: tickets,
         ticketLabel: ticketLabel.trim(),
         onlineUrl: joinLink,
+        streamed: online && streamed,
         currency,
-        venue: venue.trim(),
+        venue: online && streamed ? "Live on Klique" : venue.trim(),
         startsAt: toIso(date, start, zone),
         endsAt: end ? toIso(endDate || date, end, zone) : endDate && endDate !== date ? toIso(endDate, "23:59", zone) : null,
         timeZone: zone,
@@ -163,9 +166,15 @@ function EditModal({ event, open, onClose, onSaved }: { event: EventDTO; open: b
         <label className="flex cursor-pointer items-center gap-3 text-sm">
           <input type="checkbox" checked={online} onChange={(e) => setOnline(e.target.checked)} className="accent-[var(--accent-text)]" /> Online event
         </label>
+        {/* streamed live on Klique: only for an event in a community (not a group) */}
+        {online && event.community && (
+          <label className="flex cursor-pointer items-center gap-3 text-sm">
+            <input type="checkbox" checked={streamed} onChange={(e) => setStreamed(e.target.checked)} className="accent-[var(--accent-text)]" /> Stream it live on Klique
+          </label>
+        )}
         <PlaceFields value={place} onChange={setPlace} neighborhood={neighborhood} onNeighborhood={setNeighborhood} errors={errors} />
-        <TextField label={online ? "Where to join" : "Venue"} value={venue} onChange={(e) => setVenue(e.target.value)} maxLength={LIMITS.venue} error={errors.venue} />
-        {online && <TextField label="Join link (optional)" type="url" inputMode="url" value={onlineUrl} onChange={(e) => setOnlineUrl(e.target.value)} onBlur={() => setOnlineUrl((v) => normalizeLink(v))} error={errors.onlineUrl} placeholder="https://meet.google.com/…" hint="Shows as a Join online button." />}
+        {!(online && streamed) && <TextField label={online ? "Where to join" : "Venue"} value={venue} onChange={(e) => setVenue(e.target.value)} maxLength={LIMITS.venue} error={errors.venue} />}
+        {online && !streamed && <TextField label="Join link (optional)" type="url" inputMode="url" value={onlineUrl} onChange={(e) => setOnlineUrl(e.target.value)} onBlur={() => setOnlineUrl((v) => normalizeLink(v))} error={errors.onlineUrl} placeholder="https://meet.google.com/…" hint="Shows as a Join online button." />}
         <div className="grid gap-4 sm:grid-cols-2">
           <TextField label="Starts on" type="date" value={date} onChange={(e) => setDate(e.target.value)} error={errors.date} />
           <TextField label="Starts at" type="time" value={start} onChange={(e) => setStart(e.target.value)} error={errors.startsAt} />
@@ -497,6 +506,8 @@ function EventView({ event, onChange }: { event: EventDTO; onChange: (e: EventDT
               </Button>
             )}
           </div>
+          {/* streamed on Klique: Watch live, or Go live for its host */}
+          <EventLive event={event} onChanged={() => void EventService.get(event.id).then((r) => onChange(r.data), () => {})} />
           {/* the host's own links: tickets, and where to join an online event (both go through "You're leaving Klique") */}
           {!cancelled && !event.isPast && (event.ticketUrl || event.onlineUrl) && (
             <div className="space-y-2 rounded-card border border-line bg-surface p-4">

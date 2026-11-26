@@ -39,6 +39,8 @@ export interface IEvent {
   ticketLabel?: string;
   /** the link to join an online event (Zoom, Meet, a stream…) */
   onlineUrl?: string | null;
+  /** an online event streamed live on Klique (in its community, by its host): people press Going, and are told when it's on */
+  streamed?: boolean;
   capacity: number | null;
   coverImage: string | null;
   goingCount: number;
@@ -88,6 +90,7 @@ const EventSchema = new Schema<IEvent>(
     ticketUrl: { type: String, default: null, maxlength: 500 },
     ticketLabel: { type: String, default: "", maxlength: 30 },
     onlineUrl: { type: String, default: null, maxlength: 500 },
+    streamed: { type: Boolean, default: false },
     capacity: { type: Number, default: null, min: 1 },
     coverImage: { type: String, default: null },
     goingCount: { type: Number, default: 0 },

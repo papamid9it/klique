@@ -34,6 +34,7 @@ const PATHS = {
   "chevron-right": <path d="m9.5 6 6 6-6 6" />,
   "chevron-left": <path d="m14.5 6-6 6 6 6" />,
   clock: <><circle cx="12" cy="12" r="8.5" /><path d="M12 7v5.2l3.2 1.8" /></>,
+  live: <><circle cx="12" cy="12" r="2" /><path d="M8.6 8.6a4.8 4.8 0 0 0 0 6.8M15.4 8.6a4.8 4.8 0 0 1 0 6.8M5.7 5.7a8.9 8.9 0 0 0 0 12.6M18.3 5.7a8.9 8.9 0 0 1 0 12.6" /></>,
   play: <path d="M8 5.5v13l10.5-6.5z" />,
   pause: <path d="M8 5.5v13M16 5.5v13" />,
   volume: <><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" /><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" /></>,

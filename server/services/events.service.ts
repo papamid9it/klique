@@ -254,6 +254,15 @@ function validateTimes(startsAt: Date, endsAt: Date | null | undefined, mustBeFu
 }
 
 /** `reviewedImport`: a site admin posting events the finder found, after review (many at once is expected). */
+/** what a streamed event shows for where it is */
+export const STREAM_VENUE = "Live on Klique";
+
+/** Only an event in a community (not a group, not 18+) can be streamed on Klique. */
+function assertStreamable(space: { community: ICommunity; sub: unknown } | null) {
+  if (!space || space.sub) throw new ApiError(422, "Stream events in a community, not a group.", { errors: { streamed: "Not in a group" } });
+  if (space.community.adult) throw new ApiError(422, "18+ communities can't go live on Klique.", { errors: { streamed: "Not in 18+ communities" } });
+}
+
 export async function createEvent(viewer: IUser, input: z.infer<typeof eventCreateSchema>, opts: { reviewedImport?: boolean } = {}): Promise<EventDTO> {
   assertVerified(viewer);
   if (!(opts.reviewedImport && isSiteAdmin(viewer))) rateLimit(`event-create:${sid(viewer._id)}`, 20, 24 * 60 * 60 * 1000);
@@ -288,6 +297,9 @@ export async function createEvent(viewer: IUser, input: z.infer<typeof eventCrea
     space = { community: klique, sub: null };
   }
 
+  // streamed on Klique: an online event in a community (not a group: one stream at a time is the community's)
+  if (input.streamed) assertStreamable(space);
+
   // chipping in goes to a community: never to Klique itself
   if (input.contribution && space && isKlique(space.community)) throw badRequest("Klique's own events don't take contributions.");
   const interest = input.interest ?? space?.community.interest;
@@ -304,14 +316,15 @@ export async function createEvent(viewer: IUser, input: z.infer<typeof eventCrea
     country: input.country,
     region: input.region,
     city: input.city,
-    online: input.online,
+    online: input.online || input.streamed,
+    streamed: input.streamed,
     timeZone: sentZone(input.timeZone),
     ticketUrl: input.ticketUrl || null,
     ticketLabel: input.ticketLabel ?? "",
-    onlineUrl: input.online ? input.onlineUrl || null : null,
+    onlineUrl: input.online && !input.streamed ? input.onlineUrl || null : null,
     currency: input.currency ?? currencyOf(input.country),
     neighborhood: input.neighborhood,
-    venue: input.venue,
+    venue: input.streamed ? STREAM_VENUE : input.venue,
     startsAt: input.startsAt,
     endsAt: input.endsAt ?? null,
     priceNaira: input.priceNaira,
@@ -484,6 +497,14 @@ export async function updateEvent(viewer: IUser, id: string, patch: z.infer<type
   if (patch.capacity !== undefined) set.capacity = patch.capacity;
   if (patch.coverImage !== undefined) set.coverImage = patch.coverImage || null;
   if (patch.cancelled !== undefined) set.cancelled = patch.cancelled;
+  if (patch.streamed !== undefined) {
+    if (patch.streamed) {
+      const community = event.communityId ? await Community.findById(event.communityId).lean<ICommunity>() : null;
+      assertStreamable(community ? { community, sub: event.subcommunityId ? ({} as ISubcommunity) : null } : null);
+      Object.assign(set, { online: true, onlineUrl: null, venue: STREAM_VENUE });
+    }
+    set.streamed = patch.streamed;
+  }
   if (patch.contribution !== undefined) {
     if (patch.contribution && (!event.communityId || String(event.communityId) === String(await kliqueId()))) throw badRequest("Klique's own events don't take contributions.");
     set.contribution = patch.contribution;

@@ -7,6 +7,7 @@ import { DiscoverService } from "@/app/services/DiscoverService";
 import { EventsRow, HomeFeed, TOP_EVENTS, rankEvents } from "@/components/domain/home/HomeFeed";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { CommunitiesHome } from "@/components/domain/home/CommunitiesHome";
+import { LiveNowRow } from "@/components/domain/live/Live";
 import { useHomeStyle } from "@/lib/hooks/useHomeStyle";
 import { usePlace } from "@/components/providers/PlaceProvider";
 import { BackToTop } from "@/components/domain/feed/BackToTop";
@@ -114,6 +115,9 @@ function CasualHome() {
         {/* a touch of room above, so the sticky date bar never sits over the top of the letters */}
         <h1 className="display pt-1 text-[clamp(2.25rem,5vw,3.25rem)] leading-[1.08]">Find your klique.</h1>
       </header>
+
+      {/* streams on right now in your communities (nothing while nobody's live) */}
+      <LiveNowRow />
 
       {error && !data ? <ErrorState message={error} onRetry={reload} /> : <EventsRow events={topEvents} loading={loading} onEvent={patchEvent} />}
 

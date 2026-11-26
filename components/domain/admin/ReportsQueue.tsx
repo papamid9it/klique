@@ -26,6 +26,7 @@ const STATUSES: { id: ReportStatus; label: string }[] = [
   { id: "dismissed", label: "Dismissed" },
 ];
 const KIND: Record<ReportDTO["targetType"], string> = {
+  live: "Live stream",
   user: "Person",
   post: "Group update",
   feedPost: "Post",

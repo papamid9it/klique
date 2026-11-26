@@ -1,5 +1,6 @@
 "use client";
 
+import { LiveNowRow } from "@/components/domain/live/Live";
 import Link from "next/link";
 import { useState } from "react";
 import { CommunityService } from "@/app/services/CommunityService";
@@ -87,6 +88,8 @@ export function CommunitiesHome() {
 
   return (
     <>
+    {/* streams on right now in your communities (nothing while nobody's live) */}
+    <div className="mb-6 empty:hidden"><LiveNowRow /></div>
     <CityPoster
       events={deckEvents}
       loading={(discover.loading && !discover.data) || (going.loading && !going.data)}

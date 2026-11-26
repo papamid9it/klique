@@ -1,5 +1,6 @@
 import { reviewCounts } from "./review.service";
 import { mainCauseOf } from "./causes.service";
+import { canGoLive, liveOf } from "./live.service";
 import { searchFilter } from "./search-terms";
 import { audienceRefusal } from "@/lib/constants";
 import { countriesOf, getCityEntry, getCountry, parseScope, placeForReach, reachError, reachFilter, reachOf, type Reach, type ReachPlace, type Scope } from "@/lib/places";
@@ -141,7 +142,7 @@ export async function getCommunity(viewer: IUser | null, slug: string): Promise<
   if (access.adultGate === "under_18") throw notFound("We couldn't find that community.");
 
   // the counts and your own "Suppress @everyone and @here" side by side (none depends on another)
-  const [subcommunityCount, upcomingEventCount, membership, review, causes] = await Promise.all([
+  const [subcommunityCount, upcomingEventCount, membership, review, causes, live, goLive] = await Promise.all([
     access.canView ? countVisibleSubs(viewer, space.community) : null,
     access.canView
       ? Event.countDocuments({
@@ -152,16 +153,24 @@ export async function getCommunity(viewer: IUser | null, slug: string): Promise<
           startsAt: { $gte: new Date() },
         })
       : null,
-    viewer && access.isMember ? Membership.findOne({ userId: viewer._id, communityId: space.community._id, subcommunityId: null }).select("suppressEveryone").lean<{ suppressEveryone?: boolean }>() : null,
+    viewer && access.isMember ? Membership.findOne({ userId: viewer._id, communityId: space.community._id, subcommunityId: null }).select("suppressEveryone liveMuted").lean<{ suppressEveryone?: boolean; liveMuted?: boolean }>() : null,
     // what's waiting for this viewer to approve (only people who approve things here)
     reviewCounts(viewer, space.community, access),
     // the cause shown under its name (the main one), for people who can see inside
     access.canView ? mainCauseOf(space.community, access.canManage || (!!viewer && isSiteAdmin(viewer))) : null,
+    // its live stream now, and whether this viewer may start one
+    liveOf(viewer, space.community, access),
+    canGoLive(viewer, space.community, access),
   ]);
   const dto = await toCommunityDetail(space.community, access, { subcommunityCount, upcomingEventCount });
-  if (viewer && access.isMember) dto.suppressEveryone = !!membership?.suppressEveryone;
+  if (viewer && access.isMember) {
+    dto.suppressEveryone = !!membership?.suppressEveryone;
+    dto.liveNotify = !membership?.liveMuted;
+  }
   if (review) dto.review = review;
   if (causes) Object.assign(dto, causes);
+  dto.live = live;
+  if (goLive) dto.canGoLive = true;
   // not in it yet: the invite card says how many are online now, like Discord's (unless the owner hid it)
   if (!access.isMember && access.canView && !space.community.onlineHidden && space.community.memberCount > 0) {
     // who's online on Klique, kept for a minute (shared by every invite card), then how many of them are in this one
@@ -180,6 +189,14 @@ export async function setSuppressEveryone(viewer: IUser, slug: string, on: boole
   const r = await Membership.updateOne({ userId: viewer._id, communityId: space.community._id, subcommunityId: null, status: "active" }, { $set: { suppressEveryone: on } });
   if (!r.matchedCount) throw notFound("Join first.");
   return { suppressEveryone: on };
+}
+
+/** Your "Live streams" notifications in this community ("… is live in …"): on unless you turn them off. */
+export async function setLiveNotify(viewer: IUser, slug: string, on: boolean) {
+  const space = await resolveSpace(slug);
+  const r = await Membership.updateOne({ userId: viewer._id, communityId: space.community._id, subcommunityId: null, status: "active" }, { $set: { liveMuted: !on } });
+  if (!r.matchedCount) throw notFound("Join first.");
+  return { liveNotify: on };
 }
 
 /** Your own mute for a whole community: its chat stops notifying you, and its unread dot goes. */

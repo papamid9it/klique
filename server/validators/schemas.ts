@@ -376,6 +376,8 @@ const eventFields = {
   ticketUrl: clearableUrl,
   ticketLabel: z.string().trim().max(LIMITS.ticketLabel, `Keep it to ${LIMITS.ticketLabel} characters`).optional(),
   onlineUrl: clearableUrl,
+  /** streamed live on Klique (online, in a community): its host goes live from the event */
+  streamed: z.boolean().default(false),
   capacity: z.number().int().min(1).max(100_000).optional().nullable(),
   coverImage: clearableUrl,
 };
@@ -409,6 +411,7 @@ export const eventUpdateSchema = z.object({
   ticketUrl: clearableUrl,
   ticketLabel: z.string().trim().max(LIMITS.ticketLabel, `Keep it to ${LIMITS.ticketLabel} characters`).optional(),
   onlineUrl: clearableUrl,
+  streamed: z.boolean().optional(),
   capacity: z.number().int().min(1).max(100_000).optional().nullable(),
   coverImage: clearableUrl,
   cancelled: z.boolean().optional(),
@@ -496,7 +499,7 @@ export const messageListQuery = z.object({
 /* -------------------------------- safety ---------------------------- */
 
 export const reportSchema = z.object({
-  targetType: z.enum(["user", "post", "event", "community", "subcommunity", "message", "channelMessage", "ad", "feedPost", "klique"]),
+  targetType: z.enum(["user", "post", "event", "community", "subcommunity", "message", "channelMessage", "ad", "feedPost", "klique", "live"]),
   targetId: objectId,
   reason: z.enum(REPORT_REASONS.map((r) => r.id) as [string, ...string[]]),
   details: optText(LIMITS.reportDetails),

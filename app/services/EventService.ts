@@ -37,6 +37,8 @@ export interface EventInput {
   ticketUrl?: string | null;
   ticketLabel?: string;
   onlineUrl?: string | null;
+  /** streamed live on Klique (an online event in a community) */
+  streamed?: boolean;
   venue: string;
   /** ISO 8601 */
   startsAt: string;

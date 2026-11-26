@@ -3,6 +3,7 @@ import type { MyCommunityDTO } from "@/lib/types";
 import { Channel, ChannelMember, ChannelMessage, ChannelRead, type IChannel, type IChannelRead } from "../models/Channel";
 import { Community, type ICommunity } from "../models/Community";
 import { Membership, type IMembership } from "../models/Membership";
+import { LiveStream } from "../models/Live";
 import type { IUser } from "../models/User";
 import { channelVisibleToRole } from "../policies/access";
 import { Crew, CrewMember } from "../models/Crew";
@@ -27,12 +28,15 @@ export async function myCommunities(viewer: IUser): Promise<MyCommunityDTO[]> {
   if (!parentRole.size) return [];
 
   const ids = [...parentRole.keys()];
-  const [communities, channels, reads, guest] = await Promise.all([
+  const [communities, channels, reads, guest, lives] = await Promise.all([
     Community.find({ _id: { $in: ids } }).lean<ICommunity[]>(),
     Channel.find({ communityId: { $in: ids }, topicId: null, parentChannelId: null }).select("communityId subcommunityId visibility overrides categoryOverrides lastMessageId lastMessageAt").lean<IChannel[]>(),
     ChannelRead.find({ userId: viewer._id, communityId: { $in: ids } }).lean<IChannelRead[]>(),
     ChannelMember.find({ userId: viewer._id, communityId: { $in: ids } }).select("channelId").lean<{ channelId: Types.ObjectId }[]>(),
+    // who's live right now (a ring and LIVE on the community in your lists)
+    LiveStream.find({ communityId: { $in: ids }, status: "live" }).select("communityId").lean<{ communityId: Types.ObjectId }[]>(),
   ]);
+  const liveIn = new Set(lives.map((l) => sid(l.communityId)));
   const readBy = new Map(reads.map((r) => [sid(r.channelId), r.lastReadMessageId ? sid(r.lastReadMessageId) : null]));
   const mutedChannels = new Set(reads.filter((r) => r.muted).map((r) => sid(r.channelId)));
   const mutedCommunities = new Set(memberships.filter((m) => m.muted && !m.subcommunityId).map((m) => sid(m.communityId)));
@@ -98,6 +102,7 @@ export async function myCommunities(viewer: IUser): Promise<MyCommunityDTO[]> {
         unreadCount: mutedCommunities.has(sid(c._id)) ? 0 : Math.min(99, unreadTotals.get(sid(c._id)) ?? 0),
         ...(mutedCommunities.has(sid(c._id)) ? { muted: true } : {}),
         ...(pinned.has(sid(c._id)) ? { pinned: true } : {}),
+        ...(liveIn.has(sid(c._id)) ? { live: true } : {}),
         mentions: Math.min(99, mentionTotals.get(sid(c._id)) ?? 0),
         lastActivityAt: (slot.last ?? null)?.toISOString() ?? null,
       };

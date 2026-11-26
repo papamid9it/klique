@@ -49,6 +49,8 @@ export function CommunityRail({ activeSlug, horizontal, onNavigate }: { activeSl
   }, [authed, reload, connected]);
   // activity in any of your communities: refresh the unread dots
   useRealtimeEvent(() => void reload(), { filter: (e) => e.type === "channel" || (e.type === "crew" && !!e.chat), debounceMs: 1500 });
+  // someone went live in one of yours (or stopped): the red ring comes or goes at once
+  useRealtimeEvent(() => void reload(), { filter: (e) => e.type === "live", debounceMs: 800 });
   // you joined or left one in this tab: its icon appears or goes at once
   useAppEvent("membership", () => void reload());
   // you were let into a community (or added to a group): its icon appears
@@ -148,7 +150,7 @@ export function CommunityRail({ activeSlug, horizontal, onNavigate }: { activeSl
           onFocus={() => void prefetchCommunity(c.slug)}
           onTouchStart={() => void prefetchCommunity(c.slug)}
           title={c.name}
-          aria-label={`${c.name}${c.unreadCount ? `, ${c.unreadCount} unread` : c.unread ? ", unread messages" : ""}${c.mentions ? `, ${c.mentions} mention you` : ""}`}
+          aria-label={`${c.name}${c.live ? ", live now" : ""}${c.unreadCount ? `, ${c.unreadCount} unread` : c.unread ? ", unread messages" : ""}${c.mentions ? `, ${c.mentions} mention you` : ""}`}
           aria-current={active ? "page" : undefined}
           className={cx("group flex flex-col items-center gap-1", horizontal ? "w-14" : "w-full")}
         >
@@ -156,7 +158,8 @@ export function CommunityRail({ activeSlug, horizontal, onNavigate }: { activeSl
           {!horizontal && (
             <span aria-hidden="true" className={cx("absolute top-0 left-0 w-1 bg-accent-text transition-all", active ? "h-14" : "h-0")} />
           )}
-          <span className={cx("relative block overflow-hidden transition-[border-radius,box-shadow]", horizontal ? "size-11" : "size-14", active ? "rounded-[14px] ring-2 ring-accent-text ring-offset-2 ring-offset-canvas" : "rounded-full opacity-70 transition-opacity group-hover:rounded-[14px] group-hover:opacity-100")}>
+          {/* someone's live in it: a red ring, and LIVE under it */}
+          <span className={cx("relative block overflow-hidden transition-[border-radius,box-shadow]", horizontal ? "size-11" : "size-14", active ? "rounded-[14px] ring-2 ring-accent-text ring-offset-2 ring-offset-canvas" : c.live ? "rounded-full ring-2 ring-danger ring-offset-2 ring-offset-canvas group-hover:rounded-[14px]" : "rounded-full opacity-70 transition-opacity group-hover:rounded-[14px] group-hover:opacity-100")}>
             <Cover src={c.coverImage} seed={c.id} interest={c.interest} initialsOf={c.name} className={cx("size-full", c.muted && "opacity-50")} small />
           </span>
           {/* how many unseen messages (channels and your crews' chats); red when some mention you */}
@@ -165,6 +168,7 @@ export function CommunityRail({ activeSlug, horizontal, onNavigate }: { activeSl
           ) : (
             c.unread && <span className="absolute top-0 right-1 size-3 rounded-full bg-accent ring-2 ring-canvas" aria-hidden="true" />
           )}
+          {c.live && <span aria-hidden="true" className={cx("absolute left-1/2 -translate-x-1/2 rounded-[4px] bg-danger px-1 font-mono text-[9px] leading-[13px] font-bold text-white ring-2 ring-canvas", horizontal ? "top-[38px]" : "top-[46px]")}>LIVE</span>}
           {horizontal && <span className={cx("w-full truncate px-1 text-center text-[12px] leading-tight", active ? "font-semibold text-ink" : "text-ink-muted group-hover:text-ink")}>{c.name}</span>}
         </Link>
         </ContextMenu>

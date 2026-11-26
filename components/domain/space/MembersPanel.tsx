@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
 import { SpaceService } from "@/app/services/SpaceService";
+import { LiveService } from "@/app/services/LiveService";
 import { PersonRow } from "@/components/domain/PersonRow";
 import { ReportDialog } from "@/components/domain/ReportDialog";
 import { useAuth } from "@/components/providers/AuthProvider";
@@ -59,6 +60,7 @@ export function MembersPanel({ slug, subSlug, group }: { slug: string; subSlug?:
   const [timingOut, setTimingOut] = useState<{ m: MemberDTO; lifting: boolean } | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   // "are you sure?" for what changes someone's standing with one click
+  const [passing, setPassing] = useState<MemberDTO | null>(null);
   const [asking, setAsking] = useState<{ title: string; description: string; label: string; danger?: boolean; run: () => Promise<void> } | null>(null);
   const [postBanning, setPostBanning] = useState<MemberDTO | null>(null);
   const opened = openId ? (items.find((x) => x.user.id === openId) ?? null) : null;
@@ -231,6 +233,7 @@ export function MembersPanel({ slug, subSlug, group }: { slug: string; subSlug?:
                 opened.canChangeRole && opened.role !== "owner" && option(opened.role === "admin" ? "Make member" : "Make admin", "shield", () => swap(() => setAsking(opened.role === "admin" ? { title: `Make ${opened.user.displayName} a member?`, description: "They'll stop being an admin here.", label: "Make member", run: () => changeRole(opened, "member") } : { title: `Make ${opened.user.displayName} an admin?`, description: "They'll be able to manage members, channels and events here.", label: "Make admin", danger: false, run: () => changeRole(opened, "admin") })), busyId === opened.user.id, false, opened.role === "admin" ? "They stop running things here" : "They can help run everything"),
                 opened.canEditRoles && option("Roles", "shield", () => swap(() => setEditingRoles(opened)), false, false, "Give or take away roles"),
                 opened.canEditMod && option("Title and powers", "shield", () => swap(() => setNamingMod(opened)), false, false, "What they can do in this group"),
+                opened.canLivePass && option(opened.livePassUntil ? "Stop them going live" : "Let them go live", "live", () => swap(() => setPassing(opened)), false, false, opened.livePassUntil ? `Can go live until ${new Date(opened.livePassUntil).toLocaleString("en-GB", { weekday: "short", hour: "numeric", minute: "2-digit" })}` : "For a few hours, a day or a week"),
               ])}
               {/* gentle first, strongest last */}
               {section("Take action", [
@@ -244,6 +247,7 @@ export function MembersPanel({ slug, subSlug, group }: { slug: string; subSlug?:
           </div>
         </Modal>
       )}
+      {passing && <LivePassModal slug={slug} m={passing} onClose={() => setPassing(null)} onDone={() => (setPassing(null), void reload())} />}
       {postBanning && (
         <PostBanModal
           slug={slug}
@@ -337,5 +341,35 @@ export function MembersPanel({ slug, subSlug, group }: { slug: string; subSlug?:
       />
       {reporting && <ReportDialog open onClose={() => setReporting(null)} targetType="user" targetId={reporting.user.id} subject={`@${reporting.user.handle}`} />}
     </div>
+  );
+}
+
+/** Let a member go live here for a while (or stop it): they're told. */
+function LivePassModal({ slug, m, onClose, onDone }: { slug: string; m: MemberDTO; onClose: () => void; onDone: () => void }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState<number | null>(null);
+  const run = async (hours: number) => {
+    setBusy(hours);
+    try {
+      await LiveService.pass(slug, m.user.id, hours);
+      toast(hours ? `${m.user.displayName} can go live` : `${m.user.displayName} can't go live now`, "success");
+      onDone();
+    } catch (e) {
+      toast(errorMessage(e), "error");
+      setBusy(null);
+    }
+  };
+  return (
+    <Modal open onClose={onClose} title={m.livePassUntil ? `Stop ${m.user.displayName} going live?` : `Let ${m.user.displayName} go live`} description={m.livePassUntil ? "They won't be able to start a stream here." : "One stream at a time in the community. They're told."} size="sm">
+      <div className="space-y-2">
+        {m.livePassUntil ? (
+          <Button variant="danger" className="w-full" loading={busy === 0} onClick={() => void run(0)}>Stop it</Button>
+        ) : (
+          ([[3, "For 3 hours"], [24, "For a day"], [24 * 7, "For a week"], [24 * 30, "For a month"]] as const).map(([h, label]) => (
+            <Button key={h} className="w-full" loading={busy === h} disabled={busy !== null} onClick={() => void run(h)}>{label}</Button>
+          ))
+        )}
+      </div>
+    </Modal>
   );
 }

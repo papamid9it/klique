@@ -1,5 +1,6 @@
 "use client";
 
+import { useLinksOff } from "./linksOff";
 import { SelectTick } from "./SelectBar";
 import { ProfileTrigger } from "@/components/providers/ProfileCardProvider";
 import { memo, useState, type ReactNode } from "react";
@@ -48,13 +49,16 @@ function Body({ text, mentions, meId, mass }: { text: string; mentions: MentionD
 }
 
 function PlainBody({ text, mentions, meId, mass }: { text: string; mentions: MentionDTO[]; meId: string | null; mass?: "everyone" | "here" | null }) {
+  const linksOff = useLinksOff();
   const byHandle = new Map(mentions.map((m) => [m.handle.toLowerCase(), m]));
   const out: ReactNode[] = [];
   let last = 0;
   for (const m of text.matchAll(TOKEN_RX)) {
     const at = m.index ?? 0;
     if (at > last) out.push(text.slice(last, at));
-    if (m[1]) {
+    if (m[1] && linksOff) {
+      out.push(m[1]); // a live stream's chat: a link is just text
+    } else if (m[1]) {
       const url = m[1].replace(/[.,!?;:)\]]+$/, "");
       out.push(
         <a key={at} href={url} target="_blank" rel="noopener noreferrer nofollow ugc" className="text-accent-text underline underline-offset-2 hover:opacity-80">

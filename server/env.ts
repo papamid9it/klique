@@ -103,6 +103,18 @@ export function googleConfig(): { clientId: string; clientSecret: string } | nul
 }
 
 /**
+ * Twitch, for "Connect Twitch" and going live (dev.twitch.tv → Your Console → Applications). The redirect URL to
+ * register there: <site>/api/twitch/callback. TWITCH_EVENTSUB_SECRET signs Twitch's "they went live" messages to us
+ * (10-100 characters; any random text).
+ */
+export function twitchConfig(): { clientId: string; clientSecret: string; eventsubSecret: string } | null {
+  const clientId = process.env.TWITCH_CLIENT_ID?.trim();
+  const clientSecret = process.env.TWITCH_CLIENT_SECRET?.trim();
+  const eventsubSecret = process.env.TWITCH_EVENTSUB_SECRET?.trim();
+  return clientId && clientSecret && eventsubSecret && eventsubSecret.length >= 10 ? { clientId, clientSecret, eventsubSecret } : null;
+}
+
+/**
  * Where the mobile app may be sent back to after "Continue with Google". Only these exact addresses are
  * accepted (never anything from the request), so a login code can't be steered to someone else's app.
  * Add Expo Go's address (shown by `expo start`, like exp://192.168.1.5:8081/--/auth) while developing.

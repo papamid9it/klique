@@ -101,6 +101,17 @@ export async function createReport(viewer: IUser, input: z.infer<typeof reportSc
       communityId = k.communityId;
       break;
     }
+    case "live": {
+      // a live stream: anyone who can see inside its community (not its own host)
+      const { LiveStream } = await import("../models/Live");
+      const s = await LiveStream.findById(input.targetId).select("communityId hostId").lean<{ communityId: Types.ObjectId; hostId: Types.ObjectId }>();
+      if (!s) throw notFound();
+      const space = await loadSpace(s.communityId, null);
+      if (!(await spaceAccess(space, viewer)).canView) throw notFound();
+      if (sid(s.hostId) === sid(viewer._id)) throw badRequest("You can't report your own stream.");
+      communityId = s.communityId;
+      break;
+    }
     case "event": {
       const event = await Event.findById(input.targetId).lean<IEvent>();
       if (!event || !(await canViewEvent(event, viewer))) throw notFound();
