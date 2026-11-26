@@ -180,7 +180,7 @@ function GiveModal({ c, cause: start, onClose }: { c: CommunityDTO; cause: Cause
           </div>
           <p id="cause-note" className="mt-1.5 flex flex-wrap justify-between gap-2 text-[12.5px] text-ink-muted">
             <span>{balance === null ? "" : `Your balance: ${hype(balance)} Hype`}</span>
-            <span>{bad ?? `The community gets ${hype(Math.floor((n * (100 - fee)) / 100))} of it (${100 - fee}%)`}</span>
+            <span>{bad ?? (info.data?.toKlique ? "All of it supports Klique" : `The community gets ${hype(Math.floor((n * (100 - fee)) / 100))} of it (${100 - fee}%)`)}</span>
           </p>
         </div>
         <label className="flex items-center gap-2 text-[13px]">
@@ -190,7 +190,7 @@ function GiveModal({ c, cause: start, onClose }: { c: CommunityDTO; cause: Cause
         <label className="flex items-start gap-2 text-[13px]">
           <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} className="mt-0.5 size-4 accent-[var(--color-accent-text)]" />
           <span>
-            I understand this is a gift to the community, not a purchase: it can&apos;t be refunded. Klique keeps {fee}%.{" "}
+            {info.data?.toKlique ? "I understand this is a gift to support Klique, not a purchase: it can't be refunded." : `I understand this is a gift to the community, not a purchase: it can't be refunded. Klique keeps ${fee}%.`}{" "}
             <Link href="/terms/payments#causes" className="underline">Terms</Link>
           </span>
         </label>
@@ -231,7 +231,7 @@ export function CausesSettings({ c }: { c: CommunityDTO }) {
   return (
     <div className="space-y-4">
       <p className="text-[13.5px] leading-relaxed text-ink-muted">
-        Members give Hype to what you&apos;re raising for. Your community gets {100 - data.feePercent}% of it, paid to your bank with your other payouts. Up to {data.max} causes; the main one shows in your community&apos;s left panel and beside its posts. Gifts can&apos;t be refunded.
+        {data.toKlique ? "Klique HQ's causes support Klique itself: everything given is Klique's, with nothing to pay out." : `Members give Hype to what you're raising for. Your community gets ${100 - data.feePercent}% of it, paid to your bank with your other payouts.`} Up to {data.max} causes; the main one shows in the community&apos;s left panel and beside its posts. Gifts can&apos;t be refunded.
       </p>
       {!data.unlocked ? (
         <EmptyState icon="lock" title="Not open yet">

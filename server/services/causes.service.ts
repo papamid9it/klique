@@ -46,8 +46,10 @@ export const causeDto = (b: IDonationButton): CauseDTO => ({
 /** Big and old enough for causes (site admins and Klique HQ aside). */
 const unlockedFor = (c: Pick<ICommunity, "memberCount" | "createdAt">, cfg: MoneyConfig) => (c.memberCount ?? 0) >= cfg.causeMinMembers && Date.now() - +c.createdAt >= cfg.causeMinDays * DAY_MS;
 
-/** Not here: Klique HQ, explicit communities and groups have no causes. */
-const noCauses = (c: ICommunity) => isKlique(c) || !!c.explicit;
+/** Not here: explicit communities have no causes (app stores and payment companies don't allow money for them). */
+const noCauses = (c: ICommunity) => !!c.explicit;
+/** Klique HQ's causes support Klique itself: all of what's given is Klique's (no split, no payout). */
+const toKlique = (c: ICommunity) => isKlique(c);
 
 /** The running causes, main first (an older community with none marked main: its first). */
 async function running(communityId: Types.ObjectId): Promise<IDonationButton[]> {
@@ -67,7 +69,7 @@ export async function listCauses(viewer: IUser | null, slug: string): Promise<Ca
   const { space, access } = await resolveSpaceFor(viewer, slug);
   const cfg = await getMoneyConfig();
   const manage = !!viewer && (access.canManage || isSiteAdmin(viewer)) && !noCauses(space.community);
-  const base = { canManage: manage, unlocked: !noCauses(space.community) && (unlockedFor(space.community, cfg) || (!!viewer && isSiteAdmin(viewer))), unlock: { members: cfg.causeMinMembers, days: cfg.causeMinDays }, feePercent: cfg.causeFeePercent, max: MAX_CAUSES };
+  const base = { canManage: manage, unlocked: !noCauses(space.community) && (toKlique(space.community) || unlockedFor(space.community, cfg) || (!!viewer && isSiteAdmin(viewer))), unlock: { members: cfg.causeMinMembers, days: cfg.causeMinDays }, feePercent: toKlique(space.community) ? 100 : cfg.causeFeePercent, max: MAX_CAUSES, toKlique: toKlique(space.community) };
   const balance = viewer ? ((await User.findById(viewer._id).select("giftHype").lean<Pick<IUser, "giftHype">>())?.giftHype ?? 0) : null;
   if (space.sub || !access.canView || noCauses(space.community)) return { ...base, items: [], balance };
   return { ...base, items: (await running(space.community._id)).map(causeDto), balance };
@@ -77,7 +79,6 @@ async function managed(viewer: IUser, slug: string) {
   const { space, access } = await resolveSpaceFor(viewer, slug);
   if (space.sub) throw notFound("Causes live in the community, not in a group.");
   if (!access.canManage && !isSiteAdmin(viewer)) throw forbidden("Only this community's owner and admins can do that.");
-  if (isKlique(space.community)) throw forbidden("Klique itself doesn't have causes.");
   if (space.community.explicit) throw forbidden("Communities with explicit content can't have causes.");
   return space.community;
 }
@@ -85,7 +86,7 @@ async function managed(viewer: IUser, slug: string) {
 export async function saveCause(viewer: IUser, slug: string, input: z.infer<typeof causeSchema>, id?: string): Promise<CauseDTO> {
   const community = await managed(viewer, slug);
   const cfg = await getMoneyConfig();
-  if (!id && !unlockedFor(community, cfg) && !isSiteAdmin(viewer)) throw forbidden(`Causes open once your community has ${cfg.causeMinMembers.toLocaleString("en-NG")} members and is ${cfg.causeMinDays} days old.`);
+  if (!id && !toKlique(community) && !unlockedFor(community, cfg) && !isSiteAdmin(viewer)) throw forbidden(`Causes open once your community has ${cfg.causeMinMembers.toLocaleString("en-NG")} members and is ${cfg.causeMinDays} days old.`);
   const set = { label: input.label, ...(input.verb ? { verb: input.verb[0].toUpperCase() + input.verb.slice(1).toLowerCase() } : {}), title: input.title, description: input.description ?? "", ...(input.imageUrl !== undefined ? { imageUrl: input.imageUrl } : {}), goalHype: input.goalHype ?? null, active: true };
   let row: IDonationButton | null;
   if (id) {
@@ -141,11 +142,13 @@ export async function giveToCause(viewer: IUser, slug: string, id: string, input
 
   const cfg = await getMoneyConfig();
   const amount = Math.max(1, Math.round(input.hype * cfg.causeNairaPerHype));
-  const fee = Math.min(amount, feeOf(amount, cfg.causeFeePercent));
+  // Klique HQ's causes support Klique itself: all of it is Klique's, so nothing builds up to pay out
+  const feePercent = toKlique(community) ? 100 : cfg.causeFeePercent;
+  const fee = Math.min(amount, feeOf(amount, feePercent));
   let row: IPayment;
   try {
     row = (
-      await Payment.create({ kind: "donation", communityId: community._id, buttonId: cause._id, userId: viewer._id, amount, feePercent: cfg.causeFeePercent, fee, net: amount - fee, hype: input.hype, message: input.anonymous ? "anonymous" : "", reference, status: "pending" })
+      await Payment.create({ kind: "donation", communityId: community._id, buttonId: cause._id, userId: viewer._id, amount, feePercent, fee, net: amount - fee, hype: input.hype, message: input.anonymous ? "anonymous" : "", reference, status: "pending" })
     ).toObject() as IPayment;
   } catch (e) {
     if ((e as { code?: number })?.code === 11000) throw conflict("That gift is already on its way.");
@@ -165,7 +168,7 @@ export async function giveToCause(viewer: IUser, slug: string, id: string, input
   const staff = await Membership.find({ communityId: community._id, subcommunityId: null, status: "active", role: { $in: ["owner", "admin"] } }).select("userId").lean<{ userId: Types.ObjectId }[]>();
   notify(
     staff.map((m) => m.userId),
-    { title: `${who} gave ${input.hype.toLocaleString("en-NG")} Hype to ${cause.title}`, body: `${naira(amount - fee)} for ${community.name}, after Klique's share.`, data: { href: `/communities/${community.slug}?view=dashboard&d=money` } },
+    { title: `${who} gave ${input.hype.toLocaleString("en-NG")} Hype to ${cause.title}`, body: toKlique(community) ? "Thank you from the Klique Team." : `${naira(amount - fee)} for ${community.name}, after Klique's share.`, data: { href: `/communities/${community.slug}?view=dashboard&d=money` } },
     { ...(input.anonymous ? {} : { actorId: viewer._id }), category: "admin", groupKey: `cause:${sid(cause._id)}`, many: (n) => `${n} gifts to ${cause.title}`, ref: `money:${sid(community._id)}` },
   );
   notify([viewer._id], { title: `Thank you for supporting ${community.name}`, body: `${input.hype.toLocaleString("en-NG")} Hype to ${cause.title}.`, data: { href: `/communities/${community.slug}` } }, { category: "community", ref: `receipt:${reference}` });

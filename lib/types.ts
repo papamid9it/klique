@@ -1385,6 +1385,8 @@ export interface CausesDTO {
   max: number;
   /** the viewer's Hype (signed in) */
   balance: number | null;
+  /** Klique HQ: what's given supports Klique itself (all of it; nothing to pay out) */
+  toKlique?: boolean;
 }
 
 export interface DonationButtonDTO {

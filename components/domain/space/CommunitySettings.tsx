@@ -134,7 +134,8 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
       ],
     },
     // Klique itself has no causes (and explicit communities no money); causes are given in Hype, paid out to the bank
-    ...(c.official || c.explicit || !admin ? [] : [{ title: "Money", items: [{ id: "donations", label: "Causes", icon: "heart" as const, hint: "What members can give Hype to" }, { id: "payouts", label: "Payouts", icon: "coin" as const, hint: "Where the money goes" }] }]),
+    // (Klique HQ has causes too, for Klique itself: no payouts there)
+    ...(c.explicit || !admin ? [] : [{ title: "Money", items: [{ id: "donations", label: "Causes", icon: "heart" as const, hint: "What members can give Hype to" }, ...(c.official ? [] : [{ id: "payouts", label: "Payouts", icon: "coin" as const, hint: "Where the money goes" }])] }]),
     {
       title: "Extras",
       items: [
@@ -261,7 +262,7 @@ export function CommunitySettings({ c, tab, onTab, onClose, onChanged }: { c: Co
         </SettingsBlock>
       )}
 
-      {active === "donations" && !c.official && <CausesSettings c={c} />}
+      {active === "donations" && <CausesSettings c={c} />}
       {active === "payouts" && !c.official && <PayoutsSettings slug={c.slug} />}
 
       {active === "members" && isOwner && (
