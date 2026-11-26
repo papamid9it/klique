@@ -33,12 +33,13 @@ const PREVIEW_BOT = /bot|crawler|spider|facebookexternalhit|whatsapp|slack|disco
 const GO_IN = "klique_in";
 function frontDoor(req: NextRequest): NextResponse | null {
   if (req.nextUrl.pathname !== "/") return null;
-  // "Open Klique": remember it (a year) and go in, with a clean address
+  // "Open Klique": remember it (this visit) and go in, with a clean address
   if (req.nextUrl.searchParams.get("app") === "1") {
     const to = req.nextUrl.clone();
     to.searchParams.delete("app");
     const res = NextResponse.redirect(to);
-    res.cookies.set(GO_IN, "1", { path: "/", maxAge: 60 * 60 * 24 * 365, sameSite: "lax" });
+    // only for this visit (until the browser closes): signed out, the next visit starts at the landing page again
+    res.cookies.set(GO_IN, "1", { path: "/", sameSite: "lax" });
     return res;
   }
   if (req.nextUrl.search) return null;

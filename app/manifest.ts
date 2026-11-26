@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { ANDROID_APP_URL, ANDROID_PACKAGE } from "@/lib/constants";
 
 /**
  * The web app manifest, so Chrome, Edge and phones can install Klique from the browser (the download page offers it).
@@ -13,6 +14,9 @@ export default function manifest(): MetadataRoute.Manifest {
     start_url: "/",
     scope: "/",
     display: "standalone",
+    // on Android phones the real app is the one to get: Chrome doesn't offer "Install Klique" (the website) there
+    related_applications: [{ platform: "play", url: ANDROID_APP_URL, id: ANDROID_PACKAGE }],
+    prefer_related_applications: true,
     background_color: "#0a0a0a",
     theme_color: "#0a0a0a",
     icons: [
