@@ -69,9 +69,22 @@ interface VideoHandle {
  * or pauses (with a quick icon), the corner button turns sound on or off for every video this visit, and a thin
  * line shows how far it's got. With autoplay turned off it waits for a tap; with data saver on nothing even loads.
  */
+const clock = (sec: number) => {
+  const s = Math.max(0, Math.floor(sec));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const r = String(s % 60).padStart(2, "0");
+  return h ? `${h}:${String(m).padStart(2, "0")}:${r}` : `${m}:${r}`;
+};
+
 const FeedVideo = forwardRef<VideoHandle, { url: string; poster: string | null; active: boolean; withSound?: boolean; cover?: boolean; onShape: (w: number, h: number) => void; onReady: () => void }>(function FeedVideo({ url, poster, active, withSound, cover, onShape, onReady }, ref) {
   const v = useRef<HTMLVideoElement>(null);
+  // the opened post's line (how far it's played, drag to move) and its time: set straight on the page as it plays, so
+  // a playing video never re-renders anything
   const bar = useRef<HTMLSpanElement>(null);
+  const time = useRef<HTMLSpanElement>(null);
+  const track = useRef<HTMLSpanElement>(null);
+  const dragging = useRef(false);
   const saver = useDataSaver().on;
   const autoplay = useAutoplay();
   const still = useMotion().reduce;
@@ -172,6 +185,18 @@ const FeedVideo = forwardRef<VideoHandle, { url: string; poster: string | null; 
   };
   useImperativeHandle(ref, () => ({ toggle }));
 
+  // the line: where the pointer is along it; the picture follows while dragging, and it plays on from there
+  const seekTo = (x: number, done: boolean) => {
+    const el = v.current;
+    const box = track.current?.getBoundingClientRect();
+    if (!el?.duration || !box) return;
+    const f = Math.min(1, Math.max(0, (x - box.left) / box.width));
+    el.currentTime = f * el.duration;
+    if (bar.current) bar.current.style.transform = `scaleX(${f})`;
+    if (time.current) time.current.textContent = clock(f * el.duration);
+    if (done && el.paused && !held) play();
+  };
+
   useEffect(() => {
     if (!flash) return;
     const t = setTimeout(() => setFlash(null), 650);
@@ -194,8 +219,12 @@ const FeedVideo = forwardRef<VideoHandle, { url: string; poster: string | null; 
         onPause={() => setPaused(true)}
         onTimeUpdate={(e) => {
           const el = e.currentTarget;
-          if (bar.current && el.duration) bar.current.style.transform = `scaleX(${el.currentTime / el.duration})`;
+          if (!withSound || dragging.current || !el.duration) return;
+          if (bar.current) bar.current.style.transform = `scaleX(${el.currentTime / el.duration})`;
+          track.current?.setAttribute("aria-valuenow", String(Math.round((el.currentTime / el.duration) * 100)));
+          if (time.current) time.current.textContent = clock(el.currentTime < 0.5 ? el.duration : el.currentTime);
         }}
+        onDurationChange={(e) => withSound && time.current && e.currentTarget.duration && (time.current.textContent = clock(e.currentTarget.duration))}
         className={cx("pointer-events-none relative size-full", cover ? "object-cover" : "object-contain")}
         aria-label="Video"
       >
@@ -229,9 +258,47 @@ const FeedVideo = forwardRef<VideoHandle, { url: string; poster: string | null; 
       >
         <Icon name={sound ? "volume" : "volumeoff"} size={15} />
       </button>
-      <span className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 bg-white/15" aria-hidden="true">
-        <span ref={bar} className="block h-full origin-left scale-x-0 bg-white/80" />
-      </span>
+      {/* the opened post only (not the feed): a line of how far it's played and the time, left of the sound button;
+          drag along it (or click a spot) to go back or forward */}
+      {withSound && (
+        <span className="absolute bottom-3 left-3 right-14 flex h-8 items-center gap-3 rounded-full bg-black/45 px-3 backdrop-blur">
+          <span
+            ref={track}
+            role="slider"
+            tabIndex={0}
+            aria-label="Video position"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={0}
+            className="group/seek relative flex h-full flex-1 cursor-pointer touch-none items-center"
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              e.currentTarget.setPointerCapture(e.pointerId);
+              dragging.current = true;
+              seekTo(e.clientX, false);
+            }}
+            onPointerMove={(e) => dragging.current && seekTo(e.clientX, false)}
+            onPointerUp={(e) => {
+              if (!dragging.current) return;
+              dragging.current = false;
+              seekTo(e.clientX, true);
+            }}
+            onPointerCancel={() => void (dragging.current = false)}
+            onKeyDown={(e) => {
+              const el = v.current;
+              if (!el?.duration || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
+              e.preventDefault();
+              el.currentTime = Math.min(el.duration, Math.max(0, el.currentTime + (e.key === "ArrowRight" ? 5 : -5)));
+            }}
+          >
+            <span className="block h-[3px] w-full overflow-hidden rounded-full bg-white/30 transition-[height] group-hover/seek:h-[5px]">
+              <span ref={bar} className="block h-full origin-left scale-x-0 bg-white" />
+            </span>
+          </span>
+          <span ref={time} className="min-w-9 text-right text-[12.5px] font-semibold text-white tabular-nums" />
+        </span>
+      )}
     </>
   );
 });
