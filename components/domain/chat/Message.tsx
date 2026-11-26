@@ -37,7 +37,7 @@ export function ChatBody({ onAccent, ...props }: { text: string; mentions: Menti
   return <span className={onAccent ? "[--tag:var(--tag-on-accent)]" : undefined}><Body {...props} /></span>;
 }
 
-function Body({ text, mentions, meId, mass }: { text: string; mentions: MentionDTO[]; meId: string | null; mass?: "everyone" | "here" | null }) {
+function Body({ text, mentions, meId }: { text: string; mentions: MentionDTO[]; meId: string | null; /** whether it pinged (the colour shows either way) */ mass?: "everyone" | "here" | null }) {
   // only emoji (a few): all of them big, custom and normal, like Discord
   if (isEmojiOnly(text))
     return (
@@ -45,10 +45,10 @@ function Body({ text, mentions, meId, mass }: { text: string; mentions: MentionD
         <EmojiText text={text} jumbo />
       </span>
     );
-  return <Formatted text={text} plain={(t) => <PlainBody text={t} mentions={mentions} meId={meId} mass={mass} />} />;
+  return <Formatted text={text} plain={(t) => <PlainBody text={t} mentions={mentions} meId={meId} />} />;
 }
 
-function PlainBody({ text, mentions, meId, mass }: { text: string; mentions: MentionDTO[]; meId: string | null; mass?: "everyone" | "here" | null }) {
+function PlainBody({ text, mentions, meId }: { text: string; mentions: MentionDTO[]; meId: string | null }) {
   const linksOff = useLinksOff();
   const byHandle = new Map(mentions.map((m) => [m.handle.toLowerCase(), m]));
   const out: ReactNode[] = [];
@@ -69,8 +69,8 @@ function PlainBody({ text, mentions, meId, mass }: { text: string; mentions: Men
     } else {
       const who = byHandle.get(m[2].toLowerCase());
       const word = m[2].toLowerCase();
-      // a mass mention that pinged (@everyone/@all, @here/@channel): highlighted like Discord's
-      if (mass && (MASS_WORDS[word] === "everyone" || (MASS_WORDS[word] === "here" && mass === "here"))) {
+      // @everyone/@all and @here/@channel: always coloured, like Discord's (whether or not it notified anyone)
+      if (MASS_WORDS[word]) {
         out.push(
           <span key={at} className="rounded-md bg-accent/15 px-1 py-px font-semibold text-accent-text">
             @{m[2]}
