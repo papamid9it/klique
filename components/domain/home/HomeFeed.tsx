@@ -18,7 +18,8 @@ import { cx } from "@/components/ui/cx";
 import { RowSkeleton, Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/States";
 import { eventPhoto } from "@/lib/fake";
-import { compactCount, dateChip, formatTime } from "@/lib/format";
+import { compactCount, dateChip, formatPrice, formatTime } from "@/lib/format";
+import { Avatar } from "@/components/ui/Avatar";
 import { useEventActions } from "@/lib/hooks/useEventActions";
 import { KliquePhotoCard } from "@/components/domain/crews/parts";
 import type { CommunityCardDTO, CrewCardDTO, DiscoverDTO, EventDTO, FeedPostDTO, HomeFeedItem, UserBrief } from "@/lib/types";
@@ -93,47 +94,59 @@ function EventTile({ e, onChange }: { e: EventDTO; onChange: (e: EventDTO) => vo
 }
 
 /** One event, full width, between posts in the feed: picture, date, title, where, how many are going, Going. */
+/**
+ * An event in the Home feed, now and then between posts (like an ad, marked "Event for you"): the flyer with its date,
+ * place and price, friends going (or how many), Save and I'm in.
+ */
 export function EventFeedCard({ e, onChange }: { e: EventDTO; onChange: (e: EventDTO) => void }) {
-  const d = dateChip(e.startsAt, e.timeZone);
-  const { busy, rsvp } = useEventActions(e, onChange);
+  const { busy, rsvp, toggleSave } = useEventActions(e, onChange);
   const going = e.viewer.rsvp === "going";
+  const friends = e.friendsGoing;
+  const when = new Date(e.startsAt).toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", ...(e.timeZone ? { timeZone: e.timeZone } : {}) }).toUpperCase().replace(",", " ·");
+  const place = e.streamed ? "Live on Klique" : e.online ? "Online" : [e.neighborhood || e.venue, e.city ? e.city.charAt(0).toUpperCase() + e.city.slice(1) : ""].filter(Boolean).join(", ");
   return (
     <article className="overflow-hidden rounded-card border border-line bg-surface">
-      <p className="eyebrow px-4 pt-3 pb-2">Event for you</p>
+      {/* marked, like an ad: a calendar tile, the title, "Event for you" */}
+      <Link href={`/events/${e.id}`} className="flex items-center gap-2.5 px-4 py-3">
+        <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-control bg-raised"><Icon name="calendar" size={17} /></span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[15px] font-semibold">{e.title}</span>
+          <span className="block truncate text-[13px] text-ink-muted">Event for you{e.community ? ` · ${e.community.name}` : ""}</span>
+        </span>
+      </Link>
       <Link href={`/events/${e.id}`} className="block">
-        <Cover src={eventPhoto(e.id, e.coverImage)} seed={e.id} interest={e.interest} className="aspect-[16/9]">
-          <span className="absolute top-2 left-2 flex flex-col items-center rounded-control bg-black/70 px-2.5 py-1.5 leading-none text-white backdrop-blur">
-            <span className="font-mono text-[12px] uppercase">{d.month}</span>
-            <span className="text-[20px] font-semibold">{d.day}</span>
-          </span>
+        <Cover src={eventPhoto(e.id, e.coverImage)} seed={e.id} interest={e.interest} className="aspect-[4/3]">
+          <span className="absolute top-2.5 left-2.5 rounded-control bg-black/65 px-2.5 py-1 text-[12px] font-bold tracking-wide text-white">{when}</span>
         </Cover>
       </Link>
-      <div className="flex items-center gap-3 p-4">
-        <div className="min-w-0 flex-1">
-          <Link href={`/events/${e.id}`} className="line-clamp-2 text-[17px] leading-snug font-semibold hover:underline">
-            {e.title}
-          </Link>
-          <p className="mt-1 truncate font-mono text-[12px] text-ink-muted">
-            {formatTime(e.startsAt, e.timeZone)} · {e.online ? "Online" : e.venue} · {compactCount(e.goingCount)} going
-          </p>
-        </div>
-        {e.viewer.isHost ? (
-          <span className="text-[12px] font-semibold text-ink-muted">Hosting</span>
-        ) : e.viewer.mustJoin && !e.viewer.rsvp ? (
-          <Button size="sm" href={`/events/${e.id}`}>
-            View
-          </Button>
-        ) : (
-          <Button size="sm" variant={going ? "primary" : "secondary"} loading={busy === "rsvp"} disabled={e.isFull && !going} onClick={() => void rsvp("going")} aria-pressed={going}>
-            {going ? (
+      <div className="space-y-3 p-4">
+        <p className="flex items-center gap-1.5 truncate text-[14px] text-ink-muted">
+          <Icon name="pin" size={14} /> {place}{e.priceNaira !== null ? ` · ${e.priceNaira === 0 ? "Free" : formatPrice(e.priceNaira, e.currency)}` : ""}
+        </p>
+        <div className="flex items-center gap-2.5">
+          <span className="flex min-w-0 flex-1 items-center gap-2">
+            {friends?.count ? (
               <>
-                <Icon name="check" size={13} /> Going
+                <span className="flex">{friends.people.slice(0, 3).map((p, i) => <span key={p.id} className={i ? "-ml-2" : ""}><Avatar name={p.displayName} src={p.avatarUrl} size={22} className="ring-2 ring-surface" /></span>)}</span>
+                <span className="truncate text-[13px] text-ink-muted"><b className="text-ink">{friends.people[0]?.displayName ?? "Friends"}{friends.count > 1 ? ` + ${friends.count - 1} ${friends.count === 2 ? "friend" : "friends"}` : ""}</b> going</span>
               </>
             ) : (
-              "Going?"
+              <span className="truncate text-[13px] text-ink-muted"><b className="text-ink">{compactCount(e.goingCount)}</b> going</span>
             )}
+          </span>
+          <Button size="sm" onClick={() => void toggleSave()} aria-pressed={e.viewer.saved} aria-label={e.viewer.saved ? "Remove from saved" : "Save event"}>
+            <Icon name="bookmark" size={15} className={e.viewer.saved ? "fill-current" : ""} />
           </Button>
-        )}
+          {e.viewer.isHost ? (
+            <Button size="sm" href={`/events/${e.id}`}>Hosting</Button>
+          ) : e.viewer.mustJoin && !e.viewer.rsvp ? (
+            <Button size="sm" href={`/events/${e.id}`}>View</Button>
+          ) : (
+            <Button size="sm" variant={going ? "secondary" : "primary"} loading={busy === "rsvp"} disabled={e.isFull && !going} onClick={() => void rsvp("going")} aria-pressed={going}>
+              {going ? <><Icon name="check" size={13} /> Going</> : e.isFull ? "Full" : "I'm in"}
+            </Button>
+          )}
+        </div>
       </div>
     </article>
   );

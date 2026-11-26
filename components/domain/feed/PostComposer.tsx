@@ -11,12 +11,11 @@ import { UploadService } from "@/app/services/UploadService";
 import { MOCK_IMAGES, MOCK_VIDEOS } from "@/components/domain/topics/TopicMedia";
 import { useToast } from "@/components/providers/ToastProvider";
 import { Button } from "@/components/ui/Button";
-import { TextArea, TextField } from "@/components/ui/Field";
+import { TextArea } from "@/components/ui/Field";
 import { Icon } from "@/components/ui/Icon";
 import { Modal } from "@/components/ui/Modal";
 import { cx } from "@/components/ui/cx";
-import { FEED_TITLE_MAX, TEXT_BACKGROUNDS, TEXT_CARD_MAX, textStyleOf, type TextBackgroundId } from "@/lib/feedText";
-import { LongPost, TextCard } from "./TextPost";
+import { FEED_TITLE_MAX } from "@/lib/feedText";
 import { cdn, videoPoster } from "@/lib/cdn";
 import { LIMITS, POST_FRAMES, postFrame } from "@/lib/constants";
 import { useUploadStatus } from "@/lib/hooks/useUploads";
@@ -32,15 +31,15 @@ import { useTagSuggest } from "./TagSuggest";
 export function PostComposer({ slug, communityName, explicitAllowed, onClose, onPosted }: { slug: string; communityName: string; explicitAllowed?: boolean; onClose: () => void; onPosted: (p: FeedPostDTO) => void }) {
   const toast = useToast();
   const status = useUploadStatus();
-  const [mode, setMode] = useState<"media" | "text">("media");
+  const [mode, setMode] = useState<"media" | "text">("text");
   const [caption, setCaption] = useState("");
   // @people, @communities and #tags as you type the caption
   const captionRef = useRef<HTMLTextAreaElement | null>(null);
   const suggest = useTagSuggest(captionRef, caption, setCaption);
   const [title, setTitle] = useState("");
-  const [textBg, setTextBg] = useState<TextBackgroundId>("sunset");
   const [explicit, setExplicit] = useState(false);
   const [spoiler, setSpoiler] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [media, setMedia] = useState<TopicMediaDTO[]>([]);
   // pictures or a video: first choose them, then a second page to see how it looks and finish it
   const [step, setStep] = useState<1 | 2>(1);
@@ -93,7 +92,7 @@ export function PostComposer({ slug, communityName, explicitAllowed, onClose, on
     sending.current = true;
     setBusy(true);
     try {
-      const res = await FeedService.create(slug, { ...(mode === "media" ? { caption: caption.trim(), media: media.map((m, i) => (i === 0 && frame ? { ...m, frame } : m)), plainBackdrop, mediaFit } : { caption: caption.trim(), title: title.trim(), textBg, media: [] }), ...(explicitAllowed ? { explicit } : {}), spoiler, clientKey });
+      const res = await FeedService.create(slug, { title: title.trim(), ...(mode === "media" ? { caption: caption.trim(), media: media.map((m, i) => (i === 0 && frame ? { ...m, frame } : m)), plainBackdrop, mediaFit } : { caption: caption.trim(), media: [] }), ...(explicitAllowed ? { explicit } : {}), spoiler, clientKey });
       toast("Posted", "success");
       onPosted(res.data);
     } catch (err) {
@@ -105,24 +104,30 @@ export function PostComposer({ slug, communityName, explicitAllowed, onClose, on
   }
 
   return (
-    <Modal open onClose={onClose} size="lg" title={mode === "media" && step === 2 ? "Preview and finish" : "New post"} description={mode === "media" ? `Step ${step} of 2 · ${step === 1 ? "choose your pictures or video" : `sharing with ${communityName}`}` : `Share some text with ${communityName}.`}>
+    <Modal open onClose={onClose} size="lg" title={mode === "media" && step === 2 ? "Preview and finish" : "New post"} description={`Posting to ${communityName}`}>
       <form onSubmit={submit} onKeyDown={(e) => { if (e.key === "Enter" && mode === "media" && step === 1 && (e.target as HTMLElement).tagName === "INPUT") e.preventDefault(); }} className="space-y-4">
+        {/* every post has a title (as on Reddit): it shows on top of the post everywhere */}
+        <div>
+          <label htmlFor="post-title" className="sr-only">Title</label>
+          <input id="post-title" value={title} onChange={(e) => setTitle(e.target.value.slice(0, FEED_TITLE_MAX))} maxLength={FEED_TITLE_MAX} placeholder="Title" autoFocus className="w-full border-0 bg-transparent px-0 text-[22px] font-bold text-ink placeholder:text-ink-muted/70 focus:outline-none" />
+          <p className="text-right font-mono text-[11px] text-ink-muted">{title.length}/{FEED_TITLE_MAX}</p>
+        </div>
         {step === 1 && (
-        <div role="tablist" aria-label="What to post" className="inline-flex gap-1 rounded-control bg-raised p-1">
+        <div role="tablist" aria-label="What to post" className="flex border-b border-line">
           {(
             [
-              ["media", "image", "Pictures or video"],
               ["text", "edit", "Text"],
+              ["media", "image", "Images & video"],
             ] as const
           ).map(([id, icon, label]) => (
-            <button key={id} type="button" role="tab" aria-selected={mode === id} onClick={() => setMode(id)} className={cx("inline-flex h-8 items-center gap-1.5 rounded-[9px] px-3.5 text-[13px] font-semibold transition", mode === id ? "bg-ink text-canvas" : "text-ink-muted hover:text-ink")}>
-              <Icon name={icon} size={14} /> {label}
+            <button key={id} type="button" role="tab" aria-selected={mode === id} onClick={() => setMode(id)} className={cx("-mb-px inline-flex h-10 flex-1 items-center justify-center gap-1.5 border-b-2 text-[14px] transition", mode === id ? "border-ink font-bold text-ink" : "border-transparent font-semibold text-ink-muted hover:text-ink")}>
+              <Icon name={icon} size={15} /> {label}
             </button>
           ))}
         </div>
         )}
         {mode === "text" ? (
-          <TextFields title={title} setTitle={setTitle} caption={caption} setCaption={setCaption} textBg={textBg} setTextBg={setTextBg} captionRef={captionRef} suggest={suggest} />
+          <TextFields caption={caption} setCaption={setCaption} captionRef={captionRef} suggest={suggest} />
         ) : step === 1 ? (
         <fieldset>
           <legend className="mb-1.5 text-sm font-medium">
@@ -193,8 +198,14 @@ export function PostComposer({ slug, communityName, explicitAllowed, onClose, on
           </div>
         </div>
         )}
+        {/* rarely needed options (Spoiler), out of everyone's way behind ⋯ */}
+        {(mode === "text" || step === 2) && !moreOpen && (
+          <button type="button" onClick={() => setMoreOpen(true)} aria-expanded={false} className="inline-flex items-center gap-1.5 self-start text-[13px] font-semibold text-ink-muted hover:text-ink">
+            <Icon name="more" size={16} /> More options{spoiler ? " · Spoiler" : ""}
+          </button>
+        )}
         {/* a spoiler (a film, a match): blurred until someone taps, like Reddit's */}
-        {(mode === "text" || step === 2) && (
+        {(mode === "text" || step === 2) && moreOpen && (
           <label className="flex items-start gap-2.5 rounded-control border border-line bg-raised/40 p-3 text-sm">
             <input type="checkbox" checked={spoiler} onChange={(e) => setSpoiler(e.target.checked)} className="mt-0.5 size-4 accent-[var(--accent-text)]" />
             <span>
@@ -229,7 +240,7 @@ export function PostComposer({ slug, communityName, explicitAllowed, onClose, on
               Next <Icon name="chevron-right" size={15} />
             </Button>
           ) : (
-            <Button key="share" type="submit" variant="primary" loading={busy} disabled={mode === "media" ? !media.length || uploading : !caption.trim() || (caption.trim().length > TEXT_CARD_MAX && !title.trim())}>
+            <Button key="share" type="submit" variant="primary" loading={busy} disabled={!title.trim() || (mode === "media" && (!media.length || uploading))}>
               Share
             </Button>
           )}
@@ -240,44 +251,17 @@ export function PostComposer({ slug, communityName, explicitAllowed, onClose, on
 }
 
 /** The Text tab: a title (needed past the card limit), the text, and for a card its colour, with a live preview. */
-function TextFields({ title, setTitle, caption, setCaption, textBg, setTextBg, captionRef, suggest }: { title: string; setTitle: (v: string) => void; caption: string; setCaption: (v: string) => void; textBg: TextBackgroundId; setTextBg: (v: TextBackgroundId) => void; captionRef: React.RefObject<HTMLTextAreaElement | null>; suggest: ReturnType<typeof useTagSuggest> }) {
-  const text = caption.trim();
-  const style = textStyleOf({ media: [], title, caption });
-  const needsTitle = text.length > TEXT_CARD_MAX && !title.trim();
+/** A text post's body (optional: the title, above, is required). */
+function TextFields({ caption, setCaption, captionRef, suggest }: { caption: string; setCaption: (v: string) => void; captionRef: React.RefObject<HTMLTextAreaElement | null>; suggest: ReturnType<typeof useTagSuggest> }) {
   return (
-    <div className="space-y-4">
-      <TextField label={text.length > TEXT_CARD_MAX ? "Title" : "Title (optional)"} value={title} onChange={(e) => setTitle(e.target.value)} maxLength={FEED_TITLE_MAX} placeholder="What's it about?" error={needsTitle ? "Longer posts need a title." : undefined} hint={text.length > TEXT_CARD_MAX ? undefined : `Short text with no title shows as a colour card. Add a title, or go past ${TEXT_CARD_MAX} characters, for a text post.`} />
+    <div className="space-y-2">
       <FormatButton area={captionRef} value={caption} onChange={setCaption} />
-      <TextArea ref={captionRef} label="Text" value={caption} onChange={(e) => setCaption(e.target.value)} onKeyDown={(e) => suggest.onKeyDown(e)} maxLength={LIMITS.feedCaption} counter={LIMITS.feedCaption} placeholder="Ask something, share a tip, start a conversation… @someone #tag" />
+      <TextArea ref={captionRef} label="Body text (optional)" value={caption} onChange={(e) => setCaption(e.target.value)} onKeyDown={(e) => suggest.onKeyDown(e)} maxLength={LIMITS.feedCaption} counter={LIMITS.feedCaption} placeholder="Ask something, share a tip, start a conversation… @someone #tag" />
       {suggest.panel}
-      <div className="flex flex-wrap items-start gap-4 rounded-card border border-line bg-raised/40 p-3">
-        <div className="w-36 shrink-0">
-          {style === "card" ? (
-            <TextCard post={{ caption: text || "Your text here", textBg }} className="[&_p]:text-[12px]" />
-          ) : (
-            <div className="max-h-44 overflow-hidden rounded-control border border-line bg-surface p-2.5 [&_h3]:text-[12px] [&_p]:text-[12px]">
-              <LongPost post={{ title: title.trim() || "Your title", caption: text }} clamp />
-            </div>
-          )}
-        </div>
-        <div className="min-w-0 flex-1 space-y-2">
-          <p className="font-mono text-[12px] text-ink-muted">
-            {text.length}/{TEXT_CARD_MAX} · {style === "card" ? "shows as a colour card" : "shows as a text post with a title"}
-          </p>
-          {style === "card" && (
-            <div role="radiogroup" aria-label="Card colour" className="flex flex-wrap gap-2">
-              {TEXT_BACKGROUNDS.map((b) => (
-                <button key={b.id} type="button" role="radio" aria-checked={textBg === b.id} aria-label={b.name} title={b.name} onClick={() => setTextBg(b.id)} className={cx("size-8 rounded-full border-2 transition", textBg === b.id ? "border-ink" : "border-line")} style={{ background: b.css }} />
-              ))}
-            </div>
-          )}
-          <p className="text-xs text-ink-muted">{style === "card" ? "It goes where a picture would, and opens like one." : "People see the title and the first lines, and open it to read the rest and comment."}</p>
-        </div>
-      </div>
+      <p className="text-xs text-ink-muted">People see the title and the first lines, and open it to read the rest and comment.</p>
     </div>
   );
 }
-
 
 /** The second page's preview: how it will look in reels and on Home, updating as you type. */
 function PostPreview({ media, at, onAt, caption, plain, where, onWhere, reelsOn, frame, onFrame }: { frame: number | null; onFrame: (f: number | null) => void; reelsOn: boolean; media: TopicMediaDTO[]; at: number; onAt: (i: number) => void; caption: string; plain: boolean; where: "reels" | "home"; onWhere: (w: "reels" | "home") => void }) {

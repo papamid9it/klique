@@ -32,7 +32,6 @@ import { textStyleOf } from "@/lib/feedText";
 import type { FeedPostDTO } from "@/lib/types";
 import { VerifiedCheck } from "@/components/ui/VerifiedCheck";
 import { PlanBadge } from "@/components/domain/account/PlanTab";
-import { RichText } from "./RichText";
 
 /** A post's own link: it opens over the feed you're on, and on its own page when opened directly. */
 export const postHref = (p: Pick<FeedPostDTO, "id">) => `/p/${p.id}`;
@@ -91,9 +90,7 @@ export function PostCard({ post: p, onChange, onRemoved, onOpenComments, showCom
   const [deleting, setDeleting] = useState(false);
   const [fitting, setFitting] = useState(false);
   const [reporting, setReporting] = useState(false);
-  const [more, setMore] = useState(false);
   const [joining, setJoining] = useState(false);
-  const long = p.caption.length > 180;
   const vote = useVote(p, onChange);
   // no pictures or video: a coloured card (short text) or a title and text (long), lib/feedText
   const style = textStyleOf(p);
@@ -171,18 +168,12 @@ export function PostCard({ post: p, onChange, onRemoved, onOpenComments, showCom
         <OverflowMenu items={menu} label="Post options" />
       </header>
 
-      {/* the caption leads, like a Reddit title */}
-      {!style && p.caption && (
-        <>
-          <p className={cx("mt-2.5 text-[16px] leading-snug font-semibold break-words whitespace-pre-wrap text-ink", !more && long && "line-clamp-3")}>
-            <RichText text={p.caption} refs={p.refs} formatted />
-          </p>
-          {long && !more && (
-            <button type="button" onClick={() => setMore(true)} className="mt-0.5 text-[13px] font-medium text-ink-muted hover:text-ink">
-              more
-            </button>
-          )}
-        </>
+      {/* the title leads (every post has one now); the caption shows only when the post is opened. Older posts
+          without a title show their caption's start instead */}
+      {(style === "card" ? p.title : !style && (p.title || p.caption)) && (
+        <button type="button" onClick={onOpenComments} className="mt-2.5 block w-full text-left">
+          <span className="line-clamp-3 text-[17px] leading-snug font-semibold break-words text-ink">{p.title || p.caption}</span>
+        </button>
       )}
 
       {/* a tap opens the post; a double tap loves it (love is never taken back by a double tap) */}

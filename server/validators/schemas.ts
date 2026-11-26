@@ -286,7 +286,10 @@ export const feedPostSchema = z
     /** a random id per "New post" box: the same send twice makes one post */
     clientKey: clientKey.optional(),
   })
-  .refine((v) => v.media.length > 0 || v.caption.length > 0, { path: ["caption"], message: "Add a picture, a video or some text." })
+  .refine((v) => v.media.length > 0 || v.caption.length > 0 || v.title.trim().length > 0, { path: ["title"], message: "Add a title." })
+  // every post has a title (as on Reddit); an older app that sends none gets its caption's first line as the title
+  .transform((v) => (v.title.trim() ? v : { ...v, title: (v.caption.split("\n").find((l) => l.trim()) ?? "").trim().slice(0, FEED_TITLE_MAX) }))
+  .refine((v) => v.title.trim().length > 0, { path: ["title"], message: "Add a title." })
   .refine((v) => v.media.length > 0 || v.caption.length <= TEXT_CARD_MAX || v.title.length > 0, { path: ["title"], message: "Add a title for a longer post." });
 /** edit a post: its caption (its author), or whether it's explicit (its author, or the community's owner and admins) */
 export const feedCaptionSchema = z.object({ caption: text(LIMITS.feedCaption).optional(), explicit: z.boolean().optional(), spoiler: z.boolean().optional(), mediaFit: z.enum(MEDIA_FIT_IDS).optional() }).refine((v) => v.caption !== undefined || v.explicit !== undefined || v.spoiler !== undefined || v.mediaFit !== undefined, "Nothing to change.");
@@ -307,7 +310,12 @@ export const feedCommentSchema = z
 export const feedReactSchema = z.object({ kind: z.enum(REACTION_IDS) });
 /** a page of the home feed, or of a community's posts */
 /** `at`: when page 1 was made, so later pages rank the same posts the same way (no repeats, no gaps). */
-export const homeFeedQuery = pageQuery.extend({ at: z.coerce.number().int().positive().optional() });
+export const homeFeedQuery = pageQuery.extend({
+  at: z.coerce.number().int().positive().optional(),
+  /** "popular": most love and comments, over `range` */
+  sort: z.enum(["foryou", "popular"]).default("foryou"),
+  range: z.enum(["today", "week"]).default("today"),
+});
 
 export const reelsQuery = homeFeedQuery.extend({ start: z.string().max(40).optional() });
 

@@ -7,11 +7,11 @@ import type { CrewCardDTO, EventDTO } from "./types";
  */
 export type FeedSlot = { kind: "klique"; klique: CrewCardDTO } | { kind: "event"; event: EventDTO } | { kind: "ad"; ad: number };
 
-/** Posts between two cards: at least, and at most. */
-const GAP_MIN = 4;
-const GAP_MAX = 8;
-/** How often each kind comes up; a kind with nothing left gives its turn to another. */
-const CHANCE = { event: 0.4, klique: 0.4, ad: 0.2 };
+/** Posts between two cards: at least, and at most (Home is about posts; an event comes now and then, like an ad). */
+const GAP_MIN = 7;
+const GAP_MAX = 10;
+/** How often each kind comes up; a kind with nothing left gives its turn to another. Events most often. */
+const CHANCE = { event: 0.5, klique: 0.3, ad: 0.2 };
 /** Once: communities to join, after this many posts. */
 export const COMMUNITIES_AT = 9;
 /** The first row of kliques, how often it comes back, and how many one row shows. */

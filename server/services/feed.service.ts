@@ -212,7 +212,8 @@ export async function createPost(viewer: IUser, space: Space, access: SpaceAcces
     tags: refs.tags,
     mentionIds: refs.userIds,
     communityRefIds: refs.communityIds,
-    title: input.media.length ? "" : input.title,
+    // every post has a title now (pictures and videos too, shown above them)
+    title: input.title,
     plainBackdrop: input.plainBackdrop,
     mediaFit: input.media.length ? input.mediaFit : "cover",
     textBg: style === "card" ? (input.textBg ?? "sunset") : null,
@@ -703,6 +704,39 @@ export async function homeFeed(viewer: IUser, page: number, at?: number): Promis
   const byId = new Map(dtos.map((d) => [d.id, d]));
   const items: HomeFeedItem[] = slice.flatMap((x) => (byId.has(sid(x.post._id)) ? [{ post: byId.get(sid(x.post._id))!, trending: x.trending }] : []));
   return { items, page, hasMore: merged.length > page * PAGE, at: now };
+}
+
+/**
+ * Home's Popular tab: the posts with the most love and comments (a comment counts double) from the last day or week,
+ * in your communities and public ones (never 18+ or explicit), text posts included. Ranked once per `at`, so pages
+ * line up while you scroll.
+ */
+export async function popularFeed(viewer: IUser, page: number, range: "today" | "week", at?: number): Promise<{ items: HomeFeedItem[]; page: number; hasMore: boolean; at: number }> {
+  const mine = await Membership.find({ userId: viewer._id, subcommunityId: null, status: "active" }).select("communityId").lean<Pick<IMembership, "communityId">[]>();
+  const mineIds = mine.map((m) => m.communityId);
+  const [open, hidden, elsewhere] = await Promise.all([
+    Community.find({ _id: { $in: mineIds }, feedPolicy: { $in: ["admins", "members"] }, adult: { $ne: true }, explicit: { $ne: true } }).select("_id").lean<{ _id: Types.ObjectId }[]>(),
+    hiddenUserIds(viewer._id),
+    Community.find({ _id: { $nin: mineIds }, privacy: "public", adult: { $ne: true }, explicit: { $ne: true }, feedPolicy: { $in: ["admins", "members"] } }).select("_id").limit(1000).lean<{ _id: Types.ObjectId }[]>(),
+  ]);
+  const now = at && at <= Date.now() && at > Date.now() - 24 * HOUR ? at : Date.now();
+  const since = new Date(now - (range === "today" ? 24 : 7 * 24) * HOUR);
+  const ids = [...open, ...elsewhere].map((c) => c._id);
+  if (!ids.length) return { items: [], page, hasMore: false, at: now };
+  const rows = await FeedPost.aggregate<{ _id: Types.ObjectId }>([
+    { $match: { communityId: { $in: ids }, createdAt: { $gte: since, $lte: new Date(now) }, hiddenAt: null, explicit: { $ne: true }, ...(hidden.length ? { authorId: { $nin: hidden } } : {}) } },
+    { $addFields: { popular: { $add: ["$upCount", { $multiply: [2, "$commentCount"] }] } } },
+    { $match: { popular: { $gt: 0 } } },
+    { $sort: { popular: -1, _id: -1 } },
+    { $skip: (page - 1) * PAGE },
+    { $limit: PAGE + 1 },
+    { $project: { _id: 1 } },
+  ]);
+  const order = rows.slice(0, PAGE).map((r) => r._id);
+  const full = await FeedPost.find({ _id: { $in: order } }).lean<IFeedPost[]>();
+  const byId = new Map(full.map((p) => [sid(p._id), p]));
+  const dtos = await toPosts(order.flatMap((id) => (byId.has(sid(id)) ? [byId.get(sid(id))!] : [])), viewer);
+  return { items: dtos.map((post) => ({ post, trending: false })), page, hasMore: rows.length > PAGE, at: now };
 }
 
 /** Post cards for any list of posts (the tag pages use it). */

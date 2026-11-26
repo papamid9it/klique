@@ -1,13 +1,13 @@
 "use client";
 
+import { PopularFeed } from "@/components/domain/home/PopularFeed";
 import { useEffect, useRef, useState } from "react";
 import ApiClient from "@/app/ApiCore";
 import { CrewService } from "@/app/services/CrewService";
 import { DiscoverService } from "@/app/services/DiscoverService";
-import { EventsRow, HomeFeed, TOP_EVENTS, rankEvents } from "@/components/domain/home/HomeFeed";
+import { HomeFeed, rankEvents } from "@/components/domain/home/HomeFeed";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { CommunitiesHome } from "@/components/domain/home/CommunitiesHome";
-import { LiveNowRow } from "@/components/domain/live/Live";
 import { useHomeStyle } from "@/lib/hooks/useHomeStyle";
 import { usePlace } from "@/components/providers/PlaceProvider";
 import { BackToTop } from "@/components/domain/feed/BackToTop";
@@ -59,8 +59,8 @@ function CasualHome() {
   const events = rankEvents(data, user?.interests ?? []);
   // as in the app: the row at the top is a new mix every 10 minutes; the events between posts stay the same for you
   // (the server sends both: homeSlider and homeBelow)
-  const topEvents = data?.homeSlider ?? events;
-  const moreEvents = data?.homeBelow ?? (events.length > TOP_EVENTS + 2 ? events.slice(TOP_EVENTS) : events);
+  // no events row on top any more: all the server's picks go between posts, in its order
+  const moreEvents = data?.homeBelow ? [...(data.homeSlider ?? []), ...data.homeBelow] : events;
   // kliques you could join, best for you first: the first few in their own row, the rest between posts
   const kliques = useApi(user ? () => CrewService.forYou({ limit: 30 }) : null, [user?.id, where], { key: `kliques-for-you:${user?.id ?? ""}:${where}`, wait: !ready });
   const [dismissed, setDismissed] = useState<string[]>([]);
@@ -100,6 +100,7 @@ function CasualHome() {
   };
   useRefreshKeys(() => void refresh(), { inApp, isHere: (a) => a.pathname === "/" && !a.search && !a.hash && window.location.pathname === "/" && !window.location.search });
 
+  const [homeTab, setHomeTab] = useState<"foryou" | "popular">("foryou");
   return (
     <div className="space-y-9">
       {/* the date and place stay pinned at the top while you scroll: a thin bar in the page colour, under the
@@ -116,14 +117,23 @@ function CasualHome() {
         <h1 className="display pt-1 text-[clamp(2.25rem,5vw,3.25rem)] leading-[1.08]">Find your klique.</h1>
       </header>
 
-      {/* streams on right now in your communities (nothing while nobody's live) */}
-      <LiveNowRow />
-
-      {error && !data ? <ErrorState message={error} onRetry={reload} /> : <EventsRow events={topEvents} loading={loading} onEvent={patchEvent} />}
+      {/* Home opens on posts; events come now and then between them, like an ad */}
+      {error && !data ? <ErrorState message={error} onRetry={reload} /> : null}
 
 
       <div className="mx-auto max-w-[730px]">
+        {/* For you | Popular (most love and comments) */}
+        <div role="tablist" aria-label="Home" className="mb-5 flex gap-6 border-b border-line">
+          {(["foryou", "popular"] as const).map((k) => (
+            <button key={k} type="button" role="tab" aria-selected={homeTab === k} onClick={() => setHomeTab(k)} className={`-mb-px h-11 border-b-2 text-[16px] transition ${homeTab === k ? "border-ink font-bold text-ink" : "border-transparent font-semibold text-ink-muted hover:text-ink"}`}>
+              {k === "foryou" ? "For you" : "Popular"}
+            </button>
+          ))}
+        </div>
+        {homeTab === "popular" && <PopularFeed />}
+        <div className={homeTab === "popular" ? "hidden" : undefined}>
         <HomeFeed refreshRef={feedRefresh} onNewer={setNewer} moreEvents={moreEvents} eventsInOrder={!!data?.homeBelow} fillersLoading={loading || kliques.loading} kliques={forYou} onDismissKlique={dismiss} communities={data?.suggestedCommunities ?? []} onEvent={patchEvent} onCommunity={patchCommunity} />
+        </div>
         <BackToTop hidden={newer.length > 0} />
       </div>
     </div>
