@@ -20,8 +20,9 @@ export const TOPUP_MIN = 100;
 /** payouts are made on this day of each month */
 export const PAYOUT_DAY = 3;
 
-export type GiftTargetType = "post" | "comment" | "topic" | "reply";
-export const GIFT_TARGET_TYPES: GiftTargetType[] = ["post", "comment", "topic", "reply"];
+/** "live": a live stream, to the person streaming (and shown in its live chat) */
+export type GiftTargetType = "post" | "comment" | "topic" | "reply" | "live";
+export const GIFT_TARGET_TYPES: GiftTargetType[] = ["post", "comment", "topic", "reply", "live"];
 export const giftTargetKey = (t: { type: GiftTargetType; id: string }) => `${t.type}:${t.id}`;
 
 /** A Hype pack in the phone app: its store product id and the Hype it gives (no custom amounts in the stores). */

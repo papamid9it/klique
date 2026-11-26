@@ -128,7 +128,7 @@ export interface IGiftSend {
   /** naira value and Hype paid */
   price: number;
   hype: number;
-  target: { type: "post" | "comment" | "topic" | "reply"; id: Types.ObjectId };
+  target: { type: "post" | "comment" | "topic" | "reply" | "live"; id: Types.ObjectId };
   communityId: Types.ObjectId | null;
   anonymous: boolean;
   /** the sender's one-off id for this send: the same send twice is one gift */
@@ -156,7 +156,7 @@ const GiftSendSchema = new Schema<IGiftSend>(
     artUrl: { type: String, default: null },
     price: { type: Number, required: true },
     hype: { type: Number, required: true },
-    target: { type: new Schema({ type: { type: String, enum: ["post", "comment", "topic", "reply"], required: true }, id: { type: Schema.Types.ObjectId, required: true } }, { _id: false }), required: true },
+    target: { type: new Schema({ type: { type: String, enum: ["post", "comment", "topic", "reply", "live"], required: true }, id: { type: Schema.Types.ObjectId, required: true } }, { _id: false }), required: true },
     communityId: { type: Schema.Types.ObjectId, ref: "Community", default: null },
     anonymous: { type: Boolean, default: false },
     clientKey: { type: String, required: true, maxlength: 64 },

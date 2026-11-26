@@ -21,7 +21,7 @@ import { Badge, Panel, StatCard } from "./AdminParts";
 const naira = (n: number) => `₦${n.toLocaleString("en-NG")}`;
 const day = (iso: string) => new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 const PLATFORM = { web: "Website (Paystack)", apple: "iPhone (Apple)", google: "Android (Google)" } as const;
-const TARGET = { post: "post", comment: "comment", topic: "board post", reply: "board reply" } as const;
+const TARGET = { post: "post", comment: "comment", topic: "board post", reply: "board reply", live: "live stream" } as const;
 
 /** Admin → Gifts → Dashboard: Hype bought, who bought it, gifts sent (anonymous senders shown), and the money split. */
 /** Top-ups that may be paid without their Hype yet: shown only when there are some, with a button to check them now. */

@@ -459,6 +459,16 @@ async function resolveTarget(type: GiftTargetType, id: string): Promise<Target> 
     const [c, b] = await Promise.all([Community.findById(topic.communityId).select("slug").lean<Pick<ICommunity, "slug">>(), topic.boardId ? Board.findById(topic.boardId).select("slug").lean<Pick<IBoard, "slug">>() : null]);
     href = `/communities/${c?.slug}?view=topics&b=${b?.slug ?? ""}&t=${sid(topic._id)}`;
     label = "your board post";
+  } else if (type === "live") {
+    // a live stream: the award goes to the person streaming, while it's on
+    const { LiveStream } = await import("../models/Live");
+    const l = await LiveStream.findById(_id).select("hostId communityId status").lean<{ hostId: Types.ObjectId; communityId: Types.ObjectId; status: string }>();
+    if (!l || l.status !== "live") throw notFound("That stream has ended.");
+    authorId = l.hostId;
+    communityId = l.communityId;
+    const c = await Community.findById(l.communityId).select("slug").lean<Pick<ICommunity, "slug">>();
+    href = `/communities/${c?.slug}?live=1`;
+    label = "your live stream";
   } else throw badRequest("Awards can't go there.");
   if (!authorId) throw badRequest("That can't take awards.");
   const community = communityId ? await Community.findById(communityId).lean<ICommunity>() : null;
@@ -536,6 +546,11 @@ export async function sendGift(viewer: IUser, input: z.infer<typeof giftSendSche
   await GiftSend.updateOne({ _id: row._id }, { $set: { status: "sent" } });
 
   const who = input.anonymous ? "Someone" : viewer.displayName;
+  // during a live: everyone watching sees it in the live chat
+  if (input.target.type === "live") {
+    const { announceLiveGift } = await import("./channels.service");
+    await announceLiveGift(new Types.ObjectId(input.target.id), { senderId: input.anonymous ? null : viewer._id, hostId: t.authorId, giftName: gift.name, artUrl: gift.artUrl ?? null, hype }).catch((err) => console.warn("[live] gift line:", (err as Error)?.message));
+  }
   notify([t.authorId], { title: `${who} sent you an award: ${gift.name}`, body: toReceiver > 0 ? `On ${t.label}. You earn ${naira(toReceiver)}.` : `On ${t.label}.`, data: { href: t.href } }, { category: "gifts", ref: `gift:${input.target.type}:${input.target.id}`, ...(input.anonymous ? {} : { actorId: viewer._id }) });
   return { balance, summary: (await summarise([input.target]))[giftTargetKey(input.target)] };
 }

@@ -6,8 +6,8 @@ import { errorMessage, isApiError } from "@/app/ApiCore";
 import { CommunityService } from "@/app/services/CommunityService";
 import { LiveService, livePlayerUrl } from "@/app/services/LiveService";
 import { ReportDialog } from "@/components/domain/ReportDialog";
-import { ChatPane } from "@/components/domain/chat/ChatPane";
-import { LinksOff } from "@/components/domain/chat/linksOff";
+import { LiveRoomChat } from "./LiveRoomChat";
+import { GiftButton } from "@/components/domain/gifts/Gifts";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
 import { useToast } from "@/components/providers/ToastProvider";
@@ -97,6 +97,8 @@ function WatchModal({ c, live, onClose, onEnded }: { c: Pick<CommunityDTO, "slug
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
             <Avatar name={live.host.displayName} src={live.host.avatarUrl} size={36} />
             <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{live.host.displayName}</span>
+            {/* an award for the person streaming (shows in the live chat for everyone) */}
+            {user && user.id !== live.host.id && live.status === "live" && <GiftButton target={{ type: "live", id: live.id }} authorId={live.host.id} variant="pill" />}
             <a href={live.provider === "twitch" ? `https://www.twitch.tv/${live.channel}` : `https://www.youtube.com/watch?v=${live.channel}`} target="_blank" rel="noreferrer" className="text-[13px] font-semibold text-ink-muted hover:text-ink">
               Open on {where}
             </a>
@@ -115,21 +117,7 @@ function WatchModal({ c, live, onClose, onEnded }: { c: Pick<CommunityDTO, "slug
         <div className="flex h-12 shrink-0 items-center border-b border-line px-4 text-[15px] font-semibold">Live chat</div>
         <div className="flex min-h-0 flex-1 flex-col">
           {chat.data ? (
-            // nothing in the chat takes you away from the stream: links are plain text, and any other link does nothing
-            <LinksOff.Provider value={true}>
-            <div className="flex min-h-0 flex-1 flex-col" onClickCapture={(e) => (e.target as HTMLElement).closest("a[href]") && e.preventDefault()}>
-            <ChatPane
-              key={chat.data.channel.id}
-              space={{ slug: c.slug }}
-              channel={chat.data.channel}
-              isMember={chat.data.isMember}
-              gate={<p className="text-sm text-ink-muted">Join {c.name} to chat.</p>}
-              onRead={() => undefined}
-              placeholder="Say something…"
-              intro={() => <p className="px-4 pt-4 text-[13px] text-ink-muted">Welcome to the live chat. Be kind; the community&apos;s rules apply. Links don&apos;t open here, so nobody gets taken away from the stream.</p>}
-            />
-            </div>
-            </LinksOff.Provider>
+            <LiveRoomChat key={chat.data.channel.id} slug={c.slug} channel={chat.data.channel} isMember={chat.data.isMember} communityName={c.name} />
           ) : chat.error ? (
             <p className="p-4 text-sm text-ink-muted">{chat.error}</p>
           ) : (

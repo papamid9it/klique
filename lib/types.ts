@@ -2288,7 +2288,7 @@ export interface GiftReceivedDTO {
   earned: number;
   anonymous: boolean;
   from: UserBrief | null;
-  target: { type: "post" | "comment" | "topic" | "reply"; id: Id };
+  target: { type: "post" | "comment" | "topic" | "reply" | "live"; id: Id };
   createdAt: ISODate;
   holdUntil: ISODate;
   paidOut: boolean;
@@ -2338,7 +2338,7 @@ export interface AdminGiftsReportDTO {
     series: { period: string; amount: number; count: number }[];
   };
   purchases: { id: Id; user: UserBrief; platform: "web" | "apple" | "google"; pack: string; hype: number; amount: number; storeFee: number; reference: string; test: boolean; paidAt: ISODate }[];
-  sends: { id: Id; from: UserBrief; to: UserBrief; anonymous: boolean; gift: { name: string; emoji: string }; price: number; receiverAmount: number; kliqueAmount: number; target: { type: "post" | "comment" | "topic" | "reply"; id: Id }; community: { slug: string; name: string } | null; createdAt: ISODate }[];
+  sends: { id: Id; from: UserBrief; to: UserBrief; anonymous: boolean; gift: { name: string; emoji: string }; price: number; receiverAmount: number; kliqueAmount: number; target: { type: "post" | "comment" | "topic" | "reply" | "live"; id: Id }; community: { slug: string; name: string } | null; createdAt: ISODate }[];
   split: { giftValue: number; count: number; klique: number; receivers: number; receiversPaid: number; receiversRequested: number; receiversOwed: number };
 }
 

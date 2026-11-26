@@ -46,6 +46,7 @@ export async function runReminders(): Promise<{ events: number; notified: number
   notified += await runPlanLifecycle(now);
   // threads nobody replied to (older than 10 minutes) go
   await (await import("./channels.service")).sweepEmptyThreads().catch((e) => console.warn("[threads] sweep:", (e as Error).message));
+  await (await import("./channels.service")).sweepLiveChats().catch((e) => console.warn("[live] chat sweep:", (e as Error).message));
   return { events: due.length, notified };
 }
 

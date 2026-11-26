@@ -1054,7 +1054,7 @@ export const typingSchema = z.object({ target: typingTargetSchema, on: z.boolean
 
 /* -------------------------------- gifts ------------------------------ */
 
-const giftTarget = z.object({ type: z.enum(["post", "comment", "topic", "reply"]), id: objectId });
+const giftTarget = z.object({ type: z.enum(["post", "comment", "topic", "reply", "live"]), id: objectId });
 export const giftSendSchema = z.object({
   giftId: objectId,
   target: giftTarget,

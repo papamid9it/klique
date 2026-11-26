@@ -1246,6 +1246,45 @@ export async function ensureLiveChat(viewer: IUser | null, access: SpaceAccess, 
   return toChannel(channel, { access, readBy: new Map(read ? [[sid(channel._id), read]] : []), invited: new Set(), mentionCounts: new Map(), siteAdmin: !!viewer && isSiteAdmin(viewer) });
 }
 
+/**
+ * "Sade sent a Rocket": a line in a live stream's chat when someone sends its host an award, so everyone watching
+ * sees it. From the sender; sent anonymously, it shows as "Someone" (posted like a bot, under the host's name).
+ */
+export async function announceLiveGift(liveId: Types.ObjectId, g: { senderId: Types.ObjectId | null; hostId: Types.ObjectId; giftName: string; artUrl: string | null; hype: number }) {
+  const channel = await Channel.findOne({ topicId: liveId }).lean<IChannel>();
+  if (!channel) return; // nobody has opened the chat yet: nobody to show it to
+  const host = await User.findById(g.hostId).select("displayName").lean<{ displayName: string }>();
+  const body = `sent ${/^[aeiou]/i.test(g.giftName) ? "an" : "a"} ${g.giftName} to ${host?.displayName ?? "the host"}`;
+  const cards = [{ color: "#F5B83D", title: g.giftName, text: `${g.hype.toLocaleString("en-NG")} Hype`, ...(g.artUrl ? { thumbnail: g.artUrl } : {}) }];
+  const doc = await ChannelMessage.create({
+    channelId: channel._id,
+    communityId: channel.communityId,
+    authorId: g.senderId ?? g.hostId,
+    body: g.senderId ? body : `Someone ${body}`,
+    images: [],
+    mentions: [],
+    cards,
+    ...(g.senderId ? {} : { webhook: { id: liveId, name: "Award", avatarUrl: g.artUrl } }),
+  });
+  await Channel.updateOne({ _id: channel._id }, { lastMessageId: doc._id, lastMessageAt: doc.createdAt });
+  emitChannel(channel.communityId, channel._id);
+}
+
+/** a live chat is kept this long after its stream ends (so a reported message can still be looked at), then deleted */
+const LIVE_CHAT_KEEP_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Deletes the chats of streams that ended more than a week ago (run with the reminders job). */
+export async function sweepLiveChats(): Promise<number> {
+  const { LiveStream } = await import("../models/Live");
+  const old = await LiveStream.find({ status: "ended", endedAt: { $lt: new Date(Date.now() - LIVE_CHAT_KEEP_MS) } }).select("_id").limit(200).lean<{ _id: Types.ObjectId }[]>();
+  if (!old.length) return 0;
+  const chats = await Channel.find({ topicId: { $in: old.map((l) => l._id) }, slug: /^live-/ }).select("_id").lean<{ _id: Types.ObjectId }[]>();
+  if (!chats.length) return 0;
+  const ids = chats.map((c) => c._id);
+  await Promise.all([ChannelMessage.deleteMany({ channelId: { $in: ids } }), ChannelRead.deleteMany({ channelId: { $in: ids } }), Channel.deleteMany({ _id: { $in: ids } })]);
+  return chats.length;
+}
+
 async function moveOldComments(topic: Pick<ITopic, "_id" | "communityId">, channel: IChannel) {
   const comments = await TopicComment.find({ topicId: topic._id, deletedAt: null }).sort({ _id: 1 }).limit(2000).lean<ITopicComment[]>();
   if (!comments.length) return;
