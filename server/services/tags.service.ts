@@ -172,7 +172,7 @@ export async function searchPosts(viewer: IUser | null, q: string, limit: number
     rows = await FeedPost.find({ ...base, $text: { $search: words } }, { score: { $meta: "textScore" } }).sort({ score: { $meta: "textScore" }, createdAt: -1 }).limit(limit).lean<IFeedPost[]>();
   } catch {
     // no text index yet (npm run db:indexes): a plain, case-blind match on the caption, or the tag itself
-    rows = await FeedPost.find({ ...base, $or: [{ caption: { $regex: escapeRegex(words), $options: "i" } }, ...(isTag(tag) ? [{ tags: tag }] : [])] }).sort({ createdAt: -1 }).limit(limit).lean<IFeedPost[]>();
+    rows = await FeedPost.find({ ...base, $or: [{ title: { $regex: escapeRegex(words), $options: "i" } }, { caption: { $regex: escapeRegex(words), $options: "i" } }, ...(isTag(tag) ? [{ tags: tag }] : [])] }).sort({ createdAt: -1 }).limit(limit).lean<IFeedPost[]>();
   }
   return toPosts(rows, viewer);
 }

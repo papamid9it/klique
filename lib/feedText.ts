@@ -24,8 +24,19 @@ export const textBackground = (id: string | null | undefined) => TEXT_BACKGROUND
 
 export type TextStyle = "card" | "long";
 
-/** How a post without media shows (null: it has pictures or a video). */
-export function textStyleOf(p: { media: readonly unknown[]; title?: string | null; caption: string }): TextStyle | null {
+/**
+ * How a post without media shows (null: it has pictures or a video). A title on its own with a colour picked is a
+ * card (the title big on the colour); older posts with short text and no title were cards too. Anything else (a title
+ * with text, or no colour) is a text post: the title, then the first lines.
+ */
+export function textStyleOf(p: { media: readonly unknown[]; title?: string | null; caption: string; textBg?: string | null }): TextStyle | null {
   if (p.media.length) return null;
-  return p.title?.trim() || p.caption.trim().length > TEXT_CARD_MAX ? "long" : "card";
+  const title = p.title?.trim() ?? "";
+  const text = p.caption.trim();
+  if (title && !text && p.textBg) return "card";
+  if (!title && text && text.length <= TEXT_CARD_MAX) return "card";
+  return "long";
 }
+
+/** The words a colour card shows: its text, or (a title-only post on a colour) its title. */
+export const cardText = (p: { caption: string; title?: string | null }) => p.caption.trim() || p.title?.trim() || "";

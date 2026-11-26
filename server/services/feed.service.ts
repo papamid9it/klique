@@ -711,7 +711,13 @@ export async function homeFeed(viewer: IUser, page: number, at?: number): Promis
  * in your communities and public ones (never 18+ or explicit), text posts included. Ranked once per `at`, so pages
  * line up while you scroll.
  */
-export async function popularFeed(viewer: IUser, page: number, range: "today" | "week", at?: number): Promise<{ items: HomeFeedItem[]; page: number; hasMore: boolean; at: number }> {
+export async function popularFeed(viewer: IUser, page: number, range: "auto" | "today" | "week", at?: number): Promise<{ items: HomeFeedItem[]; page: number; hasMore: boolean; at: number }> {
+  // no choice to make: today's, unless today has fewer than 5 popular posts (then the last 7 days)
+  if (range === "auto") {
+    const today = await popularFeed(viewer, 1, "today", at);
+    const week = today.items.length < 5 && !today.hasMore;
+    return week ? popularFeed(viewer, page, "week", at) : page === 1 ? today : popularFeed(viewer, page, "today", at);
+  }
   const mine = await Membership.find({ userId: viewer._id, subcommunityId: null, status: "active" }).select("communityId").lean<Pick<IMembership, "communityId">[]>();
   const mineIds = mine.map((m) => m.communityId);
   const [open, hidden, elsewhere] = await Promise.all([

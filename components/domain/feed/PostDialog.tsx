@@ -105,7 +105,13 @@ export function PostView({ post, onChange, onClose, focusComment }: { post: Feed
                 <ExplicitCover explicit={post.explicit} spoiler={post.spoiler}>
                   <LongPost post={post} />
                 </ExplicitCover>
-              ) : style === null && post.caption && <p className="text-[15px] leading-snug font-semibold break-words whitespace-pre-wrap">{post.caption}</p>}
+              ) : style === null && (post.title || post.caption) ? (
+                // a picture or video post opened: its title, then the caption (the feed shows only the title)
+                <div className="space-y-1.5">
+                  {post.title && <h2 className="text-[17px] leading-snug font-bold break-words">{post.title}</h2>}
+                  {post.caption && <p className="text-[15px] leading-relaxed break-words whitespace-pre-wrap text-ink">{post.caption}</p>}
+                </div>
+              ) : null}
               <div className="-ml-1.5 flex flex-wrap items-center gap-0.5">
                 <VoteControl post={post} onChange={onChange} />
                 <span className="inline-flex h-11 min-w-11 items-center justify-center gap-1.5 px-1.5 text-[14px] font-semibold text-ink" aria-label={`${post.commentCount} comments`}>

@@ -288,7 +288,12 @@ export const feedPostSchema = z
   })
   .refine((v) => v.media.length > 0 || v.caption.length > 0 || v.title.trim().length > 0, { path: ["title"], message: "Add a title." })
   // every post has a title (as on Reddit); an older app that sends none gets its caption's first line as the title
-  .transform((v) => (v.title.trim() ? v : { ...v, title: (v.caption.split("\n").find((l) => l.trim()) ?? "").trim().slice(0, FEED_TITLE_MAX) }))
+  .transform((v) => {
+    if (v.title.trim()) return v;
+    const title = (v.caption.split("\n").find((l) => l.trim()) ?? "").trim().slice(0, FEED_TITLE_MAX);
+    // short text from an older app (one line): it becomes the title, so it isn't shown twice
+    return { ...v, title, caption: v.caption.trim() === title ? "" : v.caption };
+  })
   .refine((v) => v.title.trim().length > 0, { path: ["title"], message: "Add a title." })
   .refine((v) => v.media.length > 0 || v.caption.length <= TEXT_CARD_MAX || v.title.length > 0, { path: ["title"], message: "Add a title for a longer post." });
 /** edit a post: its caption (its author), or whether it's explicit (its author, or the community's owner and admins) */
@@ -314,7 +319,8 @@ export const homeFeedQuery = pageQuery.extend({
   at: z.coerce.number().int().positive().optional(),
   /** "popular": most love and comments, over `range` */
   sort: z.enum(["foryou", "popular"]).default("foryou"),
-  range: z.enum(["today", "week"]).default("today"),
+  /** "auto": today, or the last 7 days when today is quiet */
+  range: z.enum(["auto", "today", "week"]).default("auto"),
 });
 
 export const reelsQuery = homeFeedQuery.extend({ start: z.string().max(40).optional() });

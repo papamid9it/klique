@@ -36,7 +36,7 @@ export const FeedService = {
   reels: (page = 1, at?: number, start?: string) => api.get<Envelope<{ items: FeedPostDTO[]; page: number; hasMore: boolean; at: number }>>("/api/reels", { page, ...(at ? { at } : {}), ...(start ? { start } : {}) }),
   reelsReady: () => api.get<Envelope<{ ready: boolean; on: boolean }>>("/api/reels/ready"),
   /** Home's Popular tab: most love and comments today or this week */
-  popular: (range: "today" | "week", page = 1, at?: number) => api.get<Envelope<{ items: HomeFeedItem[]; page: number; hasMore: boolean; at: number }>>("/api/me/feed", { sort: "popular", range, page, ...(at ? { at } : {}) }),
+  popular: (range: "auto" | "today" | "week", page = 1, at?: number) => api.get<Envelope<{ items: HomeFeedItem[]; page: number; hasMore: boolean; at: number }>>("/api/me/feed", { sort: "popular", range, page, ...(at ? { at } : {}) }),
   home: (page = 1, at?: number) => api.get<Envelope<{ items: HomeFeedItem[]; page: number; hasMore: boolean; at: number }>>("/api/me/feed", at ? { page, at } : { page }),
 };
 

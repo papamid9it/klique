@@ -15,7 +15,8 @@ import { TextArea } from "@/components/ui/Field";
 import { Icon } from "@/components/ui/Icon";
 import { Modal } from "@/components/ui/Modal";
 import { cx } from "@/components/ui/cx";
-import { FEED_TITLE_MAX } from "@/lib/feedText";
+import { FEED_TITLE_MAX, TEXT_BACKGROUNDS, type TextBackgroundId } from "@/lib/feedText";
+import { TextCard } from "./TextPost";
 import { cdn, videoPoster } from "@/lib/cdn";
 import { LIMITS, POST_FRAMES, postFrame } from "@/lib/constants";
 import { useUploadStatus } from "@/lib/hooks/useUploads";
@@ -37,6 +38,8 @@ export function PostComposer({ slug, communityName, explicitAllowed, onClose, on
   const captionRef = useRef<HTMLTextAreaElement | null>(null);
   const suggest = useTagSuggest(captionRef, caption, setCaption);
   const [title, setTitle] = useState("");
+  // a title on its own can go on a colour (a card, the title big on it); null: a plain text post
+  const [textBg, setTextBg] = useState<TextBackgroundId | null>(null);
   const [explicit, setExplicit] = useState(false);
   const [spoiler, setSpoiler] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -92,7 +95,7 @@ export function PostComposer({ slug, communityName, explicitAllowed, onClose, on
     sending.current = true;
     setBusy(true);
     try {
-      const res = await FeedService.create(slug, { title: title.trim(), ...(mode === "media" ? { caption: caption.trim(), media: media.map((m, i) => (i === 0 && frame ? { ...m, frame } : m)), plainBackdrop, mediaFit } : { caption: caption.trim(), media: [] }), ...(explicitAllowed ? { explicit } : {}), spoiler, clientKey });
+      const res = await FeedService.create(slug, { title: title.trim(), ...(mode === "media" ? { caption: caption.trim(), media: media.map((m, i) => (i === 0 && frame ? { ...m, frame } : m)), plainBackdrop, mediaFit } : { caption: caption.trim(), media: [], ...(textBg && !caption.trim() ? { textBg } : {}) }), ...(explicitAllowed ? { explicit } : {}), spoiler, clientKey });
       toast("Posted", "success");
       onPosted(res.data);
     } catch (err) {
@@ -127,7 +130,7 @@ export function PostComposer({ slug, communityName, explicitAllowed, onClose, on
         </div>
         )}
         {mode === "text" ? (
-          <TextFields caption={caption} setCaption={setCaption} captionRef={captionRef} suggest={suggest} />
+          <TextFields title={title} caption={caption} setCaption={setCaption} textBg={textBg} setTextBg={setTextBg} captionRef={captionRef} suggest={suggest} />
         ) : step === 1 ? (
         <fieldset>
           <legend className="mb-1.5 text-sm font-medium">
@@ -252,9 +255,23 @@ export function PostComposer({ slug, communityName, explicitAllowed, onClose, on
 
 /** The Text tab: a title (needed past the card limit), the text, and for a card its colour, with a live preview. */
 /** A text post's body (optional: the title, above, is required). */
-function TextFields({ caption, setCaption, captionRef, suggest }: { caption: string; setCaption: (v: string) => void; captionRef: React.RefObject<HTMLTextAreaElement | null>; suggest: ReturnType<typeof useTagSuggest> }) {
+function TextFields({ title, caption, setCaption, textBg, setTextBg, captionRef, suggest }: { title: string; caption: string; setCaption: (v: string) => void; textBg: TextBackgroundId | null; setTextBg: (v: TextBackgroundId | null) => void; captionRef: React.RefObject<HTMLTextAreaElement | null>; suggest: ReturnType<typeof useTagSuggest> }) {
+  const short = !caption.trim();
   return (
     <div className="space-y-2">
+      {/* title only: it can go big on a colour, like a status (a body makes it a plain text post) */}
+      {short && (
+        <div className="space-y-2 rounded-card border border-line bg-raised/40 p-3">
+          <p className="text-[13px] font-semibold">Background <span className="font-normal text-ink-muted">(title only)</span></p>
+          <div role="radiogroup" aria-label="Background" className="flex flex-wrap items-center gap-2">
+            <button type="button" role="radio" aria-checked={!textBg} onClick={() => setTextBg(null)} className={cx("h-8 rounded-control border-2 px-2.5 text-[12px] font-semibold transition", !textBg ? "border-ink" : "border-line text-ink-muted")}>None</button>
+            {TEXT_BACKGROUNDS.map((b) => (
+              <button key={b.id} type="button" role="radio" aria-checked={textBg === b.id} aria-label={b.name} title={b.name} onClick={() => setTextBg(b.id)} className={cx("size-8 rounded-full border-2 transition", textBg === b.id ? "border-ink" : "border-line")} style={{ background: b.css }} />
+            ))}
+          </div>
+          {textBg && title.trim() && <div className="w-48"><TextCard post={{ caption: "", title: title.trim(), textBg, refs: { users: [], communities: [] } }} className="[&_p]:text-[14px]" /></div>}
+        </div>
+      )}
       <FormatButton area={captionRef} value={caption} onChange={setCaption} />
       <TextArea ref={captionRef} label="Body text (optional)" value={caption} onChange={(e) => setCaption(e.target.value)} onKeyDown={(e) => suggest.onKeyDown(e)} maxLength={LIMITS.feedCaption} counter={LIMITS.feedCaption} placeholder="Ask something, share a tip, start a conversation… @someone #tag" />
       {suggest.panel}

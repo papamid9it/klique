@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/ui/Icon";
 import { cx } from "@/components/ui/cx";
-import { textBackground } from "@/lib/feedText";
+import { textBackground, cardText } from "@/lib/feedText";
 import type { FeedPostDTO } from "@/lib/types";
 import { RichText } from "./RichText";
 
@@ -14,7 +14,7 @@ const sizeFor = (n: number) => (n <= 40 ? "text-[30px]" : n <= 90 ? "text-[24px]
  * A short text post as a card: its text on the colour the poster picked (4:3, at most 440px tall), in the picture's place.
  * In the feed (`onOpen`) one tap opens the post; two quick taps upvote with a heart where you tapped, like a picture.
  */
-export function TextCard({ post, onOpen, onDoubleTap, className }: { post: Pick<FeedPostDTO, "caption" | "textBg" | "refs">; onOpen?: () => void; onDoubleTap?: () => void; className?: string }) {
+export function TextCard({ post, onOpen, onDoubleTap, className }: { post: Pick<FeedPostDTO, "caption" | "textBg" | "refs"> & { title?: string | null }; onOpen?: () => void; onDoubleTap?: () => void; className?: string }) {
   const bg = textBackground(post.textBg);
   const box = useRef<HTMLDivElement>(null);
   const lastTap = useRef(0);
@@ -46,8 +46,8 @@ export function TextCard({ post, onOpen, onDoubleTap, className }: { post: Pick<
 
   return (
     <div ref={box} onClick={tap} role={onOpen ? "button" : undefined} tabIndex={onOpen ? 0 : undefined} onKeyDown={(e) => onOpen && (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onOpen())} aria-label={onOpen ? "Open the post" : undefined} className={cx("relative flex aspect-[4/3] max-h-[440px] w-full max-w-full items-center justify-center overflow-hidden rounded-control px-7 text-center select-none", onOpen && "cursor-pointer", className)} style={{ background: bg.css, color: bg.ink }}>
-      <p className={cx("max-w-full leading-[1.18] font-bold tracking-[-0.02em] [overflow-wrap:anywhere] whitespace-pre-wrap", sizeFor(post.caption.length))}>
-        <RichText text={post.caption} refs={post.refs} formatted />
+      <p className={cx("max-w-full leading-[1.18] font-bold tracking-[-0.02em] [overflow-wrap:anywhere] whitespace-pre-wrap", sizeFor(cardText(post).length))}>
+        <RichText text={cardText(post)} refs={post.refs} formatted />
       </p>
       {bursts.map((b) => (
         // Instagram's heart (it counts as an upvote)
