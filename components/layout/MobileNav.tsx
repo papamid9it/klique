@@ -13,7 +13,7 @@ import { AccountSheet } from "./AccountSheet";
 const TAB = "flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-control px-1 pt-1 text-[12px] leading-tight font-medium transition active:bg-raised";
 
 /**
- * Phones: the bottom bar. Home, Events, Kliques, Communities, and Me (your picture): Me opens the account menu as a
+ * Phones: the bottom bar. Home, Going out (events and kliques), Communities, and Me (your picture): Me opens the account menu as a
  * sheet (status, profile, Saved, plan, settings, admin, sign out). Messages, notifications and search are in the
  * top bar; Saved is in the Communities panel and the account menu.
  */
@@ -23,8 +23,8 @@ export function MobileNav() {
   const [me, setMe] = useState(false);
   const items = [
     { href: "/", label: "Home", icon: "home" as const, active: pathname === "/" },
-    { href: "/events", label: "Events", icon: "calendar" as const, active: pathname.startsWith("/events") },
-    { href: "/kliques", label: "Kliques", icon: "pin" as const, active: pathname.startsWith("/kliques") },
+    // events and kliques together: Events | Kliques at the top of both pages
+    { href: "/events", label: "Going out", icon: "calendar" as const, active: pathname.startsWith("/events") || pathname.startsWith("/kliques") },
     { href: "/communities", label: "Communities", icon: "users" as const, active: pathname === "/communities" || pathname.startsWith("/search") || pathname.startsWith("/saved") },
   ];
 

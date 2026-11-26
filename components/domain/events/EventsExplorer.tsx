@@ -1,5 +1,6 @@
 "use client";
 
+import { GoingOutTabs } from "./GoingOutTabs";
 import { useCategories } from "@/lib/hooks/useCategories";
 import { useSearchParams } from "next/navigation";
 import { Fragment, useState } from "react";
@@ -246,6 +247,7 @@ export function EventsExplorer() {
       {panel}
       <div className="min-w-0">
         {/* ------------------------------ hero ------------------------------ */}
+        <GoingOutTabs current="events" className="mb-6" />
         <header className="flex flex-wrap items-end justify-between gap-4">
           <div className="min-w-0">
             <p className="eyebrow mb-3">What&apos;s on</p>

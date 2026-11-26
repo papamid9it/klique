@@ -16,8 +16,8 @@ export const SCENE_DOT: Record<string, string> = {
  * communities is a tab on the Communities page. */
 export const HOME_NAV: { href: string; label: string; icon: IconName; match: (p: string) => boolean; authed?: boolean }[] = [
   { href: "/", label: "Discover", icon: "home", match: (p) => p === "/" || p.startsWith("/search") },
-  { href: "/events", label: "Events", icon: "calendar", match: (p) => p.startsWith("/events") },
-  { href: "/kliques", label: "Kliques", icon: "pin", match: (p) => p === "/kliques" },
+  // events and kliques together (as in the app): Events | Kliques at the top of both pages
+  { href: "/events", label: "Going out", icon: "calendar", match: (p) => p.startsWith("/events") || p === "/kliques" },
   { href: "/communities", label: "Communities", icon: "users", match: (p) => p === "/communities" },
 ];
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { GoingOutTabs } from "@/components/domain/events/GoingOutTabs";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Switch } from "@/components/ui/Field";
 import { Suspense, useCallback, useEffect, useState, type ReactNode } from "react";
@@ -408,6 +409,7 @@ function KliquesPage() {
         </PagePanel>
       )}
 
+      <GoingOutTabs current="kliques" className="mb-6" />
       <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-[-0.02em]">Kliques</h1>
