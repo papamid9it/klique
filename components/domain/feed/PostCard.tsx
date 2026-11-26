@@ -179,16 +179,6 @@ export function PostCard({ post: p, onChange, onRemoved, onOpenComments, showCom
           <span className="line-clamp-3 text-[17px] leading-snug font-semibold break-words text-ink">{p.title || p.caption}</span>
         </button>
       )}
-      {/* its #tags (from the title and the text), up to 3, each opening its tag page */}
-      {!!p.tags?.length && (
-        <div className="mt-1.5 flex flex-wrap gap-x-2.5 gap-y-1">
-          {p.tags.slice(0, 3).map((tag) => (
-            <Link key={tag} href={`/tags/${encodeURIComponent(tag)}`} className="text-[13.5px] font-semibold text-accent-text hover:underline">
-              #{tag}
-            </Link>
-          ))}
-        </div>
-      )}
 
       {/* a tap opens the post; a double tap loves it (love is never taken back by a double tap) */}
       {(p.media.length > 0 || style === "card") && (
