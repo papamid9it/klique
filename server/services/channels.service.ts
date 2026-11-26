@@ -703,8 +703,13 @@ export async function postMessage(viewer: IUser, space: Space, access: SpaceAcce
   const { sticker, images = [], replyToId } = input;
   const stickerUrl = input.stickerUrl && !sticker ? assertStickerUrl(input.stickerUrl) : null;
   const { channel, invited } = await loadChannel(viewer, space, access, channelSlug);
+  // a live stream's chat: not for people removed from the stream
+  if (channel.topicId && channel.slug.startsWith("live-")) {
+    const { LiveStream } = await import("../models/Live");
+    if (await LiveStream.exists({ _id: channel.topicId, kickedIds: viewer._id })) throw forbidden("You were removed from this stream.");
+  }
   // replies on a board post live in its chat: stopped from Boards means these too, not ordinary chat
-  if (channel.topicId) assertNotPostBanned(access);
+  else if (channel.topicId) assertNotPostBanned(access);
   // custom emoji: :name: shortcuts, and only emoji they may use here
   const body = await normalizeEmoji(viewer, channel.communityId, input.body);
   if (!canPostInChannel(channel, access, invited)) {

@@ -69,6 +69,8 @@ export async function liveOf(viewer: IUser | null, community: ICommunity, access
     if (!s) return null;
   }
   const staff = staffOf(access, viewer);
+  // removed from this stream: it doesn't show for them
+  if (viewer && (s.kickedIds ?? []).some((k) => sid(k) === sid(viewer._id))) return null;
   if (s.status === "waiting" && !staff && !(viewer && sid(viewer._id) === sid(s.hostId))) return null;
   return toLive(s, viewer, staff);
 }
@@ -273,6 +275,55 @@ export async function liveChat(viewer: IUser | null, slug: string) {
   if (!access.canView) throw notFound("We couldn't find that stream.");
   const s = await LiveStream.findOne({ communityId: space.community._id, status: { $in: ["waiting", "live"] } }).lean<ILiveStream>();
   if (!s || (await stale(s))) throw notFound("Nobody's live here now.");
+  if (viewer && (s.kickedIds ?? []).some((k) => sid(k) === sid(viewer._id))) throw forbidden("You were removed from this stream.");
   const { ensureLiveChat } = await import("./channels.service");
-  return { liveId: sid(s._id), isMember: access.isMember, channel: await ensureLiveChat(viewer, access, s) };
+  return { liveId: sid(s._id), isMember: access.isMember, canModerate: mayModerate(viewer, access, s), channel: await ensureLiveChat(viewer, access, s) };
+}
+
+/** Who moderates a stream: its host, the people who run the community, and roles that delete messages, time out or remove members. */
+function mayModerate(viewer: IUser | null, access: SpaceAccess, s: Pick<ILiveStream, "hostId">): boolean {
+  if (!viewer) return false;
+  return sid(viewer._id) === sid(s.hostId) || staffOf(access, viewer) || can(access, "kick") || can(access, "timeout") || can(access, "deleteMessages");
+}
+
+/**
+ * Moderating a stream from its live chat. "remove": they lose the player and the chat in Klique (they can still find
+ * it on Twitch or YouTube, which Klique doesn't run), and their messages in this chat go. "allow": back in.
+ * "timeout": the community's own 10-minute timeout (no writing anywhere in it), for people allowed to time out.
+ */
+export async function moderateLive(viewer: IUser, slug: string, input: { userId: string; action: "remove" | "allow" | "timeout" }) {
+  const { space, access } = await resolveSpaceFor(viewer, slug);
+  const s = await LiveStream.findOne({ communityId: space.community._id, status: { $in: ["waiting", "live"] } }).lean<ILiveStream>();
+  if (!s) throw notFound("Nobody's live here now.");
+  if (!mayModerate(viewer, access, s)) throw forbidden("Only the person streaming and the community's moderators can do that.");
+  if (!Types.ObjectId.isValid(input.userId)) throw notFound("We couldn't find them.");
+  const target = new Types.ObjectId(input.userId);
+  if (sid(target) === sid(viewer._id)) throw badRequest("You can't do that to yourself.");
+  if (sid(target) === sid(s.hostId)) throw forbidden("That's the person streaming.");
+
+  if (input.action === "timeout") {
+    const { setTimeout_ } = await import("./spaces.service");
+    return setTimeout_(viewer, space, access, input.userId, 600, "In the live chat");
+  }
+
+  // the people who run the community can't be removed from it (except by Klique's admins)
+  const m = await Membership.findOne({ userId: target, communityId: space.community._id, subcommunityId: null }).select("role").lean<{ role: string }>();
+  if ((m?.role === "owner" || m?.role === "admin") && !isSiteAdmin(viewer)) throw forbidden("You can't remove the community's owner or admins.");
+  if (input.action === "allow") {
+    await LiveStream.updateOne({ _id: s._id }, { $pull: { kickedIds: target } });
+    return { userId: input.userId, removed: false };
+  }
+  await LiveStream.updateOne({ _id: s._id }, { $addToSet: { kickedIds: target } });
+  // their messages in this chat go too (like a ban in Twitch's chat)
+  const { Channel, ChannelMessage } = await import("../models/Channel");
+  const chat = await Channel.findOne({ topicId: s._id }).select("_id communityId").lean<{ _id: Types.ObjectId; communityId: Types.ObjectId }>();
+  if (chat) {
+    await ChannelMessage.updateMany({ channelId: chat._id, authorId: target, deletedAt: null }, { $set: { deletedAt: new Date(), deletedById: viewer._id, body: "", gone: true } });
+    const { emitChannel } = await import("./realtime");
+    emitChannel(chat.communityId, chat._id);
+  }
+  const who = await User.findById(target).select("displayName").lean<{ displayName: string }>();
+  const { ModAction } = await import("../models/ModAction");
+  await ModAction.create({ communityId: space.community._id, actorId: viewer._id, action: "live.remove", targetType: "member", targetId: target, label: `${who?.displayName ?? "Someone"} from the live stream`, authorId: target }).catch(() => {});
+  return { userId: input.userId, removed: true };
 }

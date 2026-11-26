@@ -4,9 +4,10 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { errorMessage, isApiError } from "@/app/ApiCore";
 import { CommunityService } from "@/app/services/CommunityService";
-import { LiveService, livePlayerUrl } from "@/app/services/LiveService";
+import { LiveService } from "@/app/services/LiveService";
 import { ReportDialog } from "@/components/domain/ReportDialog";
 import { LiveRoomChat } from "./LiveRoomChat";
+import { LivePlayer, warmLivePlayer } from "./LivePlayer";
 import { GiftButton } from "@/components/domain/gifts/Gifts";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
@@ -36,6 +37,10 @@ export function LiveRow({ c, onChanged }: { c: CommunityDTO; onChanged: () => vo
     if (sp.get("live") === "1") setOpen(c.live?.status === "live" ? "watch" : c.canGoLive ? "go" : null);
   }, [sp, c.live?.status, c.canGoLive]);
 
+  // someone's live: connect to Twitch or YouTube now, so Watch starts faster
+  useEffect(() => {
+    if (live?.status === "live") warmLivePlayer(live.provider);
+  }, [live?.status, live?.provider]);
   if (!live && !c.canGoLive) return null;
   const on = live?.status === "live";
   return (
@@ -62,9 +67,7 @@ export function LiveRow({ c, onChanged }: { c: CommunityDTO; onChanged: () => vo
 function WatchModal({ c, live, onClose, onEnded }: { c: Pick<CommunityDTO, "slug" | "name">; live: LiveDTO; onClose: () => void; onEnded: () => void }) {
   const { user } = useAuth();
   const [reporting, setReporting] = useState(false);
-  const [host, setHost] = useState<string | null>(null);
   const chat = useApi(() => LiveService.chat(c.slug), [c.slug, live.id], { key: `live-chat:${live.id}` });
-  useEffect(() => setHost(window.location.hostname), []);
   // the page underneath stays put; Escape closes (unless a dialog on top of this is open)
   useEffect(() => {
     const before = document.body.style.overflow;
@@ -89,7 +92,7 @@ function WatchModal({ c, live, onClose, onEnded }: { c: Pick<CommunityDTO, "slug
         </div>
         <div className="px-0 sm:px-4">
           <div className="aspect-video w-full overflow-hidden bg-black sm:rounded-card">
-            {host && <iframe src={livePlayerUrl(live, host)} title={live.title || "Live stream"} allow="autoplay; fullscreen; encrypted-media; picture-in-picture" allowFullScreen className="size-full border-0" />}
+            <LivePlayer live={live} />
           </div>
         </div>
         <div className="space-y-3 px-4 py-4">
@@ -117,7 +120,7 @@ function WatchModal({ c, live, onClose, onEnded }: { c: Pick<CommunityDTO, "slug
         <div className="flex h-12 shrink-0 items-center border-b border-line px-4 text-[15px] font-semibold">Live chat</div>
         <div className="flex min-h-0 flex-1 flex-col">
           {chat.data ? (
-            <LiveRoomChat key={chat.data.channel.id} slug={c.slug} channel={chat.data.channel} isMember={chat.data.isMember} communityName={c.name} />
+            <LiveRoomChat key={chat.data.channel.id} slug={c.slug} channel={chat.data.channel} isMember={chat.data.isMember} canModerate={chat.data.canModerate} communityName={c.name} />
           ) : chat.error ? (
             <p className="p-4 text-sm text-ink-muted">{chat.error}</p>
           ) : (
@@ -415,6 +418,10 @@ export function LiveNowRow() {
     return () => clearInterval(t);
   }, [authed, reload]);
   const items = now.data ?? [];
+  const firstProvider = items[0]?.live.provider;
+  useEffect(() => {
+    if (firstProvider) warmLivePlayer(firstProvider);
+  }, [firstProvider]);
   if (!items.length) return null;
   return (
     <section aria-label="Live now">

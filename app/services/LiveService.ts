@@ -15,7 +15,9 @@ export const LiveService = {
   twitchKey: () => api.get<Envelope<{ server: string; key: string; url: string }>>("/api/me/twitch/key"),
   start: (slug: string, input: { provider: "twitch" | "youtube"; link?: string; title: string; eventId?: string | null }) => api.post<Envelope<LiveDTO>>(`/api/communities/${slug}/live`, input),
   /** the chat beside the stream */
-  chat: (slug: string) => api.get<Envelope<{ liveId: string; isMember: boolean; channel: ChannelDTO }>>(`/api/communities/${slug}/live/chat`),
+  chat: (slug: string) => api.get<Envelope<{ liveId: string; isMember: boolean; canModerate: boolean; channel: ChannelDTO }>>(`/api/communities/${slug}/live/chat`),
+  /** moderating from the live chat: remove someone from the stream (or let them back), or time them out for 10 minutes */
+  moderate: (slug: string, userId: string, action: "remove" | "allow" | "timeout") => api.post<Envelope<unknown>>(`/api/communities/${slug}/live/moderate`, { userId, action }),
   end: (slug: string) => api.delete<Envelope<{ ended: boolean }>>(`/api/communities/${slug}/live`),
   /** let a member go live for so many hours (0 takes it back) */
   pass: (slug: string, userId: string, hours: number) => api.post<Envelope<{ userId: string; until: string | null }>>(`/api/communities/${slug}/live/pass`, { userId, hours }),

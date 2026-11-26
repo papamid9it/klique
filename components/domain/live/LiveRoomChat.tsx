@@ -7,6 +7,9 @@ import { ReportDialog } from "@/components/domain/ReportDialog";
 import { useRealtime, useRealtimeEvent } from "@/components/providers/RealtimeProvider";
 import { ProfileTrigger } from "@/components/providers/ProfileCardProvider";
 import { useToast } from "@/components/providers/ToastProvider";
+import { useConfirm } from "@/components/providers/ConfirmProvider";
+import { useAuth } from "@/components/providers/AuthProvider";
+import { LiveService } from "@/app/services/LiveService";
 import { Avatar } from "@/components/ui/Avatar";
 import { EmojiText } from "@/components/ui/CustomEmoji";
 import { Icon } from "@/components/ui/Icon";
@@ -23,8 +26,10 @@ const MAX_LEN = 300;
  * as gold lines. Plain text only: no pictures, threads or link previews, and links don't open (nobody gets taken off
  * the stream). Members write; everyone else who can see the community reads along.
  */
-export function LiveRoomChat({ slug, channel, isMember, communityName }: { slug: string; channel: ChannelDTO; isMember: boolean; communityName: string }) {
+export function LiveRoomChat({ slug, channel, isMember, communityName, canModerate }: { slug: string; channel: ChannelDTO; isMember: boolean; communityName: string; /** the person streaming and the community's moderators: time out, remove from the stream */ canModerate?: boolean }) {
   const toast = useToast();
+  const confirm = useConfirm();
+  const { user } = useAuth();
   const { connected } = useRealtime();
   const space = { slug };
   const [msgs, setMsgs] = useState<ChannelMessageDTO[]>([]);
@@ -124,6 +129,23 @@ export function LiveRoomChat({ slug, channel, isMember, communityName }: { slug:
     }
   }
 
+  async function moderate(m: ChannelMessageDTO, action: "remove" | "timeout") {
+    const name = m.author.displayName;
+    const ok = await confirm(
+      action === "remove"
+        ? { title: `Remove ${name} from the stream?`, body: "The stream and its chat disappear for them on Klique, and their messages here go.", confirmLabel: "Remove" }
+        : { title: `Time out ${name} for 10 minutes?`, body: "They can't write anywhere in this community until it ends.", confirmLabel: "Time out" },
+    );
+    if (!ok) return;
+    try {
+      await LiveService.moderate(slug, m.author.id, action);
+      if (action === "remove") setMsgs((cur) => cur.filter((x) => x.author.id !== m.author.id));
+      toast(action === "remove" ? `${name} was removed from the stream` : `${name} is timed out for 10 minutes`, "success");
+    } catch (e) {
+      toast(errorMessage(e), "error");
+    }
+  }
+
   async function remove(m: ChannelMessageDTO) {
     try {
       await ChannelService.deleteMessage(space, channel.slug, m.id);
@@ -165,6 +187,16 @@ export function LiveRoomChat({ slug, channel, isMember, communityName }: { slug:
                       <button type="button" aria-label="Delete message" title="Delete" onClick={() => void remove(m)} className="inline-flex size-6 items-center justify-center rounded-full text-ink-muted hover:text-danger">
                         <Icon name="trash" size={13} />
                       </button>
+                    )}
+                    {canModerate && !m.bot && m.author.id !== user?.id && (
+                      <>
+                        <button type="button" aria-label={`Time out ${m.author.displayName}`} title="Time out 10 minutes" onClick={() => void moderate(m, "timeout")} className="inline-flex size-6 items-center justify-center rounded-full text-ink-muted hover:text-ink">
+                          <Icon name="clock" size={13} />
+                        </button>
+                        <button type="button" aria-label={`Remove ${m.author.displayName} from the stream`} title="Remove from the stream" onClick={() => void moderate(m, "remove")} className="inline-flex size-6 items-center justify-center rounded-full text-ink-muted hover:text-danger">
+                          <Icon name="ban" size={13} />
+                        </button>
+                      </>
                     )}
                     {!m.canDelete && (
                       <button type="button" aria-label="Report message" title="Report" onClick={() => setReporting(m)} className="inline-flex size-6 items-center justify-center rounded-full text-ink-muted hover:text-ink">

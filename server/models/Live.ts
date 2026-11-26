@@ -52,6 +52,8 @@ export interface ILiveStream {
   startedAt: Date | null;
   endedAt: Date | null;
   endedById: Types.ObjectId | null;
+  /** removed from this stream by its host or a moderator: no player or live chat for them in Klique */
+  kickedIds?: Types.ObjectId[];
   createdAt: Date;
 }
 
@@ -67,6 +69,7 @@ const LiveStreamSchema = new Schema<ILiveStream>(
     startedAt: { type: Date, default: null },
     endedAt: { type: Date, default: null },
     endedById: { type: Schema.Types.ObjectId, ref: "User", default: null },
+    kickedIds: { type: [Schema.Types.ObjectId], default: [] },
   },
   { timestamps: { createdAt: true, updatedAt: false } },
 );
