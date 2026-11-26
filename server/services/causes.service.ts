@@ -2,7 +2,7 @@ import "server-only";
 import { Types } from "mongoose";
 import type { z } from "zod";
 import { MAX_CAUSES, feeOf, type MoneyConfig } from "@/lib/money";
-import type { CauseDTO, CausesDTO } from "@/lib/types";
+import type { CauseDTO, CausesDTO, CauseSupporterDTO } from "@/lib/types";
 import { ApiError, badRequest, conflict, forbidden, notFound } from "../http/errors";
 import { rateLimit } from "../http/rate-limit";
 import type { ICommunity } from "../models/Community";
@@ -16,6 +16,7 @@ import { moveHype } from "./gifts.service";
 import { sid } from "./helpers";
 import { isKlique } from "./klique.service";
 import { getMoneyConfig } from "./money.service";
+import { loadBriefs } from "../serializers";
 import { notify } from "./push.service";
 import { resolveSpaceFor } from "./spaces.service";
 
@@ -30,7 +31,8 @@ import { resolveSpaceFor } from "./spaces.service";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const naira = (n: number) => `₦${n.toLocaleString("en-NG")}`;
 
-export const causeDto = (b: IDonationButton): CauseDTO => ({
+/** `staff`: the community's owner and admins (or a site admin): only they see how many gave. */
+export const causeDto = (b: IDonationButton, staff = false): CauseDTO => ({
   id: sid(b._id),
   label: b.label || b.title,
   verb: b.verb || "Give",
@@ -39,7 +41,7 @@ export const causeDto = (b: IDonationButton): CauseDTO => ({
   imageUrl: b.imageUrl ?? null,
   goalHype: b.goalHype ?? null,
   raisedHype: b.raisedHype ?? 0,
-  supporters: b.donors,
+  supporters: staff ? b.donors : null,
   main: !!b.main,
 });
 
@@ -59,10 +61,10 @@ async function running(communityId: Types.ObjectId): Promise<IDonationButton[]> 
 }
 
 /** The main cause and how many there are, for the community page (one query; none for groups and Klique HQ). */
-export async function mainCauseOf(community: ICommunity): Promise<{ mainCause: CauseDTO | null; causeCount: number }> {
+export async function mainCauseOf(community: ICommunity, staff = false): Promise<{ mainCause: CauseDTO | null; causeCount: number }> {
   if (noCauses(community)) return { mainCause: null, causeCount: 0 };
   const rows = await running(community._id);
-  return { mainCause: rows[0] ? causeDto(rows[0]) : null, causeCount: rows.length };
+  return { mainCause: rows[0] ? causeDto(rows[0], staff) : null, causeCount: rows.length };
 }
 
 export async function listCauses(viewer: IUser | null, slug: string): Promise<CausesDTO> {
@@ -72,7 +74,7 @@ export async function listCauses(viewer: IUser | null, slug: string): Promise<Ca
   const base = { canManage: manage, unlocked: !noCauses(space.community) && (toKlique(space.community) || unlockedFor(space.community, cfg) || (!!viewer && isSiteAdmin(viewer))), unlock: { members: cfg.causeMinMembers, days: cfg.causeMinDays }, feePercent: toKlique(space.community) ? 100 : cfg.causeFeePercent, max: MAX_CAUSES, toKlique: toKlique(space.community) };
   const balance = viewer ? ((await User.findById(viewer._id).select("giftHype").lean<Pick<IUser, "giftHype">>())?.giftHype ?? 0) : null;
   if (space.sub || !access.canView || noCauses(space.community)) return { ...base, items: [], balance };
-  return { ...base, items: (await running(space.community._id)).map(causeDto), balance };
+  return { ...base, items: (await running(space.community._id)).map((b) => causeDto(b, manage)), balance };
 }
 
 async function managed(viewer: IUser, slug: string) {
@@ -107,7 +109,7 @@ export async function saveCause(viewer: IUser, slug: string, input: z.infer<type
     await DonationButton.updateOne({ _id: row._id }, { $set: { main: false } });
     row = { ...row, main: false };
   }
-  return causeDto(row);
+  return causeDto(row, true);
 }
 
 /** Ending a cause that's been given to only hides it, so what was given stays on the record. */
@@ -137,7 +139,8 @@ export async function giveToCause(viewer: IUser, slug: string, id: string, input
   const reference = `kcs_${sid(viewer._id)}_${input.clientKey}`.slice(0, 120);
   const done = await Payment.findOne({ reference }).lean<IPayment>();
   const balanceNow = async () => (await User.findById(viewer._id).select("giftHype").lean<Pick<IUser, "giftHype">>())?.giftHype ?? 0;
-  if (done?.status === "paid") return { balance: await balanceNow(), cause: causeDto((await DonationButton.findById(cause._id).lean<IDonationButton>()) ?? cause) };
+  const staff = access.canManage || isSiteAdmin(viewer);
+  if (done?.status === "paid") return { balance: await balanceNow(), cause: causeDto((await DonationButton.findById(cause._id).lean<IDonationButton>()) ?? cause, staff) };
   rateLimit(`cause-give:${sid(viewer._id)}`, 60, 60 * 60 * 1000);
 
   const cfg = await getMoneyConfig();
@@ -165,12 +168,36 @@ export async function giveToCause(viewer: IUser, slug: string, id: string, input
 
   // the people who run it hear about it, bundled; the giver gets a thank-you
   const who = input.anonymous ? "Someone" : viewer.displayName;
-  const staff = await Membership.find({ communityId: community._id, subcommunityId: null, status: "active", role: { $in: ["owner", "admin"] } }).select("userId").lean<{ userId: Types.ObjectId }[]>();
+  const runners = await Membership.find({ communityId: community._id, subcommunityId: null, status: "active", role: { $in: ["owner", "admin"] } }).select("userId").lean<{ userId: Types.ObjectId }[]>();
   notify(
-    staff.map((m) => m.userId),
+    runners.map((m) => m.userId),
     { title: `${who} gave ${input.hype.toLocaleString("en-NG")} Hype to ${cause.title}`, body: toKlique(community) ? "Thank you from the Klique Team." : `${naira(amount - fee)} for ${community.name}, after Klique's share.`, data: { href: `/communities/${community.slug}?view=dashboard&d=money` } },
     { ...(input.anonymous ? {} : { actorId: viewer._id }), category: "admin", groupKey: `cause:${sid(cause._id)}`, many: (n) => `${n} gifts to ${cause.title}`, ref: `money:${sid(community._id)}` },
   );
   notify([viewer._id], { title: `Thank you for supporting ${community.name}`, body: `${input.hype.toLocaleString("en-NG")} Hype to ${cause.title}.`, data: { href: `/communities/${community.slug}` } }, { category: "community", ref: `receipt:${reference}` });
-  return { balance, cause: causeDto(after ?? cause) };
+  return { balance, cause: causeDto(after ?? cause, staff) };
+}
+
+const SUPPORTERS_PAGE = 30;
+
+/**
+ * Who gave to a cause, newest first, 30 at a time (`after`: the last one shown): for the community's owner and admins
+ * only. Someone who gave anonymously shows as "Someone".
+ */
+export async function causeSupporters(viewer: IUser, slug: string, id: string, after?: string | null): Promise<{ items: CauseSupporterDTO[]; nextCursor: string | null; total: number }> {
+  const community = await managed(viewer, slug);
+  const cause = Types.ObjectId.isValid(id) ? await DonationButton.findOne({ _id: id, communityId: community._id }).lean<IDonationButton>() : null;
+  if (!cause) throw notFound("We couldn't find that cause.");
+  const rows = await Payment.find({ buttonId: cause._id, status: "paid", ...(after && Types.ObjectId.isValid(after) ? { _id: { $lt: new Types.ObjectId(after) } } : {}) }).sort({ _id: -1 }).limit(SUPPORTERS_PAGE + 1).lean<IPayment[]>();
+  const page = rows.slice(0, SUPPORTERS_PAGE);
+  const named = page.filter((p) => p.message !== "anonymous");
+  const people = await loadBriefs(named.map((p) => p.userId));
+  return {
+    items: page.map((p) => {
+      const anonymous = p.message === "anonymous";
+      return { id: sid(p._id), user: anonymous ? null : (people.get(sid(p.userId)) ?? null), anonymous, hype: p.hype ?? 0, at: (p.paidAt ?? p.createdAt).toISOString() };
+    }),
+    nextCursor: rows.length > SUPPORTERS_PAGE ? sid(page[page.length - 1]._id) : null,
+    total: cause.donors,
+  };
 }

@@ -70,6 +70,12 @@ export interface IUser {
   /** chats and communities they pinned to the top of their lists */
   pins?: { chats?: Types.ObjectId[]; communities?: Types.ObjectId[] };
   suspendedAt?: Date | null;
+  /**
+   * Extra limits a site admin gave this person, on top of their plan, each until a date (a month after it's given):
+   * kliques to start a month, to be in at once, communities to make, communities to join. What they made or joined
+   * with them stays after.
+   */
+  extraLimits?: Partial<Record<"kliqueStart" | "kliqueIn" | "communityCreate" | "communityJoin", { n: number; until: Date }>>;
   /** finished joining: picked 3+ categories and joined 2+ communities (null: they're sent to /welcome) */
   onboardedAt?: Date | null;
   /** a bot's own account (models/BotApp): it can't sign in, take DMs or friend requests; shown with a BOT tag */
@@ -135,6 +141,7 @@ const UserSchema = new Schema<IUser>(
     payoutBank: { type: Schema.Types.Mixed, default: null },
     pins: { type: { chats: [Schema.Types.ObjectId], communities: [Schema.Types.ObjectId], _id: false }, default: undefined },
     suspendedAt: { type: Date, default: null },
+    extraLimits: { type: Schema.Types.Mixed, default: undefined },
     onboardedAt: { type: Date, default: null },
     bot: { type: new Schema({ appId: { type: Schema.Types.ObjectId, required: true } }, { _id: false }), default: null },
     dob: { type: Date, default: null },

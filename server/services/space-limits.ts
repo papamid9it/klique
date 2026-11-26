@@ -10,6 +10,7 @@ import type { IUser } from "../models/User";
 import { isSiteAdmin } from "../policies/hosting";
 import { kliqueId } from "./klique-id";
 import { getPlanConfig, planOf } from "./subscriptions.service";
+import { extraOf, moreFor } from "./limits.service";
 
 /**
  * Plan limits on communities (lib/plans, Admin → Plans): how many you may own, how many you may be in (Klique HQ
@@ -18,7 +19,7 @@ import { getPlanConfig, planOf } from "./subscriptions.service";
  * for everyone in them; you just can't create or join more until you're back under your plan's limit.
  */
 
-const more = (plan: PlanId) => (plan === "pro" ? "" : ` Upgrade to ${plan === "free" ? "Lite or Pro" : "Pro"} for more: see /pricing.`);
+const more = (plan: PlanId) => moreFor(plan);
 const keep = " Everything you already have keeps working.";
 const limit = (message: string) => new ApiError(403, message, { code: "plan_limit" });
 
@@ -30,7 +31,8 @@ async function planAndConfig(viewer: IUser) {
 export async function assertCanCreateCommunity(viewer: IUser) {
   if (isSiteAdmin(viewer)) return;
   const { plan, c } = await planAndConfig(viewer);
-  const max = c.communitiesCreate[plan];
+  // the plan's, plus any extra the Klique Team gave them (to be used within its month)
+  const max = c.communitiesCreate[plan] + extraOf(viewer, "communityCreate");
   const owned = await Community.countDocuments({ ownerId: viewer._id, official: { $ne: true } });
   if (owned >= max) throw limit(`You own ${owned} ${owned === 1 ? "community" : "communities"}; ${PLAN_NAMES[plan]} allows ${max}.${keep}${more(plan)}`);
 }
@@ -41,7 +43,7 @@ export async function assertCanJoinCommunity(viewer: IUser, communityId: Types.O
   const hq = await kliqueId();
   if (hq && String(hq) === String(communityId)) return;
   const { plan, c } = await planAndConfig(viewer);
-  const max = c.communitiesJoin[plan];
+  const max = c.communitiesJoin[plan] + extraOf(viewer, "communityJoin");
   const inNow = await Membership.countDocuments({ userId: viewer._id, subcommunityId: null, status: "active", ...(hq ? { communityId: { $ne: hq } } : {}) });
   if (inNow >= max) throw limit(`You're in ${inNow} communities; ${PLAN_NAMES[plan]} allows ${max}. Leave one to join another.${more(plan)}`);
 }

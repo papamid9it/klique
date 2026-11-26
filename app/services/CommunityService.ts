@@ -4,7 +4,7 @@ import type { CityId, InterestId } from "@/lib/constants";
 
 /** a cause as its owner writes it: goal in Hype (null: no goal) */
 export type CauseInput = { label: string; verb?: string; title: string; description?: string; imageUrl?: string | null; goalHype?: number | null; main?: boolean };
-import type { CommunityCardDTO, CommunityDTO, CommunityPrivacy, Envelope, GroupPolicy, MyCommunityDTO, Paginated, SidebarDTO, CommunityDashboardDTO, CommunityReviewDTO, CauseDTO, CausesDTO, GrowthStatsDTO, VerificationDTO, Move } from "@/lib/types";
+import type { CommunityCardDTO, CommunityDTO, CommunityPrivacy, Envelope, GroupPolicy, MyCommunityDTO, Paginated, SidebarDTO, CommunityDashboardDTO, CommunityReviewDTO, CauseDTO, CausesDTO, CauseSupporterDTO, GrowthStatsDTO, VerificationDTO, Move } from "@/lib/types";
 
 const api = new ApiClient();
 
@@ -72,6 +72,8 @@ export const CommunityService = {
   /** causes: what the community raises Hype for (anyone who can see it), and making, changing and ending them (owner, admins) */
   causes: (slug: string) => api.get<Envelope<CausesDTO>>(`/api/communities/${slug}/causes`),
   saveCause: (slug: string, input: CauseInput, id?: string) => (id ? api.patch<Envelope<CauseDTO>>(`/api/communities/${slug}/causes/${id}`, input) : api.post<Envelope<CauseDTO>>(`/api/communities/${slug}/causes`, input)),
+  /** who gave to a cause, 30 at a time (the community's owner and admins only) */
+  causeSupporters: (slug: string, id: string, after?: string | null) => api.get<Envelope<{ items: CauseSupporterDTO[]; nextCursor: string | null; total: number }>>(`/api/communities/${slug}/causes/${id}/supporters`, after ? { after } : undefined),
   endCause: (slug: string, id: string) => api.delete<Envelope<{ ended: boolean }>>(`/api/communities/${slug}/causes/${id}`),
   /** give Hype to a cause: a gift, never refunded */
   giveToCause: (slug: string, id: string, input: { hype: number; clientKey: string; anonymous?: boolean; agree: true }) => api.post<Envelope<{ balance: number; cause: CauseDTO }>>(`/api/communities/${slug}/causes/${id}/give`, input),

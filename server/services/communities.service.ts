@@ -28,6 +28,7 @@ import { PAGE_SIZE, purgeSpaceData, recountMembers, sid, uniqueCommunitySlug } f
 import { resolveSpace } from "./spaces.service";
 import { countVisibleSubs } from "./subcommunities.service";
 import { listedFilter, standingOf } from "../policies/standing";
+import { isSiteAdmin } from "../policies/hosting";
 import { assertCanCreateCommunity } from "./space-limits";
 
 type ListQuery = z.infer<typeof communityListQuery>;
@@ -155,7 +156,7 @@ export async function getCommunity(viewer: IUser | null, slug: string): Promise<
     // what's waiting for this viewer to approve (only people who approve things here)
     reviewCounts(viewer, space.community, access),
     // the cause shown under its name (the main one), for people who can see inside
-    access.canView ? mainCauseOf(space.community) : null,
+    access.canView ? mainCauseOf(space.community, access.canManage || (!!viewer && isSiteAdmin(viewer))) : null,
   ]);
   const dto = await toCommunityDetail(space.community, access, { subcommunityCount, upcomingEventCount });
   if (viewer && access.isMember) dto.suppressEveryone = !!membership?.suppressEveryone;

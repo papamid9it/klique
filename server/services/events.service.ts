@@ -104,6 +104,13 @@ export async function listEvents(viewer: IUser | null, q: ListQuery): Promise<Pa
     and.push(searchFilter(q.q, ["title", "venue", "neighborhood", "description", "city", "interest"]) as QueryFilter<IEvent>);
   }
 
+  // your own events sent in for approval (waiting, or turned down, with the reason): only you see them
+  if (q.scope === "submitted") {
+    if (!viewer) throw unauthorized();
+    const rows = await Event.find({ hostId: viewer._id, review: { $in: ["pending", "rejected"] }, cancelled: false }).sort({ createdAt: -1 }).skip((q.page - 1) * PAGE_SIZE).limit(PAGE_SIZE + 1).lean<IEvent[]>();
+    return { items: await toEvents(rows.slice(0, PAGE_SIZE), viewer), page: q.page, hasMore: rows.length > PAGE_SIZE };
+  }
+
   // Events inside one community / group: whoever may see that space sees its events. That's how a public
   // community shows visitors what's on before they join; everywhere else, events are for members only.
   if (q.community) {

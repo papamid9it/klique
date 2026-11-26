@@ -19,7 +19,7 @@ export interface EventListParams {
   community?: string;
   sub?: string;
   /** "going" | "saved" | "hosted" | "mine" (hosted or going) need a signed-in user */
-  scope?: "all" | "going" | "saved" | "hosted" | "mine";
+  scope?: "all" | "going" | "saved" | "hosted" | "mine" | "submitted";
   past?: boolean;
   page?: number;
 }

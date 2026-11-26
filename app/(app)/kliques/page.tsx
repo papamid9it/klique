@@ -27,6 +27,7 @@ import { formatDateShort } from "@/lib/format";
 import type { CrewCardDTO, JoinedKliqueDTO } from "@/lib/types";
 import { Cover } from "@/components/ui/Cover";
 import { SoftLink } from "@/components/ui/SoftLink";
+import { LimitsPill } from "@/components/domain/account/LimitsPill";
 import { Tabs } from "@/components/ui/Tabs";
 
 type When = NonNullable<KliqueFilters["when"]> | "any";
@@ -412,7 +413,9 @@ function KliquesPage() {
           <h1 className="text-2xl font-semibold tracking-[-0.02em]">Kliques</h1>
           <p className="text-sm text-ink-muted">Movies, matches, runs, nights out and events. Join one, or start your own.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* how much of your plan you've used: in at once, starts left this month */}
+          <LimitsPill kind="kliques" />
           {f.tab === "discover" && (
             <Button className="lg:hidden" onClick={() => setSheet(true)}>
               <Icon name="sliders" size={15} /> Filters{active ? ` · ${active}` : ""}

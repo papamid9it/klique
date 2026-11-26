@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { errorMessage, isApiError } from "@/app/ApiCore";
 import { CommunityService, type CauseInput } from "@/app/services/CommunityService";
 import { GiftService } from "@/app/services/GiftService";
 import { HypeCoin } from "@/components/domain/gifts/HypeCoin";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useToast } from "@/components/providers/ToastProvider";
+import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { Switch, TextArea, TextField } from "@/components/ui/Field";
 import { Icon } from "@/components/ui/Icon";
@@ -19,7 +20,7 @@ import { cx } from "@/components/ui/cx";
 import { useApi } from "@/lib/hooks/useApi";
 import { CAUSE_PRESETS, MAX_CAUSE_GIFT } from "@/lib/money";
 import { HYPE_NAIRA } from "@/lib/gifts";
-import type { CauseDTO, CommunityDTO } from "@/lib/types";
+import type { CauseDTO, CauseSupporterDTO, CommunityDTO } from "@/lib/types";
 
 /*
  * Causes: what a community raises Hype for (they replaced donations). The main one sits in the community's left panel
@@ -31,8 +32,8 @@ const hype = (n: number) => n.toLocaleString("en-NG");
 const newKey = () => `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 12)}`;
 
 /** How far a cause is: a gold bar, and so much of its goal in Hype. */
-export function CauseBar({ cause, compact, className }: { cause: Pick<CauseDTO, "raisedHype" | "goalHype" | "supporters">; compact?: boolean; className?: string }) {
-  if (!cause.goalHype) return compact ? null : <p className={cx("font-mono text-[12px] text-ink-muted", className)}>{hype(cause.raisedHype)} Hype from {cause.supporters} {cause.supporters === 1 ? "person" : "people"}</p>;
+export function CauseBar({ cause, compact, className }: { cause: Pick<CauseDTO, "raisedHype" | "goalHype">; compact?: boolean; className?: string }) {
+  if (!cause.goalHype) return compact ? null : <p className={cx("font-mono text-[12px] text-ink-muted", className)}>{hype(cause.raisedHype)} Hype given</p>;
   const pct = Math.min(100, Math.round((cause.raisedHype / cause.goalHype) * 100));
   return (
     <div className={className}>
@@ -95,7 +96,7 @@ function CausesModal({ c, onPick, onClose }: { c: CommunityDTO; onPick: (x: Caus
                   <span className="min-w-0 flex-1">
                     {x.main && <span className="mb-0.5 inline-block rounded-[5px] bg-ink px-1.5 font-mono text-[10.5px] font-semibold text-canvas">MAIN</span>}
                     <span className="block truncate text-[14px] font-semibold">{x.title}</span>
-                    <span className="block text-[12px] text-ink-muted">{x.supporters} {x.supporters === 1 ? "supporter" : "supporters"}</span>
+
                   </span>
                 </span>
                 <CauseBar cause={x} className="mt-2.5" />
@@ -216,6 +217,7 @@ export function CausesSettings({ c }: { c: CommunityDTO }) {
   const toast = useToast();
   const { data, loading, error, reload } = useApi(() => CommunityService.causes(c.slug), [c.slug], { key: `causes:${c.slug}` });
   const [editing, setEditing] = useState<CauseDTO | "new" | null>(null);
+  const [supportersOf, setSupportersOf] = useState<CauseDTO | null>(null);
   if (loading && !data) return <RowSkeleton rows={3} />;
   if (error || !data) return <ErrorState message={error} onRetry={reload} />;
   async function end(x: CauseDTO) {
@@ -247,8 +249,12 @@ export function CausesSettings({ c }: { c: CommunityDTO }) {
                 <li key={x.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[14px] font-semibold">{x.main && <span className="mr-1.5 rounded-[5px] bg-ink px-1.5 font-mono text-[10.5px] text-canvas">MAIN</span>}{x.title}</p>
-                    <p className="truncate text-[12.5px] text-ink-muted">Button: {x.label}</p>
+                    <p className="truncate text-[12.5px] text-ink-muted">Button: {x.label} · {x.verb}</p>
                     <CauseBar cause={x} className="mt-1.5" />
+                    {/* only the people who run it see who gave */}
+                    <button type="button" onClick={() => setSupportersOf(x)} className="mt-1.5 text-[12.5px] font-semibold text-ink-muted hover:text-ink">
+                      {x.supporters ?? 0} {x.supporters === 1 ? "supporter" : "supporters"} ›
+                    </button>
                   </div>
                   <Button size="sm" onClick={() => setEditing(x)}>Edit</Button>
                   <Button size="sm" variant="ghost" onClick={() => void end(x)}>End</Button>
@@ -263,6 +269,7 @@ export function CausesSettings({ c }: { c: CommunityDTO }) {
           )}
         </>
       )}
+      {supportersOf && <SupportersModal c={c} cause={supportersOf} onClose={() => setSupportersOf(null)} />}
       {editing && <CauseForm c={c} cause={editing === "new" ? null : editing} first={!data.items.length} onClose={() => setEditing(null)} onSaved={() => (setEditing(null), void reload())} />}
     </div>
   );
@@ -332,6 +339,56 @@ function CauseForm({ c, cause, first, onClose, onSaved }: { c: CommunityDTO; cau
           <Button type="submit" variant="primary" loading={busy}>{cause ? "Save" : "Start this cause"}</Button>
         </div>
       </form>
+    </Modal>
+  );
+}
+
+/** Who gave to a cause (owner and admins only), newest first; more load as you scroll to the end. */
+function SupportersModal({ c, cause, onClose }: { c: CommunityDTO; cause: CauseDTO; onClose: () => void }) {
+  const toast = useToast();
+  const [items, setItems] = useState<CauseSupporterDTO[]>([]);
+  const [next, setNext] = useState<string | null | undefined>(undefined);
+  const [busy, setBusy] = useState(false);
+  const load = useCallback(async (after?: string | null) => {
+    setBusy(true);
+    try {
+      const r = (await CommunityService.causeSupporters(c.slug, cause.id, after)).data;
+      setItems((list) => [...list, ...r.items.filter((x) => !list.some((y) => y.id === x.id))]);
+      setNext(r.nextCursor);
+    } catch (e) {
+      toast(errorMessage(e), "error");
+    }
+    setBusy(false);
+  }, [c.slug, cause.id, toast]);
+  useEffect(() => void load(), [load]);
+  const when = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  return (
+    <Modal open onClose={onClose} title="Supporters" description={`${cause.title} · ${cause.supporters ?? 0} ${cause.supporters === 1 ? "person" : "people"}`} size="sm">
+      <div
+        className="max-h-[60vh] overflow-y-auto"
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          if (next && !busy && el.scrollTop + el.clientHeight > el.scrollHeight - 80) void load(next);
+        }}
+      >
+        {items.length === 0 && busy ? <RowSkeleton rows={4} /> : items.length === 0 ? (
+          <p className="py-6 text-center text-sm text-ink-muted">Nobody has given yet.</p>
+        ) : (
+          <ul className="divide-y divide-line">
+            {items.map((x) => (
+              <li key={x.id} className="flex items-center gap-3 py-2.5">
+                {x.user ? <Avatar name={x.user.displayName} src={x.user.avatarUrl} size={32} /> : <span className="inline-flex size-8 items-center justify-center rounded-full bg-raised text-ink-muted"><Icon name="user" size={15} /></span>}
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold">{x.user ? x.user.displayName : "Someone"}</span>
+                  <span className="block text-[12px] text-ink-muted">{x.anonymous ? "Gave anonymously · " : ""}{when(x.at)}</span>
+                </span>
+                <span className="flex items-center gap-1 font-mono text-sm font-semibold"><HypeCoin size={14} />{hype(x.hype)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {busy && items.length > 0 && <p className="py-3 text-center text-[12.5px] text-ink-muted">Loading more…</p>}
+      </div>
     </Modal>
   );
 }

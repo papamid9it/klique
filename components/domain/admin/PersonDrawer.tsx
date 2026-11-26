@@ -21,6 +21,57 @@ import { placeShort } from "@/lib/places";
 import type { AdminUserDTO } from "@/lib/types";
 import { AuditRow, Badge, ConfirmDialog } from "./AdminParts";
 
+const EXTRAS: { kind: "kliqueStart" | "kliqueIn" | "communityCreate" | "communityJoin"; label: string; hint: string }[] = [
+  { kind: "kliqueStart", label: "Kliques to start", hint: "extra this month" },
+  { kind: "kliqueIn", label: "Kliques to be in", hint: "at once" },
+  { kind: "communityCreate", label: "Communities to make", hint: "use within the month" },
+  { kind: "communityJoin", label: "Communities to join", hint: "use within the month" },
+];
+
+/**
+ * Extra on top of their plan, for a month from now: kliques to start, to be in at once, communities to make or join
+ * (what they make or join with it stays). They're told, and it goes in the audit log. 0 takes it away.
+ */
+function ExtraLimits({ u, onChange }: { u: AdminUserDTO; onChange: () => void }) {
+  const toast = useToast();
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+  async function give(kind: (typeof EXTRAS)[number]["kind"]) {
+    const n = Math.max(0, Math.floor(Number(values[kind] ?? "") || 0));
+    setBusy(kind);
+    try {
+      await AdminService.setExtra(u.id, kind, n);
+      toast(n ? `Given for a month: +${n}` : "Taken away", "success");
+      setValues((v) => ({ ...v, [kind]: "" }));
+      onChange();
+    } catch (e) {
+      toast(errorMessage(e), "error");
+    }
+    setBusy(null);
+  }
+  return (
+    <section>
+      <h3 className="eyebrow mb-2">Extra limits</h3>
+      <p className="mb-3 text-[13px] text-ink-muted">On top of their plan, for a month from now. They&apos;re told. What they make or join with it stays.</p>
+      <ul className="divide-y divide-line rounded-control border border-line">
+        {EXTRAS.map((x) => {
+          const now = u.extras?.find((e) => e.kind === x.kind);
+          return (
+            <li key={x.kind} className="flex flex-wrap items-center gap-3 px-3 py-2.5">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold">{x.label}</p>
+                <p className="text-[12px] text-ink-muted">{now ? `+${now.n} until ${formatDateLong(now.until)}` : x.hint}</p>
+              </div>
+              <input type="number" min={0} max={1000} inputMode="numeric" aria-label={`${x.label}: how many extra`} placeholder={now ? String(now.n) : "0"} value={values[x.kind] ?? ""} onChange={(e) => setValues((v) => ({ ...v, [x.kind]: e.target.value }))} className="h-9 w-20 rounded-control border border-line bg-raised px-2 text-sm" />
+              <Button size="sm" loading={busy === x.kind} onClick={() => void give(x.kind)}>{(values[x.kind] ?? "") === "0" ? "Take away" : "Give"}</Button>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
 export function UserBadges({ u }: { u: AdminUserDTO }) {
   return (
     <>
@@ -195,6 +246,8 @@ export function PersonDrawer({ userId, onClose, onChange }: { userId: string | n
               )}
             </section>
           )}
+
+          <ExtraLimits u={u} onChange={() => void reload()} />
 
           <section>
             <h3 className="eyebrow mb-2">Admin history</h3>

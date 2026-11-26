@@ -675,6 +675,14 @@ export function ChannelList({
           {nav
             .filter((n) => n.show)
             .map((n) => navLink(`${base}?view=${n.id}`, view === n.id, n.label, n.icon, n.count, undefined, n.badge))}
+          {/* the community's live stream: one at a time, coming soon */}
+          <li>
+            <button type="button" onClick={() => toast("Live is coming soon: one stream at a time for the whole community, and live from its events.")} className="flex h-9 w-full items-center gap-2.5 rounded-control px-2.5 text-[14px] font-medium text-ink-muted transition hover:bg-raised/60 hover:text-ink">
+              <Icon name="play" size={16} />
+              Live
+              <span className="ml-auto rounded-full border border-line px-2 py-px font-mono text-[11px] font-semibold uppercase">Soon</span>
+            </button>
+          </li>
         </ul>
         {groupSection}
         {crewSection(crews)}

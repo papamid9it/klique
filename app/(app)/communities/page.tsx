@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { EmptyState } from "@/components/ui/States";
 import { isInterestId } from "@/lib/constants";
+import { LimitsPill } from "@/components/domain/account/LimitsPill";
 import { softNavigate } from "@/lib/nav";
 
 type Section = "discover" | "joined" | "sponsored";
@@ -59,9 +60,13 @@ export default function CommunitiesPage() {
         eyebrow="Communities"
         title={section === "joined" ? "My communities" : section === "sponsored" ? "Sponsored communities" : "Find your people"}
         action={
-          <Button href="/communities/new" variant="ink">
-            <Icon name="plus" size={16} /> Start a community
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* how much of your plan you've used: joined, and how many more you can make */}
+            <LimitsPill kind="communities" />
+            <Button href="/communities/new" variant="ink">
+              <Icon name="plus" size={16} /> Start a community
+            </Button>
+          </div>
         }
         // the sections are in the left panel on big screens; phones and tablets keep them as tabs here
         footer={

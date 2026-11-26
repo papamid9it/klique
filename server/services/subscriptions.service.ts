@@ -68,7 +68,7 @@ export const planOf = (u: Pick<IUser, "plan" | "planUntil" | "email">): PlanId =
 /* ------------------------------ usage ------------------------------ */
 
 /** The start of this calendar month in Lagos (UTC+1). */
-function monthStart(now = new Date()): Date {
+export function monthStart(now = new Date()): Date {
   const lagos = new Date(+now + 3600_000);
   return new Date(Date.UTC(lagos.getUTCFullYear(), lagos.getUTCMonth(), 1) - 3600_000);
 }

@@ -3,7 +3,7 @@
 import { ANDROID_APP_URL } from "@/lib/constants";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { errorMessage, isApiError } from "@/app/ApiCore";
+import ApiClient, { errorMessage, isApiError } from "@/app/ApiCore";
 import { SubscriptionService } from "@/app/services/SubscriptionService";
 import { useToast } from "@/components/providers/ToastProvider";
 import { Button } from "@/components/ui/Button";
@@ -18,6 +18,7 @@ import { useApi } from "@/lib/hooks/useApi";
 import { PLAN_NAMES, planPerks, type PaidPlan, type PlanId } from "@/lib/plans";
 import type { SubscriptionDTO } from "@/lib/types";
 import { usePayWith } from "@/components/domain/payments/PayWith";
+import { TextArea } from "@/components/ui/Field";
 import { PointsCard } from "./PointsCard";
 
 const ORDER: PlanId[] = ["free", "lite", "pro"];
@@ -109,11 +110,40 @@ export function UpgradePrompt({ message, onClose }: { message: string | null; on
               </Button>
             </>
           )}
+          {/* on Pro already: no plan above, so the Klique Team can give more (it lands in Admin → Feedback) */}
+          {sub && !next && !sub.siteAdmin && <AskForMore what={text} />}
           <Button className="w-full" href="/settings?tab=plan">{next ? "See everything in Lite and Pro" : "See your plan"}</Button>
           <button type="button" onClick={onClose} className="h-10 w-full text-sm font-semibold text-ink-muted hover:text-ink">Not now</button>
         </div>
       </div>
     </Modal>
+  );
+}
+
+/** On Pro and still need more: a short note to the Klique Team, who can give extra for a month (Admin → People). */
+function AskForMore({ what }: { what: string }) {
+  const toast = useToast();
+  const [open, setOpen] = useState(false);
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
+  if (sent) return <p className="rounded-control bg-raised px-3 py-2.5 text-sm">Sent. The Klique Team will get back to you.</p>;
+  if (!open) return <Button variant="primary" className="w-full" onClick={() => setOpen(true)}>Ask the Klique Team for more</Button>;
+  async function send() {
+    setBusy(true);
+    try {
+      await new ApiClient().post("/api/feedback", { kind: "feedback", message: `I'd like more than Pro allows. ${what.trim()} What I need it for: ${note.trim()}`.slice(0, 2000), source: "web plan limit" });
+      setSent(true);
+    } catch (e) {
+      toast(errorMessage(e), "error");
+    }
+    setBusy(false);
+  }
+  return (
+    <div className="space-y-2">
+      <TextArea label="What do you need it for?" value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} placeholder="e.g. I run 3 football communities and need one more for Abuja." />
+      <Button variant="primary" className="w-full" loading={busy} disabled={note.trim().length < 5} onClick={() => void send()}>Send to the Klique Team</Button>
+    </div>
   );
 }
 

@@ -30,6 +30,8 @@ export const AdminService = {
   /** take a community's 18+ flag (and with it explicit content) or just its explicit flag off */
   communityFlags: (id: string, input: { adult?: false; explicit?: false; verified?: boolean; rejectVerification?: true; note?: string }) => api.patch<Envelope<{ adult?: boolean; explicit?: boolean; verified?: boolean }>>(`/api/admin/communities/${id}`, input),
   deleteCommunity: (id: string, note = "", banOwner = false) => api.delete<Envelope<{ deleted: boolean }>>(`/api/admin/communities/${id}`, { note, ...(banOwner ? { banOwner: "1" } : {}) }),
+  /** give someone extra on top of their plan for a month (n = 0 takes it away) */
+  setExtra: (userId: string, kind: "kliqueStart" | "kliqueIn" | "communityCreate" | "communityJoin", n: number) => api.post<Envelope<{ kind: string; n: number; until: string | null }>>(`/api/admin/users/${userId}/extras`, { kind, n }),
   /** warn its owner, restrict, suspend (days, or none: until lifted) or lift; the owner sees the reason */
   communityStanding: (id: string, input: { action: "warn" | "restrict" | "suspend" | "lift"; days?: number | null; reason: string }) => api.post<Envelope<{ standing: AdminCommunityRow["standing"] }>>(`/api/admin/communities/${id}/standing`, input),
 

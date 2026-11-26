@@ -426,7 +426,8 @@ export const eventListQuery = pageQuery.extend({
   q: z.preprocess(blankToUndef, z.string().trim().max(60).optional()),
   community: z.preprocess(blankToUndef, z.string().trim().max(80).optional()),
   sub: z.preprocess(blankToUndef, z.string().trim().max(80).optional()),
-  scope: z.enum(["all", "going", "saved", "hosted", "mine"]).default("all"),
+  /** submitted: your own events waiting for approval, or turned down (only you see them) */
+  scope: z.enum(["all", "going", "saved", "hosted", "mine", "submitted"]).default("all"),
   past: z.preprocess((v) => v === "true" || v === true, z.boolean()).default(false),
   sort: z.enum(["soonest", "popular", "new"]).default("soonest"),
 });

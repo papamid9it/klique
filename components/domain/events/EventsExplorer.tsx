@@ -35,11 +35,13 @@ const WHEN: { id: DateFilter; label: string }[] = [
   { id: "month", label: "Next 30 days" },
 ];
 
-type Mine = "going" | "saved" | "hosted";
-const MINE: { id: Mine; label: string; icon: "check" | "bookmark" | "calendar" }[] = [
+type Mine = "going" | "saved" | "hosted" | "submitted";
+const MINE: { id: Mine; label: string; icon: "check" | "bookmark" | "calendar" | "clock" }[] = [
   { id: "going", label: "Going", icon: "check" },
   { id: "saved", label: "Saved", icon: "bookmark" },
   { id: "hosted", label: "Hosting", icon: "calendar" },
+  // your own events waiting for a community admin to approve them, or turned down (with the reason)
+  { id: "submitted", label: "Sent in", icon: "clock" },
 ];
 
 /** Your own events (going, saved, hosting), shown in place of the results when picked in the panel. */
@@ -63,13 +65,21 @@ function MyEvents({ scope, onBack }: { scope: Mine; onBack: () => void }) {
         ) : error ? (
           <ErrorState message={error} onRetry={reload} />
         ) : !items.length ? (
-          <EmptyState icon={scope === "saved" ? "bookmark" : "calendar"} title={scope === "saved" ? "Nothing saved yet" : scope === "going" ? "You're not going to anything yet" : "You aren't hosting anything"} action={scope === "hosted" ? <Button href="/events/new" variant="primary">Create an event</Button> : <Button href="/events">Find events</Button>}>
-            {scope === "saved" ? "Tap the bookmark on any event to keep it here." : scope === "going" ? "RSVP to an event and it'll show up here." : "Events live in communities: post one from your community's Events page."}
+          <EmptyState icon={scope === "saved" ? "bookmark" : "calendar"} title={scope === "saved" ? "Nothing saved yet" : scope === "going" ? "You're not going to anything yet" : scope === "submitted" ? "Nothing waiting" : "You aren't hosting anything"} action={scope === "hosted" ? <Button href="/events/new" variant="primary">Create an event</Button> : <Button href="/events">Find events</Button>}>
+            {scope === "saved" ? "Tap the bookmark on any event to keep it here." : scope === "going" ? "RSVP to an event and it'll show up here." : scope === "submitted" ? "Events you send in to a community for its admins to approve show up here, until they're up." : "Events live in communities: post one from your community's Events page."}
           </EmptyState>
         ) : (
           <div className="space-y-2.5">
             {items.map((e) => (
-              <EventRow key={e.id} event={e} onChange={(next) => setItems((list) => list.map((x) => (x.id === next.id ? next : x)))} />
+              <div key={e.id}>
+                {/* sent in: waiting, or not approved with the admin's reason (open it to change it and send it again) */}
+                {scope === "submitted" && (
+                  <p className={cx("mb-1 text-[12.5px] font-semibold", e.review?.status === "rejected" ? "text-danger" : "text-ink-muted")}>
+                    {e.review?.status === "rejected" ? `Not approved${e.review.reason ? `: “${e.review.reason}”. Open it to change it and send it again.` : "."}` : `Waiting for an admin of ${e.community?.name ?? "the community"} to approve it.`}
+                  </p>
+                )}
+                <EventRow event={e} onChange={(next) => setItems((list) => list.map((x) => (x.id === next.id ? next : x)))} />
+              </div>
             ))}
             <MoreOnScroll hasMore={hasMore} loading={loadingMore} count={items.length} onLoad={loadMore} />
           </div>

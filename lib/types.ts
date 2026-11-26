@@ -1367,7 +1367,8 @@ export interface CauseDTO {
   imageUrl: string | null;
   goalHype: number | null;
   raisedHype: number;
-  supporters: number;
+  /** how many people gave: only for the community's owner and admins (null for everyone else) */
+  supporters: number | null;
   main: boolean;
 }
 
@@ -1690,6 +1691,8 @@ export interface ReportDTO {
 }
 
 export interface AdminUserDTO extends UserBrief {
+  /** extra on top of their plan from the Klique Team, still running (each lasts a month from when it's given) */
+  extras?: { kind: "kliqueStart" | "kliqueIn" | "communityCreate" | "communityJoin"; n: number; until: ISODate }[];
   email: string;
   emailVerified: boolean;
   isAdmin: boolean;
@@ -2333,4 +2336,26 @@ export interface BotCommandRuleDTO {
   channelIds: string[];
   /** each person can use it once in this many seconds (0: no wait; owners, admins and moderators never wait) */
   cooldownSec: number;
+}
+
+/** What someone may still do on their plan (plus any extra a site admin gave them), for the limit pills and sheets. */
+export interface LimitsDTO {
+  plan: "free" | "lite" | "pro";
+  /** the next plan up for more (null: on Pro, ask the Klique Team) */
+  nextPlan: "lite" | "pro" | null;
+  /** site admins: no limits */
+  unlimited: boolean;
+  kliques: { started: number; startMax: number; inNow: number; inMax: number | null; resetsAt: ISODate };
+  communities: { owned: number; ownMax: number; joined: number; joinMax: number };
+  /** what's on top of the plan, and until when */
+  extras: { kind: "kliqueStart" | "kliqueIn" | "communityCreate" | "communityJoin"; n: number; until: ISODate }[];
+}
+
+/** One gift to a cause, for the community's owner and admins: who (or "Someone", given anonymously), how much, when. */
+export interface CauseSupporterDTO {
+  id: Id;
+  user: UserBrief | null;
+  anonymous: boolean;
+  hype: number;
+  at: ISODate;
 }

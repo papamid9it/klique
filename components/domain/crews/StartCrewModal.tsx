@@ -122,12 +122,14 @@ export function StartCrewModal({ event, community, open, onClose, onCreated }: {
           </p>
           <div className="flex justify-end gap-2">
             <Button onClick={onClose}>Close</Button>
-            {/plan|upgrade/i.test(blocked) && (
-              <Button variant="primary" href="/settings?tab=plan">
-                See plans
+            {/* a plan limit: what each plan gives, and the way to more (Lite or Pro, Pro, or on Pro the Klique Team) */}
+            {/this month|Lite|Pro|Klique Team/.test(blocked) && (
+              <Button variant="primary" onClick={() => setAskPlan(blocked)}>
+                Get more
               </Button>
             )}
           </div>
+          <UpgradePrompt message={askPlan} onClose={() => setAskPlan(null)} />
         </div>
       ) : (
         <form ref={form} onSubmit={submit} className="space-y-4" noValidate>

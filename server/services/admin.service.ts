@@ -327,6 +327,10 @@ const toAdminUser = (u: IUser): AdminUserDTO => ({
   emailVerified: !!u.emailVerifiedAt,
   isAdmin: isSiteAdmin(u),
   suspended: !!u.suspendedAt,
+  extras: (["kliqueStart", "kliqueIn", "communityCreate", "communityJoin"] as const).flatMap((kind) => {
+    const e = u.extraLimits?.[kind];
+    return e && +new Date(e.until) > Date.now() ? [{ kind, n: e.n, until: new Date(e.until).toISOString() }] : [];
+  }),
   suspendedReason: u.suspendedReason ?? "",
   gender: u.gender ?? "unspecified",
   createdAt: u.createdAt.toISOString(),
