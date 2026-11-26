@@ -14,11 +14,15 @@ export interface PointsConfig {
   actions: Record<PointAction, number>;
   /** most points anyone can earn from each kind of action in one day (Lagos time) */
   caps: Record<PointAction, number>;
+  /** a host earns for the people who came only once at least this many came (then for all of them; 0 or 1: from the first) */
+  hostMinAttendees: number;
+  /** watching a streamed event this many minutes (in a row) counts as coming to it */
+  streamAttendMinutes: number;
 }
 
 export const POINT_ACTIONS: { id: PointAction; label: string; hint: string }[] = [
-  { id: "attend", label: "Came to an event", hint: "The host confirms you were there." },
-  { id: "hostAttendee", label: "Someone came to your event", hint: "Per person the host confirms (up to 50 per event)." },
+  { id: "attend", label: "Came to an event", hint: "The host confirms you were there, or you watched its live stream long enough." },
+  { id: "hostAttendee", label: "Someone came to your event", hint: "Per person who came (confirmed by the host, or watched your stream), once enough people came. Up to 50 per event." },
   { id: "crew", label: "Went with a klique", hint: "You were in a klique of 2 or more for an event you were confirmed at." },
   { id: "postUpvote", label: "Love on your post", hint: "Someone else loved a post of yours (once per person per post)." },
   { id: "boardUpvote", label: "Upvote on your board post", hint: "Someone else upvoted a board post of yours (once per person per post)." },
@@ -28,6 +32,8 @@ export const POINT_ACTIONS: { id: PointAction; label: string; hint: string }[] =
 export const DEFAULT_POINTS_CONFIG: PointsConfig = {
   actions: { attend: 30, hostAttendee: 5, crew: 15, postUpvote: 2, boardUpvote: 2, reaction: 1 },
   caps: { attend: 90, hostAttendee: 150, crew: 45, postUpvote: 50, boardUpvote: 50, reaction: 25 },
+  hostMinAttendees: 5,
+  streamAttendMinutes: 5,
 };
 
 const int = (v: unknown, min: number, max: number, fallback: number) => (typeof v === "number" && Number.isFinite(v) ? Math.min(max, Math.max(min, Math.round(v))) : fallback);
@@ -43,7 +49,7 @@ export function pointsConfigOf(stored: unknown): PointsConfig {
     actions[id] = int(a[id], 0, 10_000, DEFAULT_POINTS_CONFIG.actions[id]);
     caps[id] = int(c[id], 0, 1_000_000, DEFAULT_POINTS_CONFIG.caps[id]);
   }
-  return { actions, caps };
+  return { actions, caps, hostMinAttendees: int(s.hostMinAttendees, 0, 1000, DEFAULT_POINTS_CONFIG.hostMinAttendees), streamAttendMinutes: int(s.streamAttendMinutes, 1, 600, DEFAULT_POINTS_CONFIG.streamAttendMinutes) };
 }
 
 /** Reactions that earn the author points; the rest (👎 😡 😢) earn nothing and never take any away. */

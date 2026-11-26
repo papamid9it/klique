@@ -48,7 +48,7 @@ export function LiveRow({ c, onChanged }: { c: CommunityDTO; onChanged: () => vo
       <button
         type="button"
         onClick={() => setOpen(on ? "watch" : "go")}
-        className={cx("flex h-9 w-full items-center gap-2.5 rounded-control px-2.5 text-[14px] font-medium transition hover:bg-raised/60", on ? "text-ink" : "text-ink-muted hover:text-ink")}
+        className={cx("flex h-10 w-full items-center gap-2.5 rounded-control px-2.5 text-[15px] font-medium transition hover:bg-raised/60", on ? "text-ink" : "text-ink-muted hover:text-ink")}
       >
         <Icon name="live" size={16} />
         <span className="min-w-0 flex-1 truncate text-left">{on ? live!.host.displayName : live ? "Starting…" : "Go live"}</span>

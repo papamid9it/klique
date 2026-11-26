@@ -127,7 +127,7 @@ export function DmSidebar({ onNavigate }: { onNavigate?: () => void }) {
               if (e.key === "Enter" && q.trim() && !rows.length) router.push(`/search?q=${encodeURIComponent(q.trim())}`);
             }}
             placeholder="Find a chat or search messages"
-            className="min-w-0 flex-1 bg-transparent text-[14px] text-ink placeholder:text-ink-muted/80 focus:outline-none"
+            className="min-w-0 flex-1 bg-transparent text-[15px] text-ink placeholder:text-ink-muted/80 focus:outline-none"
           />
         </div>
       </div>
@@ -205,7 +205,7 @@ export function DmSidebar({ onNavigate }: { onNavigate?: () => void }) {
                         <span className="ml-auto shrink-0 font-mono text-[12px] text-ink-muted">{c.lastMessage && now ? relativeStamp(c.lastMessage.createdAt, now) : ""}</span>
                       </span>
                       <span className="flex items-center gap-2">
-                        <span className={cx("truncate text-[13.5px]", unread ? "font-medium text-ink" : "text-ink-muted")}>{c.blockedByMe ? "Blocked" : preview}</span>
+                        <span className={cx("truncate text-[14px]", unread ? "font-medium text-ink" : "text-ink-muted")}>{c.blockedByMe ? "Blocked" : preview}</span>
                         {unread && !active && (
                           <span className="ml-auto inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-accent px-1.5 text-[12px] leading-none font-bold text-accent-ink" aria-label={`${c.unreadCount} unread`}>
                             {c.unreadCount > 99 ? "99+" : c.unreadCount}

@@ -356,6 +356,22 @@ export function EarningSettings() {
           ))}
         </div>
       </Panel>
+      <Panel title="Hosting">
+        <div className="grid items-end gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_8rem]">
+          <span className="min-w-0 pb-1.5">
+            <span className="block text-sm font-semibold">Hosting counts from</span>
+            <span className="block text-[12px] text-ink-muted">A host earns &quot;Someone came to your event&quot; points only once at least this many people came (confirmed, or watched the stream long enough). Then for all of them, the first ones too. 0 or 1: from the first person.</span>
+          </span>
+          <TextField label="People" type="number" min={0} value={String(c.hostMinAttendees)} onChange={(e) => setDraft({ ...c, hostMinAttendees: num(e.target.value) })} />
+        </div>
+        <div className="grid items-end gap-3 border-t border-line px-4 py-3 sm:grid-cols-[minmax(0,1fr)_8rem]">
+          <span className="min-w-0 pb-1.5">
+            <span className="block text-sm font-semibold">Watching counts as coming after</span>
+            <span className="block text-[12px] text-ink-muted">A streamed event: someone who watches its live this many minutes in a row is marked as there, and earns &quot;Came to an event&quot; (and counts toward the host&apos;s). Leaving for more than a couple of minutes starts the clock again.</span>
+          </span>
+          <TextField label="Minutes" type="number" min={1} value={String(c.streamAttendMinutes)} onChange={(e) => setDraft({ ...c, streamAttendMinutes: Math.max(1, num(e.target.value)) })} />
+        </div>
+      </Panel>
       <p className="text-sm text-ink-muted">Only other people&apos;s actions count, each person counts once per post or message, and nothing takes points away by itself. 0 turns an action off.</p>
       <div className="flex gap-2">
         <Button variant="primary" onClick={() => void save()} loading={saving} disabled={!draft}>

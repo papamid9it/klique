@@ -61,10 +61,27 @@ async function toLive(s: ILiveStream, viewer: IUser | null, staff: boolean): Pro
 
 /** a player that hasn't said "still watching" for this long no longer counts */
 const WATCHING_MS = 70_000;
+/** viewer counts, kept 10 seconds (every player asks every 30 seconds: one count serves them all) */
+const viewerCounts = new Map<string, { n: number; at: number }>();
 /** People watching a stream right now. */
 export async function viewersOf(liveId: Types.ObjectId): Promise<number> {
+  const key = sid(liveId);
+  const hit = viewerCounts.get(key);
+  if (hit && Date.now() - hit.at < 10_000) return hit.n;
   const { LiveViewer } = await import("../models/Live");
-  return LiveViewer.countDocuments({ liveId, seenAt: { $gte: new Date(Date.now() - WATCHING_MS) } });
+  const n = await LiveViewer.countDocuments({ liveId, seenAt: { $gte: new Date(Date.now() - WATCHING_MS) } });
+  if (viewerCounts.size > 500) viewerCounts.clear();
+  viewerCounts.set(key, { n, at: Date.now() });
+  return n;
+}
+
+/** the "watching counts as coming after" minutes (Admin → Points), read at most once a minute */
+let attendMinutes: { n: number; at: number } | null = null;
+async function streamAttendMinutes(): Promise<number> {
+  if (attendMinutes && Date.now() - attendMinutes.at < 60_000) return attendMinutes.n;
+  const { getPointsConfig } = await import("./points.service");
+  attendMinutes = { n: (await getPointsConfig()).streamAttendMinutes, at: Date.now() };
+  return attendMinutes.n;
 }
 
 /**
@@ -76,14 +93,23 @@ export async function watching(viewer: IUser | null, slug: string, input: { live
   if (!access.canView || !Types.ObjectId.isValid(input.liveId)) throw notFound("We couldn't find that stream.");
   const key = viewer ? sid(viewer._id) : input.key && /^[A-Za-z0-9_-]{8,64}$/.test(input.key) ? `anon:${input.key}` : null;
   const liveId = new Types.ObjectId(input.liveId);
-  const s = await LiveStream.findOne({ _id: liveId, communityId: space.community._id, status: "live" }).select("_id hostId").lean<{ _id: Types.ObjectId; hostId: Types.ObjectId }>();
+  const s = await LiveStream.findOne({ _id: liveId, communityId: space.community._id, status: "live" }).select("_id hostId eventId").lean<{ _id: Types.ObjectId; hostId: Types.ObjectId; eventId: Types.ObjectId | null }>();
   if (!s) return { viewers: 0, live: false };
   // the person streaming isn't one of their own viewers
   if (key && key !== sid(s.hostId)) {
     rateLimit(`watching:${key}`, 20, 60_000);
     const { LiveViewer } = await import("../models/Live");
-    const r = await LiveViewer.updateOne({ liveId, key }, { $set: { seenAt: new Date() } }, { upsert: true });
+    const r = await LiveViewer.updateOne({ liveId, key }, { $set: { seenAt: new Date() }, $setOnInsert: { firstSeenAt: new Date() } }, { upsert: true });
     if (r.upsertedCount) await LiveStream.updateOne({ _id: liveId }, { $inc: { watched: 1 } });
+    // a streamed event: watching long enough (Admin → Points) counts as coming (marked there, points for them and the host)
+    if (viewer && s.eventId) {
+      const minutes = await streamAttendMinutes();
+      const counted = await LiveViewer.findOneAndUpdate({ liveId, key, counted: { $ne: true }, firstSeenAt: { $lte: new Date(Date.now() - minutes * 60_000) } }, { $set: { counted: true } }).lean();
+      if (counted) {
+        const { attendedStream } = await import("./attendance.service");
+        await attendedStream(s.eventId, viewer._id).catch((err) => console.warn("[live] attendance:", (err as Error)?.message));
+      }
+    }
   }
   const viewers = await viewersOf(liveId);
   await LiveStream.updateOne({ _id: liveId, peakViewers: { $lt: viewers } }, { $set: { peakViewers: viewers } });

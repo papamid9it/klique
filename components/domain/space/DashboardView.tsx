@@ -60,7 +60,7 @@ function SectionLinks({ c, across, onNavigate }: { c: CommunityDTO; across?: boo
                 scroll={false}
                 onClick={onNavigate}
                 aria-current={on ? "page" : undefined}
-                className={cx("flex h-9 items-center gap-2.5 rounded-control px-2.5 text-[14px] whitespace-nowrap transition", on ? "bg-raised font-semibold text-ink" : "font-medium text-ink-muted hover:bg-raised/60 hover:text-ink")}
+                className={cx("flex h-10 items-center gap-2.5 rounded-control px-2.5 text-[15px] whitespace-nowrap transition", on ? "bg-raised font-semibold text-ink" : "font-medium text-ink-muted hover:bg-raised/60 hover:text-ink")}
               >
                 <Icon name={s.icon} size={16} />
                 {s.label}

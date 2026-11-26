@@ -953,6 +953,8 @@ const pointAction = z.enum(["attend", "hostAttendee", "crew", "postUpvote", "boa
 export const pointsEarningSchema = z.object({
   actions: z.partialRecord(pointAction, z.number().int().min(0).max(10_000)).optional(),
   caps: z.partialRecord(pointAction, z.number().int().min(0).max(1_000_000)).optional(),
+  hostMinAttendees: z.number().int().min(0).max(1000).optional(),
+  streamAttendMinutes: z.number().int().min(1).max(600).optional(),
 });
 /** Admin → Profile effects: an uploaded Lottie JSON, the frame it waits on, a name and a Hype price (null: the default). */
 export const profileEffectSchema = z.object({

@@ -95,11 +95,17 @@ export interface ILiveViewer {
   liveId: Types.ObjectId;
   key: string;
   seenAt: Date;
+  /** when they started watching (a streamed event: watching long enough counts as coming) */
+  firstSeenAt?: Date;
+  /** already counted as coming to the event */
+  counted?: boolean;
 }
 const LiveViewerSchema = new Schema<ILiveViewer>({
   liveId: { type: Schema.Types.ObjectId, required: true },
   key: { type: String, required: true, maxlength: 64 },
   seenAt: { type: Date, required: true },
+  firstSeenAt: { type: Date, default: null },
+  counted: { type: Boolean, default: false },
 });
 LiveViewerSchema.index({ liveId: 1, key: 1 }, { unique: true });
 LiveViewerSchema.index({ liveId: 1, seenAt: -1 });

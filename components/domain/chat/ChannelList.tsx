@@ -391,7 +391,7 @@ export function ChannelList({
           scroll={false}
           onClick={onNavigate}
           aria-current={on ? "page" : undefined}
-          className={cx("flex h-9 items-center gap-2.5 rounded-control px-2.5 text-[14px] transition", on ? "bg-raised font-medium text-ink" : fresh ? "font-semibold text-ink hover:bg-raised/60" : "font-medium text-ink-muted hover:bg-raised/60 hover:text-ink")}
+          className={cx("flex h-10 items-center gap-2.5 rounded-control px-2.5 text-[15px] transition", on ? "bg-raised font-medium text-ink" : fresh ? "font-semibold text-ink hover:bg-raised/60" : "font-medium text-ink-muted hover:bg-raised/60 hover:text-ink")}
         >
           <Icon name={icon} size={16} />
           {label}
@@ -454,7 +454,7 @@ export function ChannelList({
                 >
                   <Icon name="pin" size={16} className="shrink-0" />
                   <span className="min-w-0 flex-1">
-                    <span className={cx("block truncate text-[14px]", x.unreadCount && !on ? "font-semibold text-ink" : "font-medium")}>{x.title}</span>
+                    <span className={cx("block truncate text-[15px]", x.unreadCount && !on ? "font-semibold text-ink" : "font-medium")}>{x.title}</span>
                     <span className="block truncate text-[12px] opacity-80">{x.standing === "pending" ? "Asked to join · " : ""}{x.eventTitle ?? `From ${x.area}`}</span>
                   </span>
                   {!on && <CountBadge n={x.unreadCount ?? 0} />}
@@ -591,7 +591,7 @@ export function ChannelList({
                     scroll={false}
                     onClick={onNavigate}
                     aria-current={on ? "page" : undefined}
-                    className={cx("flex h-9 items-center gap-2.5 rounded-control px-2.5 text-[14px] font-medium transition", on ? "bg-raised text-ink" : "text-ink-muted hover:bg-raised/60 hover:text-ink")}
+                    className={cx("flex h-10 items-center gap-2.5 rounded-control px-2.5 text-[15px] font-medium transition", on ? "bg-raised text-ink" : "text-ink-muted hover:bg-raised/60 hover:text-ink")}
                   >
                     <Icon name={b.postPolicy === "admins" ? "megaphone" : "topics"} size={16} />
                     <span className="truncate">{b.name}</span>
@@ -779,7 +779,7 @@ function ChannelRow({ ch, href, active, menu, pinned, onNavigate }: { ch: Channe
         onClick={onNavigate}
         aria-current={active ? "page" : undefined}
         className={cx(
-          "flex h-9 items-center gap-2 rounded-control pl-2.5 text-[14px] transition",
+          "flex h-10 items-center gap-2 rounded-control pl-2.5 text-[15px] transition",
           menu ? "pr-9" : "pr-2.5",
           active ? "bg-raised font-semibold text-ink" : (ch.unread && !ch.muted) || ch.mentions > 0 ? "font-semibold text-ink hover:bg-raised/60" : "font-medium text-ink-muted hover:bg-raised/60 hover:text-ink",
         )}

@@ -25,7 +25,7 @@ export async function getPointsConfig(): Promise<PointsConfig> {
 
 export async function setPointsConfig(input: z.infer<typeof pointsEarningSchema>): Promise<PointsConfig> {
   const now = await getPointsConfig();
-  const next = pointsConfigOf({ actions: { ...now.actions, ...(input.actions ?? {}) }, caps: { ...now.caps, ...(input.caps ?? {}) } });
+  const next = pointsConfigOf({ actions: { ...now.actions, ...(input.actions ?? {}) }, caps: { ...now.caps, ...(input.caps ?? {}) }, hostMinAttendees: input.hostMinAttendees ?? now.hostMinAttendees, streamAttendMinutes: input.streamAttendMinutes ?? now.streamAttendMinutes });
   await AppSetting.updateOne({ _id: CONFIG_KEY }, { $set: { value: next } }, { upsert: true });
   return next;
 }

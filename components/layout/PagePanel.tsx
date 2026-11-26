@@ -52,7 +52,7 @@ export function PagePanel({ label, back, children }: { label: string; /** a page
   );
 }
 
-const row = "flex h-10 w-full items-center gap-3 rounded-control px-3 text-left text-[14px] font-medium transition";
+const row = "flex h-10 w-full items-center gap-3 rounded-control px-3 text-left text-[15px] font-medium transition";
 const tone = (on?: boolean) => (on ? "bg-raised text-ink" : "text-ink-muted hover:bg-raised/60 hover:text-ink");
 
 const openKey = (id: string) => `klique:panel-open:${id}`;

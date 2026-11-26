@@ -18,7 +18,7 @@ import { awardPoints } from "./points.service";
 /**
  * "Who came?": once an event has started, its host (or an admin of its community) ticks off the people who
  * actually showed up. That's what points for events are built on: the attendee gets points for coming (plus a bit
- * more if they came with a crew), and the host gets some for each person who came. Open from the start until
+ * more if they came with a crew), and the host gets some for each person who came, once enough came (see payHost). Open from the start until
  * a week after the end. Unticking someone takes the tick away but not points already given.
  */
 
@@ -79,13 +79,46 @@ export async function setAttendance(viewer: IUser, id: string, userIds: string[]
   const crewRows = await CrewMember.find({ eventId: event._id, userId: { $in: fresh.map((r) => r.userId) }, status: "active" }).select("userId crewId").lean<{ userId: Types.ObjectId; crewId: Types.ObjectId }[]>();
   const crews = await Crew.find({ _id: { $in: crewRows.map((r) => r.crewId) }, memberCount: { $gte: 2 } }).distinct("_id");
   const inCrew = new Set(crewRows.filter((r) => crews.some((c) => sid(c) === sid(r.crewId))).map((r) => sid(r.userId)));
-  const counted = await Rsvp.countDocuments({ eventId: event._id, attendedAt: { $ne: null } });
-  let hostRoom = Math.max(0, HOST_MAX - (counted - fresh.length));
-
   for (const r of fresh) {
     await awardPoints(r.userId, "attend", ref, event.hostId);
     if (inCrew.has(sid(r.userId))) await awardPoints(r.userId, "crew", ref, event.hostId);
-    if (hostRoom-- > 0) await awardPoints(event.hostId, "hostAttendee", `${ref}:${sid(r.userId)}`, r.userId);
   }
+  await payHost(event);
   return getAttendance(viewer, id);
+}
+
+/**
+ * A streamed event (watched in Klique): watching it long enough counts as coming, with no host ticking people off.
+ * They're put down as going if they weren't, marked as there, and earn the same points as for coming in person; the
+ * host earns per person who came (up to 50 per event), as for any event. Once per person per event.
+ */
+export async function attendedStream(eventId: Types.ObjectId, userId: Types.ObjectId) {
+  const event = await Event.findById(eventId).lean<IEvent>();
+  if (!event || event.cancelled || !event.streamed || sid(event.hostId) === sid(userId)) return;
+  let row = await Rsvp.findOne({ eventId, userId }).lean<IRsvp>();
+  if (row?.attendedAt) return;
+  if (!row || row.status !== "going") {
+    await Rsvp.updateOne({ eventId, userId }, { $set: { status: "going" }, $setOnInsert: { eventId, userId } }, { upsert: true });
+    const { recountRsvps } = await import("./helpers");
+    await recountRsvps(eventId);
+    row = await Rsvp.findOne({ eventId, userId }).lean<IRsvp>();
+  }
+  if (!row) return;
+  const r = await Rsvp.updateOne({ _id: row._id, attendedAt: null }, { $set: { attendedAt: new Date() } });
+  if (!r.modifiedCount) return; // counted already (two players at once)
+  await awardPoints(userId, "attend", `event:${sid(event._id)}`, event.hostId);
+  await payHost(event);
+}
+
+/**
+ * The host's points for the people who came: only once at least so many came (Admin → Points, "Hosting counts
+ * from"), then for each of them, the first ones too (up to 50 per event). Safe to run again: each person pays once.
+ */
+async function payHost(event: IEvent) {
+  const { getPointsConfig } = await import("./points.service");
+  const min = (await getPointsConfig()).hostMinAttendees;
+  const came = await Rsvp.find({ eventId: event._id, attendedAt: { $ne: null }, userId: { $ne: event.hostId } }).sort({ attendedAt: 1 }).limit(HOST_MAX).select("userId").lean<{ userId: Types.ObjectId }[]>();
+  if (came.length < Math.max(1, min)) return;
+  const ref = `event:${sid(event._id)}`;
+  for (const r of came) await awardPoints(event.hostId, "hostAttendee", `${ref}:${sid(r.userId)}`, r.userId);
 }
