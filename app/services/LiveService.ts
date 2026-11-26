@@ -20,6 +20,8 @@ export const LiveService = {
   moderate: (slug: string, userId: string, action: "remove" | "allow" | "timeout") => api.post<Envelope<unknown>>(`/api/communities/${slug}/live/moderate`, { userId, action }),
   /** "still watching" (every 30 seconds): counts viewers; answers how many are on now */
   watching: (slug: string, liveId: string, key?: string) => api.post<Envelope<{ viewers: number; live: boolean }>>(`/api/communities/${slug}/live/watching`, { liveId, ...(key ? { key } : {}) }),
+  /** the player closed: off the viewer count at once */
+  left: (slug: string, liveId: string, key?: string) => api.delete<Envelope<{ left: boolean }>>(`/api/communities/${slug}/live/watching`, { liveId, ...(key ? { key } : {}) }),
   summary: (slug: string, liveId: string) => api.get<Envelope<LiveSummaryDTO>>(`/api/communities/${slug}/live/summary`, { id: liveId }),
   end: (slug: string) => api.delete<Envelope<{ ended: boolean }>>(`/api/communities/${slug}/live`),
   /** let a member go live for so many hours (0 takes it back) */

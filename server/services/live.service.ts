@@ -60,14 +60,14 @@ async function toLive(s: ILiveStream, viewer: IUser | null, staff: boolean): Pro
 }
 
 /** a player that hasn't said "still watching" for this long no longer counts */
-const WATCHING_MS = 70_000;
+const WATCHING_MS = 45_000;
 /** viewer counts, kept 10 seconds (every player asks every 30 seconds: one count serves them all) */
 const viewerCounts = new Map<string, { n: number; at: number }>();
 /** People watching a stream right now. */
 export async function viewersOf(liveId: Types.ObjectId): Promise<number> {
   const key = sid(liveId);
   const hit = viewerCounts.get(key);
-  if (hit && Date.now() - hit.at < 10_000) return hit.n;
+  if (hit && Date.now() - hit.at < 4_000) return hit.n;
   const { LiveViewer } = await import("../models/Live");
   const n = await LiveViewer.countDocuments({ liveId, seenAt: { $gte: new Date(Date.now() - WATCHING_MS) } });
   if (viewerCounts.size > 500) viewerCounts.clear();
@@ -114,6 +114,17 @@ export async function watching(viewer: IUser | null, slug: string, input: { live
   const viewers = await viewersOf(liveId);
   await LiveStream.updateOne({ _id: liveId, peakViewers: { $lt: viewers } }, { $set: { peakViewers: viewers } });
   return { viewers, live: true };
+}
+
+/** They closed the player (or left the app): off the count at once, not when their check-ins stop. */
+export async function leftStream(viewer: IUser | null, input: { liveId: string; key?: string }) {
+  const key = viewer ? sid(viewer._id) : input.key && /^[A-Za-z0-9_-]{8,64}$/.test(input.key) ? `anon:${input.key}` : null;
+  if (!key || !Types.ObjectId.isValid(input.liveId)) return { left: true };
+  const { LiveViewer } = await import("../models/Live");
+  // the row stays (it remembers when they started, for counting as coming); it just stops counting as watching
+  await LiveViewer.updateOne({ liveId: new Types.ObjectId(input.liveId), key }, { $set: { seenAt: new Date(0) } });
+  viewerCounts.delete(input.liveId);
+  return { left: true };
 }
 
 /** "How it went": for its host (and the people who run the community), once it's over or any time during it. */

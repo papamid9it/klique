@@ -10,7 +10,7 @@ export interface EventListParams {
   where?: string;
   interest?: InterestId;
   price?: "any" | "free" | "paid";
-  format?: "any" | "in-person" | "online";
+  format?: "any" | "in-person" | "online" | "stream";
   /** one calendar day, YYYY-MM-DD */
   day?: string;
   date?: DateFilter;

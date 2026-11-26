@@ -121,7 +121,7 @@ export function EventsExplorer() {
   const [date, setDate] = useState<DateFilter>(() => (isDateFilter(sp.get("date")) ? (sp.get("date") as DateFilter) : "any"));
   const [day, setDay] = useState(() => (/^\d{4}-\d{2}-\d{2}$/.test(sp.get("day") ?? "") ? sp.get("day")! : ""));
   const [free, setFree] = useState(() => sp.get("free") === "1");
-  const [format, setFormat] = useState<"any" | "in-person" | "online">(() => (sp.get("format") === "online" || sp.get("format") === "in-person" ? (sp.get("format") as "online" | "in-person") : "any"));
+  const [format, setFormat] = useState<"any" | "in-person" | "online" | "stream">(() => (sp.get("format") === "online" || sp.get("format") === "in-person" || sp.get("format") === "stream" ? (sp.get("format") as "online" | "in-person" | "stream") : "any"));
   const [q, setQ] = useState("");
   const dq = useDebounced(q);
   const { status } = useAuth();
@@ -296,7 +296,7 @@ export function EventsExplorer() {
             <fieldset>
               <legend className="eyebrow mb-2">Format</legend>
               <div className="flex flex-wrap gap-2">
-                {([["any", "All"], ["in-person", "In person"], ["online", "Online"]] as const).map(([id, label]) => (
+                {([["any", "All"], ["in-person", "In person"], ["online", "Online"], ["stream", "Streams"]] as const).map(([id, label]) => (
                   <Pill key={id} on={format === id} onClick={() => setFormat(id)}>{label}</Pill>
                 ))}
                 <Pill on={free} onClick={() => setFree((f) => !f)}>Free only</Pill>
@@ -344,7 +344,7 @@ export function EventsExplorer() {
               <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search events…" aria-label="Search events" className="h-10 w-full rounded-full border border-line bg-raised pr-3 pl-10 text-sm placeholder:text-ink-muted/70 focus:border-accent-text" />
             </div>
             <div data-pill="" className="flex rounded-full border border-line bg-raised p-0.5" role="group" aria-label="Format">
-              {([["any", "All"], ["in-person", "In person"], ["online", "Online"]] as const).map(([id, label]) => (
+              {([["any", "All"], ["in-person", "In person"], ["online", "Online"], ["stream", "Streams"]] as const).map(([id, label]) => (
                 <button key={id} type="button" aria-pressed={format === id} onClick={() => setFormat(id)} className={cx("h-8 rounded-full px-3 text-[13px] font-semibold transition", format === id ? "bg-surface text-ink shadow-sm" : "text-ink-muted hover:text-ink")}>
                   {label}
                 </button>

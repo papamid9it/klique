@@ -422,7 +422,8 @@ export const eventListQuery = pageQuery.extend({
   where: whereParam,
   interest: z.preprocess(blankToUndef, interestId.optional()),
   price: z.enum(["any", "free", "paid"]).default("any"),
-  format: z.enum(["any", "in-person", "online"]).default("any"),
+  /** "stream": streamed live on Klique */
+  format: z.enum(["any", "in-person", "online", "stream"]).default("any"),
   /** one calendar day, YYYY-MM-DD (Lagos time) */
   day: z.preprocess(blankToUndef, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()),
   date: z.enum(DATE_FILTERS.map((d) => d.id) as [string, ...string[]]).default("any"),

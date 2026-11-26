@@ -96,6 +96,7 @@ export async function listEvents(viewer: IUser | null, q: ListQuery): Promise<Pa
   const where = parseScope(q.where);
   if (where) and.push(scopeFilter(where) as QueryFilter<IEvent>);
   if (q.format === "online") and.push({ online: true });
+  if (q.format === "stream") and.push({ streamed: true });
   if (q.format === "in-person") and.push({ online: { $ne: true } });
   if (q.interest) and.push({ interest: q.interest });
   if (q.price === "free") and.push({ priceNaira: 0 });

@@ -89,9 +89,10 @@ export function LiveRoomChat({ slug, channel, isMember, communityName, canModera
   // something new here: fetch it now; without live updates, check every few seconds
   useRealtimeEvent(() => void fetchNew(), { filter: (e) => e.type === "channel" && e.channelId === channel.id, debounceMs: 250 });
   useEffect(() => {
-    const t = setInterval(() => document.visibilityState === "visible" && void fetchNew(), connected ? 20_000 : 3_000);
+    // live updates reach members only (and only while connected): everyone else checks every 3 seconds, members every 8
+    const t = setInterval(() => document.visibilityState === "visible" && void fetchNew(), connected && isMember ? 8_000 : 3_000);
     return () => clearInterval(t);
-  }, [connected, fetchNew]);
+  }, [connected, isMember, fetchNew]);
 
   // stay at the bottom while you're there
   useEffect(() => {

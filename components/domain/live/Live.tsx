@@ -82,8 +82,18 @@ function WatchModal({ c, live, onClose, onEnded }: { c: Pick<CommunityDTO, "slug
     }
     const ping = () => void LiveService.watching(c.slug, live.id, key).then((r) => setViewers(r.data.viewers), () => {});
     ping();
-    const t = window.setInterval(() => document.visibilityState === "visible" && ping(), 30_000);
-    return () => window.clearInterval(t);
+    const t = window.setInterval(() => document.visibilityState === "visible" && ping(), 20_000);
+    // closing the player, or the tab going away: off the count at once
+    const leave = () => void LiveService.left(c.slug, live.id, key).catch(() => {});
+    const onHide = () => (document.visibilityState === "hidden" ? leave() : ping());
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", leave);
+    return () => {
+      window.clearInterval(t);
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("pagehide", leave);
+      leave();
+    };
   }, [c.slug, live.id, user]);
   // the page underneath stays put; Escape closes (unless a dialog on top of this is open)
   useEffect(() => {

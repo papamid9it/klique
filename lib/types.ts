@@ -898,7 +898,7 @@ export interface SearchFilters {
   interest?: string;
   when?: string;
   price?: "any" | "free" | "paid";
-  format?: "any" | "in-person" | "online";
+  format?: "any" | "in-person" | "online" | "stream";
   past?: boolean;
   verified?: boolean;
   sort?: "best" | "new" | "popular";
