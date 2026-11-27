@@ -71,7 +71,10 @@ function WatchModal({ c, live, onClose, onEnded }: { c: Pick<CommunityDTO, "slug
   const chat = useApi(() => LiveService.chat(c.slug), [c.slug, live.id], { key: `live-chat:${live.id}` });
   // "still watching" every 30 seconds: counts you, and shows how many are watching
   const [viewers, setViewers] = useState(live.viewers ?? 0);
+  // counted (and "X joined" for everyone) only once the video really plays here, never while it's still loading
+  const [started, setStarted] = useState(false);
   useEffect(() => {
+    if (!started) return;
     let key: string | undefined;
     if (!user) {
       try {
@@ -96,7 +99,7 @@ function WatchModal({ c, live, onClose, onEnded }: { c: Pick<CommunityDTO, "slug
       window.removeEventListener("pagehide", leave);
       leave();
     };
-  }, [c.slug, live.id, user]);
+  }, [c.slug, live.id, user, started]);
   // the page underneath stays put; Escape closes (unless a dialog on top of this is open)
   useEffect(() => {
     const before = document.body.style.overflow;
@@ -125,7 +128,7 @@ function WatchModal({ c, live, onClose, onEnded }: { c: Pick<CommunityDTO, "slug
         </div>
         <div className="px-0 sm:px-4">
           <div className="aspect-video w-full overflow-hidden bg-black sm:rounded-card">
-            <LivePlayer live={live} />
+            <LivePlayer live={live} onStarted={() => setStarted(true)} />
           </div>
         </div>
         <div className="space-y-3 px-4 py-4">
@@ -134,7 +137,8 @@ function WatchModal({ c, live, onClose, onEnded }: { c: Pick<CommunityDTO, "slug
             <Avatar name={live.host.displayName} src={live.host.avatarUrl} size={36} />
             <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{live.host.displayName}</span>
             {/* an award for the person streaming (shows in the live chat for everyone) */}
-            {user && user.id !== live.host.id && live.status === "live" && <GiftButton target={{ type: "live", id: live.id }} authorId={live.host.id} variant="pill" />}
+            {/* gifting, like chatting, waits until the stream is playing here */}
+            {user && user.id !== live.host.id && live.status === "live" && started && <GiftButton target={{ type: "live", id: live.id }} authorId={live.host.id} variant="pill" />}
             {/* anyone watching can report it (Klique's admins can end it from the reports queue) */}
             {user && user.id !== live.host.id && (
               <button type="button" onClick={() => setReporting(true)} className="inline-flex items-center gap-1 text-[13px] font-semibold text-ink-muted hover:text-ink">
@@ -150,7 +154,7 @@ function WatchModal({ c, live, onClose, onEnded }: { c: Pick<CommunityDTO, "slug
         <div className="flex h-12 shrink-0 items-center border-b border-line px-4 text-[15px] font-semibold">Live chat</div>
         <div className="flex min-h-0 flex-1 flex-col">
           {chat.data ? (
-            <LiveRoomChat key={chat.data.channel.id} slug={c.slug} channel={chat.data.channel} isMember={chat.data.isMember} canModerate={chat.data.canModerate} communityName={c.name} />
+            <LiveRoomChat key={chat.data.channel.id} slug={c.slug} channel={chat.data.channel} isMember={chat.data.isMember} canModerate={chat.data.canModerate} communityName={c.name} loading={!started} />
           ) : chat.error ? (
             <p className="p-4 text-sm text-ink-muted">{chat.error}</p>
           ) : (

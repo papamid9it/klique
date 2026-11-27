@@ -106,6 +106,8 @@ export async function watching(viewer: IUser | null, slug: string, input: { live
     // over the video for everyone watching (never stored in the chat), and kept on their row for screens that poll
     if (viewer && (input.first || !before || Date.now() - +before.seenAt > 60_000)) {
       await LiveViewer.updateOne({ liveId, key }, { $set: { joinedAt: new Date() } });
+      // the count kept for a few seconds is out of date now: the streamer's eye number goes up at once
+      viewerCounts.delete(sid(liveId));
       publish([rtChannel.community(space.community._id)], { type: "liveJoin", liveId: sid(liveId), name: viewer.displayName, avatarUrl: viewer.avatarUrl ?? null });
     }
     // a streamed event: watching long enough (Admin → Points) counts as coming (marked there, points for them and the host)

@@ -26,7 +26,7 @@ const MAX_LEN = 300;
  * as gold lines. Plain text only: no pictures, threads or link previews, and links don't open (nobody gets taken off
  * the stream). Members write; everyone else who can see the community reads along.
  */
-export function LiveRoomChat({ slug, channel, isMember, communityName, canModerate }: { slug: string; channel: ChannelDTO; isMember: boolean; communityName: string; /** the person streaming and the community's moderators: time out, remove from the stream */ canModerate?: boolean }) {
+export function LiveRoomChat({ slug, channel, isMember, communityName, canModerate, loading }: { slug: string; channel: ChannelDTO; isMember: boolean; communityName: string; /** the person streaming and the community's moderators: time out, remove from the stream */ canModerate?: boolean; /** the stream hasn't started playing here yet: chatting waits for it */ loading?: boolean }) {
   const toast = useToast();
   const confirm = useConfirm();
   const { user } = useAuth();
@@ -217,7 +217,9 @@ export function LiveRoomChat({ slug, channel, isMember, communityName, canModera
         </button>
       )}
       <div className="border-t border-line p-2.5">
-        {isMember ? (
+        {isMember && loading ? (
+          <p className="flex h-11 items-center rounded-full border border-line bg-surface px-4 text-sm text-ink-muted">Loading the stream…</p>
+        ) : isMember ? (
           <form
             onSubmit={(e) => {
               e.preventDefault();

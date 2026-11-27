@@ -48,7 +48,9 @@ export function warmLivePlayer(provider: LiveDTO["provider"]) {
  * Until it plays, a black cover with "Starting the stream…" sits over it, so there's no white flash and no blank
  * black box; it fades out the moment the picture starts (or after 15 seconds, whatever happens).
  */
-export function LivePlayer({ live, poster }: { live: Pick<LiveDTO, "id" | "provider" | "channel" | "title">; poster?: string | null }) {
+export function LivePlayer({ live, poster, onStarted }: { live: Pick<LiveDTO, "id" | "provider" | "channel" | "title">; poster?: string | null; /** the picture really started (not the cover's time-out): count them as watching from here */ onStarted?: () => void }) {
+  const started = useRef(onStarted);
+  started.current = onStarted;
   const box = useRef<HTMLDivElement>(null);
   const [playing, setPlaying] = useState(false);
   const [host, setHost] = useState<string | null>(null);
@@ -79,6 +81,7 @@ export function LivePlayer({ live, poster }: { live: Pick<LiveDTO, "id" | "provi
       player = new T.Player(el, { channel: live.channel, parent: [host], width: "100%", height: "100%", autoplay: true, muted: true });
       playerRef.current = player;
       player.addEventListener(T.Player.PLAYING, () => {
+        started.current?.();
         moving.current = true;
         setPlaying(true);
         setBuffering(false);
@@ -132,7 +135,7 @@ export function LivePlayer({ live, poster }: { live: Pick<LiveDTO, "id" | "provi
           allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
           allowFullScreen
           // YouTube's page can't tell us when it plays: a moment after it loads is close enough
-          onLoad={() => window.setTimeout(() => setPlaying(true), 1500)}
+          onLoad={() => window.setTimeout(() => (setPlaying(true), started.current?.()), 1500)}
         />
       )}
       {/* started muted (so it plays at once): one tap for sound */}
