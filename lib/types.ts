@@ -2430,6 +2430,8 @@ export interface LiveDTO {
   canEnd: boolean;
   /** people watching right now (in Klique) */
   viewers?: number;
+  /** streamed from the Klique app's camera (upright): full screen fills the card with it; anything else shows full width */
+  phone?: boolean;
 }
 
 /** "How it went", for the person streaming once it ends. */

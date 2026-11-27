@@ -400,6 +400,7 @@ function YouTubeConnection() {
   const confirm = useConfirm();
   const sp = useSearchParams();
   const yt = useApi(() => LiveService.youtube(), [], { key: "youtube-status" });
+  const [rules, setRules] = useState(false);
   useEffect(() => {
     const r = sp.get("youtube");
     if (r === "connected") toast("YouTube connected", "success");
@@ -443,10 +444,39 @@ function YouTubeConnection() {
             Disconnect
           </Button>
         ) : (
-          <BrandButton brand="youtube" size="sm" onClick={() => void connect()}>
+          <BrandButton brand="youtube" size="sm" onClick={() => setRules(true)}>
             Connect
           </BrandButton>
         ))}
+      {/* what YouTube needs, before Google's sign-in */}
+      <Modal open={rules} onClose={() => setRules(false)} title="Before you connect YouTube" size="sm">
+        <ol className="space-y-3">
+          {YOUTUBE_RULES.map((r, i) => (
+            <li key={r.title} className="flex gap-3">
+              <span className="w-5 shrink-0 text-[14px] font-bold text-ink-muted">{i + 1}.</span>
+              <span>
+                <span className="block text-[14px] font-semibold">{r.title}</span>
+                <span className="block text-[13px] text-ink-muted">{r.body}</span>
+              </span>
+            </li>
+          ))}
+        </ol>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button onClick={() => setRules(false)}>Not now</Button>
+          <BrandButton brand="youtube" onClick={() => (setRules(false), void connect())}>
+            Continue to YouTube
+          </BrandButton>
+        </div>
+      </Modal>
     </div>
   );
 }
+
+/** What YouTube needs before someone can stream through it (shown before they connect). */
+const YOUTUBE_RULES = [
+  { title: "A YouTube channel", body: "A Google account isn't enough. Make a channel on YouTube first." },
+  { title: "Live streaming switched on", body: "In YouTube Studio, verify your phone number and turn on live streaming. The first time, YouTube can take up to 24 hours." },
+  { title: "No live restrictions", body: "Channels with a live-streaming strike or restriction in the last 90 days can't go live." },
+  { title: "Public on your channel", body: "Your streams go out as public videos on your own channel, and everyone in the community watches them here." },
+  { title: "YouTube's rules and Klique's", body: "Streams follow YouTube's Community Guidelines and the community's rules. Breaking either can end a stream." },
+];
