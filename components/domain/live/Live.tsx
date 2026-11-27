@@ -431,15 +431,11 @@ export function ConnectionsTab() {
   );
 }
 
-/**
- * "Live now" at the top of Home: streams on right now in your communities (nothing at all while nobody's live).
- * Shows up and goes at once (live updates), and checks again every two minutes in case those are off.
- */
-export function LiveNowRow() {
+/** Streams on right now in your communities, busiest first: live updates, and a check every two minutes in case those are off. */
+function useLiveNow() {
   const { status } = useAuth();
   const authed = status === "authed";
   const now = useApi(authed ? () => LiveService.now() : null, [authed], { key: "live-now" });
-  const [watching, setWatching] = useState<LiveNowDTO | null>(null);
   const { reload } = now;
   useRealtimeEvent(() => void reload(), { filter: (e) => e.type === "live", debounceMs: 800 });
   useEffect(() => {
@@ -447,43 +443,75 @@ export function LiveNowRow() {
     const t = setInterval(() => document.visibilityState === "visible" && void reload(), 120_000);
     return () => clearInterval(t);
   }, [authed, reload]);
-  const items = now.data ?? [];
+  const items = (now.data ?? []).slice(0, 20);
   const firstProvider = items[0]?.live.provider;
   useEffect(() => {
     if (firstProvider) warmLivePlayer(firstProvider);
   }, [firstProvider]);
+  return { items };
+}
+
+/** One live stream, like Twitch's cards: its picture with LIVE and how many are watching, then the title and community. */
+function LiveCard({ x, onWatch }: { x: LiveNowDTO; onWatch: () => void }) {
+  return (
+    <button type="button" onClick={onWatch} aria-label={`Live in ${x.community.name}. Watch`} className="group block w-full text-left">
+      <span className="relative block aspect-video overflow-hidden rounded-[8px] bg-raised">
+        <LivePreview live={x.live} cover={x.community.coverImage} />
+        <span className="absolute top-2 left-2 rounded-[4px] bg-danger px-1.5 text-[11px] leading-[18px] font-extrabold tracking-[.03em] text-white">LIVE</span>
+        {x.live.viewers ? <span className="absolute bottom-2 left-2 rounded-[4px] bg-black/70 px-1.5 text-[12px] leading-[18px] font-semibold text-white">{x.live.viewers.toLocaleString()} watching</span> : null}
+      </span>
+      <span className="mt-2 flex items-start gap-2.5">
+        <span className="size-8 shrink-0 overflow-hidden rounded-full bg-raised">
+          {x.community.coverImage ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={x.community.coverImage} alt="" className="size-full object-cover" />
+          ) : (
+            <span className="flex size-full items-center justify-center text-[14px] font-bold">{x.community.name.slice(0, 1).toUpperCase()}</span>
+          )}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[14px] font-semibold text-ink group-hover:underline">{x.live.title || "Live now"}</span>
+          <span className="block truncate text-[13px] text-ink-muted">{x.community.name}</span>
+        </span>
+      </span>
+    </button>
+  );
+}
+
+// only what fits Home's width, on one line: 1 on a phone, then 2, 3 and 4 as there's room (a container query, so it
+// suits both Home styles)
+const SHOWN = ["", "hidden @md:block", "hidden @lg:block", "hidden @2xl:block"];
+
+/**
+ * Live on Home, as cards like Twitch's: the busiest streams in your communities, 1 to 4 across, only what fits on one line
+ * (no sideways scrolling, no list of the rest). Nothing at all while nobody's live.
+ */
+export function LiveNowRow() {
+  const { items } = useLiveNow();
+  const [watching, setWatching] = useState<LiveNowDTO | null>(null);
   if (!items.length) return null;
   return (
-    <section aria-label="Live now">
-      <div className="mb-3 flex items-baseline gap-2.5">
-        <h2 className="text-[18px] font-bold">Live now</h2>
-        <span className="text-[13px] text-ink-muted">in your communities</span>
-      </div>
-      <ul className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-1">
-        {items.map((x) => (
-          <li key={x.live.id} className="w-[280px] shrink-0">
-            <button type="button" onClick={() => setWatching(x)} className="w-full overflow-hidden rounded-card border border-line bg-surface text-left transition hover:bg-raised">
-              <span className="relative block aspect-video bg-raised">
-                {x.community.coverImage && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={x.community.coverImage} alt="" className="size-full object-cover" />
-                )}
-                <span className="absolute top-2.5 left-2.5 rounded-[5px] bg-danger px-1.5 py-px font-mono text-[11px] font-bold text-white">LIVE</span>
-              </span>
-              <span className="flex items-center gap-2.5 px-3 py-2.5">
-                <Avatar name={x.live.host.displayName} src={x.live.host.avatarUrl} size={32} />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[14px] font-semibold">{x.live.title || `${x.live.host.displayName} is live`}</span>
-                  <span className="block truncate text-[13px] text-ink-muted">{x.live.host.displayName} in {x.community.name}</span>
-                </span>
-              </span>
-            </button>
+    <section aria-label="Live now" className="@container">
+      <ul className="grid grid-cols-1 gap-3 pt-1 pb-3 @md:grid-cols-2 @lg:grid-cols-3 @2xl:grid-cols-4">
+        {items.slice(0, 4).map((x, i) => (
+          <li key={x.live.id} className={cx("min-w-0", SHOWN[i])}>
+            <LiveCard x={x} onWatch={() => setWatching(x)} />
           </li>
         ))}
       </ul>
-      {watching && <WatchModal c={{ slug: watching.community.slug, name: watching.community.name }} live={watching.live} onClose={() => setWatching(null)} onEnded={() => (setWatching(null), void reload())} />}
+      {watching && <WatchModal c={{ slug: watching.community.slug, name: watching.community.name }} live={watching.live} onClose={() => setWatching(null)} onEnded={() => setWatching(null)} />}
     </section>
   );
+}
+
+/** A live stream's own picture (YouTube's or Twitch's preview); the community's picture if there's none. */
+function LivePreview({ live, cover }: { live: LiveDTO; cover: string | null }) {
+  const own = live.provider === "youtube" ? `https://i.ytimg.com/vi/${encodeURIComponent(live.channel)}/hqdefault_live.jpg` : live.provider === "twitch" ? `https://static-cdn.jtvnw.net/previews-ttv/live_user_${encodeURIComponent(live.channel.toLowerCase())}-440x248.jpg` : null;
+  const [failed, setFailed] = useState(false);
+  const src = own && !failed ? own : cover;
+  if (!src) return null;
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={src} alt="" loading="lazy" onError={() => setFailed(true)} className="size-full object-cover transition group-hover:scale-[1.02]" />;
 }
 
 /** Across the top of a community while someone's live: who, what, and Watch (dismissable for this stream). */

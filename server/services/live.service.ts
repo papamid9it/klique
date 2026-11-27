@@ -330,7 +330,7 @@ export async function onTwitchOffline(twitchId: string) {
   for (const e of ending) emitLive(e.communityId, false);
 }
 
-/** "Live now" on Home: streams on right now in your communities (newest first). */
+/** Live rings on Home: streams on right now in your communities, the busiest first (then the newest). */
 export async function liveNow(viewer: IUser): Promise<LiveNowDTO[]> {
   const mine = await Membership.find({ userId: viewer._id, subcommunityId: null, status: "active" }).select("communityId").lean<{ communityId: Types.ObjectId }[]>();
   if (!mine.length) return [];
@@ -345,6 +345,8 @@ export async function liveNow(viewer: IUser): Promise<LiveNowDTO[]> {
   ]);
   const byId = new Map(communities.map((c) => [sid(c._id), c]));
   const counts = new Map(await Promise.all(fresh.map(async (s) => [sid(s._id), await viewersOf(s._id)] as const)));
+  // busiest first; the sort is stable, so equal ones stay newest first
+  fresh.sort((a, b) => (counts.get(sid(b._id)) ?? 0) - (counts.get(sid(a._id)) ?? 0));
   return fresh.flatMap((s) => {
     const c = byId.get(sid(s.communityId));
     if (!c || c.adult) return [];

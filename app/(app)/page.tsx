@@ -15,6 +15,7 @@ import { NewPostsPill, useRefreshKeys } from "@/components/domain/feed/NewPosts"
 import { scrollerOf } from "@/components/domain/feed/useInfiniteFeed";
 import { useInDesktopApp } from "@/lib/hooks/useInDesktopApp";
 import { ErrorState } from "@/components/ui/States";
+import { LiveNowRow } from "@/components/domain/live/Live";
 import { formatEyebrowDate } from "@/lib/format";
 import { useApi, useNow } from "@/lib/hooks/useApi";
 import type { CommunityCardDTO, DiscoverDTO, EventDTO, UserBrief } from "@/lib/types";
@@ -130,6 +131,8 @@ function CasualHome() {
             </button>
           ))}
         </div>
+        {/* live streams as cards, only while someone's live in your communities */}
+        {homeTab === "foryou" && <div className="mb-3 empty:hidden"><LiveNowRow /></div>}
         {homeTab === "popular" && <PopularFeed />}
         <div className={homeTab === "popular" ? "hidden" : undefined}>
         <HomeFeed refreshRef={feedRefresh} onNewer={setNewer} moreEvents={moreEvents} eventsInOrder={!!data?.homeBelow} fillersLoading={loading || kliques.loading} kliques={forYou} onDismissKlique={dismiss} communities={data?.suggestedCommunities ?? []} onEvent={patchEvent} onCommunity={patchCommunity} />

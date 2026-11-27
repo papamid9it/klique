@@ -11,6 +11,7 @@ import { useRealtimeEvent } from "@/components/providers/RealtimeProvider";
 import { JoinButton } from "@/components/domain/JoinButton";
 import { useHomeKliques } from "./useHomeKliques";
 import { CityPoster } from "./CityPoster";
+import { LiveNowRow } from "@/components/domain/live/Live";
 import { Button } from "@/components/ui/Button";
 import { Cover } from "@/components/ui/Cover";
 import { Icon } from "@/components/ui/Icon";
@@ -87,6 +88,8 @@ export function CommunitiesHome() {
 
   return (
     <>
+    {/* live streams in your communities, first thing on the page (nothing while nobody's live) */}
+    <div className="mb-6 empty:hidden"><LiveNowRow /></div>
     <CityPoster
       events={deckEvents}
       loading={(discover.loading && !discover.data) || (going.loading && !going.data)}
