@@ -37,6 +37,12 @@ export const isPermission = (p: string): p is Permission => (ALL_PERMISSIONS as 
  * shows up when people edit roles. Without it a bot gets no messages at all; slash commands and button presses still work.
  */
 export const READ_MESSAGES = { id: "readMessages", label: "Read messages", hint: "See what people write in the channels it can see, from now on. It can never read older messages or private channels it isn't added to." } as const;
+/**
+ * Also bots only, kept apart the same way (CommunityRole.postEvents): add events to the community through the bot API
+ * (an event finder bot, a ticketing site's bot). The owner allowed it, so its events go straight to Events, as an
+ * admin's do (never to To review).
+ */
+export const POST_EVENTS = { id: "postEvents", label: "Post events", hint: "Add events to the community's Events, under the bot's name. Members get the usual New event notification." } as const;
 /** what a bot can ask for */
-export const BOT_PERMISSIONS = [...PERMISSIONS.filter((p) => p.id !== "manageWebhooks" && p.id !== "goLive"), READ_MESSAGES];
+export const BOT_PERMISSIONS = [...PERMISSIONS.filter((p) => p.id !== "manageWebhooks" && p.id !== "goLive"), READ_MESSAGES, POST_EVENTS];
 export const isBotPermission = (p: string) => BOT_PERMISSIONS.some((x) => x.id === p);

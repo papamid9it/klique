@@ -4,7 +4,7 @@ import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { Types } from "mongoose";
 import { z } from "zod";
-import { ALL_PERMISSIONS, isBotPermission, isPermission, READ_MESSAGES } from "@/lib/roles";
+import { ALL_PERMISSIONS, isBotPermission, isPermission, POST_EVENTS, READ_MESSAGES } from "@/lib/roles";
 import type { BotCommandRuleDTO, UserBrief } from "@/lib/types";
 import { appUrl } from "../env";
 import { assertPublicHttpUrl, safeLookup } from "../net-guard";
@@ -215,9 +215,10 @@ export async function installBot(viewer: IUser, id: string, slug: string, permis
   const mine = isSiteAdmin(viewer) ? ALL_PERMISSIONS : (access.perms ?? []);
   const give = [...new Set(permissions)].filter((p) => isPermission(p) && a.permissions.includes(p) && mine.includes(p) && p !== "manageWebhooks");
   const reads = permissions.includes(READ_MESSAGES.id) && a.permissions.includes(READ_MESSAGES.id);
+  const posts = permissions.includes(POST_EVENTS.id) && a.permissions.includes(POST_EVENTS.id);
   // its role: just below the installer's highest role (or at the bottom)
   const below = await CommunityRole.findOne({ communityId: c._id, position: { $lt: access.rank ?? 1e9 } }).sort({ position: -1 }).lean<ICommunityRole>();
-  const role = await CommunityRole.create({ communityId: c._id, name: a.name, color: "#5865f2", icon: "🤖", position: below ? Math.max(1, below.position - 1) : 1, permissions: give, selfAssignable: false, botAppId: a._id, readMessagesSince: reads ? new Date() : null });
+  const role = await CommunityRole.create({ communityId: c._id, name: a.name, color: "#5865f2", icon: "🤖", position: below ? Math.max(1, below.position - 1) : 1, permissions: give, selfAssignable: false, botAppId: a._id, readMessagesSince: reads ? new Date() : null, postEvents: posts });
   await Membership.updateOne(
     { userId: a.userId, communityId: c._id, subcommunityId: null },
     { $set: { status: "active", role: "member", roleIds: [role._id], rulesAcceptedAt: new Date(), welcomedAt: new Date() } },
@@ -225,8 +226,8 @@ export async function installBot(viewer: IUser, id: string, slug: string, permis
   );
   await Community.updateOne({ _id: c._id }, { $addToSet: { bots: a._id } });
   await recountMembers(c._id, null);
-  void ModAction.create({ communityId: c._id, actorId: viewer._id, action: "bot.add", targetType: "member", targetId: a.userId, label: `${a.name}${give.length || reads ? ` (${[...give, ...(reads ? [READ_MESSAGES.id] : [])].join(", ")})` : ""}`, authorId: a.userId }).catch(() => {});
-  void deliver(a, "bot.added", { community: { id: sid(c._id), slug: c.slug, name: c.name }, permissions: give });
+  void ModAction.create({ communityId: c._id, actorId: viewer._id, action: "bot.add", targetType: "member", targetId: a.userId, label: `${a.name}${give.length || reads || posts ? ` (${[...give, ...(reads ? [READ_MESSAGES.id] : []), ...(posts ? [POST_EVENTS.id] : [])].join(", ")})` : ""}`, authorId: a.userId }).catch(() => {});
+  void deliver(a, "bot.added", { community: { id: sid(c._id), slug: c.slug, name: c.name }, permissions: [...give, ...(reads ? [READ_MESSAGES.id] : []), ...(posts ? [POST_EVENTS.id] : [])] });
   return { community: c.slug };
 }
 
@@ -297,11 +298,35 @@ export async function setBotRules(viewer: IUser, slug: string, id: string, rules
 }
 
 /** A community's bots (for its settings), each with its commands' rules. */
-export async function communityBots(viewer: IUser, slug: string): Promise<(BotDTO & { readMessages: boolean; rules: BotCommandRuleDTO[] })[]> {
+export async function communityBots(viewer: IUser, slug: string): Promise<(BotDTO & { readMessages: boolean; postEvents: boolean; asksPostEvents: boolean; rules: BotCommandRuleDTO[] })[]> {
   const { space } = await resolveSpaceFor(viewer, slug);
-  const [rows, roles] = await Promise.all([BotApp.find({ _id: { $in: space.community.bots ?? [] } }).lean<IBotApp[]>(), CommunityRole.find({ communityId: space.community._id, botAppId: { $ne: null } }).select("botAppId readMessagesSince").lean<ICommunityRole[]>()]);
+  const [rows, roles] = await Promise.all([BotApp.find({ _id: { $in: space.community.bots ?? [] } }).lean<IBotApp[]>(), CommunityRole.find({ communityId: space.community._id, botAppId: { $ne: null } }).select("botAppId readMessagesSince postEvents").lean<ICommunityRole[]>()]);
   const reading = new Set(roles.filter((r) => r.readMessagesSince).map((r) => sid(r.botAppId!)));
-  return Promise.all(rows.map(async (r) => ({ ...(await toDto(r, false)), readMessages: reading.has(sid(r._id)), rules: r.commands.map((c) => ruleFor(space.community, r._id, c.name)) })));
+  const posting = new Set(roles.filter((r) => r.postEvents).map((r) => sid(r.botAppId!)));
+  return Promise.all(rows.map(async (r) => ({ ...(await toDto(r, false)), readMessages: reading.has(sid(r._id)), postEvents: posting.has(sid(r._id)), asksPostEvents: r.permissions.includes(POST_EVENTS.id), rules: r.commands.map((c) => ruleFor(space.community, r._id, c.name)) })));
+}
+
+/** Let a bot add events, or stop it (only a bot that asks for it). Events it already added stay. */
+export async function setBotPostEvents(viewer: IUser, slug: string, id: string, on: boolean): Promise<{ postEvents: boolean }> {
+  const { space, access } = await resolveSpaceFor(viewer, slug);
+  if (access.role !== "owner" && !isSiteAdmin(viewer) && !access.perms?.includes("manageWebhooks")) throw forbidden("Only the community's owner can change this.");
+  if (!Types.ObjectId.isValid(id)) throw notFound("We couldn't find that bot.");
+  const c = space.community;
+  const role = await CommunityRole.findOne({ communityId: c._id, botAppId: id }).lean<ICommunityRole>();
+  const app = role ? await BotApp.findById(id).select("name userId permissions").lean<Pick<IBotApp, "_id" | "name" | "userId" | "permissions">>() : null;
+  if (!role || !app) throw notFound("That bot isn't in this community.");
+  if (on && !app.permissions.includes(POST_EVENTS.id)) throw badRequest(`${app.name} doesn't ask to post events.`);
+  if (!!role.postEvents !== on) {
+    await CommunityRole.updateOne({ _id: role._id }, { $set: { postEvents: on } });
+    void ModAction.create({ communityId: c._id, actorId: viewer._id, action: "bot.add", targetType: "member", targetId: app.userId, label: `${app.name}: ${on ? "can now post events" : "can no longer post events"}`, authorId: null }).catch(() => {});
+  }
+  return { postEvents: on };
+}
+
+/** The bot's role in a community lets it add events. */
+export async function assertBotPostsEvents(app: IBotApp, communityId: Types.ObjectId) {
+  const role = await CommunityRole.findOne({ communityId, botAppId: app._id }).select("postEvents").lean<ICommunityRole>();
+  if (!role?.postEvents) throw forbidden("This bot isn't allowed to post events here. A community owner can turn on Post events in its settings, under Bots.");
 }
 
 /** Let a bot read messages from now on, or stop it. Allowing it again never opens up what was said in between. */

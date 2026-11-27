@@ -1,14 +1,15 @@
 import { z } from "zod";
 import { readJson, withApi } from "@/server/http/api";
-import { botRulesSchema, setBotReadMessages, setBotRules, uninstallBot } from "@/server/services/bots.service";
+import { botRulesSchema, setBotPostEvents, setBotReadMessages, setBotRules, uninstallBot } from "@/server/services/bots.service";
 
-const patch = z.object({ readMessages: z.boolean().optional(), rules: botRulesSchema.optional() });
+const patch = z.object({ readMessages: z.boolean().optional(), postEvents: z.boolean().optional(), rules: botRulesSchema.optional() });
 
-/** Let a bot read messages from now on, or stop it; or set who may use its commands, where, and how often. */
+/** Let a bot read messages from now on (or stop it), let it post events (or stop it), or set who may use its commands, where, and how often. */
 export const PATCH = withApi<{ slug: string; id: string }, "required">({ auth: "required" }, async ({ req, params, viewer }) => {
   const body = await readJson(req, patch);
-  const out: { readMessages?: boolean; rules?: unknown } = {};
+  const out: { readMessages?: boolean; postEvents?: boolean; rules?: unknown } = {};
   if (body.readMessages !== undefined) Object.assign(out, await setBotReadMessages(viewer, params.slug, params.id, body.readMessages));
+  if (body.postEvents !== undefined) Object.assign(out, await setBotPostEvents(viewer, params.slug, params.id, body.postEvents));
   if (body.rules) Object.assign(out, await setBotRules(viewer, params.slug, params.id, body.rules));
   return out;
 });

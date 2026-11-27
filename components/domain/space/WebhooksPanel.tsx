@@ -13,7 +13,7 @@ import { SettingsBlock } from "@/components/ui/SettingsShell";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { relativeStamp } from "@/lib/format";
-import { READ_MESSAGES } from "@/lib/roles";
+import { POST_EVENTS, READ_MESSAGES } from "@/lib/roles";
 import { useApi, useNow } from "@/lib/hooks/useApi";
 import type { BotCommandRuleDTO, Envelope, UserBrief } from "@/lib/types";
 import { cx } from "@/components/ui/cx";
@@ -299,15 +299,15 @@ export function WebhooksPanel({ slug, onWelcome }: { slug: string; /** opens the
 /** The community's bots (added with their invite links), each removable. */
 function BotsBlock({ slug, channels }: { slug: string; channels: Hooks["channels"] }) {
   const toast = useToast();
-  const { data, reload } = useApi(() => api.get<Envelope<{ id: string; name: string; description: string; avatarUrl: string | null; user: UserBrief | null; commands: { name: string; description?: string }[]; readMessages: boolean; rules: BotCommandRuleDTO[] }[]>>(`/api/communities/${slug}/bots`), [slug], { key: `bots:${slug}` });
+  const { data, reload } = useApi(() => api.get<Envelope<{ id: string; name: string; description: string; avatarUrl: string | null; user: UserBrief | null; commands: { name: string; description?: string }[]; readMessages: boolean; postEvents: boolean; asksPostEvents: boolean; rules: BotCommandRuleDTO[] }[]>>(`/api/communities/${slug}/bots`), [slug], { key: `bots:${slug}` });
   const [removing, setRemoving] = useState<{ id: string; name: string } | null>(null);
   const [ruling, setRuling] = useState<string | null>(null);
   const ruled = data?.find((b) => b.id === ruling) ?? null;
   const [saving, setSaving] = useState<string | null>(null);
-  const setReads = async (id: string, readMessages: boolean) => {
+  const setAccess = async (id: string, change: { readMessages?: boolean; postEvents?: boolean }) => {
     setSaving(id);
     try {
-      await api.patch(`/api/communities/${slug}/bots/${id}`, { readMessages });
+      await api.patch(`/api/communities/${slug}/bots/${id}`, change);
       await reload();
     } catch (e) {
       toast(errorMessage(e), "error");
@@ -331,8 +331,13 @@ function BotsBlock({ slug, channels }: { slug: string; channels: Hooks["channels
                 </p>
                 <p className="truncate text-xs text-ink-muted">{b.commands.length ? b.commands.map((c) => `/${c.name}`).join(" ") : b.description || `@${b.user?.handle ?? ""}`}</p>
                 <div className="mt-2 max-w-sm">
-                  <Switch checked={b.readMessages} onChange={(v) => void setReads(b.id, v)} status={saving === b.id ? "saving" : undefined} label="Can read messages" hint={READ_MESSAGES.hint} />
+                  <Switch checked={b.readMessages} onChange={(v) => void setAccess(b.id, { readMessages: v })} status={saving === b.id ? "saving" : undefined} label="Can read messages" hint={READ_MESSAGES.hint} />
                 </div>
+                {(b.asksPostEvents || b.postEvents) && (
+                  <div className="mt-2 max-w-sm">
+                    <Switch checked={b.postEvents} onChange={(v) => void setAccess(b.id, { postEvents: v })} status={saving === b.id ? "saving" : undefined} label="Can post events" hint={POST_EVENTS.hint} />
+                  </div>
+                )}
                 {b.commands.length > 0 && (
                   <button type="button" onClick={() => setRuling(b.id)} className="mt-2 text-sm font-medium text-accent-text underline underline-offset-2">
                     Who can use its commands{b.rules.some((r) => r.who !== "everyone" || r.channelIds.length || r.cooldownSec) ? " (limited)" : " (everyone)"}

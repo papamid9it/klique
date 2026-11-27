@@ -65,9 +65,20 @@ const PER_RUN = 6;
 export async function instagramEvents(source: IEventSource, fallbackCountry: string): Promise<Candidate[]> {
   const username = instagramUsername(source.url);
   if (!username) return [];
+  const { events, newest } = await instagramAccountEvents(username, source.lastPostAt ?? null, fallbackCountry);
+  // next time, only what's new after these
+  if (newest) await EventSource.updateOne({ _id: source._id }, { $set: { lastPostAt: newest } });
+  return events;
+}
+
+/**
+ * One account's posts newer than `after` (the first check looks back three weeks), read into events, and the newest
+ * post's time (keep it for next time). Used by the admin finder's watched accounts and by communities' Event finder.
+ */
+export async function instagramAccountEvents(username: string, after: Date | null, fallbackCountry: string): Promise<{ events: Candidate[]; newest: Date | null }> {
   if (!instagramOn()) throw new Error("Add INSTAGRAM_ACCESS_TOKEN and INSTAGRAM_USER_ID to read Instagram accounts");
   if (!aiOn()) throw new Error("Add ANTHROPIC_API_KEY so the AI can read the posts");
-  const since = source.lastPostAt ? +source.lastPostAt : Date.now() - 21 * DAY;
+  const since = after ? +after : Date.now() - 21 * DAY;
   const posts = (await recentPosts(username)).filter((p) => +new Date(p.timestamp) > since).sort((a, b) => +new Date(a.timestamp) - +new Date(b.timestamp));
   const newest = posts.length ? new Date(posts[posts.length - 1].timestamp) : null;
   const out: Candidate[] = [];
@@ -90,7 +101,5 @@ export async function instagramEvents(source: IEventSource, fallbackCountry: str
       }),
     );
   }
-  // next time, only what's new after these
-  if (newest) await EventSource.updateOne({ _id: source._id }, { $set: { lastPostAt: newest } });
-  return out;
+  return { events: out, newest };
 }

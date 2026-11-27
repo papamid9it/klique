@@ -264,7 +264,11 @@ function assertStreamable(space: { community: ICommunity; sub: unknown } | null)
   if (space.community.adult) throw new ApiError(422, "18+ communities can't go live on Klique.", { errors: { streamed: "Not in 18+ communities" } });
 }
 
-export async function createEvent(viewer: IUser, input: z.infer<typeof eventCreateSchema>, opts: { reviewedImport?: boolean } = {}): Promise<EventDTO> {
+/**
+ * `reviewedImport`: a site admin posting from the finder (no daily limit). `trustedBot`: a bot the community let post
+ * events (Settings → Bots, "Post events"): it posts straight away, as an admin would, never as a member's submission.
+ */
+export async function createEvent(viewer: IUser, input: z.infer<typeof eventCreateSchema>, opts: { reviewedImport?: boolean; trustedBot?: boolean } = {}): Promise<EventDTO> {
   assertVerified(viewer);
   if (!(opts.reviewedImport && isSiteAdmin(viewer))) rateLimit(`event-create:${sid(viewer._id)}`, 20, 24 * 60 * 60 * 1000);
   assertPlace(input, true);
@@ -280,7 +284,7 @@ export async function createEvent(viewer: IUser, input: z.infer<typeof eventCrea
     if (isKlique(resolved.space.community)) {
       if (!isSiteAdmin(viewer)) throw forbidden("Only the Klique team posts events in Klique. Post it in your own community.");
       if (!input.interest) throw new ApiError(422, "Pick an interest for this event.", { errors: { interest: "Pick an interest" } });
-    } else if (!isSiteAdmin(viewer) && !canHostInSpace(resolved.access)) {
+    } else if (!isSiteAdmin(viewer) && !opts.trustedBot && !canHostInSpace(resolved.access)) {
       if (!resolved.access.isMember || resolved.space.community.memberEvents === false) assertCanHostInSpace(viewer, resolved.access);
       assertCanPost(resolved.access);
       rateLimit(`event-submit:${sid(viewer._id)}:${sid(resolved.space.community._id)}`, 5, 24 * 60 * 60 * 1000);

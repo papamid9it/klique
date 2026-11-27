@@ -21,6 +21,8 @@ export interface ICommunityRole {
   botAppId?: Types.ObjectId | null;
   /** a bot's role: when the community allowed it to read messages. It sees nothing older. Null: it can't. */
   readMessagesSince?: Date | null;
+  /** a bot's role: the community lets it add events (lib/roles POST_EVENTS) */
+  postEvents?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -37,6 +39,7 @@ const CommunityRoleSchema = new Schema<ICommunityRole>(
     builtin: { type: String, enum: ["admin", null], default: null },
     botAppId: { type: Schema.Types.ObjectId, default: null },
     readMessagesSince: { type: Date, default: null },
+    postEvents: { type: Boolean, default: false },
   },
   { timestamps: true },
 );

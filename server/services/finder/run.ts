@@ -63,7 +63,7 @@ export const words = (t: string) =>
     .split(/\s+/)
     .filter((w) => w.length > 1 && !STOP.has(w));
 
-const similar = (a: string, b: string) => {
+export const similar = (a: string, b: string) => {
   const A = new Set(words(a));
   const B = new Set(words(b));
   if (!A.size || !B.size) return false;
@@ -90,7 +90,7 @@ async function isDuplicate(c: Candidate, key: string): Promise<boolean> {
 
 /* ------------------------------- filtering ------------------------------- */
 
-function inPlace(c: Candidate, q: IFinderQuery): boolean {
+export function inPlace(c: Candidate, q: Pick<IFinderQuery, "country" | "region" | "city">): boolean {
   if (!q.country) return true;
   if (c.country !== q.country) return false;
   if (q.city) {
@@ -153,25 +153,33 @@ async function work(run: IFinderRun, task: IFinderTask): Promise<{ events: Candi
   const url = source?.url ?? task.target;
   // a watched Instagram account: its new posts through Meta's API, read by the AI (never scraped)
   if (source && instagramUsername(url)) return { events: await instagramEvents(source, q.country), follow: [], source };
+  return { ...(await pageEvents(url, q.country, task.kind === "follow")), source };
+}
+
+/**
+ * One page's events: a calendar (.ics), a feed (its items become pages to follow), schema.org event markup, a
+ * listings page (the event pages it links to, to follow), or, with none of those, the AI reading the page. A page
+ * reached by following (`followed`) doesn't lead further.
+ */
+export async function pageEvents(url: string, country: string, followed = false): Promise<{ events: Candidate[]; follow: string[] }> {
   assertScrapable(new URL(url));
   const page = await politeFetch(url);
-  if (looksLikeIcs(page.type, page.body)) return { events: fromIcs(page.body, page.url, q.country), follow: [], source };
-  if (looksLikeFeed(page.type, page.body)) return { events: [], follow: task.kind === "follow" ? [] : feedLinks(page.body, page.url), source };
+  if (looksLikeIcs(page.type, page.body)) return { events: fromIcs(page.body, page.url, country), follow: [] };
+  if (looksLikeFeed(page.type, page.body)) return { events: [], follow: followed ? [] : feedLinks(page.body, page.url) };
   const site = siteNameOf(page.body, page.url);
   const objects = [...jsonLd(page.body), ...microdata(page.body)];
   const events = objects
     .filter(isEvent)
-    .map((o) => fromSchemaOrg(o, page.url, site, q.country))
-    .filter((c): c is Candidate => !!c)
-    .map((c) => (task.kind === "url" || task.kind === "follow" ? { ...c, provider: c.provider } : c));
+    .map((o) => fromSchemaOrg(o, page.url, site, country))
+    .filter((c): c is Candidate => !!c);
   // a listings page: read the event pages it links to (one task each), but don't crawl further from those
-  const follow = !events.length && task.kind !== "follow" ? itemListLinks(objects).map((l) => new URL(l, page.url).toString()) : [];
+  const follow = !events.length && !followed ? itemListLinks(objects).map((l) => new URL(l, page.url).toString()) : [];
   // no event markup and nothing to follow: the AI reads the page (and its share picture) instead
   if (!events.length && !follow.length && aiOn()) {
     const image = page.body.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)/i)?.[1] ?? null;
-    return { events: await readPageWithAi({ url: page.url.toString(), html: page.body, siteName: site, image }, q.country), follow: [], source };
+    return { events: await readPageWithAi({ url: page.url.toString(), html: page.body, siteName: site, image }, country), follow: [] };
   }
-  return { events, follow, source };
+  return { events, follow };
 }
 
 /** Run tasks until about `budgetMs` has passed (one at a time). Returns the run as it stands. */
