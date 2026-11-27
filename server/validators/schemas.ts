@@ -1095,6 +1095,8 @@ export const giftSendSchema = z.object({
   anonymous: z.boolean().default(false),
   /** a random id per send: the same send twice makes one gift */
   clientKey: z.string().regex(/^[A-Za-z0-9_-]{8,64}$/),
+  /** a combo during a live: the same gift this many times, paid all at once (elsewhere always 1) */
+  count: z.number().int().min(1).max(99).default(1),
 });
 export const giftTopupSchema = z.object({
   amount: z.number().int().min(1).max(10_000_000),

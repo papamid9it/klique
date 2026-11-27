@@ -1,10 +1,9 @@
 "use client";
 
-import { BrandButton, TWITCH, TwitchLogo, YOUTUBE, YouTubeLogo } from "./BrandButtons";
+import { BrandButton, YOUTUBE, YouTubeLogo } from "./BrandButtons";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { errorMessage, isApiError } from "@/app/ApiCore";
-import { CommunityService } from "@/app/services/CommunityService";
+import { errorMessage } from "@/app/ApiCore";
 import { LiveService } from "@/app/services/LiveService";
 import { ReportDialog } from "@/components/domain/ReportDialog";
 import { LiveRoomChat } from "./LiveRoomChat";
@@ -38,7 +37,7 @@ export function LiveRow({ c, onChanged }: { c: CommunityDTO; onChanged: () => vo
     if (sp.get("live") === "1") setOpen(c.live?.status === "live" ? "watch" : c.canGoLive ? "go" : null);
   }, [sp, c.live?.status, c.canGoLive]);
 
-  // someone's live: connect to Twitch or YouTube now, so Watch starts faster
+  // someone's live: connect to the player now, so Watch starts faster
   useEffect(() => {
     if (live?.status === "live") warmLivePlayer(live.provider);
   }, [live?.status, live?.provider]);
@@ -177,7 +176,7 @@ function EndButton({ slug, onEnded }: { slug: string; onEnded: () => void }) {
       variant="danger"
       loading={busy}
       onClick={async () => {
-        if (!(await confirm({ title: "End the stream?", body: "It stops showing as live in the community. Stop streaming in OBS or on Twitch too.", confirmLabel: "End", danger: true }))) return;
+        if (!(await confirm({ title: "End the stream?", body: "It stops showing as live in the community. Stop streaming on YouTube too.", confirmLabel: "End", danger: true }))) return;
         setBusy(true);
         try {
           await LiveService.end(slug);
@@ -195,60 +194,28 @@ function EndButton({ slug, onEnded }: { slug: string; onEnded: () => void }) {
   );
 }
 
-/** Go live: on Twitch (connected; streaming from OBS or the phone app) or by pasting a YouTube live link. */
-function GoLiveModal({ c, live, onLive, onClose, onChanged, eventId, eventTitle }: { c: Pick<CommunityDTO, "slug" | "name">; live: LiveDTO | null; onLive: (l: LiveDTO | null) => void; onClose: () => void; onChanged: () => void; /** streaming an event: the people going are told */ eventId?: string; eventTitle?: string }) {
+/**
+ * Go live on the website: start the stream on YouTube (YouTube Studio, OBS…), then paste its live link. From a phone,
+ * the Klique app streams the camera to YouTube by itself.
+ */
+function GoLiveModal({ c, onLive, onClose, onChanged, eventId, eventTitle }: { c: Pick<CommunityDTO, "slug" | "name">; live: LiveDTO | null; onLive: (l: LiveDTO | null) => void; onClose: () => void; onChanged: () => void; /** streaming an event: the people going are told */ eventId?: string; eventTitle?: string }) {
   const toast = useToast();
-  const { user } = useAuth();
-  const twitch = useApi(() => LiveService.twitch(), [], { key: "twitch-status" });
-  const [provider, setProvider] = useState<"twitch" | "youtube">("twitch");
-  const [others, setOthers] = useState(false);
   const [title, setTitle] = useState(eventTitle ?? "");
   const [link, setLink] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const waiting = live?.status === "waiting" && live.host.id === user?.id;
-
-  // waiting for Twitch to say the stream started: check every few seconds
-  useEffect(() => {
-    if (!waiting) return;
-    const t = setInterval(async () => {
-      try {
-        const r = await CommunityService.get(c.slug);
-        if (r.data.live?.status === "live") {
-          onLive(r.data.live);
-          toast("You're live", "success");
-          onChanged();
-          onClose();
-        } else if (!r.data.live) onLive(null);
-      } catch {
-        /* try again next time */
-      }
-    }, 6000);
-    return () => clearInterval(t);
-  }, [waiting, c.slug, onLive, onChanged, onClose, toast]);
-
-  async function connect() {
-    try {
-      const r = await LiveService.twitchConnectUrl(`/communities/${c.slug}?live=1`);
-      window.location.href = r.data.url;
-    } catch (e) {
-      toast(errorMessage(e), "error");
-    }
-  }
 
   async function go() {
     setBusy(true);
     setError(null);
     try {
-      const r = await LiveService.start(c.slug, { provider, title, ...(eventId ? { eventId } : {}), ...(provider === "youtube" ? { link } : {}) });
+      const r = await LiveService.start(c.slug, { provider: "youtube", title, link, ...(eventId ? { eventId } : {}) });
       onLive(r.data);
-      if (r.data.status === "live") {
-        toast("You're live", "success");
-        onChanged();
-        onClose();
-      }
+      toast("You're live", "success");
+      onChanged();
+      onClose();
     } catch (e) {
-      setError(isApiError(e) && e.code === "twitch_reconnect" ? "Twitch needs you to connect again." : errorMessage(e));
+      setError(errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -256,181 +223,27 @@ function GoLiveModal({ c, live, onLive, onClose, onChanged, eventId, eventTitle 
 
   return (
     <Modal open onClose={onClose} title="Go live" description={`One stream at a time in ${c.name}. Members are told when you're on.`} size="md">
-      {waiting ? (
-        <div className="space-y-4">
-          <p className="text-[14px] leading-relaxed">Start streaming now, in OBS or from the Klique app. Klique shows you as LIVE as soon as Twitch says you&apos;re on.</p>
-          <StreamKey />
-          <div className="flex items-center gap-2 text-[13px] text-ink-muted">
-            <span className="inline-block size-2 animate-pulse rounded-full bg-danger" /> Waiting for Twitch…
-          </div>
-          <div className="flex justify-end">
-            <EndButton slug={c.slug} onEnded={() => (onLive(null), onClose())} />
-          </div>
+      <div className="space-y-4">
+        <TextField label="Title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} placeholder="Friday night set" />
+        <TextField label="YouTube live link" value={link} onChange={(e) => setLink(e.target.value)} maxLength={300} placeholder="https://youtube.com/live/…" hint="Start the stream on YouTube first, then paste its link. On your phone, the Klique app streams your camera straight to YouTube." />
+        {error && <p role="alert" className="text-[13px] text-danger">{error}</p>}
+        <div className="flex justify-end gap-2">
+          <Button onClick={onClose}>Cancel</Button>
+          <BrandButton brand="youtube" disabled={!link.trim() || busy} onClick={() => void go()}>
+            {busy ? "Going live…" : "Go live"}
+          </BrandButton>
         </div>
-      ) : (
-        <div className="space-y-4">
-          <TextField label="Title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} placeholder="Friday night set" />
-          {provider === "twitch" ? (
-            twitch.loading && !twitch.data ? (
-              <RowSkeleton rows={1} />
-            ) : !twitch.data?.ready ? (
-              <p className="text-[13.5px] text-ink-muted">Twitch isn&apos;t set up on Klique yet. Use a YouTube link for now.</p>
-            ) : twitch.data.connected ? (
-              <div className="flex items-center gap-2.5 rounded-control border border-line px-3 py-2.5">
-                {twitch.data.avatarUrl && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={twitch.data.avatarUrl} alt="" className="size-8 rounded-full" />
-                )}
-                <span className="min-w-0 flex-1 text-[14px]">
-                  Streaming as <b>{twitch.data.displayName}</b>
-                </span>
-              </div>
-            ) : (
-              <div className="rounded-control border border-line p-3">
-                <p className="text-[13.5px] text-ink-muted">Connect your Twitch account once. Then stream from OBS, or from your phone&apos;s camera in the Klique app.</p>
-                <BrandButton brand="twitch" className="mt-3" onClick={() => void connect()}>
-                  Connect Twitch
-                </BrandButton>
-              </div>
-            )
-          ) : (
-            <div className="space-y-2">
-              <TextField label="YouTube live link" value={link} onChange={(e) => setLink(e.target.value)} maxLength={300} placeholder="https://youtube.com/live/…" hint="Start the stream on YouTube first, then paste its link." />
-              <button type="button" onClick={() => setProvider("twitch")} className="text-[13px] font-semibold text-ink-muted hover:text-ink">
-                Use Twitch instead
-              </button>
-            </div>
-          )}
-          {/* Twitch is the main way; anything else sits behind "Other options" */}
-          {provider === "twitch" &&
-            (others ? (
-              <div className="rounded-control border border-line p-1">
-                <button type="button" onClick={() => setProvider("youtube")} className="flex w-full items-center gap-2.5 rounded-[8px] px-3 py-2.5 text-left text-[14px] font-medium hover:bg-raised">
-                  <span className="inline-flex size-7 items-center justify-center rounded-[6px] text-white" style={{ background: YOUTUBE }}><YouTubeLogo size={16} /></span> <span className="flex-1">YouTube live link</span> <Icon name="chevron-right" size={15} className="text-ink-muted" />
-                </button>
-              </div>
-            ) : (
-              <button type="button" onClick={() => setOthers(true)} className="w-full rounded-control border border-line py-2.5 text-[14px] font-semibold text-ink-muted transition hover:bg-raised hover:text-ink">
-                Other options
-              </button>
-            ))}
-          {error && <p role="alert" className="text-[13px] text-danger">{error}</p>}
-          <div className="flex justify-end gap-2">
-            <Button onClick={onClose}>Cancel</Button>
-            <Button variant="primary" loading={busy} disabled={provider === "twitch" ? !twitch.data?.connected : !link.trim()} onClick={() => void go()}>
-              Go live
-            </Button>
-          </div>
-        </div>
-      )}
+      </div>
     </Modal>
   );
 }
 
-/** For OBS: Twitch's server and the stream key (hidden until shown; never kept on the page). */
-function StreamKey() {
-  const toast = useToast();
-  const [key, setKey] = useState<{ server: string; key: string } | null>(null);
-  const [busy, setBusy] = useState(false);
-  const copy = (t: string) => void navigator.clipboard.writeText(t).then(() => toast("Copied", "success"), () => toast("Couldn't copy it", "error"));
-  if (!key) {
-    return (
-      <Button
-        size="sm"
-        loading={busy}
-        onClick={async () => {
-          setBusy(true);
-          try {
-            setKey((await LiveService.twitchKey()).data);
-          } catch (e) {
-            toast(errorMessage(e), "error");
-          } finally {
-            setBusy(false);
-          }
-        }}
-      >
-        Show OBS settings
-      </Button>
-    );
-  }
-  return (
-    <div className="space-y-2 rounded-control border border-line p-3 text-[13px]">
-      {[
-        ["Server", key.server],
-        ["Stream key", key.key],
-      ].map(([label, value]) => (
-        <div key={label} className="flex items-center gap-2">
-          <span className="w-20 shrink-0 text-ink-muted">{label}</span>
-          <code className="min-w-0 flex-1 truncate font-mono">{label === "Stream key" ? "•".repeat(16) : value}</code>
-          <button type="button" onClick={() => copy(value)} className="shrink-0 font-semibold text-ink-muted hover:text-ink">
-            Copy
-          </button>
-        </div>
-      ))}
-      <p className="text-ink-muted">Keep the key secret: anyone with it can stream on your channel.</p>
-    </div>
-  );
-}
-
-/** Settings → Connections: Twitch, for going live in communities. */
+/** Settings → Connections: YouTube, for going live in communities. */
 export function ConnectionsTab() {
-  const toast = useToast();
-  const confirm = useConfirm();
-  const sp = useSearchParams();
-  const twitch = useApi(() => LiveService.twitch(), [], { key: "twitch-status" });
-  useEffect(() => {
-    const r = sp.get("twitch");
-    if (r === "connected") toast("Twitch connected", "success");
-    else if (r === "failed") toast("Couldn't connect Twitch. Try again.", "error");
-  }, [sp, toast]);
-
-  async function connect() {
-    try {
-      window.location.href = (await LiveService.twitchConnectUrl("/settings#connections")).data.url;
-    } catch (e) {
-      toast(errorMessage(e), "error");
-    }
-  }
-  async function disconnect() {
-    if (!(await confirm({ title: "Disconnect Twitch?", body: "You won't be able to go live from Twitch in communities until you connect again.", confirmLabel: "Disconnect", danger: true }))) return;
-    try {
-      await LiveService.twitchDisconnect();
-      toast("Twitch disconnected", "success");
-      void twitch.reload();
-    } catch (e) {
-      toast(errorMessage(e), "error");
-    }
-  }
-
-  const t = twitch.data;
   return (
     <section>
       <h3 className="eyebrow">Live streaming</h3>
-      <p className="mt-1.5 text-sm text-ink-muted">Connect Twitch or YouTube to go live in communities. The Klique app streams your camera to your own channel; on a computer, stream to Twitch from OBS, or paste a YouTube live link.</p>
-      <div className="mt-4 flex items-center gap-3 rounded-card border border-line bg-surface p-4">
-        {t?.avatarUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={t.avatarUrl} alt="" className="size-10 rounded-full" />
-        ) : (
-          <span className="inline-flex size-10 items-center justify-center rounded-full text-white" style={{ background: TWITCH }}>
-            <TwitchLogo size={18} />
-          </span>
-        )}
-        <span className="min-w-0 flex-1">
-          <span className="block text-[15px] font-semibold">Twitch</span>
-          <span className="block truncate text-[13px] text-ink-muted">{twitch.loading && !t ? "…" : !t?.ready ? "Not available yet" : t.connected ? `Connected as ${t.displayName}` : "Not connected"}</span>
-        </span>
-        {t?.ready &&
-          (t.connected ? (
-            <Button size="sm" onClick={() => void disconnect()}>
-              Disconnect
-            </Button>
-          ) : (
-            <BrandButton brand="twitch" size="sm" onClick={() => void connect()}>
-              Connect
-            </BrandButton>
-          ))}
-      </div>
+      <p className="mt-1.5 text-sm text-ink-muted">Connect YouTube to go live in communities. The Klique app streams your camera to your own channel; on a computer, start the stream on YouTube and paste its link.</p>
       <YouTubeConnection />
     </section>
   );
@@ -460,7 +273,7 @@ function useLiveNow() {
 function LiveCard({ x, onWatch }: { x: LiveNowDTO; onWatch: () => void }) {
   return (
     <button type="button" onClick={onWatch} aria-label={`Live in ${x.community.name}. Watch`} className="group block w-full text-left">
-      <span className="relative block aspect-video overflow-hidden rounded-[8px] bg-raised">
+      <span className="relative block aspect-video overflow-hidden rounded-[8px] border border-line bg-raised transition group-hover:border-ink-muted/60">
         <LivePreview live={x.live} cover={x.community.coverImage} />
         <span className="absolute top-2 left-2 rounded-[4px] bg-danger px-1.5 text-[11px] leading-[18px] font-extrabold tracking-[.03em] text-white">LIVE</span>
         {x.live.viewers ? <span className="absolute bottom-2 left-2 rounded-[4px] bg-black/70 px-1.5 text-[12px] leading-[18px] font-semibold text-white">{x.live.viewers.toLocaleString()} watching</span> : null}

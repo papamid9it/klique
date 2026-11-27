@@ -507,14 +507,16 @@ export async function sendGift(viewer: IUser, input: z.infer<typeof giftSendSche
   const receiver = await User.findById(t.authorId).select("_id suspendedAt points createdAt country").lean<Pick<IUser, "_id" | "suspendedAt" | "points" | "createdAt" | "country">>();
   if (!receiver || receiver.suspendedAt) throw badRequest("They can't get awards right now.");
 
-  const hype = giftHype(gift.price);
+  // a combo during a live: the same gift n times, one send (paid all at once, or not at all)
+  const n = input.target.type === "live" ? input.count : 1;
+  const hype = giftHype(gift.price) * n;
   // only people who qualify (points, months on Klique, country) earn from an award; for anyone else it still shows,
   // but its whole value is Klique's, and it isn't credited later when they do qualify
   // earning from awards can be paused for everyone (Admin → System): then nobody earns, as if they didn't qualify
   const paused = !(await earningsOn());
   const earning = earningStatus(receiver, config);
   const notEarnedReason = paused ? "earning from awards is paused" : earning.eligible ? null : `receiver not eligible: ${[earning.missing.points && "points", earning.missing.months && "account age", earning.missing.country && "country"].filter(Boolean).join(", ")}`;
-  const toReceiver = earning.eligible && !paused ? receiverShare(gift.price, config.receiverPercent) : 0;
+  const toReceiver = earning.eligible && !paused ? receiverShare(gift.price, config.receiverPercent) * n : 0;
   let row: IGiftSend;
   try {
     row = (
@@ -525,14 +527,15 @@ export async function sendGift(viewer: IUser, input: z.infer<typeof giftSendSche
         giftName: gift.name,
         emoji: gift.emoji,
         artUrl: gift.artUrl,
-        price: gift.price,
+        count: n,
+        price: gift.price * n,
         hype,
         target: { type: input.target.type, id: new Types.ObjectId(input.target.id) },
         communityId: t.community._id,
         anonymous: !!input.anonymous,
         clientKey: input.clientKey,
         receiverAmount: toReceiver,
-        kliqueAmount: gift.price - toReceiver,
+        kliqueAmount: gift.price * n - toReceiver,
         notEarnedReason,
         holdUntil: new Date(Date.now() + config.holdDays * DAY_MS),
       })
@@ -541,10 +544,10 @@ export async function sendGift(viewer: IUser, input: z.infer<typeof giftSendSche
     if ((e as { code?: number })?.code === 11000) throw conflict("That award is already on its way.");
     throw e;
   }
-  const balance = await move(viewer._id, -hype, "gift", `${gift.name} gift`, `gift:${sid(row._id)}`);
+  const balance = await move(viewer._id, -hype, "gift", n > 1 ? `${gift.name} gift ×${n}` : `${gift.name} gift`, `gift:${sid(row._id)}`);
   if (balance === null) {
     await GiftSend.deleteOne({ _id: row._id, status: "pending" });
-    throw new ApiError(402, `You need ${hype.toLocaleString("en-NG")} Hype for a ${gift.name}. Top up in Settings, Hype.`, { code: "not_enough_hype" });
+    throw new ApiError(402, `You need ${hype.toLocaleString("en-NG")} Hype for ${n > 1 ? `${n} ${gift.name}s` : `a ${gift.name}`}. Top up in Settings, Hype.`, { code: "not_enough_hype" });
   }
   await GiftSend.updateOne({ _id: row._id }, { $set: { status: "sent" } });
 
@@ -552,7 +555,7 @@ export async function sendGift(viewer: IUser, input: z.infer<typeof giftSendSche
   // during a live: everyone watching sees it in the live chat
   if (input.target.type === "live") {
     const { announceLiveGift } = await import("./channels.service");
-    await announceLiveGift(new Types.ObjectId(input.target.id), { senderId: input.anonymous ? null : viewer._id, hostId: t.authorId, giftName: gift.name, artUrl: gift.artUrl ?? null, hype }).catch((err) => console.warn("[live] gift line:", (err as Error)?.message));
+    await announceLiveGift(new Types.ObjectId(input.target.id), { senderId: input.anonymous ? null : viewer._id, hostId: t.authorId, giftName: gift.name, artUrl: gift.artUrl ?? null, hype, count: n }).catch((err) => console.warn("[live] gift line:", (err as Error)?.message));
   }
   // everyone with it open (its community, and the person it's for) sees the award at once
   publish([rtChannel.community(t.community._id), rtChannel.user(t.authorId)], { type: "gift", key: giftTargetKey(input.target) });
@@ -581,7 +584,7 @@ async function summarise(targets: { type: GiftTargetType; id: string }[]): Promi
   if (!ok.length) return out;
   const rows = await GiftSend.aggregate<{ _id: { type: GiftTargetType; id: Types.ObjectId; giftId: Types.ObjectId }; count: number; price: number; name: string; emoji: string; artUrl: string | null }>([
     { $match: { status: "sent", $or: ok.map((t) => ({ "target.type": t.type, "target.id": oid(t.id) })) } },
-    { $group: { _id: { type: "$target.type", id: "$target.id", giftId: "$giftId" }, count: { $sum: 1 }, price: { $max: "$price" }, name: { $last: "$giftName" }, emoji: { $last: "$emoji" }, artUrl: { $last: "$artUrl" } } },
+    { $group: { _id: { type: "$target.type", id: "$target.id", giftId: "$giftId" }, count: { $sum: { $ifNull: ["$count", 1] } }, price: { $max: { $divide: ["$price", { $ifNull: ["$count", 1] }] } }, name: { $last: "$giftName" }, emoji: { $last: "$emoji" }, artUrl: { $last: "$artUrl" } } },
   ]);
   const art = await artOf(rows.filter((r) => !r.artUrl).map((r) => r._id.giftId));
   for (const r of rows) {
@@ -833,7 +836,7 @@ export async function adminGiftsReport(r: Range & { group?: "day" | "month" }): 
     HypeTopup.aggregate<{ _id: string; amount: number; count: number }>([{ $match: paidQ }, { $group: { _id: { $dateToString: { format: fmt, date: "$paidAt" } }, amount: { $sum: "$amount" }, count: { $sum: 1 } } }, { $sort: { _id: 1 } }]),
     HypeTopup.find(paidQ).sort({ paidAt: -1 }).limit(300).lean<IHypeTopup[]>(),
     GiftSend.find(sentQ).sort({ createdAt: -1 }).limit(300).lean<IGiftSend[]>(),
-    GiftSend.aggregate<{ value: number; receivers: number; klique: number; count: number }>([{ $match: sentQ }, { $group: { _id: null, value: { $sum: "$price" }, receivers: { $sum: "$receiverAmount" }, klique: { $sum: "$kliqueAmount" }, count: { $sum: 1 } } }]),
+    GiftSend.aggregate<{ value: number; receivers: number; klique: number; count: number }>([{ $match: sentQ }, { $group: { _id: null, value: { $sum: "$price" }, receivers: { $sum: "$receiverAmount" }, klique: { $sum: "$kliqueAmount" }, count: { $sum: { $ifNull: ["$count", 1] } } } }]),
     Payout.aggregate<{ _id: string; amount: number }>([{ $match: { kind: "gifts", ...(when ? { createdAt: when } : {}) } }, { $group: { _id: "$status", amount: { $sum: "$amount" } } }]),
   ]);
   const people = await loadBriefs([...purchases.map((p) => p.userId), ...sends.flatMap((s) => [s.fromId, s.toId])]);

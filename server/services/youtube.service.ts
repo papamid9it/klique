@@ -157,7 +157,7 @@ export async function youtubeBroadcast(viewer: IUser, title: string): Promise<{ 
     body: JSON.stringify({
       snippet: { title: name, scheduledStartTime: new Date().toISOString() },
       status: { privacyStatus: "public", selfDeclaredMadeForKids: false },
-      contentDetails: { enableAutoStart: true, enableAutoStop: true, latencyPreference: "low", enableDvr: true, recordFromStart: true },
+      contentDetails: { enableAutoStart: true, enableAutoStop: true, latencyPreference: "ultraLow", enableDvr: true, recordFromStart: true },
     }),
   });
   const s = await yt<{ id: string; cdn: { ingestionInfo: { ingestionAddress: string; streamName: string } } }>("/liveStreams?part=snippet,cdn,contentDetails", t.token, 50, {

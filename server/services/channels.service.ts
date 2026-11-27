@@ -1255,12 +1255,13 @@ export async function ensureLiveChat(viewer: IUser | null, access: SpaceAccess, 
  * "Sade sent a Rocket": a line in a live stream's chat when someone sends its host an award, so everyone watching
  * sees it. From the sender; sent anonymously, it shows as "Someone" (posted like a bot, under the host's name).
  */
-export async function announceLiveGift(liveId: Types.ObjectId, g: { senderId: Types.ObjectId | null; hostId: Types.ObjectId; giftName: string; artUrl: string | null; hype: number }) {
+export async function announceLiveGift(liveId: Types.ObjectId, g: { senderId: Types.ObjectId | null; hostId: Types.ObjectId; giftName: string; artUrl: string | null; hype: number; count?: number }) {
   const channel = await Channel.findOne({ topicId: liveId }).lean<IChannel>();
   if (!channel) return; // nobody has opened the chat yet: nobody to show it to
   const host = await User.findById(g.hostId).select("displayName").lean<{ displayName: string }>();
   const body = `sent ${/^[aeiou]/i.test(g.giftName) ? "an" : "a"} ${g.giftName} to ${host?.displayName ?? "the host"}`;
-  const cards = [{ color: "#F5B83D", title: g.giftName, text: `${g.hype.toLocaleString("en-NG")} Hype`, ...(g.artUrl ? { thumbnail: g.artUrl } : {}) }];
+  // a combo says how many in the card's title ("Rose ×10"); the Hype is for all of them
+  const cards = [{ color: "#F5B83D", title: g.count && g.count > 1 ? `${g.giftName} ×${g.count}` : g.giftName, text: `${g.hype.toLocaleString("en-NG")} Hype`, ...(g.artUrl ? { thumbnail: g.artUrl } : {}) }];
   const doc = await ChannelMessage.create({
     channelId: channel._id,
     communityId: channel.communityId,

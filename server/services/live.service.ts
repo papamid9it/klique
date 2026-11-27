@@ -274,6 +274,9 @@ async function tellMembers(s: ILiveStream, community: ICommunity, host: Pick<IUs
 }
 
 export async function startLive(viewer: IUser, slug: string, input: { provider: "twitch" | "youtube"; link?: string; broadcastId?: string; title: string; eventId?: string | null }): Promise<LiveDTO> {
+  // Twitch was too slow (a long delay before people see you): going live is on YouTube now. Streams already on Twitch
+  // play on until they end.
+  if (input.provider === "twitch") throw badRequest("Going live on Twitch has stopped. Connect YouTube in Settings, Connections, and go live from there.");
   const { space, access } = await resolveSpaceFor(viewer, slug);
   if (space.sub) throw badRequest("Go live in the community, not a group.");
   const community = space.community;

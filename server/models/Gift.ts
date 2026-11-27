@@ -126,6 +126,8 @@ export interface IGiftSend {
   emoji: string;
   artUrl: string | null;
   /** naira value and Hype paid */
+  /** the price, Hype and earnings below are for all of them: a combo during a live is one send of several */
+  count?: number;
   price: number;
   hype: number;
   target: { type: "post" | "comment" | "topic" | "reply" | "live"; id: Types.ObjectId };
@@ -154,6 +156,7 @@ const GiftSendSchema = new Schema<IGiftSend>(
     giftName: { type: String, required: true },
     emoji: { type: String, default: "🎁" },
     artUrl: { type: String, default: null },
+    count: { type: Number, default: 1, min: 1 },
     price: { type: Number, required: true },
     hype: { type: Number, required: true },
     target: { type: new Schema({ type: { type: String, enum: ["post", "comment", "topic", "reply", "live"], required: true }, id: { type: Schema.Types.ObjectId, required: true } }, { _id: false }), required: true },

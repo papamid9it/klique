@@ -379,6 +379,15 @@ export function HomeFeed({
     if (between) {
       return (
         <section aria-label="What's happening">
+          {/* new here (only Klique HQ, no posts yet): say why it's quiet, and where to go */}
+          <div className="mb-5 rounded-card border border-line bg-surface p-4">
+            <p className="text-[17px] font-bold">Your feed is quiet</p>
+            <p className="mt-1 text-[15px] text-ink-muted">Join a few communities and their posts show up here. Meanwhile, here&apos;s what&apos;s on around you.</p>
+            <div className="mt-3 flex gap-2">
+              <Button href="/communities" variant="primary" className="flex-1">Find communities</Button>
+              <Button href="/events" className="flex-1">Find events</Button>
+            </div>
+          </div>
           <ul className="space-y-5">
             {Array.from({ length: between }, (_, n) => (
               <Fragment key={n}>
