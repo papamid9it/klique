@@ -9,7 +9,7 @@ import { rateLimit } from "../http/rate-limit";
 import { after } from "next/server";
 import { AppSetting } from "../models/AppSetting";
 import { FeedSeen } from "../models/FeedSeen";
-import { emitRemoved } from "./realtime";
+import { emitPost, emitRemoved } from "./realtime";
 import { Community, type ICommunity } from "../models/Community";
 import { FeedComment, FeedPost, FeedVote, type IFeedComment, type IFeedPost } from "../models/FeedPost";
 import { Membership, type IMembership } from "../models/Membership";
@@ -366,6 +366,8 @@ export async function vote(viewer: IUser, space: Space, access: SpaceAccess, pos
     await FeedPost.updateOne({ _id: p._id }, { $inc: inc });
     // love earns the author points (older apps can still send a downvote: it's kept, but counts for nothing) (once per person per post, however often it's taken back and given again)
     if (value === 1) awardPointsLater(p.authorId, "postUpvote", `feed:${sid(p._id)}:${sid(viewer._id)}`, viewer._id);
+    // the author (and anyone with it open) sees the new love at once
+    emitPost(p.communityId, p._id);
   }
   const fresh = await FeedPost.findById(p._id).select("upCount downCount").lean<Pick<IFeedPost, "upCount" | "downCount">>();
   return { upCount: Math.max(0, fresh?.upCount ?? 0), downCount: Math.max(0, fresh?.downCount ?? 0), myVote: value };
@@ -429,6 +431,8 @@ export async function addComment(viewer: IUser, space: Space, access: SpaceAcces
     throw e;
   }
   await FeedPost.updateOne({ _id: p._id }, { $inc: { commentCount: 1 } });
+  // open copies of the post get the new comment (and its count) at once
+  emitPost(p.communityId, p._id);
   noteStickerUse(viewer._id, stickerUrl);
   const said = previewOf({ body: input.body, sticker, stickerUrl }).slice(0, 140);
   // the post's author and the person answered hear about it (never yourself), bundled per post
@@ -497,7 +501,9 @@ export async function reactToComment(viewer: IUser, space: Space, access: SpaceA
   rateLimit(`react:${sid(viewer._id)}`, 60, 30_000);
   const p = await loadPost(space, postId);
   const c = await loadComment(sid(p._id), commentId);
-  return toggleReaction("feedComment", c._id, viewer._id, kind);
+  const out = await toggleReaction("feedComment", c._id, viewer._id, kind);
+  emitPost(p.communityId, p._id);
+  return out;
 }
 
 /* ------------------------------------------------------------------ */

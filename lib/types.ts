@@ -1658,7 +1658,11 @@ export type RealtimeEvent =
   /** something was deleted (a post, board post, event or klique): open lists drop it at once */
   | { type: "removed"; what: "post" | "topic" | "event" | "klique"; id: Id }
   /** someone went live in a community (`on`), or its stream ended: open pages show or drop LIVE at once */
-  | { type: "live"; communityId: Id; on: boolean };
+  | { type: "live"; communityId: Id; on: boolean }
+  /** a post's love, comments or comment reactions changed: open copies of it fetch it again */
+  | { type: "post"; postId: Id }
+  /** an award landed on something ("post:<id>", "comment:<id>"…: lib/gifts giftTargetKey): its award count refreshes */
+  | { type: "gift"; key: string };
 
 /** A chat to type in: a community or group channel, a DM conversation, or a crew's chat. */
 export type TypingTarget = { kind: "channel"; slug: string; sub?: string | null; channel: string } | { kind: "dm"; id: Id } | { kind: "crew"; id: Id };

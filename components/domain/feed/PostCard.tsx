@@ -1,5 +1,6 @@
 "use client";
 
+import { useRealtimeEvent } from "@/components/providers/RealtimeProvider";
 import { PostTag } from "./PostTag";
 import { checkReels, reelsReady } from "@/lib/reels-ready";
 import { useRouter } from "next/navigation";
@@ -81,6 +82,11 @@ export function VoteControl({ post: p, onChange }: { post: FeedPostDTO; onChange
  * comments, then the caption. `trending` marks a post from a public community you're not in, with a Join button.
  */
 export function PostCard({ post: p, onChange, onRemoved, onOpenComments, showCommunity, trending }: { post: FeedPostDTO; onChange: (p: FeedPostDTO) => void; onRemoved: () => void; onOpenComments: () => void; showCommunity?: boolean; trending?: boolean }) {
+  // someone else loved it or commented: its counts update at once
+  useRealtimeEvent(
+    () => void FeedService.get(p.community.slug, p.id).then((r) => onChange(r.data), () => {}),
+    { filter: (e) => e.type === "post" && e.postId === p.id, debounceMs: 600 },
+  )
   const now = useNow();
   const toast = useToast();
   const { requireAuth, user } = useAuth();

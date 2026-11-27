@@ -1,5 +1,6 @@
 "use client";
 
+import { useRealtimeEvent } from "@/components/providers/RealtimeProvider";
 import { createPortal } from "react-dom";
 import { HypeCoin } from "./HypeCoin";
 import Link from "next/link";
@@ -54,6 +55,13 @@ function flush() {
   });
 }
 
+/** An award just landed on it (a live event): ask again, keeping what's shown until the new count arrives. */
+function refetch(key: string) {
+  if (waiting.has(key)) return;
+  waiting.add(key);
+  if (!timer) timer = setTimeout(flush, 40);
+}
+
 function want(key: string) {
   if (known.has(key) || waiting.has(key)) return;
   waiting.add(key);
@@ -83,6 +91,8 @@ function useSummary(target: GiftTarget): GiftSummaryDTO | null {
       if (!set.size) listeners.delete(key);
     };
   }, [key]);
+  // someone else sent an award to it: the count updates at once (the person it's for too)
+  useRealtimeEvent(() => refetch(key), { filter: (e) => e.type === "gift" && e.key === key, debounceMs: 300 });
   return known.get(key) ?? null;
 }
 

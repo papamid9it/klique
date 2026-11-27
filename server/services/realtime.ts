@@ -49,6 +49,9 @@ export const emitRemoved = (communityId: Types.ObjectId | string | null | undefi
   if (communityId) publish([rtChannel.community(communityId)], { type: "removed", what, id: String(id) });
 };
 
+/** A post's love, comments or comment reactions changed: everyone in its community with it open refreshes it. */
+export const emitPost = (communityId: Types.ObjectId | string, postId: Types.ObjectId | string) => publish([rtChannel.community(communityId)], { type: "post", postId: String(postId) });
+
 export const emitTopic = (communityId: Types.ObjectId | string, topicId: Types.ObjectId | string) =>
   publish([rtChannel.community(communityId)], { type: "topic", communityId: String(communityId), topicId: String(topicId) });
 

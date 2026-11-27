@@ -1,5 +1,6 @@
 "use client";
 
+import { useRealtimeEvent } from "@/components/providers/RealtimeProvider";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
 import { FeedService, newClientKey } from "@/app/services/FeedService";
@@ -90,7 +91,7 @@ type Draft = { body: string } & StickerChoice;
  * held outside so Reply can fill it with "@name "; `above` is the "Replying to" strip.
  */
 function Composer({ body, setBody, onSend, placeholder, inputRef, above }: { body: string; setBody: (v: string) => void; onSend: (draft: Draft) => Promise<boolean>; placeholder: string; inputRef?: React.Ref<HTMLTextAreaElement>; above?: React.ReactNode }) {
-  // @people, @communities and #tags as you type
+  // @people and @communities as you type
   const own = useRef<HTMLTextAreaElement | null>(null);
   const suggest = useTagSuggest(own, body, setBody);
   const [sticker, setSticker] = useState<StickerChoice | null>(null);
@@ -165,7 +166,9 @@ export function PostComments({ post, onCount, pinned, top, focus }: { post: Feed
   const confirm = useConfirm();
   const now = useNow();
   const slug = post.community.slug;
-  const { data, loading, setData } = useApi(() => FeedService.comments(slug, post.id), [slug, post.id]);
+  const { data, loading, setData, reload } = useApi(() => FeedService.comments(slug, post.id), [slug, post.id]);
+  // someone else commented or reacted: the comments catch up at once
+  useRealtimeEvent(() => void reload(), { filter: (e) => e.type === "post" && e.postId === post.id, debounceMs: 600 });
   const list = useMemo(() => data ?? [], [data]);
   // your comments on their way: shown at once, sent behind (a failed one waits for "Not sent · Resend")
   type Outgoing = { c: FeedCommentDTO; input: Draft & { parentId?: string; clientKey: string }; state: "sending" | "failed" };

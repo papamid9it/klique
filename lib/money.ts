@@ -24,7 +24,8 @@ export const DEFAULT_MONEY_CONFIG: MoneyConfig = { donationFeePercent: 8, contri
 
 /** a community can have up to this many causes running, and one gift to a cause is at most this much Hype */
 export const MAX_CAUSES = 3;
-export const MAX_CAUSE_GIFT = 100_000;
+/** the most Hype given to a cause at once: the biggest Hype pack in the stores (40,000), so one purchase always covers it */
+export const MAX_CAUSE_GIFT = 40_000;
 /** quick amounts in the give popup, Hype */
 export const CAUSE_PRESETS = [50, 250, 1000, 5000];
 

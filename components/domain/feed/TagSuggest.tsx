@@ -28,7 +28,9 @@ export function useTagSuggest(target: React.RefObject<HTMLTextAreaElement | null
   // where the caret is: re-read after every change
   useEffect(() => {
     const el = target.current;
-    setToken(el ? activeToken(value, el.selectionStart ?? value.length) : null);
+    // @people and @communities only: no #tags any more
+    const tk = el ? activeToken(value, el.selectionStart ?? value.length) : null;
+    setToken(tk?.kind === "@" ? tk : null);
   }, [value, target]);
 
   useEffect(() => {

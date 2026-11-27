@@ -1,4 +1,5 @@
 import "server-only";
+import { publish, rtChannel } from "./realtime";
 import { randomBytes } from "node:crypto";
 import mongoose, { Types } from "mongoose";
 import type { z } from "zod";
@@ -551,6 +552,8 @@ export async function sendGift(viewer: IUser, input: z.infer<typeof giftSendSche
     const { announceLiveGift } = await import("./channels.service");
     await announceLiveGift(new Types.ObjectId(input.target.id), { senderId: input.anonymous ? null : viewer._id, hostId: t.authorId, giftName: gift.name, artUrl: gift.artUrl ?? null, hype }).catch((err) => console.warn("[live] gift line:", (err as Error)?.message));
   }
+  // everyone with it open (its community, and the person it's for) sees the award at once
+  publish([rtChannel.community(t.community._id), rtChannel.user(t.authorId)], { type: "gift", key: giftTargetKey(input.target) });
   notify([t.authorId], { title: `${who} sent you an award: ${gift.name}`, body: toReceiver > 0 ? `On ${t.label}. You earn ${naira(toReceiver)}.` : `On ${t.label}.`, data: { href: t.href } }, { category: "gifts", ref: `gift:${input.target.type}:${input.target.id}`, ...(input.anonymous ? {} : { actorId: viewer._id }) });
   return { balance, summary: (await summarise([input.target]))[giftTargetKey(input.target)] };
 }

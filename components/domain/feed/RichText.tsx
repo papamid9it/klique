@@ -12,7 +12,7 @@ const TOKEN_RX = /(https?:\/\/[^\s<]+)|(?<![\w@])@([a-zA-Z0-9][a-zA-Z0-9_-]{1,39
 
 /**
  * A post's or comment's text: links open in a new tab, @people open their card, @communities are a chip (with the
- * verified badge) to the community, #tags go to /tags/<tag>. Only names the server resolved (`refs`) become links:
+ * verified badge) to the community; a #word is plain text (no #tags any more). Only names the server resolved (`refs`) become links:
  * anything else stays plain text. Never injects HTML.
  */
 export function RichText({ text, refs, formatted }: { text: string; refs?: TextRefsDTO | null; /** bold, italic and so on: posts, not their comments */ formatted?: boolean }) {
@@ -55,11 +55,8 @@ function PlainRichText({ text, refs }: { text: string; refs?: TextRefsDTO | null
         );
       } else out.push(m[0]);
     } else if (m[3]) {
-      out.push(
-        <Link key={at} href={`/tags/${m[3].toLowerCase()}`} className="font-medium text-accent-text hover:underline">
-          #{m[3]}
-        </Link>,
-      );
+      // no #tags any more (posts carry their community's tag): a #word is just text
+      out.push(m[0]);
     }
     last = at + m[0].length;
   }

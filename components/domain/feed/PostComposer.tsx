@@ -1,6 +1,6 @@
 "use client";
 
-import { postTagColor } from "@/lib/postTags";
+import { PostTagPicker } from "./PostTag";
 import { FormatButton } from "@/components/ui/FormatButton";
 import { useRef, useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
@@ -36,7 +36,7 @@ export function PostComposer({ slug, communityName, explicitAllowed, postTags = 
   const status = useUploadStatus();
   const [mode, setMode] = useState<"media" | "text">("text");
   const [caption, setCaption] = useState("");
-  // @people, @communities and #tags as you type the caption
+  // @people and @communities as you type the caption
   const captionRef = useRef<HTMLTextAreaElement | null>(null);
   const suggest = useTagSuggest(captionRef, caption, setCaption);
   const [title, setTitle] = useState("");
@@ -117,22 +117,8 @@ export function PostComposer({ slug, communityName, explicitAllowed, postTags = 
           <input id="post-title" value={title} onChange={(e) => setTitle(e.target.value.slice(0, FEED_TITLE_MAX))} maxLength={FEED_TITLE_MAX} placeholder="Title" autoFocus className="w-full border-0 bg-transparent px-0 text-[22px] font-bold text-ink placeholder:text-ink-muted/70 focus:outline-none" />
           <p className="text-right font-mono text-[11px] text-ink-muted">{title.length}/{FEED_TITLE_MAX}</p>
         </div>
-        {/* the community's tags (Reddit's flair): pick one, or none */}
-        {postTags.length > 0 && (
-          <div role="radiogroup" aria-label="Tag" className="-mt-2 flex flex-wrap items-center gap-2">
-            <span className="text-[13px] font-semibold text-ink-muted">Tag</span>
-            {postTags.map((g) => {
-              const on = tagId === g.id;
-              const col = postTagColor(g.color);
-              return (
-                <button key={g.id} type="button" role="radio" aria-checked={on} onClick={() => setTagId(on ? null : g.id)} className={cx("inline-flex h-7 items-center rounded-[6px] border px-2.5 text-[12.5px] font-bold transition", on ? "border-transparent" : "border-line text-ink hover:bg-raised")} style={on ? { background: col.bg, color: col.ink } : undefined}>
-                  {!on && <span aria-hidden="true" className="mr-1.5 size-2.5 rounded-[3px]" style={{ background: col.bg }} />}
-                  {g.name}
-                </button>
-              );
-            })}
-          </div>
-        )}
+        {/* the community's tags (tag shapes): pick one, or none */}
+        <PostTagPicker tags={postTags} value={tagId} onChange={setTagId} />
         {step === 1 && (
         <div role="tablist" aria-label="What to post" className="flex border-b border-line">
           {(
@@ -205,7 +191,7 @@ export function PostComposer({ slug, communityName, explicitAllowed, postTags = 
           <PostPreview media={media} at={Math.min(previewAt, media.length - 1)} onAt={setPreviewAt} caption={caption} plain={plainBackdrop} where={reelsOn ? previewIn : "home"} onWhere={setPreviewIn} reelsOn={reelsOn} frame={frame} onFrame={setFrame} />
           <div className="min-w-0 space-y-4">
             <FormatButton area={captionRef} value={caption} onChange={setCaption} />
-            <TextArea ref={captionRef} label="Caption (optional)" value={caption} onChange={(e) => setCaption(e.target.value)} onKeyDown={(e) => suggest.onKeyDown(e)} maxLength={LIMITS.feedCaption} counter={LIMITS.feedCaption} placeholder="Say something about it… @someone #tag" />
+            <TextArea ref={captionRef} label="Caption (optional)" value={caption} onChange={(e) => setCaption(e.target.value)} onKeyDown={(e) => suggest.onKeyDown(e)} maxLength={LIMITS.feedCaption} counter={LIMITS.feedCaption} placeholder="Say something about it… @someone" />
             {suggest.panel}
             <MediaFitPicker media={media} value={mediaFit} onChange={setMediaFit} />
             {reelsOn && <div>
@@ -291,7 +277,7 @@ function TextFields({ title, caption, setCaption, textBg, setTextBg, captionRef,
         </div>
       )}
       <FormatButton area={captionRef} value={caption} onChange={setCaption} />
-      <TextArea ref={captionRef} label="Body text (optional)" value={caption} onChange={(e) => setCaption(e.target.value)} onKeyDown={(e) => suggest.onKeyDown(e)} maxLength={LIMITS.feedCaption} counter={LIMITS.feedCaption} placeholder="Ask something, share a tip, start a conversation… @someone #tag" />
+      <TextArea ref={captionRef} label="Body text (optional)" value={caption} onChange={(e) => setCaption(e.target.value)} onKeyDown={(e) => suggest.onKeyDown(e)} maxLength={LIMITS.feedCaption} counter={LIMITS.feedCaption} placeholder="Ask something, share a tip, start a conversation… @someone" />
       {suggest.panel}
       <p className="text-xs text-ink-muted">People see the title and the first lines, and open it to read the rest and comment.</p>
     </div>

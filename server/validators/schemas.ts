@@ -10,6 +10,8 @@ import { REACTION_IDS, STICKER_IDS } from "@/lib/reactions";
 import { SOCIAL_IDS, socialHandle, socialOf, type SocialId } from "@/lib/socials";
 import { FEED_TITLE_MAX, TEXT_BACKGROUND_IDS, TEXT_CARD_MAX } from "@/lib/feedText";
 import { NOTIFY_CATEGORY_IDS } from "@/lib/notifications";
+import { MAX_CAUSE_GIFT } from "@/lib/money";
+import { GIFT_PRICE_MAX } from "@/lib/gifts";
 import { POST_TAG_COLOR_IDS, POST_TAG_NAME_MAX, POST_TAGS_MAX } from "@/lib/postTags";
 import { blankToUndef, handle, httpUrl, interestId, objectId, pageQuery, placeDefault, placeOptional, placeReach, placeReachOptional, placeRequired, whereParam } from "./common";
 
@@ -1025,9 +1027,9 @@ export const causeSchema = z.object({
   goalHype: z.number().int().min(10).max(100_000_000).nullable().optional(),
   main: z.boolean().optional(),
 });
-/** giving to a cause: any whole amount up to 100,000 Hype; they must tick that it's a gift (no refunds) */
+/** giving to a cause: any whole amount up to 40,000 Hype (lib/money); they must tick that it's a gift (no refunds) */
 export const causeGiveSchema = z.object({
-  hype: z.number().int().min(1, "Give at least 1 Hype").max(100_000, "Up to 100,000 Hype at once"),
+  hype: z.number().int().min(1, "Give at least 1 Hype").max(MAX_CAUSE_GIFT, `Up to ${MAX_CAUSE_GIFT.toLocaleString("en-NG")} Hype at once`),
   clientKey: z.string().trim().min(8).max(64),
   anonymous: z.boolean().optional(),
   agree: z.literal(true, { message: "Tick that you understand gifts can't be refunded." }),
@@ -1109,7 +1111,8 @@ export const giftSaveSchema = z.object({
   name: z.string().trim().min(1, "Give it a name").max(40),
   emoji: z.string().trim().max(16).default("🎁"),
   artUrl: z.string().trim().max(600).nullable().optional(),
-  price: z.number().min(1).max(10_000_000),
+  // up to 40,000 Hype: the biggest store pack covers any award in one purchase
+  price: z.number().min(1).max(GIFT_PRICE_MAX, `Up to ₦${GIFT_PRICE_MAX.toLocaleString("en-NG")} (40,000 Hype)`),
   active: z.boolean().default(true),
   position: z.number().int().min(0).max(10_000).optional(),
 });

@@ -1,9 +1,8 @@
 "use client";
 
+import { PostTagPicker } from "@/components/domain/feed/PostTag";
 import { useEffect, useRef, useState } from "react";
 import { CommunityService } from "@/app/services/CommunityService";
-import { postTagColor } from "@/lib/postTags";
-import { cx } from "@/components/ui/cx";
 import { errorMessage } from "@/app/ApiCore";
 import { UploadService } from "@/app/services/UploadService";
 import { useUploadStatus } from "@/lib/hooks/useUploads";
@@ -165,25 +164,8 @@ export function TopicFormModal({ slug, communityName, board, topic, postTags: gi
           {errs.media && <p role="alert" className="mt-1.5 text-sm text-danger">{errs.media}</p>}
         </fieldset>
 
-        {/* the community's tags (as on its posts): pick one, or none */}
-        {postTags.length > 0 && (
-          <fieldset>
-            <legend className="mb-1.5 text-sm font-medium">Tag</legend>
-            <div role="radiogroup" aria-label="Tag" className="flex flex-wrap gap-2">
-              {postTags.map((g) => {
-                const on = tagId === g.id;
-                const col = postTagColor(g.color);
-                return (
-                  <button key={g.id} type="button" role="radio" aria-checked={on} onClick={() => setTagId(on ? null : g.id)} className={cx("inline-flex h-7 items-center rounded-[6px] border px-2.5 text-[12.5px] font-bold transition", on ? "border-transparent" : "border-line text-ink hover:bg-raised")} style={on ? { background: col.bg, color: col.ink } : undefined}>
-                    {!on && <span aria-hidden="true" className="mr-1.5 size-2.5 rounded-[3px]" style={{ background: col.bg }} />}
-                    {g.name}
-                  </button>
-                );
-              })}
-            </div>
-            {errs.tagId && <p role="alert" className="mt-1.5 text-sm text-danger">{errs.tagId}</p>}
-          </fieldset>
-        )}
+        {/* the community's tags (tag shapes): pick one, or none */}
+        <PostTagPicker tags={postTags} value={tagId} onChange={setTagId} />
 
         <div className="flex justify-end gap-2 pt-1">
           <Button variant="ghost" onClick={onClose}>

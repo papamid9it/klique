@@ -100,6 +100,8 @@ export function giftConfigOf(stored: unknown): GiftConfig {
 }
 
 /** A gift's price in Hype (its naira price ÷ ₦10, never below 1). */
+/** the dearest an award may be (naira): 40,000 Hype, the biggest store pack, so one purchase always covers any award */
+export const GIFT_PRICE_MAX = 400_000;
 export const giftHype = (priceNaira: number) => Math.max(1, Math.ceil(priceNaira / HYPE_NAIRA));
 /** Hype for a naira top-up on the website. */
 export const hypeForNaira = (naira: number) => Math.floor(naira / HYPE_NAIRA);
