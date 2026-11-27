@@ -165,14 +165,23 @@ export async function youtubeBroadcast(viewer: IUser, title: string): Promise<{ 
     body: JSON.stringify({ snippet: { title: `${name} (Klique)` }, cdn: { ingestionType: "rtmp", resolution: "variable", frameRate: "variable" }, contentDetails: { isReusable: false } }),
   });
   await yt(`/liveBroadcasts/bind?id=${encodeURIComponent(b.id)}&part=id&streamId=${encodeURIComponent(s.id)}`, t.token, 50, { method: "POST" });
+  // remembered, so going live can check it's theirs without asking YouTube again (the last 10 are kept)
+  await YouTubeLink.updateOne({ _id: t.link._id }, { $push: { broadcastIds: { $each: [b.id], $slice: -10 } } });
   return { broadcastId: b.id, url: `${s.cdn.ingestionInfo.ingestionAddress}/${s.cdn.ingestionInfo.streamName}` };
 }
 
-/** Is that broadcast theirs? (Before it's shown as their stream in a community.) */
+/**
+ * Is that broadcast theirs? (Before it's shown as their stream in a community.) One Klique made for them is known
+ * (no call to YouTube); anything else is looked up by its id (YouTube only returns your own broadcasts to you).
+ */
 export async function youtubeOwnsBroadcast(userId: Types.ObjectId, broadcastId: string): Promise<boolean> {
+  const link = await YouTubeLink.findOne({ userId }).select("broadcastIds").lean<Pick<IYouTubeLink, "broadcastIds">>();
+  if (!link) return false;
+  if (link.broadcastIds?.includes(broadcastId)) return true;
   const t = await userToken(userId).catch(() => null);
   if (!t) return false;
-  const r = await yt<{ items?: { id: string }[] }>(`/liveBroadcasts?part=id&mine=true&id=${encodeURIComponent(broadcastId)}`, t.token, 1).catch(() => ({ items: [] }));
+  // note: "id" and "mine" can't be asked together; with your own sign-in, "id" only finds your broadcasts
+  const r = await yt<{ items?: { id: string }[] }>(`/liveBroadcasts?part=id&id=${encodeURIComponent(broadcastId)}`, t.token, 1).catch(() => ({ items: [] }));
   return !!r.items?.some((x) => x.id === broadcastId);
 }
 

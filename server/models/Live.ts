@@ -44,6 +44,8 @@ export interface IYouTubeLink {
   accessToken: string;
   refreshToken: string;
   expiresAt: Date;
+  /** the broadcasts Klique made on their channel lately (newest last): going live checks against these */
+  broadcastIds?: string[];
   createdAt: Date;
 }
 
@@ -56,6 +58,7 @@ const YouTubeLinkSchema = new Schema<IYouTubeLink>(
     accessToken: { type: String, required: true },
     refreshToken: { type: String, required: true },
     expiresAt: { type: Date, required: true },
+    broadcastIds: { type: [String], default: [] },
   },
   { timestamps: { createdAt: true, updatedAt: false } },
 );
