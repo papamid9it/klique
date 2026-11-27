@@ -145,6 +145,8 @@ export interface ILiveViewer {
   firstSeenAt?: Date;
   /** already counted as coming to the event */
   counted?: boolean;
+  /** when they last came in (first time, or back again): "Amara joined" for the stream, also for screens polling */
+  joinedAt?: Date | null;
 }
 const LiveViewerSchema = new Schema<ILiveViewer>({
   liveId: { type: Schema.Types.ObjectId, required: true },
@@ -152,8 +154,10 @@ const LiveViewerSchema = new Schema<ILiveViewer>({
   seenAt: { type: Date, required: true },
   firstSeenAt: { type: Date, default: null },
   counted: { type: Boolean, default: false },
+  joinedAt: { type: Date, default: null },
 });
 LiveViewerSchema.index({ liveId: 1, key: 1 }, { unique: true });
 LiveViewerSchema.index({ liveId: 1, seenAt: -1 });
+LiveViewerSchema.index({ liveId: 1, joinedAt: -1 });
 LiveViewerSchema.index({ seenAt: 1 }, { expireAfterSeconds: 120 });
 export const LiveViewer: Model<ILiveViewer> = defineModel<ILiveViewer>("LiveViewer", LiveViewerSchema);

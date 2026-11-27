@@ -89,7 +89,7 @@ async function streamAttendMinutes(): Promise<number> {
  * The player says "still watching" every 30 seconds (signed in: by person; otherwise a random key of the browser's).
  * Counts them, keeps the stream's peak and how many different people watched, and answers how many are on now.
  */
-export async function watching(viewer: IUser | null, slug: string, input: { liveId: string; key?: string }) {
+export async function watching(viewer: IUser | null, slug: string, input: { liveId: string; key?: string; first?: boolean }) {
   const { space, access } = await resolveSpaceFor(viewer, slug);
   if (!access.canView || !Types.ObjectId.isValid(input.liveId)) throw notFound("We couldn't find that stream.");
   const key = viewer ? sid(viewer._id) : input.key && /^[A-Za-z0-9_-]{8,64}$/.test(input.key) ? `anon:${input.key}` : null;
@@ -102,9 +102,12 @@ export async function watching(viewer: IUser | null, slug: string, input: { live
     const { LiveViewer } = await import("../models/Live");
     const before = await LiveViewer.findOneAndUpdate({ liveId, key }, { $set: { seenAt: new Date() }, $setOnInsert: { firstSeenAt: new Date() } }, { upsert: true, returnDocument: "before" }).select("seenAt").lean<{ seenAt: Date }>();
     if (!before) await LiveStream.updateOne({ _id: liveId }, { $inc: { watched: 1 } });
-    // they've just come in (the first time, or back after a minute away): "Amara joined" over the video for everyone
-    // watching (never stored in the chat)
-    if (viewer && (!before || Date.now() - +before.seenAt > 60_000)) publish([rtChannel.community(space.community._id)], { type: "liveJoin", liveId: sid(liveId), name: viewer.displayName, avatarUrl: viewer.avatarUrl ?? null });
+    // they've just come in (the player's first check-in, the first time, or back after a minute away): "Amara joined"
+    // over the video for everyone watching (never stored in the chat), and kept on their row for screens that poll
+    if (viewer && (input.first || !before || Date.now() - +before.seenAt > 60_000)) {
+      await LiveViewer.updateOne({ liveId, key }, { $set: { joinedAt: new Date() } });
+      publish([rtChannel.community(space.community._id)], { type: "liveJoin", liveId: sid(liveId), name: viewer.displayName, avatarUrl: viewer.avatarUrl ?? null });
+    }
     // a streamed event: watching long enough (Admin → Points) counts as coming (marked there, points for them and the host)
     if (viewer && s.eventId) {
       const minutes = await streamAttendMinutes();
@@ -118,6 +121,24 @@ export async function watching(viewer: IUser | null, slug: string, input: { live
   const viewers = await viewersOf(liveId);
   await LiveStream.updateOne({ _id: liveId, peakViewers: { $lt: viewers } }, { $set: { peakViewers: viewers } });
   return { viewers, live: true };
+}
+
+/**
+ * Who came in since `after` (newest last, up to 10): for a stream screen without the live connection, which asks every
+ * few seconds instead (the person streaming sees who joined either way).
+ */
+export async function recentJoins(viewer: IUser | null, slug: string, liveId: string, after: string | null) {
+  const { access } = await resolveSpaceFor(viewer, slug);
+  if (!access.canView || !Types.ObjectId.isValid(liveId)) throw notFound("We couldn't find that stream.");
+  const since = after && !Number.isNaN(Date.parse(after)) ? new Date(Math.max(Date.parse(after), Date.now() - 5 * 60_000)) : new Date(Date.now() - 15_000);
+  const { LiveViewer } = await import("../models/Live");
+  const rows = await LiveViewer.find({ liveId: new Types.ObjectId(liveId), joinedAt: { $gt: since } }).sort({ joinedAt: 1 }).limit(10).select("key joinedAt").lean<{ key: string; joinedAt: Date }[]>();
+  const people = rows.filter((r) => Types.ObjectId.isValid(r.key));
+  const briefs = await loadBriefs(people.map((r) => new Types.ObjectId(r.key)));
+  return people.flatMap((r) => {
+    const b = briefs.get(r.key);
+    return b ? [{ name: b.displayName, avatarUrl: b.avatarUrl ?? null, at: r.joinedAt.toISOString() }] : [];
+  });
 }
 
 /** They closed the player (or left the app): off the count at once, not when their check-ins stop. */
@@ -334,7 +355,8 @@ export async function onTwitchOffline(twitchId: string) {
 export async function liveNow(viewer: IUser): Promise<LiveNowDTO[]> {
   const mine = await Membership.find({ userId: viewer._id, subcommunityId: null, status: "active" }).select("communityId").lean<{ communityId: Types.ObjectId }[]>();
   if (!mine.length) return [];
-  const rows = await LiveStream.find({ communityId: { $in: mine.map((m) => m.communityId) }, status: "live" }).sort({ startedAt: -1 }).limit(20).lean<ILiveStream[]>();
+  // not your own stream (you're the one streaming it)
+  const rows = await LiveStream.find({ communityId: { $in: mine.map((m) => m.communityId) }, status: "live", hostId: { $ne: viewer._id } }).sort({ startedAt: -1 }).limit(20).lean<ILiveStream[]>();
   const fresh: ILiveStream[] = [];
   for (const r of rows) if (!(await stale(r))) fresh.push(r);
   if (!fresh.length) return [];

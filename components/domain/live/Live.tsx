@@ -81,12 +81,13 @@ function WatchModal({ c, live, onClose, onEnded }: { c: Pick<CommunityDTO, "slug
         key = undefined;
       }
     }
-    const ping = () => void LiveService.watching(c.slug, live.id, key).then((r) => setViewers(r.data.viewers), () => {});
-    ping();
+    // the first check-in (opening it, or coming back to the tab) says so: "Amara joined" for everyone watching
+    const ping = (first = false) => void LiveService.watching(c.slug, live.id, key, first).then((r) => setViewers(r.data.viewers), () => {});
+    ping(true);
     const t = window.setInterval(() => document.visibilityState === "visible" && ping(), 20_000);
     // closing the player, or the tab going away: off the count at once
     const leave = () => void LiveService.left(c.slug, live.id, key).catch(() => {});
-    const onHide = () => (document.visibilityState === "hidden" ? leave() : ping());
+    const onHide = () => (document.visibilityState === "hidden" ? leave() : ping(true));
     document.addEventListener("visibilitychange", onHide);
     window.addEventListener("pagehide", leave);
     return () => {
@@ -516,10 +517,12 @@ function LivePreview({ live, cover }: { live: LiveDTO; cover: string | null }) {
 
 /** Across the top of a community while someone's live: who, what, and Watch (dismissable for this stream). */
 export function LiveBar({ c, onChanged }: { c: CommunityDTO; onChanged: () => void }) {
+  const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [hidden, setHidden] = useState<string | null>(null);
   const live = c.live?.status === "live" ? c.live : null;
-  if (!live || hidden === live.id) return null;
+  // your own stream isn't announced to you (you're the one streaming)
+  if (!live || hidden === live.id || live.host.id === user?.id) return null;
   return (
     <div role="status" className="flex items-center gap-3 border-b border-line bg-surface px-3 py-2 sm:px-5">
       <span className="rounded-[5px] bg-danger px-1.5 py-px font-mono text-[11px] font-bold text-white">LIVE</span>

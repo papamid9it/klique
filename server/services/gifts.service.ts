@@ -554,7 +554,9 @@ export async function sendGift(viewer: IUser, input: z.infer<typeof giftSendSche
   }
   // everyone with it open (its community, and the person it's for) sees the award at once
   publish([rtChannel.community(t.community._id), rtChannel.user(t.authorId)], { type: "gift", key: giftTargetKey(input.target) });
-  notify([t.authorId], { title: `${who} sent you an award: ${gift.name}`, body: toReceiver > 0 ? `On ${t.label}. You earn ${naira(toReceiver)}.` : `On ${t.label}.`, data: { href: t.href } }, { category: "gifts", ref: `gift:${input.target.type}:${input.target.id}`, ...(input.anonymous ? {} : { actorId: viewer._id }) });
+  // a gift during a live shows on the stream itself (the pop and the chat line): no notification, which would only
+  // open a stream that has ended by the time it's read. What it earned shows in Earnings as always.
+  if (input.target.type !== "live") notify([t.authorId], { title: `${who} sent you an award: ${gift.name}`, body: toReceiver > 0 ? `On ${t.label}. You earn ${naira(toReceiver)}.` : `On ${t.label}.`, data: { href: t.href } }, { category: "gifts", ref: `gift:${input.target.type}:${input.target.id}`, ...(input.anonymous ? {} : { actorId: viewer._id }) });
   return { balance, summary: (await summarise([input.target]))[giftTargetKey(input.target)] };
 }
 
