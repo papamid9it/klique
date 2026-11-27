@@ -495,7 +495,9 @@ export async function sendGift(viewer: IUser, input: z.infer<typeof giftSendSche
     }
     await GiftSend.deleteOne({ _id: again._id, status: "pending" });
   }
-  rateLimit(`gift:${sid(viewer._id)}`, 120, 60 * 60 * 1000);
+  // a live stream takes fast taps (combos): up to 60 a minute there; elsewhere 120 an hour
+  if (input.target.type === "live") rateLimit(`gift-live:${sid(viewer._id)}`, 60, 60 * 1000);
+  else rateLimit(`gift:${sid(viewer._id)}`, 120, 60 * 60 * 1000);
   const gift = oid(input.giftId) ? await Gift.findOne({ _id: oid(input.giftId), active: true }).lean<IGift>() : null;
   if (!gift) throw notFound("That award isn't available any more.");
   const t = await resolveTarget(input.target.type, input.target.id);
@@ -556,7 +558,10 @@ export async function sendGift(viewer: IUser, input: z.infer<typeof giftSendSche
   publish([rtChannel.community(t.community._id), rtChannel.user(t.authorId)], { type: "gift", key: giftTargetKey(input.target) });
   // a gift during a live shows on the stream itself (the pop and the chat line): no notification, which would only
   // open a stream that has ended by the time it's read. What it earned shows in Earnings as always.
-  if (input.target.type !== "live") notify([t.authorId], { title: `${who} sent you an award: ${gift.name}`, body: toReceiver > 0 ? `On ${t.label}. You earn ${naira(toReceiver)}.` : `On ${t.label}.`, data: { href: t.href } }, { category: "gifts", ref: `gift:${input.target.type}:${input.target.id}`, ...(input.anonymous ? {} : { actorId: viewer._id }) });
+  // what they earn, in their money: dollars outside Nigeria (Google Play's rate), naira at home
+  const usdRate = receiver.country && receiver.country.toUpperCase() !== "NG" ? nairaPerUsd(config) : null;
+  const earnText = usdRate ? `$${toUsd(toReceiver, usdRate).toFixed(2)}` : naira(toReceiver);
+  if (input.target.type !== "live") notify([t.authorId], { title: `${who} sent you an award: ${gift.name}`, body: toReceiver > 0 ? `On ${t.label}. You earn ${earnText}.` : `On ${t.label}.`, data: { href: t.href } }, { category: "gifts", ref: `gift:${input.target.type}:${input.target.id}`, ...(input.anonymous ? {} : { actorId: viewer._id }) });
   return { balance, summary: (await summarise([input.target]))[giftTargetKey(input.target)] };
 }
 

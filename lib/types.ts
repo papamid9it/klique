@@ -2304,7 +2304,7 @@ export interface GiftWalletDTO {
   customMin: number;
   customMax: number;
   canBuyWeb: boolean;
-  store: { apple: boolean; google: boolean; accountToken: string; packs: { productId: string; hype: number; price: number }[] };
+  store: { apple: boolean; google: boolean; accountToken: string; packs: { productId: string; hype: number; price: number; /** Google Play's US price, when set */ usd?: number }[] };
   history: HypeEntryDTO[];
   hasMore: boolean;
 }
@@ -2445,6 +2445,8 @@ export interface LiveSummaryDTO {
   hype: number;
   givers: number;
   earned: number;
+  /** the host lives outside Nigeria: show `earned` in US dollars at this rate (naira per dollar) */
+  usdRate?: number | null;
 }
 
 /** Your Twitch connection (Settings, Go live). */

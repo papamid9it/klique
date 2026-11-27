@@ -1,4 +1,5 @@
 import "server-only";
+import { nairaPerUsd } from "@/lib/gifts";
 import { youtubeFinish, youtubeOwnsBroadcast } from "./youtube.service";
 import { Types } from "mongoose";
 import type { LiveDTO, LiveNowDTO, LiveSummaryDTO } from "@/lib/types";
@@ -170,7 +171,10 @@ export async function liveSummary(viewer: IUser, slug: string, liveId: string): 
   const from = s.startedAt ?? s.createdAt;
   const to = s.endedAt ?? new Date();
   const g = gifts[0];
-  return { title: s.title, communityName: space.community.name, duration: Math.max(0, Math.round((+to - +from) / 1000)), peakViewers: s.peakViewers ?? 0, watched: s.watched ?? 0, messages, hype: g?.hype ?? 0, givers: g?.givers.length ?? 0, earned: g?.earned ?? 0 };
+  // outside Nigeria, what they earned shows in dollars (Google Play's rate), as on their Earnings page
+  const abroad = !!viewer.country && viewer.country.toUpperCase() !== "NG";
+  const usdRate = abroad ? nairaPerUsd(await (await import("./gifts.service")).getGiftConfig()) : null;
+  return { title: s.title, communityName: space.community.name, duration: Math.max(0, Math.round((+to - +from) / 1000)), peakViewers: s.peakViewers ?? 0, watched: s.watched ?? 0, messages, hype: g?.hype ?? 0, givers: g?.givers.length ?? 0, earned: g?.earned ?? 0, ...(usdRate ? { usdRate } : {}) };
 }
 
 /** The community's stream now, for its page: live for everyone who can see it; waiting only for its host and staff. */
