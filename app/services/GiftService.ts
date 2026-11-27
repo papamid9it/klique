@@ -13,7 +13,7 @@ export const GiftService = {
   topup: (amount: number, provider?: PayProvider, back?: string) => api.post<Envelope<{ authorizationUrl: string; reference: string }>>("/api/me/hype/topup", { amount, provider, back }),
   verify: (reference: string) => api.post<Envelope<{ paid: boolean; hype: number; balance: number }>>("/api/me/hype/verify", { reference }),
   earnings: (before?: string) => api.get<Envelope<GiftEarningsDTO>>("/api/me/earnings", before ? { before } : undefined),
-  requestPayout: (input: { useSaved?: boolean; bankCode?: string; bankName?: string; accountNumber?: string; accountName?: string }) => api.post<Envelope<GiftEarningsDTO>>("/api/me/earnings/payout", input),
+  requestPayout: (input: { useSaved?: boolean; bankCode?: string; bankName?: string; accountNumber?: string; accountName?: string; network?: "usdt-trc20" | "usdt-bep20"; address?: string }) => api.post<Envelope<GiftEarningsDTO>>("/api/me/earnings/payout", input),
   sent: (before?: string) => api.get<Envelope<{ items: GiftSentDTO[]; hasMore: boolean }>>("/api/me/gifts/sent", before ? { before } : undefined),
 
   adminList: () => api.get<Envelope<GiftDTO[]>>("/api/admin/gifts"),

@@ -13,7 +13,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { ErrorState } from "@/components/ui/States";
 import { cx } from "@/components/ui/cx";
 import { COUNTRIES } from "@/lib/places";
-import { GIFT_MAX_PRICE, GIFT_MIN_PRICE, giftHype, type GiftConfig } from "@/lib/gifts";
+import { GIFT_MAX_PRICE, GIFT_MIN_PRICE, giftHype, type GiftConfig, nairaPerUsd } from "@/lib/gifts";
 import { useApi } from "@/lib/hooks/useApi";
 import type { AdminStuckTopupDTO, GiftDTO } from "@/lib/types";
 import { Badge, Panel, StatCard } from "./AdminParts";
@@ -410,6 +410,7 @@ export function GiftsSettings() {
       <TextField label="Website packs (₦, comma separated)" value={draft.webPacks.join(", ")} onChange={(e) => setDraft({ ...draft, webPacks: e.target.value.split(",").map((x) => num(x)).filter((x) => x > 0) })} hint="Any amount up to ₦500,000 can also be typed in." />
       <fieldset className="space-y-2">
         <legend className="mb-1 text-sm font-medium">Phone app packs (must match App Store Connect and Play Console)</legend>
+        <p className="text-xs text-ink-muted">Add each pack&apos;s US dollar price from Play Console. Klique uses it to show earnings in dollars to people outside Nigeria and to lock what you pay them (USDT): {nairaPerUsd(draft) ? `₦${nairaPerUsd(draft)!.toLocaleString("en-NG")} = $1 now` : "no dollar price yet, so dollar payouts are off"}.</p>
         {draft.storePacks.map((p, i) => (
           <div key={p.productId} className="flex flex-wrap items-end gap-2">
             <span className="w-28 font-mono text-[13px]">{p.productId}</span>
@@ -418,6 +419,10 @@ export function GiftsSettings() {
             </div>
             <div className="w-36">
               <TextField label="Store price (₦)" inputMode="numeric" value={String(p.price)} onChange={(e) => setDraft({ ...draft, storePacks: draft.storePacks.map((x, k) => (k === i ? { ...x, price: num(e.target.value) } : x)) })} hint={`web: ₦${(p.hype * 10).toLocaleString("en-NG")}`} />
+            </div>
+            <div className="w-32">
+              {/* Play Console's US dollar price: sets the rate for earnings outside Nigeria */}
+              <TextField label="Play price ($)" inputMode="decimal" value={p.usd ? String(p.usd) : ""} placeholder="e.g. 8.99" onChange={(e) => setDraft({ ...draft, storePacks: draft.storePacks.map((x, k) => (k === i ? { ...x, usd: Number(e.target.value.replace(/[^\d.]/g, "")) || undefined } : x)) })} hint={p.usd ? `₦${Math.round(p.price / p.usd).toLocaleString("en-NG")} = $1` : "Play Console, USD"} />
             </div>
           </div>
         ))}

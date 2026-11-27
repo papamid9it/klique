@@ -101,7 +101,11 @@ export async function watching(viewer: IUser | null, slug: string, input: { live
     rateLimit(`watching:${key}`, 20, 60_000);
     const { LiveViewer } = await import("../models/Live");
     const r = await LiveViewer.updateOne({ liveId, key }, { $set: { seenAt: new Date() }, $setOnInsert: { firstSeenAt: new Date() } }, { upsert: true });
-    if (r.upsertedCount) await LiveStream.updateOne({ _id: liveId }, { $inc: { watched: 1 } });
+    if (r.upsertedCount) {
+      await LiveStream.updateOne({ _id: liveId }, { $inc: { watched: 1 } });
+      // the first time they watch this stream: "Amara joined" over the video for everyone watching (never stored)
+      if (viewer) publish([rtChannel.community(space.community._id)], { type: "liveJoin", liveId: sid(liveId), name: viewer.displayName });
+    }
     // a streamed event: watching long enough (Admin → Points) counts as coming (marked there, points for them and the host)
     if (viewer && s.eventId) {
       const minutes = await streamAttendMinutes();

@@ -42,7 +42,14 @@ function PayoutRow({ p, onDone }: { p: PayoutDTO; onDone: (p: PayoutDTO) => void
     <li className="space-y-3 px-4 py-4">
       <div className="flex flex-wrap items-start gap-4">
         <div className="min-w-0 flex-1">
-          <p className="font-mono text-lg font-semibold">{naira(p.amount)}</p>
+          {/* outside Nigeria: the dollars (USDT) to send, locked at Google Play's rate when asked */}
+          {p.usd ? (
+            <p className="font-mono text-lg font-semibold">
+              ${p.usd.toFixed(2)} USDT <span className="text-[13px] font-normal text-ink-muted">· {naira(p.amount)} at ₦{p.rate?.toLocaleString("en-NG")} = $1</span>
+            </p>
+          ) : (
+            <p className="font-mono text-lg font-semibold">{naira(p.amount)}</p>
+          )}
           <p className="text-[13px] text-ink-muted">
             {p.kind === "gifts" ? (
               <span className="font-semibold text-ink">Award earnings{p.dueOn ? ` · due ${day(p.dueOn)}` : ""}</span>
@@ -55,19 +62,30 @@ function PayoutRow({ p, onDone }: { p: PayoutDTO; onDone: (p: PayoutDTO) => void
           </p>
         </div>
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 rounded-control border border-line bg-raised/40 px-3 py-2 text-[13px]">
-          <dt className="text-ink-muted">Bank</dt>
-          <dd className="font-semibold">{p.bank.bankName}</dd>
-          <dt className="text-ink-muted">Account</dt>
-          <dd className="font-mono font-semibold select-all">{p.bank.accountNumber}</dd>
-          <dt className="text-ink-muted">Name</dt>
-          <dd className="font-semibold">{p.bank.accountName}</dd>
+          {p.bank.bankCode.startsWith("crypto:") ? (
+            <>
+              <dt className="text-ink-muted">Network</dt>
+              <dd className="font-semibold">{p.bank.bankName}</dd>
+              <dt className="text-ink-muted">Wallet</dt>
+              <dd className="font-mono font-semibold break-all select-all">{p.bank.accountNumber}</dd>
+            </>
+          ) : (
+            <>
+              <dt className="text-ink-muted">Bank</dt>
+              <dd className="font-semibold">{p.bank.bankName}</dd>
+              <dt className="text-ink-muted">Account</dt>
+              <dd className="font-mono font-semibold select-all">{p.bank.accountNumber}</dd>
+              <dt className="text-ink-muted">Name</dt>
+              <dd className="font-semibold">{p.bank.accountName}</dd>
+            </>
+          )}
         </dl>
       </div>
       {p.status === "requested" ? (
         mode ? (
           <div className="flex flex-wrap items-end gap-2">
             <div className="min-w-56 flex-1">
-              <TextField label={mode === "paid" ? "Transfer reference" : "Why (the owner sees this)"} value={text} onChange={(e) => setText(e.target.value)} maxLength={mode === "paid" ? 120 : 300} autoFocus />
+              <TextField label={mode === "paid" ? (p.bank.bankCode.startsWith("crypto:") ? "Transaction hash" : "Transfer reference") : "Why (the owner sees this)"} value={text} onChange={(e) => setText(e.target.value)} maxLength={mode === "paid" ? 120 : 300} autoFocus />
             </div>
             <Button variant={mode === "paid" ? "primary" : "danger"} loading={busy} disabled={!text.trim()} onClick={() => void decide()} className="mb-0.5">
               {mode === "paid" ? "Mark paid" : "Turn down"}

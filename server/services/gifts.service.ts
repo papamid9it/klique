@@ -3,7 +3,7 @@ import { publish, rtChannel } from "./realtime";
 import { randomBytes } from "node:crypto";
 import mongoose, { Types } from "mongoose";
 import type { z } from "zod";
-import { DEFAULT_GIFTS, GIFT_MAX_PRICE, GIFT_MIN_PRICE, HYPE_NAIRA, TOPUP_MAX, TOPUP_MIN, giftConfigOf, giftHype, giftTargetKey, hypeForNaira, payoutDayFor, receiverShare, earningStatus, type GiftConfig, type GiftTargetType } from "@/lib/gifts";
+import { DEFAULT_GIFTS, GIFT_MAX_PRICE, GIFT_MIN_PRICE, HYPE_NAIRA, TOPUP_MAX, TOPUP_MIN, giftConfigOf, giftHype, giftTargetKey, hypeForNaira, payoutDayFor, receiverShare, earningStatus, type GiftConfig, type GiftTargetType, nairaPerUsd, toUsd, cryptoNetwork } from "@/lib/gifts";
 import type { AdminGiftsReportDTO, AdminStuckTopupDTO, GiftDTO, GiftEarningsDTO, GiftReceivedDTO, GiftSentDTO, GiftSummaryDTO, GiftWalletDTO, HypeEntryDTO, PayoutDTO } from "@/lib/types";
 import { adminEmails, appUrl, paystackConfig } from "../env";
 import { earningsOn, pickProvider, providerConnected, webPaymentsOn } from "./payments-setting";
@@ -628,7 +628,7 @@ async function receivedDtos(rows: IGiftSend[], viewerIsSender: boolean, admin = 
 
 async function payoutsOf(userId: Types.ObjectId): Promise<PayoutDTO[]> {
   const rows = await Payout.find({ kind: "gifts", requestedById: userId }).sort({ createdAt: -1 }).limit(24).lean<IPayout[]>();
-  return rows.map((r) => ({ id: sid(r._id), amount: r.amount, status: r.status, bank: { bankName: r.bank.bankName, accountName: r.bank.accountName, bankCode: r.bank.bankCode, accountNumber: mask(r.bank.accountNumber) }, reference: r.reference, note: r.note, createdAt: r.createdAt.toISOString(), decidedAt: r.decidedAt?.toISOString() ?? null, kind: "gifts", dueOn: r.dueOn?.toISOString() ?? null }));
+  return rows.map((r) => ({ id: sid(r._id), amount: r.amount, usd: r.usd ?? null, rate: r.rate ?? null, status: r.status, bank: { bankName: r.bank.bankName, accountName: r.bank.accountName, bankCode: r.bank.bankCode, accountNumber: mask(r.bank.accountNumber) }, reference: r.reference, note: r.note, createdAt: r.createdAt.toISOString(), decidedAt: r.decidedAt?.toISOString() ?? null, kind: "gifts", dueOn: r.dueOn?.toISOString() ?? null }));
 }
 
 /** Settings → Earnings: what your gifts earned, what's on hold, available, asked for and paid, and the history. */
@@ -659,6 +659,8 @@ export async function getEarnings(viewer: IUser, before?: string): Promise<GiftE
   const bank = me?.payoutBank ?? null;
   const waiting = payouts.find((p) => p.status === "requested") ?? null;
   const available = agg?.available ?? 0;
+  const abroad = !!me?.country && me.country.toUpperCase() !== "NG";
+  const rate = nairaPerUsd(config);
   return {
     paused,
     receiverPercent: config.receiverPercent,
@@ -670,8 +672,10 @@ export async function getEarnings(viewer: IUser, before?: string): Promise<GiftE
     payouts,
     history: await receivedDtos(rows.slice(0, PAGE), false),
     hasMore: rows.length > PAGE,
-    bank: bank ? { bankName: bank.bankName, accountName: bank.accountName, bankCode: bank.bankCode, accountNumber: mask(bank.accountNumber) } : null,
-    canRequest: !paused && (!waiting && available >= config.minPayout && config.earnCountries.includes((me?.country ?? "").toUpperCase())),
+    // outside Nigeria: dollars (Google Play's rate) and a crypto wallet; the saved one only if it's a wallet
+    ...(abroad ? { abroad: true, usdRate: rate } : {}),
+    bank: bank && (!abroad || bank.bankCode.startsWith("crypto:")) ? { bankName: bank.bankName, accountName: bank.accountName, bankCode: bank.bankCode, accountNumber: mask(bank.accountNumber) } : null,
+    canRequest: !paused && (!waiting && available >= config.minPayout && config.earnCountries.includes((me?.country ?? "").toUpperCase()) && (!abroad || !!rate)),
     earning: me ? earningStatus(me, config, now) : earningStatus({ points: 0, createdAt: now, country: "" }, config, now),
   };
 }
@@ -696,9 +700,20 @@ export async function requestGiftPayout(viewer: IUser, input: z.infer<typeof pay
   const me = await User.findById(viewer._id).select("payoutBank country").lean<Pick<IUser, "payoutBank" | "country">>();
   // payouts are for the countries earning is open in (Admin), like earning itself
   if (!config.earnCountries.includes((me?.country ?? "").toUpperCase())) throw forbidden(config.earnCountries.length === 1 && config.earnCountries[0] === "NG" ? "Payouts are only available in Nigeria for now." : "Payouts aren't open where you live yet.");
+  // outside Nigeria: USDT to their wallet, in dollars at Google Play's rate (locked now)
+  const abroad = (me?.country ?? "").toUpperCase() !== "NG";
+  const rate = abroad ? nairaPerUsd(config) : null;
+  if (abroad && !rate) throw badRequest("Dollar payouts aren't set up yet. Try again soon: what you've earned is kept.");
   let bank: PayoutBank;
-  if (input.useSaved && me?.payoutBank) bank = me.payoutBank;
-  else {
+  if (input.useSaved && me?.payoutBank && (!abroad || me.payoutBank.bankCode.startsWith("crypto:"))) bank = me.payoutBank;
+  else if (abroad) {
+    const net = cryptoNetwork(input.network);
+    if (!net) throw new ApiError(422, "Pick the network: USDT on TRON (TRC-20) or USDT on BNB Chain (BEP-20).", { errors: { network: "Required" } });
+    const address = (input.address ?? "").trim();
+    if (!net.pattern.test(address)) throw new ApiError(422, `That doesn't look like a ${net.name} address. Copy it again from your wallet (it starts with ${net.example}).`, { errors: { address: "Check it" } });
+    bank = { bankCode: `crypto:${net.id}`, bankName: net.name, accountNumber: address, accountName: "Crypto wallet" };
+    await User.updateOne({ _id: viewer._id }, { $set: { payoutBank: bank } });
+  } else {
     if (!input.accountNumber || !/^\d{10}$/.test(input.accountNumber)) throw new ApiError(422, "Enter the 10-digit account number.", { errors: { accountNumber: "10 digits" } });
     if (!input.bankName) throw new ApiError(422, "Pick the bank.", { errors: { bankCode: "Required" } });
     let accountName = (input.accountName ?? "").trim();
@@ -722,7 +737,7 @@ export async function requestGiftPayout(viewer: IUser, input: z.infer<typeof pay
   const session = await mongoose.startSession();
   try {
     await session.withTransaction(async () => {
-      const [payout] = await Payout.create([{ kind: "gifts", communityId: null, requestedById: viewer._id, amount, bank, dueOn }], { session });
+      const [payout] = await Payout.create([{ kind: "gifts", communityId: null, requestedById: viewer._id, amount, bank, dueOn, ...(rate ? { usd: toUsd(amount, rate), rate } : {}) }], { session });
       const ids = eligible.map((g) => g._id);
       const r = await GiftSend.updateMany({ _id: { $in: ids }, $or: [{ payoutId: null }, { payoutId: { $in: releasable } }] }, { $set: { payoutId: payout._id } }, { session });
       if (r.modifiedCount !== ids.length) throw conflict("Your earnings changed while you asked. Try again.");
@@ -742,7 +757,9 @@ export async function afterPayoutDecision(p: IPayout, admin: IUser) {
   notify(
     [p.requestedById],
     p.status === "paid"
-      ? { title: `${naira(p.amount)} award earnings paid to ${p.bank.bankName}`, body: `Transfer reference ${p.reference}.`, data: { href: "/settings?tab=earnings" } }
+      ? p.usd
+        ? { title: `$${p.usd.toFixed(2)} award earnings sent to your wallet`, body: `${p.bank.bankName}. Transaction ${p.reference}.`, data: { href: "/settings?tab=earnings" } }
+        : { title: `${naira(p.amount)} award earnings paid to ${p.bank.bankName}`, body: `Transfer reference ${p.reference}.`, data: { href: "/settings?tab=earnings" } }
       : { title: "Your award earnings payout was turned down", body: p.note, data: { href: "/settings?tab=earnings" } },
     { actorId: admin._id, category: "gifts", ref: `payout:${sid(p._id)}` },
   );
@@ -758,7 +775,7 @@ export async function monthlyGiftPayouts(now = new Date()): Promise<{ listed: nu
   if (!due.length) return { listed: 0, amount: 0 };
   await Payout.updateMany({ _id: { $in: due.map((p) => p._id) } }, { $set: { listedAt: now } });
   const amount = due.reduce((t, p) => t + p.amount, 0);
-  for (const p of due) notify([p.requestedById], { title: `Your ${naira(p.amount)} award earnings are being paid today`, body: `To ${p.bank.bankName} ${mask(p.bank.accountNumber)}.`, data: { href: "/settings?tab=earnings" } }, { category: "gifts", ref: `payout:${sid(p._id)}` });
+  for (const p of due) notify([p.requestedById], { title: p.usd ? `Your $${p.usd.toFixed(2)} award earnings are being sent today` : `Your ${naira(p.amount)} award earnings are being paid today`, body: `To ${p.bank.bankName} ${mask(p.bank.accountNumber)}.`, data: { href: "/settings?tab=earnings" } }, { category: "gifts", ref: `payout:${sid(p._id)}` });
   const admins = await User.find({ email: { $in: [...adminEmails()] } }).select("_id").lean<{ _id: Types.ObjectId }[]>();
   notify(admins.map((a) => a._id), { title: `${due.length} award ${due.length === 1 ? "payout" : "payouts"} due today`, body: `${naira(amount)} in all. Admin, Payouts.`, data: { href: "/admin/payouts" } }, { category: "admin", ref: "gift-payouts" });
   return { listed: due.length, amount };

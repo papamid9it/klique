@@ -140,7 +140,12 @@ export interface IPayout {
   listedAt?: Date | null;
   requestedById: Types.ObjectId;
   amount: number;
+  /** a bank account, or for someone outside Nigeria a crypto wallet: bankCode "crypto:<network>", the network's name,
+   *  and the wallet address in accountNumber */
   bank: PayoutBank;
+  /** outside Nigeria: what to send in US dollars (USDT), and the naira-per-dollar rate it was locked at when asked */
+  usd?: number | null;
+  rate?: number | null;
   status: "requested" | "paid" | "rejected";
   /** the bank transfer's reference, once paid */
   reference: string;
@@ -150,7 +155,7 @@ export interface IPayout {
   createdAt: Date;
 }
 
-const bankSchema = new Schema<PayoutBank>({ bankCode: { type: String, default: "" }, bankName: { type: String, required: true, maxlength: 80 }, accountNumber: { type: String, required: true, maxlength: 20 }, accountName: { type: String, required: true, maxlength: 120 } }, { _id: false });
+const bankSchema = new Schema<PayoutBank>({ bankCode: { type: String, default: "" }, bankName: { type: String, required: true, maxlength: 80 }, accountNumber: { type: String, required: true, maxlength: 64 }, accountName: { type: String, required: true, maxlength: 120 } }, { _id: false });
 
 const PayoutSchema = new Schema<IPayout>(
   {
@@ -161,6 +166,8 @@ const PayoutSchema = new Schema<IPayout>(
     requestedById: { type: Schema.Types.ObjectId, ref: "User", required: true },
     amount: { type: Number, required: true, min: 1 },
     bank: { type: bankSchema, required: true },
+    usd: { type: Number, default: null },
+    rate: { type: Number, default: null },
     status: { type: String, enum: ["requested", "paid", "rejected"], default: "requested" },
     reference: { type: String, default: "", maxlength: 120 },
     note: { type: String, default: "", maxlength: 300 },

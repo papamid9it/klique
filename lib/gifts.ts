@@ -31,7 +31,30 @@ export interface StoreHypePack {
   hype: number;
   /** what the store charges, naira (set to match App Store Connect / Play Console; about 30% over the web price) */
   price: number;
+  /** what Google Play charges for it in US dollars (Play Console's USD price): sets the naira-per-dollar rate used to
+   *  show and pay earnings outside Nigeria (nairaPerUsd) */
+  usd?: number;
 }
+
+/**
+ * Naira per US dollar for earnings outside Nigeria, from Google Play's own prices: a pack's naira price over its dollar
+ * price (the biggest pack with a dollar price set, the most exact). Null until a dollar price is set in Admin.
+ */
+export function nairaPerUsd(c: Pick<GiftConfig, "storePacks">): number | null {
+  const priced = c.storePacks.filter((p) => p.usd && p.usd > 0).sort((a, b) => b.hype - a.hype);
+  const p = priced[0];
+  return p ? Math.round((p.price / p.usd!) * 100) / 100 : null;
+}
+/** naira to dollars at that rate, to the cent */
+export const toUsd = (naira: number, rate: number) => Math.floor((naira / rate) * 100) / 100;
+
+/** How people outside Nigeria are paid: USDT to their own wallet (a site admin sends it). */
+export const CRYPTO_NETWORKS = [
+  { id: "usdt-trc20", name: "USDT on TRON (TRC-20)", short: "USDT · TRON", example: "T…", pattern: /^T[1-9A-HJ-NP-Za-km-z]{33}$/ },
+  { id: "usdt-bep20", name: "USDT on BNB Chain (BEP-20)", short: "USDT · BNB Chain", example: "0x…", pattern: /^0x[0-9a-fA-F]{40}$/ },
+] as const;
+export type CryptoNetwork = (typeof CRYPTO_NETWORKS)[number]["id"];
+export const cryptoNetwork = (id: string | null | undefined) => CRYPTO_NETWORKS.find((n) => n.id === id || `crypto:${n.id}` === id) ?? null;
 
 export interface GiftConfig {
   /** gifts can be sent at all */
@@ -87,7 +110,7 @@ export function giftConfigOf(stored: unknown): GiftConfig {
   const d = DEFAULT_GIFT_CONFIG;
   const webPacks = Array.isArray(s.webPacks) ? [...new Set(s.webPacks.map((n) => int(n, TOPUP_MIN, TOPUP_MAX, 0)).filter((n) => n > 0))].sort((a, b) => a - b) : d.webPacks;
   const storePacks = Array.isArray(s.storePacks)
-    ? s.storePacks.filter((p) => p && /^hype_\d{1,7}$/.test(p.productId) && p.hype > 0).map((p) => ({ productId: p.productId, hype: int(p.hype, 1, 1_000_000, 1), price: int(p.price, 1, 100_000_000, p.hype * HYPE_NAIRA) }))
+    ? s.storePacks.filter((p) => p && /^hype_\d{1,7}$/.test(p.productId) && p.hype > 0).map((p) => ({ productId: p.productId, hype: int(p.hype, 1, 1_000_000, 1), price: int(p.price, 1, 100_000_000, p.hype * HYPE_NAIRA), ...(typeof p.usd === "number" && p.usd > 0 && p.usd < 100_000 ? { usd: Math.round(p.usd * 100) / 100 } : {}) }))
     : d.storePacks;
   return {
     enabled: typeof s.enabled === "boolean" ? s.enabled : d.enabled,

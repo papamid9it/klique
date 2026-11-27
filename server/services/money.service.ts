@@ -93,6 +93,8 @@ async function payoutDtos(rows: IPayout[], full = false): Promise<PayoutDTO[]> {
   return rows.map((r) => ({
     id: sid(r._id),
     amount: r.amount,
+    usd: r.usd ?? null,
+    rate: r.rate ?? null,
     status: r.status,
     bank: { bankName: r.bank.bankName, accountName: r.bank.accountName, bankCode: r.bank.bankCode, accountNumber: full ? r.bank.accountNumber : mask(r.bank.accountNumber) },
     reference: r.reference,

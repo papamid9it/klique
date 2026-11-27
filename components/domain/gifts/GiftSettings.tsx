@@ -14,7 +14,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { ErrorState } from "@/components/ui/States";
 import { cx } from "@/components/ui/cx";
 import { formatDateShort } from "@/lib/format";
-import { HYPE_NAIRA, earningText, hypeForNaira, payoutDayLabel } from "@/lib/gifts";
+import { CRYPTO_NETWORKS, HYPE_NAIRA, earningText, hypeForNaira, payoutDayLabel, toUsd } from "@/lib/gifts";
 import { useApi } from "@/lib/hooks/useApi";
 import type { GiftEarningsDTO, GiftReceivedDTO, GiftWalletDTO } from "@/lib/types";
 import { GiftArt } from "./Gifts";
@@ -203,6 +203,9 @@ export function EarningsTab() {
   const [bankName, setBankName] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
   const [accountName, setAccountName] = useState("");
+  // outside Nigeria: USDT to a wallet
+  const [network, setNetwork] = useState<string>(CRYPTO_NETWORKS[0].id);
+  const [address, setAddress] = useState("");
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const list = banks.data ?? [];
@@ -213,7 +216,7 @@ export function EarningsTab() {
     setErrors({});
     try {
       const saved = useSaved && !!d.bank;
-      const res = await GiftService.requestPayout(saved ? { useSaved: true } : { bankCode: bankCode || undefined, bankName: bankName.trim(), accountNumber: accountNumber.trim(), accountName: accountName.trim() || undefined });
+      const res = await GiftService.requestPayout(saved ? { useSaved: true } : d.abroad ? { network: network as "usdt-trc20" | "usdt-bep20", address: address.trim() } : { bankCode: bankCode || undefined, bankName: bankName.trim(), accountNumber: accountNumber.trim(), accountName: accountName.trim() || undefined });
       setData(res.data);
       setAsking(false);
       toast(`Payout requested. It will be paid on ${payoutDayLabel(res.data.nextPayoutOn)}.`, "success");
@@ -235,6 +238,9 @@ export function EarningsTab() {
   if (loading && !data) return <Skeleton className="h-64 w-full rounded-card" />;
   if (error || !data) return <ErrorState message={error} onRetry={reload} />;
   const t = data.totals;
+  // outside Nigeria everything shows in dollars (Google Play's rate) and is paid in USDT to a wallet
+  const abroad = !!data.abroad;
+  const money = (n: number) => (abroad && data.usdRate ? `$${toUsd(n, data.usdRate).toFixed(2)}` : naira(n));
   return (
     <div className="space-y-6">
       {/* earning from awards switched off for everyone (Admin → System) */}
@@ -249,24 +255,24 @@ export function EarningsTab() {
         </p>
       )}
       <p className="text-sm text-ink-muted">
-        Once you qualify, when someone sends you an award, you earn {data.receiverPercent}% of its value. It&apos;s on hold for {data.holdDays} days, then you can ask for it to be paid to your bank. Requests made by the end of a month are paid on the 3rd of the next month.
+        Once you qualify, when someone sends you an award, you earn {data.receiverPercent}% of its value. It&apos;s on hold for {data.holdDays} days, then you can ask for it to be paid {abroad ? "in USDT to your crypto wallet (in dollars, at Google Play's rate)" : "to your bank"}. Requests made by the end of a month are paid on the 3rd of the next month.
       </p>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Stat label="Earned" value={naira(t.earned)} hint="All time" />
-        <Stat label="On hold" value={naira(t.onHold)} hint={`${data.holdDays}-day hold`} />
-        <Stat label="Available" value={naira(t.available)} hint={`From ${naira(data.minPayout)}`} />
-        <Stat label="Paid so far" value={naira(t.paid)} hint={t.requested ? `${naira(t.requested)} waiting` : undefined} />
+        <Stat label="Earned" value={money(t.earned)} hint="All time" />
+        <Stat label="On hold" value={money(t.onHold)} hint={`${data.holdDays}-day hold`} />
+        <Stat label="Available" value={money(t.available)} hint={`From ${money(data.minPayout)}`} />
+        <Stat label="Paid so far" value={money(t.paid)} hint={t.requested ? `${money(t.requested)} waiting` : undefined} />
       </div>
 
       <section className="space-y-3 rounded-card border border-line bg-surface p-4">
         {data.waiting ? (
           <p className="text-sm">
-            <span className="font-semibold">{naira(data.waiting.amount)}</span> will be paid on <span className="font-semibold">{payoutDayLabel(data.waiting.dueOn ?? data.nextPayoutOn)}</span> to {data.waiting.bank.bankName} {data.waiting.bank.accountNumber}.
+            <span className="font-semibold">{(data.waiting.usd ? `$${data.waiting.usd.toFixed(2)}` : naira(data.waiting.amount))}</span> will be paid on <span className="font-semibold">{payoutDayLabel(data.waiting.dueOn ?? data.nextPayoutOn)}</span> to {data.waiting.bank.bankName} {data.waiting.bank.accountNumber}.
           </p>
         ) : (
           <p className="text-sm">
             Next payout: <span className="font-semibold">{payoutDayLabel(data.nextPayoutOn)}</span>.{" "}
-            {data.canRequest ? `Ask now and ${naira(t.available)} is paid then.` : data.earning.missing.country ? "Payouts aren't open where you live yet." : t.available > 0 ? `You need ${naira(data.minPayout - t.available)} more. Payouts start from ${naira(data.minPayout)}.` : "Nothing available yet."}
+            {abroad && !data.usdRate ? "Dollar payouts aren't set up yet." : data.canRequest ? `Ask now and ${money(t.available)} is paid then.` : data.earning.missing.country ? "Payouts aren't open where you live yet." : t.available > 0 ? `You need ${money(data.minPayout - t.available)} more. Payouts start from ${money(data.minPayout)}.` : "Nothing available yet."}
           </p>
         )}
         {!asking ? (
@@ -283,7 +289,18 @@ export function EarningsTab() {
                 </span>
               </label>
             )}
-            {(!useSaved || !data.bank) && (
+            {(!useSaved || !data.bank) && abroad ? (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <SelectField label="Network" value={network} onChange={(e) => setNetwork(e.target.value)} error={errors.network}>
+                  {CRYPTO_NETWORKS.map((n) => (
+                    <option key={n.id} value={n.id}>
+                      {n.name}
+                    </option>
+                  ))}
+                </SelectField>
+                <TextField label="Your wallet address" value={address} onChange={(e) => setAddress(e.target.value.trim())} maxLength={64} placeholder={CRYPTO_NETWORKS.find((n) => n.id === network)?.example} error={errors.address} hint="Copy it from your wallet or exchange. Check the network matches: USDT sent on the wrong network can be lost." />
+              </div>
+            ) : (!useSaved || !data.bank) && (
               <div className="grid gap-3 sm:grid-cols-2">
                 {list.length ? (
                   <SelectField
@@ -314,7 +331,7 @@ export function EarningsTab() {
                 Cancel
               </Button>
               <Button type="submit" variant="primary" loading={busy}>
-                Ask for {naira(t.available)}
+                Ask for {money(t.available)}
               </Button>
             </div>
           </form>
@@ -327,7 +344,7 @@ export function EarningsTab() {
           <ul className="divide-y divide-line rounded-card border border-line bg-surface">
             {data.payouts.map((p) => (
               <li key={p.id} className="flex flex-wrap items-center gap-3 px-3.5 py-2.5 text-sm">
-                <span className="font-mono font-semibold tabular-nums">{naira(p.amount)}</span>
+                <span className="font-mono font-semibold tabular-nums">{(p.usd ? `$${p.usd.toFixed(2)}` : naira(p.amount))}</span>
                 <span className={cx("rounded-full px-2 py-0.5 text-[12px] font-semibold", p.status === "paid" ? "bg-success/15 text-success" : p.status === "rejected" ? "bg-danger/15 text-danger" : "bg-raised text-ink-muted")}>{STATUS[p.status]}</span>
                 <span className="min-w-0 flex-1 truncate text-ink-muted">{p.status === "requested" && p.dueOn ? `Paid on ${payoutDayLabel(p.dueOn)}` : p.status === "rejected" ? p.note : p.reference ? `Ref ${p.reference}` : ""}</span>
                 <span className="text-xs text-ink-muted">{formatDateShort(p.createdAt)}</span>

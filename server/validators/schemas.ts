@@ -1051,6 +1051,9 @@ export const payoutRequestSchema = z.object({
   bankName: z.string().trim().max(80).optional(),
   accountNumber: z.string().trim().max(20).optional(),
   accountName: z.string().trim().max(120).optional(),
+  /** outside Nigeria: USDT to a wallet (lib/gifts CRYPTO_NETWORKS) */
+  network: z.enum(["usdt-trc20", "usdt-bep20"]).optional(),
+  address: z.string().trim().max(64).optional(),
 });
 export const payoutDecisionSchema = z.object({ decision: z.enum(["paid", "rejected"]), reference: z.string().trim().max(120).optional(), note: z.string().trim().max(300).optional() });
 export const payoutListQuery = z.object({ status: z.enum(["requested", "paid", "rejected", "all"]).default("requested") });
@@ -1122,7 +1125,7 @@ export const giftConfigSchema = z.object({
   holdDays: z.number().int().min(0).max(90).optional(),
   minPayout: z.number().int().min(100).max(10_000_000).optional(),
   webPacks: z.array(z.number().int().min(100).max(500_000)).max(12).optional(),
-  storePacks: z.array(z.object({ productId: z.string().regex(/^hype_\d{1,7}$/), hype: z.number().int().min(1).max(1_000_000), price: z.number().int().min(1).max(100_000_000) })).max(12).optional(),
+  storePacks: z.array(z.object({ productId: z.string().regex(/^hype_\d{1,7}$/), hype: z.number().int().min(1).max(1_000_000), price: z.number().int().min(1).max(100_000_000), /** Play Console's US dollar price */ usd: z.number().min(0).max(99_999).optional() })).max(12).optional(),
   storeFeePercent: z.object({ apple: z.number().int().min(0).max(50).optional(), google: z.number().int().min(0).max(50).optional() }).optional(),
   earnMinPoints: z.number().int().min(0).max(10_000_000).optional(),
   earnMinMonths: z.number().int().min(0).max(120).optional(),

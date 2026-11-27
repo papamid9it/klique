@@ -1450,6 +1450,9 @@ export interface PayoutDTO {
   amount: number;
   status: "requested" | "paid" | "rejected";
   bank: { bankName: string; accountName: string; accountNumber: string; bankCode: string };
+  /** outside Nigeria: the US dollars (USDT) to send to the wallet in `bank`, and the rate it was locked at */
+  usd?: number | null;
+  rate?: number | null;
   reference: string;
   note: string;
   createdAt: ISODate;
@@ -1662,7 +1665,9 @@ export type RealtimeEvent =
   /** a post's love, comments or comment reactions changed: open copies of it fetch it again */
   | { type: "post"; postId: Id }
   /** an award landed on something ("post:<id>", "comment:<id>"…: lib/gifts giftTargetKey): its award count refreshes */
-  | { type: "gift"; key: string };
+  | { type: "gift"; key: string }
+  /** someone started watching a live stream (once per stream): "Amara joined" over the video; not kept in the chat */
+  | { type: "liveJoin"; liveId: Id; name: string };
 
 /** A chat to type in: a community or group channel, a DM conversation, or a crew's chat. */
 export type TypingTarget = { kind: "channel"; slug: string; sub?: string | null; channel: string } | { kind: "dm"; id: Id } | { kind: "crew"; id: Id };
@@ -2332,6 +2337,9 @@ export interface GiftEarningsDTO {
   history: GiftReceivedDTO[];
   hasMore: boolean;
   bank: { bankName: string; accountName: string; accountNumber: string; bankCode: string } | null;
+  /** outside Nigeria: shown in US dollars (naira ÷ usdRate, Google Play's rate) and paid in USDT to a wallet */
+  abroad?: boolean;
+  usdRate?: number | null;
   canRequest: boolean;
   /** whether awards received now earn them anything, and what's missing if not */
   earning: import("./gifts").EarningStatus;
