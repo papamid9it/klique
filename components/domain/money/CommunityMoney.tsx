@@ -9,130 +9,32 @@ import { useToast } from "@/components/providers/ToastProvider";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/domain/admin/AdminParts";
 import { Button } from "@/components/ui/Button";
-import { SelectField, Switch, TextArea, TextField } from "@/components/ui/Field";
-import { Icon } from "@/components/ui/Icon";
+import { SelectField, TextField } from "@/components/ui/Field";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { EmptyState, ErrorState } from "@/components/ui/States";
+import { ErrorState } from "@/components/ui/States";
 import { relativeStamp } from "@/lib/format";
 import { useApi, useNow } from "@/lib/hooks/useApi";
-import type { CommunityMoneyDTO, DonationButtonDTO } from "@/lib/types";
-import { GoalBar } from "./Donate";
+import type { CommunityMoneyDTO } from "@/lib/types";
 
 const naira = (n: number) => `₦${n.toLocaleString("en-NG")}`;
 const useMoney = (slug: string) => useApi(() => MoneyService.money(slug), [slug], { key: `money:${slug}` });
 
-/** One donation button being added or changed. */
-function ButtonForm({ slug, initial, onSaved, onCancel }: { slug: string; initial?: DonationButtonDTO; onSaved: () => void; onCancel: () => void }) {
-  const toast = useToast();
-  const [title, setTitle] = useState(initial?.title ?? "");
-  const [description, setDescription] = useState(initial?.description ?? "");
-  const [goal, setGoal] = useState(initial?.goal ? String(initial.goal) : "");
-  const [active, setActive] = useState(initial?.active ?? true);
-  const [busy, setBusy] = useState(false);
-
-  async function save(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    try {
-      const input = { title: title.trim(), description: description.trim(), goal: goal.trim() ? Math.round(Number(goal)) : null, active };
-      if (initial) await MoneyService.editButton(slug, initial.id, input);
-      else await MoneyService.addButton(slug, input);
-      toast("Saved", "success");
-      onSaved();
-    } catch (err) {
-      toast(errorMessage(err), "error");
-    } finally {
-      setBusy(false);
-    }
-  }
-
+/** How far a goal is: a bar, what's raised and the goal. */
+function GoalBar({ raised, goal, className }: { raised: number; goal: number; className?: string }) {
+  const pct = Math.min(100, Math.round((raised / goal) * 100));
   return (
-    <form onSubmit={save} className="space-y-3 rounded-card border border-line bg-raised/40 p-4">
-      <TextField label="Button name" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={60} placeholder="e.g. Ramp fund" hint="Long names are cut short on the button; the full name shows when someone opens it." required />
-      <TextArea label="What it's for (optional)" value={description} onChange={(e) => setDescription(e.target.value)} maxLength={300} counter={300} />
-      <TextField label="Goal (₦, optional)" type="number" inputMode="numeric" min={100} value={goal} onChange={(e) => setGoal(e.target.value)} hint="With a goal, people see a progress bar." />
-      {initial && <Switch checked={active} onChange={setActive} label="Showing" hint="Hidden buttons keep what they raised." />}
-      <div className="flex gap-2">
-        <Button type="submit" variant="primary" loading={busy} disabled={!title.trim()}>
-          {initial ? "Save" : "Add button"}
-        </Button>
-        <Button onClick={onCancel}>Cancel</Button>
+    <div className={className}>
+      <div className="h-2 overflow-hidden rounded-full bg-raised" role="progressbar" aria-valuemin={0} aria-valuemax={goal} aria-valuenow={raised} aria-label="Raised so far">
+        <div className="h-full rounded-full bg-gradient-to-r from-[#e8b923] to-[#f7d774]" style={{ width: `${Math.max(2, pct)}%` }} />
       </div>
-    </form>
-  );
-}
-
-/** Settings → Donations: the community's donation buttons (up to 6), each with an optional goal. */
-export function DonationsSettings({ slug }: { slug: string }) {
-  const toast = useToast();
-  const { data, loading, error, reload } = useMoney(slug);
-  const [editing, setEditing] = useState<DonationButtonDTO | "new" | null>(null);
-  if (loading && !data) return <Skeleton className="h-64 w-full rounded-card" />;
-  if (error || !data) return <ErrorState message={error} onRetry={reload} />;
-
-  async function remove(b: DonationButtonDTO) {
-    try {
-      await MoneyService.removeButton(slug, b.id);
-      toast(b.raised ? "Hidden (it keeps what it raised)" : "Removed", "success");
-      void reload();
-    } catch (e) {
-      toast(errorMessage(e), "error");
-    }
-  }
-
-  return (
-    <div className="space-y-4">
-      <p className="text-sm text-ink-muted">
-        Gold Donate buttons show on your community for anyone who can see it. Donations can&apos;t be refunded. Klique keeps {data.fees.donationPercent}% and the rest builds your balance, which the owner can ask to have paid out.
-        {!data.canTakePayments && <span className="mt-1 block font-semibold text-ink">Card payments aren&apos;t switched on yet, so people can&apos;t donate until they are.</span>}
+      <p className="mt-1 flex justify-between font-mono text-[12px] text-ink-muted">
+        <span>
+          <span className="font-semibold text-ink">{naira(raised)}</span> raised
+        </span>
+        <span>
+          {pct}% of {naira(goal)}
+        </span>
       </p>
-      {data.buttons.length === 0 && editing === null && (
-        <EmptyState icon="heart" title="No donation buttons yet" compact action={<Button variant="primary" onClick={() => setEditing("new")}>Add a button</Button>}>
-          One for general support, or one per cause with its own goal.
-        </EmptyState>
-      )}
-      <ul className="space-y-2">
-        {data.buttons.map((b) =>
-          editing !== "new" && editing?.id === b.id ? (
-            <li key={b.id}>
-              <ButtonForm slug={slug} initial={b} onSaved={() => (setEditing(null), void reload())} onCancel={() => setEditing(null)} />
-            </li>
-          ) : (
-            <li key={b.id} className="rounded-card border border-line bg-surface p-4">
-              <div className="flex items-start gap-3">
-                <span className="btn-gold inline-flex size-9 shrink-0 items-center justify-center rounded-full">
-                  <Icon name="heart" size={15} className="fill-current" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="flex items-center gap-2 text-[15px] font-semibold">
-                    {b.title} {!b.active && <Badge tone="neutral">Hidden</Badge>}
-                  </p>
-                  {b.description && <p className="text-[13px] text-ink-muted">{b.description}</p>}
-                  {b.goal ? <GoalBar raised={b.raised} goal={b.goal} className="mt-2" /> : <p className="mt-1 font-mono text-[12px] text-ink-muted">{naira(b.raised)} from {b.donors} {b.donors === 1 ? "person" : "people"}</p>}
-                </div>
-                <div className="flex gap-1">
-                  <Button size="sm" variant="ghost" onClick={() => setEditing(b)}>
-                    Edit
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => void remove(b)} aria-label={`Remove ${b.title}`}>
-                    <Icon name="trash" size={14} />
-                  </Button>
-                </div>
-              </div>
-            </li>
-          ),
-        )}
-      </ul>
-      {editing === "new" ? (
-        <ButtonForm slug={slug} onSaved={() => (setEditing(null), void reload())} onCancel={() => setEditing(null)} />
-      ) : (
-        data.buttons.length > 0 &&
-        data.buttons.length < 6 && (
-          <Button onClick={() => setEditing("new")}>
-            <Icon name="plus" size={15} /> Add another button
-          </Button>
-        )
-      )}
     </div>
   );
 }
@@ -231,6 +133,8 @@ export function PayoutsSettings({ slug }: { slug: string }) {
         <div className="p-4">
           {!data.canRequestPayout ? (
             <p className="text-sm text-ink-muted">Only the community&apos;s owner can ask for a payout.</p>
+          ) : data.payoutsPaused ? (
+            <p className="text-sm text-ink-muted">Payouts are paused by Klique for now. What your community raised is kept, and you can ask once they&apos;re back.</p>
           ) : waiting ? (
             <p className="text-sm text-ink-muted">A payout is on its way. You can ask again once it&apos;s been sent.</p>
           ) : (

@@ -1489,6 +1489,8 @@ export interface CommunityMoneyDTO {
   canTakePayments: boolean;
   /** the owner asks for payouts */
   canRequestPayout: boolean;
+  /** Admin → System has payouts to communities switched off: what was raised is kept, but none can be asked for */
+  payoutsPaused: boolean;
 }
 
 /** A community's owner dashboard (owners and admins). */

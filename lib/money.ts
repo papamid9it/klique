@@ -32,8 +32,6 @@ export const CAUSE_PRESETS = [50, 250, 1000, 5000];
 /** smallest and largest single payment, naira */
 export const MIN_PAYMENT = 100;
 export const MAX_PAYMENT = 5_000_000;
-/** quick amounts in the donate dialog */
-export const DONATION_PRESETS = [1000, 2000, 5000, 10000];
 
 const num = (v: unknown, min: number, max: number, fallback: number) => (typeof v === "number" && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : fallback);
 

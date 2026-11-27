@@ -74,17 +74,17 @@ function PaymentsSwitch() {
           {data && (
             <li className="flex items-center justify-between gap-4 px-4 py-3">
               <div className="min-w-0">
-                <p className="text-sm font-semibold">Donations to communities</p>
-                <p className="text-xs text-ink-muted">Support buttons and payouts to community owners. Payment companies treat this as a marketplace (CAC registration needed).</p>
+                <p className="text-sm font-semibold">Causes</p>
+                <p className="text-xs text-ink-muted">People give Hype to a community&apos;s causes, and its owner gets their share paid to their bank. Off: causes still take Hype and show what they raised, but owners can&apos;t ask for payouts. What was raised is kept.</p>
               </div>
-              <SwitchButton on={data.donations} disabled={!live.length && !data.donations} busy={busy === "donations"} onChange={(v) => void flip("donations", v, "Donations")} label="Donations to communities" />
+              <SwitchButton on={data.donations} busy={busy === "donations"} onChange={(v) => void flip("donations", v, "Causes")} label="Causes" />
             </li>
           )}
           {data && (
             <li className="flex items-center justify-between gap-4 px-4 py-3">
               <div className="min-w-0">
                 <p className="text-sm font-semibold">Award earnings</p>
-                <p className="text-xs text-ink-muted">People who qualify earn a share of the awards they receive, paid to their bank. Off: awards still send and show, but nobody earns from them and payouts can&apos;t be asked for. What was earned is kept.</p>
+                <p className="text-xs text-ink-muted">People who qualify earn a share of the awards they receive (on posts, board posts, comments and live streams), paid to their bank, or in USDT outside Nigeria. Off: awards still send and show, but nobody earns from them and payouts can&apos;t be asked for. What was earned is kept.</p>
               </div>
               <SwitchButton on={data.earnings} busy={busy === "earnings"} onChange={(v) => void flip("earnings", v, "Award earnings")} label="Award earnings" />
             </li>

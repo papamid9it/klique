@@ -54,9 +54,18 @@ export async function pickProvider(asked?: PayProvider | null): Promise<PayProvi
   return live[0];
 }
 
-/** Donations to communities and their payouts: their own switch, and only with web payments working. */
+/** Card donations on the website (Donate buttons): the communities switch, and only with web payments working. */
 export async function donationsOn(): Promise<boolean> {
   return (await saved()).donations && (await webPaymentsOn());
+}
+
+/**
+ * Causes (Admin → System, "Causes"): owners' share of the Hype given to their causes. Off: causes still take Hype and show what they
+ * raised, but owners can't ask for a payout; what was raised is kept for when it's back on. It doesn't depend on web
+ * payments: the Hype given to causes is also bought in the phone app.
+ */
+export async function communityPayoutsOn(): Promise<boolean> {
+  return (await saved()).donations;
 }
 
 /**

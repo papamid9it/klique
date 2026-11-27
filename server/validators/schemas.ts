@@ -1038,14 +1038,6 @@ export const causeGiveSchema = z.object({
   anonymous: z.boolean().optional(),
   agree: z.literal(true, { message: "Tick that you understand gifts can't be refunded." }),
 });
-export const donationButtonSchema = z.object({
-  title: z.string().trim().min(1, "Give it a name").max(60),
-  description: z.string().trim().max(300).optional(),
-  goal: z.number().int().min(100).max(1_000_000_000).nullable().optional(),
-  active: z.boolean().optional(),
-});
-/** a donation: they must tick that donations can't be refunded */
-export const donateSchema = z.object({ buttonId: objectId, amount: z.number().int().min(100).max(5_000_000), message: z.string().trim().max(200).optional(), agree: z.literal(true, { message: "Tick that you understand donations can't be refunded." }) });
 /** a contribution: they must tick the refund terms */
 export const contributeSchema = z.object({ quantity: z.number().int().min(1).max(100), agree: z.literal(true, { message: "Tick that you've read how refunds work." }) });
 export const payVerifySchema = z.object({ reference: z.string().trim().regex(/^k(dn|ct)_[a-f0-9]{18}$/, "That isn't a payment reference.") });

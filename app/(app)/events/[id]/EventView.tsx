@@ -3,7 +3,7 @@
 import { EventLive } from "@/components/domain/live/Live";
 import { useMediaViewer } from "@/components/providers/MediaViewerProvider";
 import { ContributeCard, ContributionFields, ContributionsPanel, contributionDraftOf, contributionInput, type ContributionDraft } from "@/components/domain/money/Contribute";
-import { usePaymentReturn } from "@/components/domain/money/Donate";
+import { usePaymentReturn } from "@/components/domain/money/usePaymentReturn";
 import { ReviewBar } from "@/components/domain/events/ReviewBar";
 import { useCategories } from "@/lib/hooks/useCategories";
 import { WhoCame } from "@/components/domain/events/WhoCame";

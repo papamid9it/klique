@@ -5,7 +5,7 @@ import type { z } from "zod";
 import { DEFAULT_MONEY_CONFIG, MAX_PAYMENT, MIN_PAYMENT, feeOf, moneyConfigOf, type MoneyConfig } from "@/lib/money";
 import type { CommunityMoneyDTO, DonationButtonDTO, PaymentDTO, PayoutDTO } from "@/lib/types";
 import { appUrl } from "../env";
-import { donationsOn } from "./payments-setting";
+import { communityPayoutsOn, donationsOn, providerConnected } from "./payments-setting";
 import { ApiError, badRequest, conflict, forbidden, notFound } from "../http/errors";
 import { rateLimit } from "../http/rate-limit";
 import { AppSetting } from "../models/AppSetting";
@@ -17,7 +17,7 @@ import type { IUser } from "../models/User";
 import { canViewEvent } from "../policies/access";
 import { isSiteAdmin } from "../policies/hosting";
 import { loadBriefs, GHOST } from "../serializers";
-import type { donationButtonSchema, moneyConfigSchema, payoutRequestSchema } from "../validators/schemas";
+import type { moneyConfigSchema, payoutRequestSchema } from "../validators/schemas";
 import { sid } from "./helpers";
 import { isKlique } from "./klique.service";
 import { paystack } from "./promotions.service";
@@ -107,44 +107,10 @@ async function payoutDtos(rows: IPayout[], full = false): Promise<PayoutDTO[]> {
   }));
 }
 
-/* ------------------------------ donation buttons ------------------------------ */
-
-/** A community's active donation buttons, for anyone who can see the community. */
-export async function listDonationButtons(viewer: IUser | null, slug: string): Promise<DonationButtonDTO[]> {
-  const { space, access } = await resolveSpaceFor(viewer, slug);
-  if (space.sub || !access.canView || isKlique(space.community)) return [];
-  const rows = await DonationButton.find({ communityId: space.community._id, active: true }).sort({ position: 1, createdAt: 1 }).lean<IDonationButton[]>();
-  return rows.map(buttonDto);
-}
-
-export async function saveDonationButton(viewer: IUser, slug: string, input: z.infer<typeof donationButtonSchema>, id?: string): Promise<DonationButtonDTO> {
-  const { community } = await managedCommunity(viewer, slug);
-  const set = { title: input.title, description: input.description ?? "", goal: input.goal || null, active: input.active ?? true };
-  if (id) {
-    const b = await DonationButton.findOneAndUpdate({ _id: id, communityId: community._id }, { $set: set }, { returnDocument: "after" }).lean<IDonationButton>();
-    if (!b) throw notFound("We couldn't find that button.");
-    return buttonDto(b);
-  }
-  if ((await DonationButton.countDocuments({ communityId: community._id })) >= 6) throw badRequest("A community can have up to 6 donation buttons.");
-  const position = (await DonationButton.countDocuments({ communityId: community._id })) + 1;
-  const b = await DonationButton.create({ ...set, communityId: community._id, position });
-  return buttonDto(b.toObject());
-}
-
-/** Removing a button that has had donations only hides it, so what was given stays on the record. */
-export async function deleteDonationButton(viewer: IUser, slug: string, id: string) {
-  const { community } = await managedCommunity(viewer, slug);
-  const b = await DonationButton.findOne({ _id: id, communityId: community._id }).lean<IDonationButton>();
-  if (!b) throw notFound("We couldn't find that button.");
-  if (await Payment.exists({ buttonId: b._id, status: { $ne: "pending" } })) await DonationButton.updateOne({ _id: b._id }, { $set: { active: false } });
-  else await DonationButton.deleteOne({ _id: b._id });
-  return { deleted: true };
-}
-
 /* ------------------------------ paying ------------------------------ */
 
 async function checkout(viewer: IUser, p: Pick<IPayment, "kind" | "communityId" | "buttonId" | "eventId" | "quantity" | "amount" | "message">, back: string): Promise<{ authorizationUrl: string; reference: string }> {
-  if (!(await donationsOn())) throw badRequest("Donations are paused for now.");
+  if (!(await donationsOn())) throw badRequest("Paying toward events is paused for now.");
   // no money moves for a community with explicit content (our payment provider doesn't allow adult content)
   if (p.communityId && (await Community.exists({ _id: p.communityId, explicit: true }))) throw forbidden(NO_MONEY_EXPLICIT);
   if (p.amount < MIN_PAYMENT || p.amount > MAX_PAYMENT) throw badRequest(`Pick an amount between ${naira(MIN_PAYMENT)} and ${naira(MAX_PAYMENT)}.`);
@@ -160,13 +126,6 @@ async function checkout(viewer: IUser, p: Pick<IPayment, "kind" | "communityId" 
     body: { email: viewer.email, amount: p.amount * 100, currency: "NGN", reference, callback_url: callback, metadata: { purpose: p.kind, cancel_action: `${appUrl()}${back}` } },
   });
   return { authorizationUrl: data.authorization_url, reference };
-}
-
-/** Start a donation to one of a community's buttons. They agree no refunds first (the form asks). */
-/** Donations are now causes, given in Hype (causes.service): the old Paystack checkout is closed (older pages get this). */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export async function startDonation(..._: [IUser, string, string, { amount: number; message?: string }]): Promise<never> {
-  throw new ApiError(410, "Donations are now causes: give Hype from the community's page.", { code: "donations_moved" });
 }
 
 /** Start a contribution toward an event: `quantity` units at its price, up to its maximum. */
@@ -303,13 +262,14 @@ export async function communityMoney(viewer: IUser, slug: string): Promise<Commu
     bank: bank ? { bankName: bank.bankName, accountName: bank.accountName, bankCode: bank.bankCode, accountNumber: mask(bank.accountNumber) } : null,
     canTakePayments: await donationsOn(),
     canRequestPayout: access.role === "owner",
+    payoutsPaused: !(await communityPayoutsOn()),
   };
 }
 
 /** Nigerian banks for the payout form (from Paystack; empty when payments aren't set up). Cached for a day. */
 let banksCache: { at: number; list: { code: string; name: string }[] } | null = null;
 export async function listBanks(): Promise<{ code: string; name: string }[]> {
-  if (!(await donationsOn())) return [];
+  if (!(await communityPayoutsOn()) || !providerConnected("paystack")) return [];
   if (banksCache && Date.now() - banksCache.at < 24 * 60 * 60 * 1000) return banksCache.list;
   const rows = await paystack<{ code: string; name: string; active?: boolean }[]>("/bank?country=nigeria&perPage=200");
   const list = rows.filter((b) => b.active !== false).map((b) => ({ code: b.code, name: b.name }));
@@ -324,6 +284,7 @@ export async function listBanks(): Promise<{ code: string; name: string }[]> {
 export async function requestPayout(viewer: IUser, slug: string, input: z.infer<typeof payoutRequestSchema>): Promise<CommunityMoneyDTO> {
   const { community, access } = await managedCommunity(viewer, slug);
   if (access.role !== "owner") throw forbidden("Only the community's owner can ask for a payout.");
+  if (!(await communityPayoutsOn())) throw forbidden("Payouts to communities are paused for now. What your community raised is kept.");
   rateLimit(`payout:${sid(community._id)}`, 5, 24 * 60 * 60 * 1000);
   if (await Payout.exists({ communityId: community._id, status: "requested" })) throw conflict("There's already a payout waiting. You can ask again once it's paid.");
   const config = await getMoneyConfig();
@@ -335,7 +296,8 @@ export async function requestPayout(viewer: IUser, slug: string, input: z.infer<
     if (!input.accountNumber || !/^\d{10}$/.test(input.accountNumber)) throw new ApiError(422, "Enter the 10-digit account number.", { errors: { accountNumber: "10 digits" } });
     if (!input.bankName) throw new ApiError(422, "Pick the bank.", { errors: { bankCode: "Required" } });
     let accountName = (input.accountName ?? "").trim();
-    if ((await donationsOn()) && input.bankCode) {
+    // the bank says whose account it is (with Paystack connected), so a typo can't send money to a stranger
+    if (providerConnected("paystack") && input.bankCode) {
       const r = await paystack<{ account_name: string }>(`/bank/resolve?account_number=${input.accountNumber}&bank_code=${encodeURIComponent(input.bankCode)}`).catch(() => null);
       if (!r) throw new ApiError(422, "That account number doesn't match the bank. Check both.", { errors: { accountNumber: "Not found at this bank" } });
       accountName = r.account_name;
