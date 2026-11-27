@@ -1,7 +1,7 @@
 import { boardCreateSchema, boardUpdateSchema, commentCreateSchema, commentUpdateSchema, topicCreateSchema, topicListQuery, topicUpdateSchema } from "../validators/schemas";
 import { resolveSpaceFor } from "../services/spaces.service";
 import { boardSidebar, createBoard, deleteBoard, listBoards, updateBoard } from "../services/boards.service";
-import { createComment, createTopic, deleteComment, deleteTopic, getTopic, listTopics, setFollow, toggleLike, topicFeed, trendingTopics, updateComment, updateTopic } from "../services/topics.service";
+import { createComment, createTopic, deleteComment, deleteTopic, getTopic, listTopics, setFollow, toggleLike, whoLiked, topicFeed, trendingTopics, updateComment, updateTopic } from "../services/topics.service";
 import { remember } from "../cache";
 import { created, readJson, readQuery, withApi } from "./api";
 
@@ -69,6 +69,12 @@ export const topicDelete = withApi<Topic, "required">({ auth: "required" }, asyn
 export const topicLike = withApi<Topic, "required">({ auth: "required" }, async ({ params, viewer }) => {
   const { space, access } = await resolveSpaceFor(viewer, params.slug);
   return toggleLike(viewer, space, access, params.topicId);
+});
+
+/** GET …/like[?comment=id] — who liked the board post (or that comment). */
+export const topicLikers = withApi<Topic>({ auth: "optional" }, async ({ req, params, viewer }) => {
+  const { space, access } = await resolveSpaceFor(viewer, params.slug);
+  return whoLiked(viewer, space, access, params.topicId, req.nextUrl.searchParams.get("comment") ?? undefined);
 });
 
 /** Follow a post (hear about new replies), or stop following it. */

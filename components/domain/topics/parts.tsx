@@ -42,6 +42,7 @@ export function LikeButton({
   size = "md",
   label = "Like",
   upvote,
+  onWho,
 }: {
   liked: boolean;
   count: number;
@@ -52,6 +53,8 @@ export function LikeButton({
   label?: string;
   /** an up arrow ("Upvote") instead of a heart: board posts */
   upvote?: boolean;
+  /** the count opens who liked it */
+  onWho?: () => void;
 }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
@@ -71,7 +74,7 @@ export function LikeButton({
     }
   }
 
-  return (
+  const button = (
     <button
       type="button"
       onClick={() => void click()}
@@ -86,8 +89,19 @@ export function LikeButton({
       )}
     >
       {upvote ? <Icon name="arrowdown" size={size === "sm" ? 14 : 16} className="rotate-180" /> : <Icon name="heart" size={size === "sm" ? 14 : 16} className={cx(liked && "fill-current")} />}
-      <span className="font-mono tabular-nums">{count > 0 ? compactCount(count) : liked ? 1 : ""}</span>
+      {!onWho && <span className="font-mono tabular-nums">{count > 0 ? compactCount(count) : liked ? 1 : ""}</span>}
       {count === 0 && !liked && <span className="sr-only">{upvote ? "Upvote" : "Like"}</span>}
     </button>
+  );
+  // the count as its own button: who liked it
+  return onWho && count > 0 ? (
+    <span className="relative inline-flex items-center">
+      {button}
+      <button type="button" onClick={onWho} aria-label={`See who ${upvote ? "upvoted" : "liked"} it, ${count}`} title={`See who ${upvote ? "upvoted" : "liked"} it`} className={cx("-ml-1.5 font-mono font-semibold tabular-nums text-ink-muted hover:text-ink hover:underline", size === "sm" ? "h-7 pr-2 text-[12px]" : "h-8 pr-2.5 text-[13px]")}>
+        {compactCount(count)}
+      </button>
+    </span>
+  ) : (
+    button
   );
 }

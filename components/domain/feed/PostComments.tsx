@@ -1,5 +1,6 @@
 "use client";
 
+import { WhoReacted } from "./WhoReacted";
 import { useRealtimeEvent } from "@/components/providers/RealtimeProvider";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "@/app/ApiCore";
@@ -179,6 +180,8 @@ export function PostComments({ post, onCount, pinned, top, focus }: { post: Feed
   }, [list, outbox]);
   const stateOf = (id: string) => outbox.find((o) => o.c.id === id)?.state;
   const [editing, setEditing] = useState<string | null>(null);
+  // "Who?" on a comment's reactions
+  const [whoFor, setWhoFor] = useState<string | null>(null);
   // how many replies each thread shows (none until opened)
   const [shown, setShown] = useState<Map<string, number>>(new Map());
   const show = (root: string, n: number) => setShown((m) => new Map(m).set(root, n));
@@ -335,7 +338,7 @@ export function PostComments({ post, onCount, pinned, top, focus }: { post: Feed
             Not sent · Resend
           </button>
         )}
-        {!c.deleted && !stateOf(c.id) && <ReactionBar reactions={c.reactions} canReact={canWrite && !!user} onToggle={(k) => void react(c, k)} className="mt-1" />}
+        {!c.deleted && !stateOf(c.id) && <ReactionBar reactions={c.reactions} canReact={canWrite && !!user} onToggle={(k) => void react(c, k)} className="mt-1" onWho={() => setWhoFor(c.id)} />}
         {/* Instagram's line under the comment: when · Reply · react */}
         {!stateOf(c.id) && <div className="mt-1 flex items-center gap-1 text-[12.5px] font-semibold text-ink-muted">
           <time dateTime={c.createdAt} className="pr-1 font-normal">
@@ -426,6 +429,7 @@ export function PostComments({ post, onCount, pinned, top, focus }: { post: Feed
   }
   return (
     <section aria-label="Comments" className="space-y-4">
+      {whoFor && <WhoReacted title="Reactions" load={() => FeedService.reactors(slug, post.id, whoFor)} onClose={() => setWhoFor(null)} />}
       {box}
       {thread}
     </section>

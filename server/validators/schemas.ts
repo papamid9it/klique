@@ -335,6 +335,10 @@ export const homeFeedQuery = pageQuery.extend({
   range: z.enum(["auto", "today", "week"]).default("auto"),
   /** a community's posts: only those with this tag of its own (lib/postTags) */
   tag: z.preprocess(blankToUndef, objectId.optional()),
+  /** a community's posts: newest first, or most love and comments */
+  order: z.enum(["new", "popular"]).default("new"),
+  /** a community's posts: only from this long ago */
+  since: z.enum(["any", "today", "week", "month", "year"]).default("any"),
 });
 
 export const reelsQuery = homeFeedQuery.extend({ start: z.string().max(40).optional() });

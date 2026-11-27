@@ -1,5 +1,6 @@
 "use client";
 
+import { WhoReacted } from "./WhoReacted";
 import { useRealtimeEvent } from "@/components/providers/RealtimeProvider";
 import { PostTag } from "./PostTag";
 import { checkReels, reelsReady } from "@/lib/reels-ready";
@@ -69,11 +70,20 @@ export function useVote(p: FeedPostDTO, onChange: (p: FeedPostDTO) => void) {
 export function VoteControl({ post: p, onChange }: { post: FeedPostDTO; onChange: (p: FeedPostDTO) => void }) {
   const vote = useVote(p, onChange);
   const loved = p.myVote === 1;
+  const [who, setWho] = useState(false);
   return (
-    <button type="button" onClick={() => void vote(1)} aria-pressed={loved} aria-label={loved ? `Take your love back, ${p.upCount} loves` : `Love, ${p.upCount} loves`} title={loved ? "Take your love back" : "Love"} data-vote={p.myVote} className={cx("inline-flex h-11 min-w-11 items-center justify-center gap-1.5 px-1.5 text-[14px] font-semibold transition-colors", loved ? "text-[#ff3040]" : "text-ink hover:text-[#ff3040]")}>
-      <Icon name="heart" size={21} className={cx(loved && "fill-current")} />
-      {p.upCount > 0 && <span className="tabular-nums">{compactCount(p.upCount)}</span>}
-    </button>
+    <span className="inline-flex items-center">
+      <button type="button" onClick={() => void vote(1)} aria-pressed={loved} aria-label={loved ? `Take your love back, ${p.upCount} loves` : `Love, ${p.upCount} loves`} title={loved ? "Take your love back" : "Love"} data-vote={p.myVote} className={cx("inline-flex h-11 min-w-11 items-center justify-center px-1.5 transition-colors", loved ? "text-[#ff3040]" : "text-ink hover:text-[#ff3040]")}>
+        <Icon name="heart" size={21} className={cx(loved && "fill-current")} />
+      </button>
+      {/* the count: who loved it */}
+      {p.upCount > 0 && (
+        <button type="button" onClick={() => setWho(true)} aria-label={`See who loved it, ${p.upCount}`} title="See who loved it" className="-ml-1 h-11 pr-1.5 text-[14px] font-semibold tabular-nums text-ink hover:underline">
+          {compactCount(p.upCount)}
+        </button>
+      )}
+      {who && <WhoReacted title="Loved by" load={() => FeedService.loves(p.community.slug, p.id)} onClose={() => setWho(false)} />}
+    </span>
   );
 }
 

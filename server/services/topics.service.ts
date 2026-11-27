@@ -3,7 +3,7 @@ import { boardsOn } from "../policies/features";
 import { withoutAdult } from "../policies/adult";
 import { deleteUploads } from "./media.service";
 import type { z } from "zod";
-import type { Paginated, TopicCommentDTO, TopicDTO, TopicDetailDTO } from "@/lib/types";
+import type { Paginated, TopicCommentDTO, TopicDTO, TopicDetailDTO, WhoReactedDTO } from "@/lib/types";
 import { ApiError, badRequest, forbidden, notFound } from "../http/errors";
 import { rateLimit } from "../http/rate-limit";
 import { Community, type ICommunity } from "../models/Community";
@@ -465,10 +465,14 @@ export async function toggleLike(viewer: IUser, space: Space, access: SpaceAcces
   rateLimit(`topic-like:${sid(viewer._id)}`, 120, 60_000);
   let targetType: "topic" | "comment" = "topic";
   let targetId = t._id;
+  let ownerId = t.authorId;
+  let said = t.title;
   if (commentId) {
     const { c } = await ownComment(viewer, t, commentId);
     targetType = "comment";
     targetId = c._id;
+    ownerId = c.authorId;
+    said = stripFormat(c.body ?? "").slice(0, 120);
   }
   const bump = (by: 1 | -1) =>
     targetType === "topic"
@@ -486,6 +490,12 @@ export async function toggleLike(viewer: IUser, space: Space, access: SpaceAcces
       await bump(1);
       // an upvote on a board post earns its author points (once per person per post)
       if (targetType === "topic") awardPointsLater(t.authorId, "boardUpvote", `topic:${sid(t._id)}:${sid(viewer._id)}`, viewer._id);
+      // its author hears about it (bundled per board post or comment), never for their own
+      if (sid(ownerId) !== sid(viewer._id)) {
+        const b = t.boardId ? await Board.findById(t.boardId).select("slug").lean<{ slug: string }>() : null;
+        const href = `/communities/${space.community.slug}?view=topics${b ? `&b=${b.slug}` : ""}&t=${sid(t._id)}`;
+        notify([ownerId], { title: `${viewer.displayName} liked your ${targetType === "topic" ? "board post" : "comment"}`, body: said, data: { href } }, { actorId: viewer._id, category: "likes", groupKey: `like:${sid(targetId)}`, many: (n) => `${n} people liked your ${targetType === "topic" ? "board post" : "comment"}`, ref: `like:${sid(targetId)}` });
+      }
     } catch (err) {
       if ((err as { code?: number }).code !== 11000) throw err; // two taps at once: the like already exists
       liked = true;
@@ -493,4 +503,22 @@ export async function toggleLike(viewer: IUser, space: Space, access: SpaceAcces
   }
   const row = targetType === "topic" ? await Topic.findById(targetId).select("likeCount").lean<{ likeCount: number }>() : await TopicComment.findById(targetId).select("likeCount").lean<{ likeCount: number }>();
   return { liked, likeCount: row?.likeCount ?? 0 };
+}
+
+/** Who liked a board post (or one of its comments), newest first. */
+export async function whoLiked(viewer: IUser | null, space: Space, access: SpaceAccess, topicId: string, commentId?: string): Promise<WhoReactedDTO> {
+  assertCommunity(space);
+  assertCanView(access, "this topic");
+  const t = await loadTopic(space, topicId);
+  let targetType: "topic" | "comment" = "topic";
+  let targetId = t._id;
+  if (commentId) {
+    if (!Types.ObjectId.isValid(commentId)) throw notFound("That comment is gone.");
+    targetType = "comment";
+    targetId = new Types.ObjectId(commentId);
+  }
+  const hidden = await hiddenUserIds(viewer?._id ?? null);
+  const rows = await TopicLike.find({ targetType, targetId, ...(hidden.length ? { userId: { $nin: hidden } } : {}) }).sort({ _id: -1 }).limit(200).select("userId").lean<{ userId: Types.ObjectId }[]>();
+  const people = await loadBriefs(rows.map((r) => r.userId));
+  return { items: rows.flatMap((r) => (people.get(sid(r.userId)) ? [{ user: people.get(sid(r.userId))! }] : [])), total: rows.length };
 }

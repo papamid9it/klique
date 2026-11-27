@@ -1,5 +1,6 @@
 "use client";
 
+import { WhoReacted } from "@/components/domain/feed/WhoReacted";
 import { PostTag } from "@/components/domain/feed/PostTag";
 import { useSearchParams } from "next/navigation";
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -139,6 +140,7 @@ export function TopicSide({ onClose, bare, full }: { onClose: () => void; bare?:
   // from a notification: ?m=<message id> opens on that message
   const focus = useSearchParams().get("m");
   const { preview: t, data: loaded, error, status, reload, slug, setTopic, topicId } = useDetail();
+  const [who, setWho] = useState(false);
   // the post and its replies appear together: until both are in, one placeholder (no half-drawn post first).
   // A post loaded ahead (hovered in the list) is in the cache: use it straight away rather than a frame later.
   const data = loaded && loaded.topic.id === topicId ? loaded : topicId ? (recallApi<TopicDetailDTO>(detailKey(slug, topicId)) ?? null) : null;
@@ -165,7 +167,8 @@ export function TopicSide({ onClose, bare, full }: { onClose: () => void; bare?:
         {t && (
           <>
             <FollowButton topic={t} slug={slug} onChange={update} />
-            <LikeButton upvote liked={t.liked} count={t.likeCount} canLike={t.canLike} onToggle={async () => (await TopicService.like(slug, t.id)).data} onChange={(n) => update({ ...t, liked: n.liked, likeCount: n.likeCount })} />
+            <LikeButton upvote liked={t.liked} count={t.likeCount} canLike={t.canLike} onToggle={async () => (await TopicService.like(slug, t.id)).data} onChange={(n) => update({ ...t, liked: n.liked, likeCount: n.likeCount })} onWho={() => setWho(true)} />
+            {who && <WhoReacted title="Upvoted by" load={() => TopicService.likers(slug, t.id)} onClose={() => setWho(false)} />}
             <TopicMenu
               topic={t}
               onChange={update}

@@ -389,6 +389,12 @@ export interface PostTargetDTO {
 
 /** A post in a community's Posts section (Instagram style). */
 /** One of a community's tags for posts (lib/postTags): its name and a colour id from POST_TAG_COLORS. */
+/** Who loved a post, liked a board post or comment, or reacted to a comment (newest first); `kind`: the reaction */
+export interface WhoReactedDTO {
+  items: { user: UserBrief; kind?: string }[];
+  total: number;
+}
+
 export interface PostTagDTO {
   id: Id;
   name: string;

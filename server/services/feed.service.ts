@@ -1,8 +1,9 @@
 import { REELS_MIN_VIDEOS } from "@/lib/constants";
+import { REACTIONS } from "@/lib/reactions";
 import "server-only";
 import { Types, type QueryFilter } from "mongoose";
 import type { z } from "zod";
-import type { FeedCommentDTO, FeedPostDTO, FeedSidebarDTO, HomeFeedItem, Paginated, PostTargetDTO, ReactionDTO } from "@/lib/types";
+import type { FeedCommentDTO, FeedPostDTO, FeedSidebarDTO, HomeFeedItem, Paginated, PostTargetDTO, ReactionDTO, WhoReactedDTO } from "@/lib/types";
 import type { ReactionKind } from "@/lib/reactions";
 import { ApiError, badRequest, forbidden, notFound } from "../http/errors";
 import { rateLimit } from "../http/rate-limit";
@@ -159,16 +160,28 @@ async function toComments(rows: IFeedComment[], viewer: IUser | null, managerRol
 /* ------------------------------------------------------------------ */
 
 /** Newest first. `at` (from page 1) leaves out what was posted since, so later pages don't shift. */
-export async function listPosts(viewer: IUser | null, space: Space, access: SpaceAccess, page: number, at?: number, tag?: string): Promise<Paginated<FeedPostDTO> & { at: number }> {
+export async function listPosts(viewer: IUser | null, space: Space, access: SpaceAccess, page: number, at?: number, tag?: string, order: "new" | "popular" = "new", since: "any" | "today" | "week" | "month" | "year" = "any"): Promise<Paginated<FeedPostDTO> & { at: number }> {
   assertFeed(space);
   assertCanView(access, "posts");
   const hidden = await hiddenUserIds(viewer?._id ?? null);
   const now = at && at <= Date.now() && at > Date.now() - 24 * HOUR ? at : Date.now();
-  const rows = await FeedPost.find({ communityId: space.community._id, ...(tag ? { tagId: new Types.ObjectId(tag) } : {}), createdAt: { $lte: new Date(now) }, hiddenAt: null, ...(hidden.length ? { authorId: { $nin: hidden } } : {}) })
-    .sort({ createdAt: -1 })
-    .skip((page - 1) * PAGE)
-    .limit(PAGE + 1)
-    .lean<IFeedPost[]>();
+  // how far back: today, the last 7, 30 or 365 days, or all of it
+  const back = { any: 0, today: 1, week: 7, month: 30, year: 365 }[since] * 86_400_000;
+  const match = { communityId: space.community._id, ...(tag ? { tagId: new Types.ObjectId(tag) } : {}), createdAt: { $lte: new Date(now), ...(back ? { $gte: new Date(now - back) } : {}) }, hiddenAt: null, ...(hidden.length ? { authorId: { $nin: hidden } } : {}) };
+  const rows =
+    order === "popular"
+      ? // most love and comments (a comment counts twice), then newest
+        await fullPosts(
+          await FeedPost.aggregate<Pick<IFeedPost, "_id">>([
+            { $match: match },
+            { $addFields: { popular: { $add: ["$upCount", { $multiply: [2, "$commentCount"] }] } } },
+            { $sort: { popular: -1, createdAt: -1 } },
+            { $skip: (page - 1) * PAGE },
+            { $limit: PAGE + 1 },
+            { $project: { _id: 1 } },
+          ]),
+        )
+      : await FeedPost.find(match).sort({ createdAt: -1 }).skip((page - 1) * PAGE).limit(PAGE + 1).lean<IFeedPost[]>();
   return { items: await toPosts(rows.slice(0, PAGE), viewer), page, hasMore: rows.length > PAGE, at: now };
 }
 
@@ -368,6 +381,10 @@ export async function vote(viewer: IUser, space: Space, access: SpaceAccess, pos
     if (value === 1) awardPointsLater(p.authorId, "postUpvote", `feed:${sid(p._id)}:${sid(viewer._id)}`, viewer._id);
     // the author (and anyone with it open) sees the new love at once
     emitPost(p.communityId, p._id);
+    // and hears about it (bundled: "Amara and 12 others loved your post"), never for your own
+    if (value === 1 && was !== 1 && sid(p.authorId) !== sid(viewer._id)) {
+      notify([p.authorId], { title: `${viewer.displayName} loved your post`, body: (p.title || p.caption).slice(0, 120), data: { href: `/p/${sid(p._id)}` } }, { actorId: viewer._id, category: "likes", groupKey: `love:${sid(p._id)}`, many: (n) => `${n} people loved your post`, ref: `love:${sid(p._id)}` });
+    }
   }
   const fresh = await FeedPost.findById(p._id).select("upCount downCount").lean<Pick<IFeedPost, "upCount" | "downCount">>();
   return { upCount: Math.max(0, fresh?.upCount ?? 0), downCount: Math.max(0, fresh?.downCount ?? 0), myVote: value };
@@ -503,6 +520,11 @@ export async function reactToComment(viewer: IUser, space: Space, access: SpaceA
   const c = await loadComment(sid(p._id), commentId);
   const out = await toggleReaction("feedComment", c._id, viewer._id, kind);
   emitPost(p.communityId, p._id);
+  // a reaction added (not taken off) to someone else's comment: they hear about it, bundled per comment
+  if (out.some((r) => r.mine && r.kind === kind) && sid(c.authorId) !== sid(viewer._id)) {
+    const emoji = REACTIONS.find((r) => r.id === kind)?.emoji ?? "";
+    notify([c.authorId], { title: `${viewer.displayName} reacted ${emoji} to your comment`, body: (c.body || "").slice(0, 120), data: { href: `/p/${sid(p._id)}?c=${sid(c._id)}` } }, { actorId: viewer._id, category: "likes", groupKey: `react:${sid(c._id)}`, many: (n) => `${n} people reacted to your comment`, ref: `react:${sid(c._id)}` });
+  }
   return out;
 }
 
@@ -774,3 +796,27 @@ export async function popularFeed(viewer: IUser, page: number, range: "auto" | "
 
 /** Post cards for any list of posts (the tag pages use it). */
 export const feedCards = (rows: IFeedPost[], viewer: IUser | null) => toPosts(rows, viewer);
+
+/** Who loved a post (newest first). Anyone who can see the post. */
+export async function whoLoved(viewer: IUser | null, space: Space, access: SpaceAccess, postId: string): Promise<WhoReactedDTO> {
+  assertFeed(space);
+  assertCanView(access, "this post");
+  const p = await loadPost(space, postId);
+  const hidden = await hiddenUserIds(viewer?._id ?? null);
+  const rows = await FeedVote.find({ postId: p._id, value: 1, ...(hidden.length ? { userId: { $nin: hidden } } : {}) }).sort({ createdAt: -1 }).limit(200).select("userId").lean<{ userId: Types.ObjectId }[]>();
+  const people = await loadBriefs(rows.map((r) => r.userId));
+  return { items: rows.flatMap((r) => (people.get(sid(r.userId)) ? [{ user: people.get(sid(r.userId))! }] : [])), total: Math.max(0, p.upCount) };
+}
+
+/** Who reacted to a comment, and with what (newest first). */
+export async function whoReactedToComment(viewer: IUser | null, space: Space, access: SpaceAccess, postId: string, commentId: string): Promise<WhoReactedDTO> {
+  assertFeed(space);
+  assertCanView(access, "this post");
+  const p = await loadPost(space, postId);
+  const c = await loadComment(sid(p._id), commentId);
+  const hidden = await hiddenUserIds(viewer?._id ?? null);
+  const { Reaction } = await import("../models/Reaction");
+  const rows = await Reaction.find({ targetType: "feedComment", targetId: c._id, ...(hidden.length ? { userId: { $nin: hidden } } : {}) }).sort({ _id: -1 }).limit(200).select("userId kind").lean<{ userId: Types.ObjectId; kind: string }[]>();
+  const people = await loadBriefs(rows.map((r) => r.userId));
+  return { items: rows.flatMap((r) => (people.get(sid(r.userId)) ? [{ user: people.get(sid(r.userId))!, kind: r.kind }] : [])), total: rows.length };
+}

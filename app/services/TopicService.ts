@@ -1,5 +1,5 @@
 import ApiClient from "@/app/ApiCore";
-import type { BoardSidebarDTO, BoardDTO, Envelope, Paginated, TopicCommentDTO, TopicDTO, TopicDetailDTO, TopicMediaDTO, TopicSort, Move } from "@/lib/types";
+import type { BoardSidebarDTO, BoardDTO, Envelope, Paginated, TopicCommentDTO, TopicDTO, TopicDetailDTO, TopicMediaDTO, TopicSort, Move, WhoReactedDTO } from "@/lib/types";
 
 const api = new ApiClient();
 const base = (slug: string) => `/api/communities/${slug}/topics`;
@@ -32,6 +32,8 @@ export const TopicService = {
   /** content edits (author) and pin / lock (owners and admins) */
   update: (slug: string, topicId: string, patch: Partial<TopicInput> & { pinned?: boolean; locked?: boolean }) => api.patch<Envelope<TopicDTO>>(`${base(slug)}/${topicId}`, patch),
   remove: (slug: string, topicId: string) => api.delete<Envelope<{ deleted: boolean }>>(`${base(slug)}/${topicId}`),
+  /** who liked it (or one of its comments) */
+  likers: (slug: string, topicId: string, commentId?: string) => api.get<Envelope<WhoReactedDTO>>(`${base(slug)}/${topicId}/like`, commentId ? { comment: commentId } : {}),
   like: (slug: string, topicId: string) => api.post<Envelope<{ liked: boolean; likeCount: number }>>(`${base(slug)}/${topicId}/like`),
   /** hear about new replies in a post's chat */
   follow: (slug: string, topicId: string, on: boolean) => (on ? api.post<Envelope<{ following: boolean }>>(`${base(slug)}/${topicId}/follow`) : api.delete<Envelope<{ following: boolean }>>(`${base(slug)}/${topicId}/follow`)),

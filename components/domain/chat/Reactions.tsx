@@ -75,7 +75,7 @@ export function ReactionPicker({ onPick, onClose, className, style: place }: { o
  * Reaction chips under a message or comment (tap one to add yours or take it back). `canReact` false makes them
  * read-only. Adding a new reaction is the one add button next to it (hover toolbar, beside Reply, beside the bubble).
  */
-export function ReactionBar({ reactions, onToggle, canReact, mine, className, children }: { reactions: ReactionDTO[]; onToggle: (k: ReactionKind) => void; canReact: boolean; mine?: boolean; className?: string; /** more chips at the end of the row (a message's awards) */ children?: React.ReactNode }) {
+export function ReactionBar({ reactions, onToggle, canReact, mine, className, children, onWho }: { reactions: ReactionDTO[]; onToggle: (k: ReactionKind) => void; canReact: boolean; mine?: boolean; className?: string; /** more chips at the end of the row (a message's awards) */ children?: React.ReactNode; /** a "who" button at the end: who reacted, and with what */ onWho?: () => void }) {
   if (!reactions.length && !children) return null;
   return (
     <div className={cx("relative mt-1 flex flex-wrap items-center gap-1 empty:hidden", mine && "justify-end", className)}>
@@ -97,6 +97,11 @@ export function ReactionBar({ reactions, onToggle, canReact, mine, className, ch
         </button>
       ))}
       {canReact && reactions.length > 0 && <ReactButton pill onPick={onToggle} align="left" />}
+      {onWho && reactions.length > 0 && (
+        <button type="button" onClick={onWho} title="See who reacted" aria-label="See who reacted" className="inline-flex h-7 items-center rounded-full px-2 text-[12px] font-semibold text-ink-muted hover:bg-raised hover:text-ink">
+          Who?
+        </button>
+      )}
       {children}
     </div>
   );

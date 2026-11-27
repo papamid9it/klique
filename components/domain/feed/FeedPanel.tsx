@@ -1,5 +1,6 @@
 "use client";
 
+import { FilterChip, FilterSelect } from "@/components/domain/space/ListFilters";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -35,7 +36,10 @@ export function FeedPanel({ c }: { c: CommunityDTO }) {
   // a community tag picked (?tag=<id>, from the row below or a post's tag): only its posts
   const tags = c.postTags ?? [];
   const tagId = tags.some((g) => g.id === sp.get("tag")) ? sp.get("tag") : null;
-  const feed = useInfiniteFeed<FeedPostDTO>(`feed:${c.slug}:${tagId ?? ""}`, async (page, at) => (await FeedService.list(c.slug, page, at, tagId)).data, (p) => p.id);
+  // New or Popular (most love and comments), and how far back
+  const [order, setOrder] = useState<"new" | "popular">("new");
+  const [since, setSince] = useState<"any" | "today" | "week" | "month" | "year">("any");
+  const feed = useInfiniteFeed<FeedPostDTO>(`feed:${c.slug}:${tagId ?? ""}:${order}:${since}`, async (page, at) => (await FeedService.list(c.slug, page, at, tagId, order, since)).data, (p) => p.id);
   const items = feed.items ?? [];
   const setItems = feed.setItems;
   const [opened, setOpened] = useState<FeedPostDTO | null>(null);
@@ -115,6 +119,12 @@ export function FeedPanel({ c }: { c: CommunityDTO }) {
         ) : null}
       </div>
 
+      {/* New · Popular, and how far back */}
+      <div className="flex flex-wrap items-center gap-2">
+        <FilterChip label="New" on={order === "new"} onClick={() => setOrder("new")} />
+        <FilterChip label="Popular" on={order === "popular"} onClick={() => setOrder("popular")} />
+        <FilterSelect label="From" value={since} onChange={setSince} options={[{ id: "any", label: "Any time" }, { id: "today", label: "Today" }, { id: "week", label: "This week" }, { id: "month", label: "This month" }, { id: "year", label: "This year" }]} />
+      </div>
       {/* the community's tags: All, then each; picking one shows only its posts */}
       {tags.length > 0 && (
         <div role="tablist" aria-label="Filter by tag" className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5">

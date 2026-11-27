@@ -5,6 +5,7 @@
  */
 export const NOTIFY_CATEGORIES = [
   { id: "mentions", label: "Mentions and replies in chat", hint: "Someone @mentions you, or replies to one of your messages, in a channel or your klique's chat." },
+  { id: "likes", label: "Likes and reactions", hint: "Someone loves your post, likes your board post or comment, or reacts to your comment. Several on one arrive as one notification." },
   { id: "replies", label: "Topic comments", hint: "New comments on your topics, and replies to your comments. Several on one topic arrive as one notification." },
   { id: "crews", label: "Kliques", hint: "New messages in your klique chats (one line per klique, and no buzz while you're reading), requests to join your klique, being let in or not, changes to the meetup, and a reminder an hour before you meet." },
   { id: "admin", label: "Communities you run", hint: "People asking to join your private communities (one notification per community, however many ask). Site admins: ads waiting for review." },

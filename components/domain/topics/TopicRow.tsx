@@ -1,5 +1,7 @@
 "use client";
 
+import { WhoReacted } from "@/components/domain/feed/WhoReacted";
+import { useState } from "react";
 import { SoftLink } from "@/components/ui/SoftLink";
 import { TopicService } from "@/app/services/TopicService";
 import { Icon } from "@/components/ui/Icon";
@@ -22,6 +24,7 @@ import { PostTag } from "@/components/domain/feed/PostTag";
  */
 export function TopicRow({ topic: t, onChange, onRemoved, onTag, active }: { topic: TopicDTO; onChange: (t: TopicDTO) => void; onRemoved: () => void; onTag?: (tag: string) => void; active?: boolean }) {
   const now = useNow();
+  const [who, setWho] = useState(false);
   const href = topicHref(t);
   const pic = t.media[0];
   const thumb = pic ? (pic.kind === "video" ? pic.poster : pic.url) : null;
@@ -67,7 +70,8 @@ export function TopicRow({ topic: t, onChange, onRemoved, onTag, active }: { top
           {preview ? `: ${preview}` : ""}
         </p>
         <div className="relative mt-2.5 flex flex-wrap items-center gap-x-1 gap-y-1 text-[12.5px] text-ink-muted">
-          <LikeButton upvote size="sm" liked={t.liked} count={t.likeCount} canLike={t.canLike} onToggle={async () => (await TopicService.like(t.community.slug, t.id)).data} onChange={(n) => onChange({ ...t, liked: n.liked, likeCount: n.likeCount })} />
+          <LikeButton upvote size="sm" liked={t.liked} count={t.likeCount} canLike={t.canLike} onToggle={async () => (await TopicService.like(t.community.slug, t.id)).data} onChange={(n) => onChange({ ...t, liked: n.liked, likeCount: n.likeCount })} onWho={() => setWho(true)} />
+          {who && <WhoReacted title="Upvoted by" load={() => TopicService.likers(t.community.slug, t.id)} onClose={() => setWho(false)} />}
           <span className="inline-flex h-7 items-center gap-1.5 px-2 font-semibold" aria-label={`${t.commentCount} replies`}>
             <Icon name="message" size={14} />
             <span className="font-mono tabular-nums">{compactCount(t.commentCount)}</span>

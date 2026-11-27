@@ -1,6 +1,6 @@
 import ApiClient from "@/app/ApiCore";
 import type { ReactionKind } from "@/lib/reactions";
-import type { Envelope, FeedCommentDTO, FeedPostDTO, FeedSidebarDTO, HomeFeedItem, Paginated, ReactionDTO, TopicMediaDTO } from "@/lib/types";
+import type { Envelope, FeedCommentDTO, FeedPostDTO, FeedSidebarDTO, HomeFeedItem, Paginated, ReactionDTO, TopicMediaDTO, WhoReactedDTO } from "@/lib/types";
 
 const api = new ApiClient();
 const base = (slug: string) => `/api/communities/${slug}/feed`;
@@ -8,7 +8,8 @@ const base = (slug: string) => `/api/communities/${slug}/feed`;
 /** A community's Posts section (pictures and videos, votes, nested comments) and the home feed. Same service for web, mobile and desktop. */
 export const FeedService = {
   /** `tag`: only posts with one of the community's tags (lib/postTags) */
-  list: (slug: string, page = 1, at?: number, tag?: string | null) => api.get<Envelope<Paginated<FeedPostDTO> & { at: number }>>(base(slug), { page, ...(at ? { at } : {}), ...(tag ? { tag } : {}) }),
+  list: (slug: string, page = 1, at?: number, tag?: string | null, order: "new" | "popular" = "new", since: "any" | "today" | "week" | "month" | "year" = "any") =>
+    api.get<Envelope<Paginated<FeedPostDTO> & { at: number }>>(base(slug), { page, ...(at ? { at } : {}), ...(tag ? { tag } : {}), ...(order !== "new" ? { order } : {}), ...(since !== "any" ? { since } : {}) }),
   sidebar: (slug: string) => api.get<Envelope<FeedSidebarDTO>>(`${base(slug)}/sidebar`),
   /** pictures or a video (caption optional), or text: a title (needed past lib/feedText TEXT_CARD_MAX) and a card colour */
   create: (slug: string, input: { caption: string; title?: string; textBg?: string; explicit?: boolean; spoiler?: boolean; plainBackdrop?: boolean; mediaFit?: "cover" | "black" | "backdrop"; media: TopicMediaDTO[]; clientKey?: string }) => api.post<Envelope<FeedPostDTO>>(base(slug), input),
@@ -22,6 +23,10 @@ export const FeedService = {
   setMediaFit: (slug: string, postId: string, mediaFit: "cover" | "black" | "backdrop") => api.patch<Envelope<FeedPostDTO>>(`${base(slug)}/${postId}`, { mediaFit }),
   remove: (slug: string, postId: string) => api.delete<Envelope<{ deleted: boolean }>>(`${base(slug)}/${postId}`),
   /** 1 up, -1 down, 0 take it back */
+  /** who loved it */
+  loves: (slug: string, postId: string) => api.get<Envelope<WhoReactedDTO>>(`${base(slug)}/${postId}/vote`),
+  /** who reacted to a comment, and with what */
+  reactors: (slug: string, postId: string, commentId: string) => api.get<Envelope<WhoReactedDTO>>(`${base(slug)}/${postId}/comments/${commentId}/reactions`),
   vote: (slug: string, postId: string, value: 1 | -1 | 0) => api.post<Envelope<Pick<FeedPostDTO, "upCount" | "downCount" | "myVote">>>(`${base(slug)}/${postId}/vote`, { value }),
   /** a post by its own link (/p/[id]), wherever it lives */
   byId: (id: string) => api.get<Envelope<FeedPostDTO>>(`/api/posts/${id}`),
