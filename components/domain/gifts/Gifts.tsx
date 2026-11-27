@@ -350,7 +350,7 @@ function GiftTray({ target, anchor, initial, onClose, onSent }: { target: GiftTa
   }
   const balance = data ? data.balance.toLocaleString("en-NG") : "";
   return (
-    <div ref={ref} role="dialog" aria-label={packsOpen ? "Hype packs" : "Send an award"} style={style} className="fixed z-50 flex w-[22rem] max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden rounded-card border border-line bg-surface shadow-xl">
+    <div ref={ref} role="dialog" aria-label={packsOpen ? "Hype packs" : "Send an award"} style={style} className="fixed z-[70] flex w-[22rem] max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden rounded-card border border-line bg-surface shadow-xl">
       {!packsOpen ? (
         <>
           <div className="px-3 pt-3"><TrayReceived target={target} /></div>
