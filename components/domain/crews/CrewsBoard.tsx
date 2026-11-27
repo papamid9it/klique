@@ -8,7 +8,8 @@ import { Icon } from "@/components/ui/Icon";
 import { RowSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { formatDateShort } from "@/lib/format";
-import { useApi, usePaged } from "@/lib/hooks/useApi";
+import { useApi, useDebounced, usePaged } from "@/lib/hooks/useApi";
+import { FilterChip, FilterSearch, FilterSelect } from "@/components/domain/space/ListFilters";
 import { useSteps } from "@/lib/hooks/useSteps";
 import { softNavigate } from "@/lib/nav";
 import type { CrewCardDTO, EventDTO } from "@/lib/types";
@@ -27,14 +28,22 @@ const KLIQUE_PAGE = 30;
 export function CrewsBoard({ slug, sub, eventId, community, onChanged }: { slug: string; sub: string | null; eventId: string | null; community: { slug: string; name: string; interest: string }; onChanged: () => void }) {
   const { requireAuth } = useAuth();
   const events = useApi(() => EventService.list({ community: slug, sub: sub ?? undefined, page: 1 }), [slug, sub], { key: `crew-events:${slug}:${sub ?? ""}` });
-  const kliques = usePaged<CrewCardDTO>((page) => CrewService.list({ community: slug, limit: KLIQUE_PAGE, page }).then((r) => ({ ...r, data: { ...r.data, page } })), [slug], { key: `kliques:${slug}` });
+  // like Going out → Kliques: search, All · Joined · Has spots, when, and for an event or just meeting up
+  const [show, setShow] = useState<"all" | "joined" | "open">("all");
+  const [q, setQ] = useState("");
+  const dq = useDebounced(q.trim(), 300);
+  const [when, setWhen] = useState<"any" | "today" | "weekend" | "week">("any");
+  const [forWhat, setFor] = useState<"any" | "event" | "meetup">("any");
+  const fkey = `${dq}:${when}:${show === "open"}`;
+  const kliques = usePaged<CrewCardDTO>((page) => CrewService.list({ community: slug, limit: KLIQUE_PAGE, page, q: dq || undefined, when: when === "any" ? undefined : when, open: show === "open" || undefined }).then((r) => ({ ...r, data: { ...r.data, page } })), [slug, fkey], { key: `kliques:${slug}:${fkey}`, keepPrevious: true });
   useRealtimeEvent(() => void kliques.reload(), { filter: (e) => e.type === "crew" && !e.chat, debounceMs: 400 });
   const [starting, setStarting] = useState(false);
   const upcoming = (events.data?.items ?? []).filter((e) => !e.online && !e.isPast);
   const base = `/communities/${slug}?${sub ? `g=${sub}&` : ""}view=kliques`;
   const event = eventId ? upcoming.find((e) => e.id === eventId) : undefined;
 
-  const list = kliques.items.filter((k) => !sub || k.space?.sub === sub);
+  const list = kliques.items.filter((k) => (!sub || k.space?.sub === sub) && (show !== "joined" || !!k.viewer.standing) && (forWhat === "any" || (forWhat === "event" ? !!k.event : !k.event)));
+  const filtered = !!dq || when !== "any" || forWhat !== "any" || show !== "all";
   const steps = useSteps(list.length, kliques.hasMore, kliques.loadingMore, kliques.loadMore, `${slug}:${sub ?? ""}`);
 
   if (event) {
@@ -62,6 +71,15 @@ export function CrewsBoard({ slug, sub, eventId, community, onChanged }: { slug:
         )}
       </div>
 
+      <div role="tablist" aria-label="Filter kliques" className="flex flex-wrap items-center gap-2">
+        <FilterSearch value={q} onChange={setQ} placeholder="Search these kliques" />
+        {(["all", "joined", "open"] as const).map((s) => (
+          <FilterChip key={s} label={s === "all" ? "All" : s === "joined" ? "Joined" : "Has spots"} on={show === s} onClick={() => setShow(s)} />
+        ))}
+        <FilterSelect label="When" value={when} onChange={setWhen} options={[{ id: "any", label: "Any" }, { id: "today", label: "Today" }, { id: "weekend", label: "This weekend" }, { id: "week", label: "This week" }]} />
+        <FilterSelect label="For" value={forWhat} onChange={setFor} options={[{ id: "any", label: "Any" }, { id: "event", label: "An event" }, { id: "meetup", label: "Just meeting up" }]} />
+      </div>
+
       {kliques.loading && !kliques.items.length ? (
         <RowSkeleton rows={2} />
       ) : kliques.error && !kliques.items.length ? (
@@ -85,6 +103,10 @@ export function CrewsBoard({ slug, sub, eventId, community, onChanged }: { slug:
         <div className="flex justify-center">
           <Button onClick={() => void kliques.loadMore()} loading={kliques.loadingMore}>See more</Button>
         </div>
+      ) : filtered ? (
+        <EmptyState icon="users" title={show === "joined" && !dq && when === "any" && forWhat === "any" ? "You're not in any here yet" : "Nothing matches"}>
+          Try other words or fewer filters.
+        </EmptyState>
       ) : (
         <EmptyState icon="users" title="No kliques yet" action={!sub ? <Button variant="primary" onClick={() => requireAuth() && setStarting(true)}>Start a klique</Button> : undefined}>
           Start the first one. Pick a plan, add a picture, and people here can join you.

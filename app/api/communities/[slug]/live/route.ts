@@ -7,6 +7,8 @@ type P = { slug: string };
 const startSchema = z.object({
   provider: z.enum(["twitch", "youtube"]),
   link: z.string().trim().max(300).optional(),
+  /** a broadcast Klique made on their YouTube channel (Connect YouTube, the phone's camera) */
+  broadcastId: z.string().trim().regex(/^[A-Za-z0-9_-]{6,40}$/).optional(),
   title: z.string().trim().max(120).default(""),
   eventId: z.string().trim().max(40).nullish(),
 });

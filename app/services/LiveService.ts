@@ -13,6 +13,10 @@ export const LiveService = {
   twitchDisconnect: () => api.delete<Envelope<{ connected: boolean }>>("/api/me/twitch"),
   /** where to stream: Twitch's server and your stream key (keep it secret) */
   twitchKey: () => api.get<Envelope<{ server: string; key: string; url: string }>>("/api/me/twitch/key"),
+  /** your YouTube channel, connected for streaming the app's camera to it */
+  youtube: () => api.get<Envelope<{ ready: boolean; connected: boolean; title: string | null; avatarUrl: string | null; available: boolean }>>("/api/me/youtube"),
+  youtubeConnectUrl: (back: string) => api.get<Envelope<{ url: string }>>("/api/me/youtube/connect", { back }),
+  youtubeDisconnect: () => api.delete<Envelope<{ connected: boolean }>>("/api/me/youtube"),
   start: (slug: string, input: { provider: "twitch" | "youtube"; link?: string; title: string; eventId?: string | null }) => api.post<Envelope<LiveDTO>>(`/api/communities/${slug}/live`, input),
   /** the chat beside the stream */
   chat: (slug: string) => api.get<Envelope<{ liveId: string; isMember: boolean; canModerate: boolean; channel: ChannelDTO }>>(`/api/communities/${slug}/live/chat`),

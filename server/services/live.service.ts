@@ -1,4 +1,5 @@
 import "server-only";
+import { youtubeFinish, youtubeOwnsBroadcast } from "./youtube.service";
 import { Types } from "mongoose";
 import type { LiveDTO, LiveNowDTO, LiveSummaryDTO } from "@/lib/types";
 import { badRequest, conflict, forbidden, notFound } from "../http/errors";
@@ -242,7 +243,7 @@ async function tellMembers(s: ILiveStream, community: ICommunity, host: Pick<IUs
   );
 }
 
-export async function startLive(viewer: IUser, slug: string, input: { provider: "twitch" | "youtube"; link?: string; title: string; eventId?: string | null }): Promise<LiveDTO> {
+export async function startLive(viewer: IUser, slug: string, input: { provider: "twitch" | "youtube"; link?: string; broadcastId?: string; title: string; eventId?: string | null }): Promise<LiveDTO> {
   const { space, access } = await resolveSpaceFor(viewer, slug);
   if (space.sub) throw badRequest("Go live in the community, not a group.");
   const community = space.community;
@@ -267,7 +268,12 @@ export async function startLive(viewer: IUser, slug: string, input: { provider: 
 
   const title = input.title.trim().slice(0, 120);
   let row: ILiveStream;
-  if (input.provider === "youtube") {
+  if (input.provider === "youtube" && input.broadcastId) {
+    // the phone's camera, to a broadcast Klique just made on their own channel: live as soon as it's posted
+    if (!(await youtubeOwnsBroadcast(viewer._id, input.broadcastId))) throw badRequest("That YouTube broadcast isn't yours. Try going live again.");
+    row = (await LiveStream.create({ communityId: community._id, eventId, hostId: viewer._id, provider: "youtube", channel: input.broadcastId, title, status: "live", startedAt: new Date(), ytBroadcast: true })).toObject() as ILiveStream;
+    await tellMembers(row, community, viewer);
+  } else if (input.provider === "youtube") {
     const id = youtubeId(input.link ?? "");
     if (!id) throw badRequest("Paste the link to your YouTube live stream (youtube.com/live/… or youtu.be/…).");
     row = (await LiveStream.create({ communityId: community._id, eventId, hostId: viewer._id, provider: "youtube", channel: id, title, status: "live", startedAt: new Date() })).toObject() as ILiveStream;
@@ -293,6 +299,8 @@ export async function endLive(viewer: IUser, slug: string) {
   if (sid(s.hostId) !== sid(viewer._id) && !staffOf(access, viewer)) throw forbidden("Only its host and the community's admins can end it.");
   await LiveStream.updateOne({ _id: s._id }, { $set: { status: "ended", endedAt: new Date(), endedById: viewer._id } });
   if (s.status === "live") emitLive(s.communityId, false);
+  // a broadcast Klique made on their channel: finished on YouTube too
+  if (s.provider === "youtube" && s.ytBroadcast) void youtubeFinish(s.hostId, s.channel);
   return { ended: true };
 }
 

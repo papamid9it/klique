@@ -401,7 +401,7 @@ export function ConnectionsTab() {
   return (
     <section>
       <h3 className="eyebrow">Live streaming</h3>
-      <p className="mt-1.5 text-sm text-ink-muted">Connect an account to go live in communities. YouTube: paste your live link when you go live.</p>
+      <p className="mt-1.5 text-sm text-ink-muted">Connect Twitch or YouTube to go live in communities. The Klique app streams your camera to your own channel; on a computer, stream to Twitch from OBS, or paste a YouTube live link.</p>
       <div className="mt-4 flex items-center gap-3 rounded-card border border-line bg-surface p-4">
         {t?.avatarUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -426,6 +426,7 @@ export function ConnectionsTab() {
             </BrandButton>
           ))}
       </div>
+      <YouTubeConnection />
     </section>
   );
 }
@@ -541,6 +542,63 @@ export function EventLive({ event, onChanged }: { event: EventDTO; onChanged: ()
       {!on && !event.isPast && <p className="flex items-center justify-center gap-1.5 text-center text-[13px] text-ink-muted"><Icon name="live" size={14} /> Streams live on Klique. Everyone going is told when it starts.</p>}
       {open === "watch" && live && <WatchModal c={c} live={live} onClose={() => setOpen(null)} onEnded={() => (setOpen(null), setLive(null), onChanged())} />}
       {open === "go" && <GoLiveModal c={c} live={live} eventId={event.id} eventTitle={event.title} onLive={setLive} onClose={() => setOpen(null)} onChanged={onChanged} />}
+    </div>
+  );
+}
+
+/** Settings → Connections: YouTube, for streaming the app's camera to your own channel. */
+function YouTubeConnection() {
+  const toast = useToast();
+  const confirm = useConfirm();
+  const sp = useSearchParams();
+  const yt = useApi(() => LiveService.youtube(), [], { key: "youtube-status" });
+  useEffect(() => {
+    const r = sp.get("youtube");
+    if (r === "connected") toast("YouTube connected", "success");
+    else if (r === "failed") toast("Couldn't connect YouTube. Try again.", "error");
+  }, [sp, toast]);
+  async function connect() {
+    try {
+      window.location.href = (await LiveService.youtubeConnectUrl("/settings#connections")).data.url;
+    } catch (e) {
+      toast(errorMessage(e), "error");
+    }
+  }
+  async function disconnect() {
+    if (!(await confirm({ title: "Disconnect YouTube?", body: "You won't be able to stream your camera to YouTube until you connect again. Pasting a live link still works.", confirmLabel: "Disconnect", danger: true }))) return;
+    try {
+      await LiveService.youtubeDisconnect();
+      toast("YouTube disconnected", "success");
+      void yt.reload();
+    } catch (e) {
+      toast(errorMessage(e), "error");
+    }
+  }
+  const y = yt.data;
+  return (
+    <div className="mt-3 flex items-center gap-3 rounded-card border border-line bg-surface p-4">
+      {y?.avatarUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={y.avatarUrl} alt="" className="size-10 rounded-full" />
+      ) : (
+        <span className="inline-flex size-10 items-center justify-center rounded-full text-white" style={{ background: YOUTUBE }}>
+          <YouTubeLogo size={18} />
+        </span>
+      )}
+      <span className="min-w-0 flex-1">
+        <span className="block text-[15px] font-semibold">YouTube</span>
+        <span className="block truncate text-[13px] text-ink-muted">{yt.loading && !y ? "…" : !y?.ready ? "Not available yet" : y.connected ? `Connected as ${y.title ?? "your channel"}` : "Not connected"}</span>
+      </span>
+      {y?.ready &&
+        (y.connected ? (
+          <Button size="sm" onClick={() => void disconnect()}>
+            Disconnect
+          </Button>
+        ) : (
+          <BrandButton brand="youtube" size="sm" onClick={() => void connect()}>
+            Connect
+          </BrandButton>
+        ))}
     </div>
   );
 }

@@ -68,6 +68,10 @@ export const DEFAULT_GIFT_CONFIG: GiftConfig = {
     { productId: "hype_500", hype: 500, price: 6500 },
     { productId: "hype_1000", hype: 1000, price: 13_000 },
     { productId: "hype_5000", hype: 5000, price: 65_000 },
+    { productId: "hype_10000", hype: 10_000, price: 130_000 },
+    { productId: "hype_25000", hype: 25_000, price: 325_000 },
+    // the biggest: covers the most given to a cause at once and the dearest award (both 40,000 Hype)
+    { productId: "hype_40000", hype: 40_000, price: 520_000 },
   ],
   storeFeePercent: { apple: 15, google: 15 },
   earnMinPoints: 1000,

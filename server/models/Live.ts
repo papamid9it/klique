@@ -34,6 +34,46 @@ const TwitchLinkSchema = new Schema<ITwitchLink>(
 
 export const TwitchLink: Model<ITwitchLink> = defineModel<ITwitchLink>("TwitchLink", TwitchLinkSchema);
 
+/** Someone's YouTube channel, connected for going live from the phone's camera. Their sign-in is kept sealed. */
+export interface IYouTubeLink {
+  _id: Types.ObjectId;
+  userId: Types.ObjectId;
+  channelId: string;
+  title: string;
+  avatarUrl: string | null;
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: Date;
+  createdAt: Date;
+}
+
+const YouTubeLinkSchema = new Schema<IYouTubeLink>(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true, unique: true },
+    channelId: { type: String, required: true, index: true },
+    title: { type: String, default: "" },
+    avatarUrl: { type: String, default: null },
+    accessToken: { type: String, required: true },
+    refreshToken: { type: String, required: true },
+    expiresAt: { type: Date, required: true },
+  },
+  { timestamps: { createdAt: true, updatedAt: false } },
+);
+
+export const YouTubeLink: Model<IYouTubeLink> = defineModel<IYouTubeLink>("YouTubeLink", YouTubeLinkSchema);
+
+/**
+ * How much of YouTube's daily allowance Klique has used (10,000 units a day; it resets at midnight Pacific time). One
+ * row per day (`_id`: the Pacific date). `out`: YouTube said it's used up, so going live by link is offered instead.
+ */
+export interface IYouTubeQuota {
+  _id: string;
+  used: number;
+  out: boolean;
+}
+const YouTubeQuotaSchema = new Schema<IYouTubeQuota>({ _id: { type: String }, used: { type: Number, default: 0 }, out: { type: Boolean, default: false } }, { versionKey: false });
+export const YouTubeQuota: Model<IYouTubeQuota> = defineModel<IYouTubeQuota>("YouTubeQuota", YouTubeQuotaSchema);
+
 /**
  * A live stream in a community (or one of its events): one at a time per community. On Twitch it's "waiting" until
  * Twitch says the channel went live, then "live" until it goes off; a YouTube link is live as soon as it's posted,
@@ -54,6 +94,8 @@ export interface ILiveStream {
   endedById: Types.ObjectId | null;
   /** removed from this stream by its host or a moderator: no player or live chat for them in Klique */
   kickedIds?: Types.ObjectId[];
+  /** a YouTube broadcast Klique made (Connect YouTube): finished on YouTube too when it ends here */
+  ytBroadcast?: boolean;
   /** the most people watching at once, and how many different people watched (for the "how it went" summary) */
   peakViewers?: number;
   watched?: number;
@@ -73,6 +115,7 @@ const LiveStreamSchema = new Schema<ILiveStream>(
     endedAt: { type: Date, default: null },
     endedById: { type: Schema.Types.ObjectId, ref: "User", default: null },
     kickedIds: { type: [Schema.Types.ObjectId], default: [] },
+    ytBroadcast: { type: Boolean, default: undefined },
     peakViewers: { type: Number, default: 0 },
     watched: { type: Number, default: 0 },
   },
