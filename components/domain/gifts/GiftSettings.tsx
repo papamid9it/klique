@@ -10,14 +10,15 @@ import { MoneyService } from "@/app/services/MoneyService";
 import { useToast } from "@/components/providers/ToastProvider";
 import { Button } from "@/components/ui/Button";
 import { SelectField, TextField } from "@/components/ui/Field";
+import { Modal } from "@/components/ui/Modal";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { HypeCoin } from "./HypeCoin";
 import { ErrorState } from "@/components/ui/States";
 import { cx } from "@/components/ui/cx";
 import { formatDateShort } from "@/lib/format";
-import { CRYPTO_NETWORKS, HYPE_NAIRA, earningText, hypeForNaira, payoutDayLabel, toUsd } from "@/lib/gifts";
+import { CRYPTO_NETWORKS, HYPE_NAIRA, hypeForNaira, payoutDayLabel, toUsd } from "@/lib/gifts";
 import { useApi } from "@/lib/hooks/useApi";
-import type { GiftEarningsDTO, GiftReceivedDTO, GiftWalletDTO } from "@/lib/types";
-import { GiftArt } from "./Gifts";
+import type { GiftEarningsDTO, GiftWalletDTO } from "@/lib/types";
 
 const naira = (n: number) => `₦${n.toLocaleString("en-NG")}`;
 const hype = (n: number) => `${n.toLocaleString("en-NG")} Hype`;
@@ -173,19 +174,6 @@ export function HypeTab() {
   );
 }
 
-function GiftLine({ g }: { g: GiftReceivedDTO }) {
-  return (
-    <li className="flex items-center gap-3 px-3.5 py-2.5 text-sm">
-      <GiftArt gift={{ name: g.giftName, emoji: g.emoji, artUrl: g.artUrl }} size={24} />
-      <span className="min-w-0 flex-1 truncate">
-        <span className="font-semibold">{g.from ? g.from.displayName : "Someone"}</span> sent a {g.giftName}
-      </span>
-      <span className="font-mono text-success tabular-nums">+{naira(g.earned)}</span>
-      <span className="w-24 text-right text-xs text-ink-muted">{new Date(g.holdUntil) > new Date() ? `On hold` : formatDateShort(g.createdAt)}</span>
-    </li>
-  );
-}
-
 const STATUS: Record<string, string> = { requested: "Waiting", paid: "Paid", rejected: "Turned down" };
 
 /**
@@ -208,6 +196,7 @@ export function EarningsTab() {
   const [address, setAddress] = useState("");
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [rules, setRules] = useState(false);
   const list = banks.data ?? [];
 
   async function submit(e: React.FormEvent, d: GiftEarningsDTO) {
@@ -228,115 +217,130 @@ export function EarningsTab() {
     }
   }
 
-  async function more(d: GiftEarningsDTO) {
-    const last = d.history[d.history.length - 1];
-    if (!last) return;
-    const res = await GiftService.earnings(last.createdAt);
-    setData({ ...d, history: [...d.history, ...res.data.history], hasMore: res.data.hasMore });
-  }
-
   if (loading && !data) return <Skeleton className="h-64 w-full rounded-card" />;
   if (error || !data) return <ErrorState message={error} onRetry={reload} />;
   const t = data.totals;
   // outside Nigeria everything shows in dollars (Google Play's rate) and is paid in USDT to a wallet
   const abroad = !!data.abroad;
   const money = (n: number) => (abroad && data.usdRate ? `$${toUsd(n, data.usdRate).toFixed(2)}` : naira(n));
+  const e = data.earning;
+  const tone = data.paused ? "muted" : e.eligible ? "good" : "wait";
+  const line = data.waiting
+    ? `${data.waiting.usd ? `$${data.waiting.usd.toFixed(2)}` : naira(data.waiting.amount)} is being paid on ${payoutDayLabel(data.waiting.dueOn ?? data.nextPayoutOn)}`
+    : abroad && !data.usdRate
+      ? "Dollar payouts aren't set up yet"
+      : data.canRequest
+        ? `Paid on ${payoutDayLabel(data.nextPayoutOn)} if you ask now`
+        : e.missing.country
+          ? "Payouts aren't open where you live yet"
+          : t.available > 0
+            ? `Payouts start from ${money(data.minPayout)}`
+            : "Nothing ready yet";
   return (
-    <div className="space-y-6">
-      {/* earning from awards switched off for everyone (Admin → System) */}
-      {data.paused && (
-        <p role="status" className="rounded-control border border-line bg-raised/60 px-4 py-3 text-sm">
-          Earning from awards is paused for now. Awards still show on your posts, but they don&apos;t earn, and payouts can&apos;t be asked for. What you&apos;ve earned so far is kept.
+    <div className="mx-auto max-w-xl space-y-6">
+      {/* the balance, big, in the middle (like Cash App): where you stand, what's ready, when it's paid, one button */}
+      <section className="flex flex-col items-center pt-2 text-center">
+        <button
+          type="button"
+          onClick={() => setRules(true)}
+          className={cx(
+            "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[13px] font-semibold",
+            tone === "good" ? "bg-success/15 text-success" : tone === "wait" ? "bg-[#F5B83D]/15 text-[#C98B12]" : "bg-raised text-ink-muted",
+          )}
+        >
+          <span className={cx("size-[7px] rounded-full", tone === "good" ? "bg-success" : tone === "wait" ? "bg-[#F5B83D]" : "bg-ink-muted")} />
+          {data.paused ? "Earning is paused" : e.eligible ? `You're earning · ${data.receiverPercent}% of each award` : "Not earning yet · see why"}
+        </button>
+        <p className="mt-5 text-sm text-ink-muted">Available to pay out</p>
+        <p className="mt-1 flex items-center gap-2.5">
+          <HypeCoin size={34} />
+          <span className="text-[44px] leading-none font-extrabold tracking-tight tabular-nums">{money(t.available)}</span>
         </p>
-      )}
-      {!data.paused && earningText(data.earning) && (
-        <p role="status" className="rounded-control border border-line bg-raised/60 px-4 py-3 text-sm">
-          {earningText(data.earning)}
-        </p>
-      )}
-      <p className="text-sm text-ink-muted">
-        Once you qualify, when someone sends you an award, you earn {data.receiverPercent}% of its value. It&apos;s on hold for {data.holdDays} days, then you can ask for it to be paid {abroad ? "in USDT to your crypto wallet (in dollars, at Google Play's rate)" : "to your bank"}. Requests made by the end of a month are paid on the 3rd of the next month.
-      </p>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Stat label="Earned" value={money(t.earned)} hint="All time" />
-        <Stat label="On hold" value={money(t.onHold)} hint={`${data.holdDays}-day hold`} />
-        <Stat label="Available" value={money(t.available)} hint={`From ${money(data.minPayout)}`} />
-        <Stat label="Paid so far" value={money(t.paid)} hint={t.requested ? `${money(t.requested)} waiting` : undefined} />
-      </div>
+        <p className="mt-2 text-sm text-ink-muted">{line}</p>
+        <button type="button" onClick={() => setRules(true)} className="mt-1 text-[13px] font-semibold text-ink-muted underline underline-offset-2 hover:text-ink">
+          How earning works
+        </button>
+      </section>
 
-      <section className="space-y-3 rounded-card border border-line bg-surface p-4">
-        {data.waiting ? (
-          <p className="text-sm">
-            <span className="font-semibold">{(data.waiting.usd ? `$${data.waiting.usd.toFixed(2)}` : naira(data.waiting.amount))}</span> will be paid on <span className="font-semibold">{payoutDayLabel(data.waiting.dueOn ?? data.nextPayoutOn)}</span> to {data.waiting.bank.bankName} {data.waiting.bank.accountNumber}.
-          </p>
-        ) : (
-          <p className="text-sm">
-            Next payout: <span className="font-semibold">{payoutDayLabel(data.nextPayoutOn)}</span>.{" "}
-            {abroad && !data.usdRate ? "Dollar payouts aren't set up yet." : data.canRequest ? `Ask now and ${money(t.available)} is paid then.` : data.earning.missing.country ? "Payouts aren't open where you live yet." : t.available > 0 ? `You need ${money(data.minPayout - t.available)} more. Payouts start from ${money(data.minPayout)}.` : "Nothing available yet."}
-          </p>
-        )}
-        {!asking ? (
-          <Button variant="primary" disabled={!data.canRequest} onClick={() => setAsking(true)}>
-            Request payout
-          </Button>
-        ) : (
+      {!asking ? (
+        <Button variant="primary" size="lg" className="w-full" disabled={!data.canRequest} onClick={() => setAsking(true)}>
+          Request payout
+        </Button>
+      ) : (
+        <section className="space-y-3 rounded-card border border-line bg-surface p-4">
+          <h2 className="text-[15px] font-semibold">Request {money(t.available)}</h2>
           <form onSubmit={(e) => void submit(e, data)} className="space-y-3">
-            {data.bank && (
-              <label className="flex items-center gap-2.5 text-sm">
-                <input type="checkbox" checked={useSaved} onChange={(e) => setUseSaved(e.target.checked)} className="size-4 accent-[var(--accent-text)]" />
-                <span>
-                  Pay to {data.bank.accountName} · {data.bank.bankName} {data.bank.accountNumber}
-                </span>
-              </label>
-            )}
-            {(!useSaved || !data.bank) && abroad ? (
-              <div className="grid gap-3 sm:grid-cols-2">
-                <SelectField label="Network" value={network} onChange={(e) => setNetwork(e.target.value)} error={errors.network}>
-                  {CRYPTO_NETWORKS.map((n) => (
-                    <option key={n.id} value={n.id}>
-                      {n.name}
-                    </option>
-                  ))}
-                </SelectField>
-                <TextField label="Your wallet address" value={address} onChange={(e) => setAddress(e.target.value.trim())} maxLength={64} placeholder={CRYPTO_NETWORKS.find((n) => n.id === network)?.example} error={errors.address} hint="Copy it from your wallet or exchange. Check the network matches: USDT sent on the wrong network can be lost." />
-              </div>
-            ) : (!useSaved || !data.bank) && (
-              <div className="grid gap-3 sm:grid-cols-2">
-                {list.length ? (
-                  <SelectField
-                    label="Bank"
-                    value={bankCode}
-                    onChange={(e) => {
-                      setBankCode(e.target.value);
-                      setBankName(list.find((b) => b.code === e.target.value)?.name ?? "");
-                    }}
-                    error={errors.bankCode}
-                  >
-                    <option value="">Pick your bank</option>
-                    {list.map((b) => (
-                      <option key={b.code} value={b.code}>
-                        {b.name}
+              {data.bank && (
+                <label className="flex items-center gap-2.5 text-sm">
+                  <input type="checkbox" checked={useSaved} onChange={(e) => setUseSaved(e.target.checked)} className="size-4 accent-[var(--accent-text)]" />
+                  <span>
+                    Pay to {data.bank.accountName} · {data.bank.bankName} {data.bank.accountNumber}
+                  </span>
+                </label>
+              )}
+              {(!useSaved || !data.bank) && abroad ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <SelectField label="Network" value={network} onChange={(e) => setNetwork(e.target.value)} error={errors.network}>
+                    {CRYPTO_NETWORKS.map((n) => (
+                      <option key={n.id} value={n.id}>
+                        {n.name}
                       </option>
                     ))}
                   </SelectField>
-                ) : (
-                  <TextField label="Bank" value={bankName} onChange={(e) => setBankName(e.target.value)} maxLength={80} error={errors.bankCode} />
-                )}
-                <TextField label="Account number" inputMode="numeric" maxLength={10} value={accountNumber} onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, ""))} error={errors.accountNumber} />
-                {!list.length && <TextField label="Name on the account" value={accountName} onChange={(e) => setAccountName(e.target.value)} maxLength={120} error={errors.accountName} />}
+                  <TextField label="Your wallet address" value={address} onChange={(e) => setAddress(e.target.value.trim())} maxLength={64} placeholder={CRYPTO_NETWORKS.find((n) => n.id === network)?.example} error={errors.address} hint="Copy it from your wallet or exchange. Check the network matches: USDT sent on the wrong network can be lost." />
+                </div>
+              ) : (!useSaved || !data.bank) && (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {list.length ? (
+                    <SelectField
+                      label="Bank"
+                      value={bankCode}
+                      onChange={(e) => {
+                        setBankCode(e.target.value);
+                        setBankName(list.find((b) => b.code === e.target.value)?.name ?? "");
+                      }}
+                      error={errors.bankCode}
+                    >
+                      <option value="">Pick your bank</option>
+                      {list.map((b) => (
+                        <option key={b.code} value={b.code}>
+                          {b.name}
+                        </option>
+                      ))}
+                    </SelectField>
+                  ) : (
+                    <TextField label="Bank" value={bankName} onChange={(e) => setBankName(e.target.value)} maxLength={80} error={errors.bankCode} />
+                  )}
+                  <TextField label="Account number" inputMode="numeric" maxLength={10} value={accountNumber} onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, ""))} error={errors.accountNumber} />
+                  {!list.length && <TextField label="Name on the account" value={accountName} onChange={(e) => setAccountName(e.target.value)} maxLength={120} error={errors.accountName} />}
+                </div>
+              )}
+              <div className="flex gap-2">
+                <Button variant="ghost" onClick={() => setAsking(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" variant="primary" loading={busy}>
+                  Ask for {money(t.available)}
+                </Button>
               </div>
-            )}
-            <div className="flex gap-2">
-              <Button variant="ghost" onClick={() => setAsking(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" variant="primary" loading={busy}>
-                Ask for {money(t.available)}
-              </Button>
-            </div>
-          </form>
-        )}
-      </section>
+            </form>
+        </section>
+      )}
+
+      {/* the rest in one strip */}
+      <div className="grid grid-cols-3 divide-x divide-line rounded-card border border-line">
+        {[
+          { label: "On hold", value: money(t.onHold), hint: `${data.holdDays}-day hold` },
+          { label: "Paid so far", value: money(t.paid), hint: t.requested ? `${money(t.requested)} waiting` : "\u00a0" },
+          { label: "All time", value: money(t.earned), hint: "Earned" },
+        ].map((x) => (
+          <div key={x.label} className="min-w-0 p-3">
+            <p className="text-[12px] text-ink-muted">{x.label}</p>
+            <p className="mt-0.5 truncate text-[17px] font-bold tabular-nums">{x.value}</p>
+            <p className="truncate text-[12px] text-ink-muted">{x.hint}</p>
+          </div>
+        ))}
+      </div>
 
       {data.payouts.length > 0 && (
         <section>
@@ -354,23 +358,66 @@ export function EarningsTab() {
         </section>
       )}
 
-      <section>
-        <h2 className="mb-2 text-sm font-semibold">Awards you got</h2>
-        {data.history.length === 0 ? (
-          <p className="text-sm text-ink-muted">No awards yet. When someone sends one to your post, comment or board post, it shows here.</p>
-        ) : (
-          <ul className="divide-y divide-line rounded-card border border-line bg-surface">
-            {data.history.map((g) => (
-              <GiftLine key={g.id} g={g} />
+      <EarningRules open={rules} d={data} onClose={() => setRules(false)} />
+    </div>
+  );
+}
+
+/** "How earning works": your checklist (points, time on Klique, country), then the rules in short lines. */
+function EarningRules({ open, d, onClose }: { open: boolean; d: GiftEarningsDTO; onClose: () => void }) {
+  const e = d.earning;
+  const abroad = !!d.abroad;
+  const money = (n: number) => (abroad && d.usdRate ? `$${toUsd(n, d.usdRate).toFixed(2)}` : naira(n));
+  const where = e.countries.length === 1 && e.countries[0] === "NG" ? "Nigeria" : `${e.countries.length} countries`;
+  const checks = [
+    { ok: !e.missing.points, label: `${e.minPoints.toLocaleString("en-NG")} points`, have: `You have ${e.points.toLocaleString("en-NG")}` },
+    { ok: !e.missing.months, label: `${e.minMonths} ${e.minMonths === 1 ? "month" : "months"} on Klique`, have: e.months === 0 ? "You joined less than a month ago" : `You joined ${e.months} ${e.months === 1 ? "month" : "months"} ago` },
+    { ok: !e.missing.country, label: `Living in ${where}`, have: "Your country is in Settings, Profile" },
+  ];
+  const rules = [
+    `You earn ${d.receiverPercent}% of every award people send you: on posts, comments, board posts and live streams.`,
+    "Awards you get before you qualify still show, but they never earn, even after you qualify.",
+    `What you earn is on hold for ${d.holdDays} days, then it's available.`,
+    `Ask for a payout from ${money(d.minPayout)}. One request at a time.`,
+    `Requests made by the end of a month are paid on the 3rd of the next month, ${abroad ? "in USDT to your crypto wallet (TRC-20 or BEP-20), in dollars at Google Play's rate" : "to your Nigerian bank account"}.`,
+    "Awards can't be refunded once they're sent.",
+    "Klique can pause earning for everyone. What you've earned is always kept.",
+  ];
+  return (
+    <Modal open={open} onClose={onClose} title="How earning works">
+      <div className="space-y-5">
+        {d.paused && <p className="text-sm">Earning from awards is paused for now. Awards still show, but they don&apos;t earn, and payouts can&apos;t be asked for. What you&apos;ve earned so far is kept.</p>}
+        <div>
+          <p className="mb-1 text-[13px] font-semibold text-ink-muted">To earn, you need</p>
+          <ul>
+            {checks.map((c) => (
+              <li key={c.label} className="flex items-center gap-3 py-2">
+                <span className={cx("inline-flex size-6 shrink-0 items-center justify-center rounded-full", c.ok ? "bg-success text-white" : "bg-raised text-ink-muted")}>
+                  <Icon name={c.ok ? "check" : "x"} size={13} />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-[15px] font-semibold">{c.label}</span>
+                  <span className="block text-[13px] text-ink-muted">{c.have}</span>
+                </span>
+              </li>
             ))}
           </ul>
-        )}
-        {data.hasMore && (
-          <Button size="sm" className="mt-2" onClick={() => void more(data)}>
-            Show more
-          </Button>
-        )}
-      </section>
-    </div>
+        </div>
+        <div>
+          <p className="mb-2 text-[13px] font-semibold text-ink-muted">The rules</p>
+          <ol className="space-y-2">
+            {rules.map((r, i) => (
+              <li key={i} className="flex gap-2.5 text-[14px] leading-[20px]">
+                <span className="font-bold text-ink-muted">{i + 1}.</span>
+                <span>{r}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+        <div className="flex justify-end">
+          <Button variant="primary" onClick={onClose}>Got it</Button>
+        </div>
+      </div>
+    </Modal>
   );
 }
