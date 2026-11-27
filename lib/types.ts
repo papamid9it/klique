@@ -1667,7 +1667,7 @@ export type RealtimeEvent =
   /** an award landed on something ("post:<id>", "comment:<id>"…: lib/gifts giftTargetKey): its award count refreshes */
   | { type: "gift"; key: string }
   /** someone started watching a live stream (once per stream): "Amara joined" over the video; not kept in the chat */
-  | { type: "liveJoin"; liveId: Id; name: string };
+  | { type: "liveJoin"; liveId: Id; name: string; avatarUrl?: string | null };
 
 /** A chat to type in: a community or group channel, a DM conversation, or a crew's chat. */
 export type TypingTarget = { kind: "channel"; slug: string; sub?: string | null; channel: string } | { kind: "dm"; id: Id } | { kind: "crew"; id: Id };
