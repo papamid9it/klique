@@ -18,7 +18,7 @@ import { cx } from "@/components/ui/cx";
 import { formatDateShort } from "@/lib/format";
 import { CRYPTO_NETWORKS, HYPE_NAIRA, hypeForNaira, payoutDayLabel, toUsd } from "@/lib/gifts";
 import { useApi } from "@/lib/hooks/useApi";
-import type { GiftEarningsDTO, GiftWalletDTO } from "@/lib/types";
+import type { GiftEarningsDTO, GiftWalletDTO, PayoutDTO } from "@/lib/types";
 
 const naira = (n: number) => `₦${n.toLocaleString("en-NG")}`;
 const hype = (n: number) => `${n.toLocaleString("en-NG")} Hype`;
@@ -197,6 +197,7 @@ export function EarningsTab() {
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [rules, setRules] = useState(false);
+  const [receipt, setReceipt] = useState<PayoutDTO | null>(null);
   const list = banks.data ?? [];
 
   async function submit(e: React.FormEvent, d: GiftEarningsDTO) {
@@ -238,35 +239,26 @@ export function EarningsTab() {
             : "Nothing ready yet";
   return (
     <div className="mx-auto max-w-xl space-y-6">
-      {/* the balance, big, in the middle (like Cash App): where you stand, what's ready, when it's paid, one button */}
-      <section className="flex flex-col items-center pt-2 text-center">
-        <button
-          type="button"
-          onClick={() => setRules(true)}
-          className={cx(
-            "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[13px] font-semibold",
-            tone === "good" ? "bg-success/15 text-success" : tone === "wait" ? "bg-[#F5B83D]/15 text-[#C98B12]" : "bg-raised text-ink-muted",
-          )}
-        >
-          <span className={cx("size-[7px] rounded-full", tone === "good" ? "bg-success" : tone === "wait" ? "bg-[#F5B83D]" : "bg-ink-muted")} />
-          {data.paused ? "Earning is paused" : e.eligible ? `You're earning · ${data.receiverPercent}% of each award` : "Not earning yet · see why"}
-        </button>
-        <p className="mt-5 text-sm text-ink-muted">Available to pay out</p>
-        <p className="mt-1 flex items-center gap-2.5">
-          <HypeCoin size={34} />
-          <span className="text-[44px] leading-none font-extrabold tracking-tight tabular-nums">{money(t.available)}</span>
+      {/* the balance card: what's ready, Request payout (and where it goes), the payout day */}
+      <section className="rounded-[20px] border border-[#F5B83D]/35 bg-surface p-5">
+        <p className="flex items-center gap-2 text-sm text-ink-muted">
+          <HypeCoin size={20} /> Available
         </p>
-        <p className="mt-2 text-sm text-ink-muted">{line}</p>
-        <button type="button" onClick={() => setRules(true)} className="mt-1 text-[13px] font-semibold text-ink-muted underline underline-offset-2 hover:text-ink">
-          How earning works
-        </button>
+        <p className="mt-1 text-[40px] leading-tight font-extrabold tracking-tight tabular-nums">{money(t.available)}</p>
+        <div className="mt-3 flex items-center gap-2">
+          <button type="button" disabled={!data.canRequest} onClick={() => setAsking(true)} className="h-12 flex-1 rounded-[12px] bg-[#F5B83D] text-[16px] font-bold text-[#1a1205] transition hover:brightness-105 disabled:opacity-45">
+            Request payout
+          </button>
+          {data.bank && (
+            <span className="inline-flex h-12 max-w-[170px] items-center truncate rounded-[12px] border border-line px-4 text-sm font-semibold">
+              {data.bank.bankCode.startsWith("crypto:") ? "USDT" : data.bank.bankName} ••{data.bank.accountNumber.slice(-2)}
+            </span>
+          )}
+        </div>
+        <p className="mt-2.5 text-[13px] text-ink-muted">{line}</p>
       </section>
 
-      {!asking ? (
-        <Button variant="primary" size="lg" className="w-full" disabled={!data.canRequest} onClick={() => setAsking(true)}>
-          Request payout
-        </Button>
-      ) : (
+      {asking && (
         <section className="space-y-3 rounded-card border border-line bg-surface p-4">
           <h2 className="text-[15px] font-semibold">Request {money(t.available)}</h2>
           <form onSubmit={(e) => void submit(e, data)} className="space-y-3">
@@ -327,37 +319,41 @@ export function EarningsTab() {
         </section>
       )}
 
-      {/* the rest in one strip */}
-      <div className="grid grid-cols-3 divide-x divide-line rounded-card border border-line">
-        {[
-          { label: "On hold", value: money(t.onHold), hint: `${data.holdDays}-day hold` },
-          { label: "Paid so far", value: money(t.paid), hint: t.requested ? `${money(t.requested)} waiting` : "\u00a0" },
-          { label: "All time", value: money(t.earned), hint: "Earned" },
-        ].map((x) => (
-          <div key={x.label} className="min-w-0 p-3">
-            <p className="text-[12px] text-ink-muted">{x.label}</p>
-            <p className="mt-0.5 truncate text-[17px] font-bold tabular-nums">{x.value}</p>
-            <p className="truncate text-[12px] text-ink-muted">{x.hint}</p>
-          </div>
-        ))}
-      </div>
+      {/* what awards earned you, month by month (this month in gold) */}
+      <EarnedChart d={data} money={money} />
+
+      {/* where you stand, and what's on hold: click for how earning works */}
+      <button type="button" onClick={() => setRules(true)} className="flex min-h-[52px] w-full items-center gap-3 rounded-card border border-line px-4 text-left hover:bg-raised">
+        <span className={cx("size-[9px] rounded-full", tone === "good" ? "bg-success" : tone === "wait" ? "bg-[#F5B83D]" : "bg-ink-muted")} />
+        <span className="flex-1 text-[15px] font-semibold">{data.paused ? "Earning is paused" : e.eligible ? "You're earning" : "Not earning yet"}</span>
+        {t.onHold > 0 && <span className="text-[13px] text-ink-muted">{money(t.onHold)} on hold</span>}
+        <span className="text-[13px] text-ink-muted">How it works</span>
+        <Icon name="chevron-right" size={15} className="text-ink-muted" />
+      </button>
 
       {data.payouts.length > 0 && (
         <section>
-          <h2 className="mb-2 text-sm font-semibold">Payouts</h2>
-          <ul className="divide-y divide-line rounded-card border border-line bg-surface">
+          <h2 className="mb-2 text-[12px] font-bold tracking-wide text-ink-muted">PAYOUTS</h2>
+          <ul className="divide-y divide-line overflow-hidden rounded-card border border-line bg-surface">
             {data.payouts.map((p) => (
-              <li key={p.id} className="flex flex-wrap items-center gap-3 px-3.5 py-2.5 text-sm">
-                <span className="font-mono font-semibold tabular-nums">{(p.usd ? `$${p.usd.toFixed(2)}` : naira(p.amount))}</span>
-                <span className={cx("rounded-full px-2 py-0.5 text-[12px] font-semibold", p.status === "paid" ? "bg-success/15 text-success" : p.status === "rejected" ? "bg-danger/15 text-danger" : "bg-raised text-ink-muted")}>{STATUS[p.status]}</span>
-                <span className="min-w-0 flex-1 truncate text-ink-muted">{p.status === "requested" && p.dueOn ? `Paid on ${payoutDayLabel(p.dueOn)}` : p.status === "rejected" ? p.note : p.reference ? `Ref ${p.reference}` : ""}</span>
-                <span className="text-xs text-ink-muted">{formatDateShort(p.createdAt)}</span>
+              <li key={p.id}>
+                <button type="button" onClick={() => setReceipt(p)} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-raised">
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-semibold tabular-nums">{p.usd ? `$${p.usd.toFixed(2)}` : naira(p.amount)}</span>
+                    <span className="block truncate text-[13px] text-ink-muted">
+                      {p.status === "requested" && p.dueOn ? `Paid on ${payoutDayLabel(p.dueOn)}` : formatDateShort(p.decidedAt ?? p.createdAt)} · {p.bank.bankName}
+                    </span>
+                  </span>
+                  <PayoutStatus status={p.status} />
+                  <Icon name="chevron-right" size={15} className="text-ink-muted" />
+                </button>
               </li>
             ))}
           </ul>
         </section>
       )}
 
+      {receipt && <PayoutReceipt p={receipt} onClose={() => setReceipt(null)} />}
       <EarningRules open={rules} d={data} onClose={() => setRules(false)} />
     </div>
   );
@@ -416,6 +412,81 @@ function EarningRules({ open, d, onClose }: { open: boolean; d: GiftEarningsDTO;
         </div>
         <div className="flex justify-end">
           <Button variant="primary" onClick={onClose}>Got it</Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+const monthShort = (m: string) => new Date(`${m}-01T12:00:00Z`).toLocaleDateString("en-GB", { month: "short" });
+
+function PayoutStatus({ status }: { status: PayoutDTO["status"] }) {
+  return <span className={cx("rounded-full px-2 py-0.5 text-[12px] font-semibold", status === "paid" ? "bg-success/15 text-success" : status === "rejected" ? "bg-danger/15 text-danger" : "bg-raised text-ink-muted")}>{STATUS[status]}</span>;
+}
+
+/** "Earned this month", how it compares with last month, and 12 months of bars. */
+function EarnedChart({ d, money }: { d: GiftEarningsDTO; money: (n: number) => string }) {
+  const months = d.monthly ?? [];
+  if (!months.length) return null;
+  const now = months[months.length - 1].amount;
+  const last = months[months.length - 2]?.amount ?? 0;
+  const top = Math.max(1, ...months.map((m) => m.amount));
+  const change = last > 0 ? Math.round(((now - last) / last) * 100) : null;
+  return (
+    <section className="rounded-card border border-line p-4">
+      <p className="flex items-baseline">
+        <span className="flex-1 text-[15px] font-bold">Earned this month</span>
+        <span className="text-[15px] font-bold tabular-nums">{money(now)}</span>
+      </p>
+      {change !== null ? <p className={cx("mt-0.5 text-[12px] font-semibold", change >= 0 ? "text-success" : "text-danger")}>{change >= 0 ? "▲" : "▼"} {Math.abs(change)}% on last month</p> : <p className="mt-0.5 text-[12px] text-ink-muted">The last 12 months</p>}
+      <div role="img" aria-label={`Earnings by month, last 12 months. This month ${money(now)}`} className="mt-3 flex h-[90px] items-end gap-1.5">
+        {months.map((m, i) => (
+          <span key={m.month} title={`${monthShort(m.month)}: ${money(m.amount)}`} className={cx("flex-1 rounded-t-[4px]", i === months.length - 1 ? "bg-[#F5B83D]" : "bg-line")} style={{ height: Math.max(4, Math.round((m.amount / top) * 90)) }} />
+        ))}
+      </div>
+      <p className="mt-1.5 flex justify-between text-[11px] text-ink-muted">
+        <span>{monthShort(months[0].month)}</span>
+        <span>{monthShort(months[Math.floor(months.length / 2)].month)}</span>
+        <span>{monthShort(months[months.length - 1].month)}</span>
+      </p>
+    </section>
+  );
+}
+
+/** A payout's receipt: amount, status, dates, where it went, the rate (dollars), the payment reference. Printable. */
+function PayoutReceipt({ p, onClose }: { p: PayoutDTO; onClose: () => void }) {
+  const crypto = p.bank.bankCode.startsWith("crypto:");
+  const amount = p.usd ? `$${p.usd.toFixed(2)} USDT` : naira(p.amount);
+  const date = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  const rows: [string, string][] = [
+    ["Receipt no.", `KLQ-${p.id.slice(-8).toUpperCase()}`],
+    ["Status", STATUS[p.status]],
+    ["Requested", date(p.createdAt)],
+    ...(p.status === "paid" && p.decidedAt ? [["Paid", date(p.decidedAt)] as [string, string]] : p.status === "requested" && p.dueOn ? [["To be paid", payoutDayLabel(p.dueOn)] as [string, string]] : p.status === "rejected" && p.decidedAt ? [["Turned down", date(p.decidedAt)] as [string, string]] : []),
+    [crypto ? "Network" : "Bank", p.bank.bankName],
+    [crypto ? "Wallet" : "Account", crypto ? p.bank.accountNumber : `${p.bank.accountName} · ${p.bank.accountNumber}`],
+    ...(p.usd ? [["In naira", naira(p.amount)] as [string, string], ...(p.rate ? [["Rate", `₦${Math.round(p.rate).toLocaleString("en-NG")} = $1`] as [string, string]] : [])] : []),
+    ...(p.reference ? [[crypto ? "Transaction" : "Payment reference", p.reference] as [string, string]] : []),
+    ...(p.status === "rejected" && p.note ? [["Why", p.note] as [string, string]] : []),
+  ];
+  return (
+    <Modal open onClose={onClose} title="Payout receipt" size="sm">
+      <div className="space-y-4">
+        <div className="text-center">
+          <p className="text-[32px] font-extrabold tracking-tight tabular-nums">{amount}</p>
+          <div className="mt-1"><PayoutStatus status={p.status} /></div>
+        </div>
+        <dl className="divide-y divide-line rounded-card border border-line text-sm">
+          {rows.map(([k, v]) => (
+            <div key={k} className="flex gap-3 px-4 py-2.5">
+              <dt className="w-32 shrink-0 text-ink-muted">{k}</dt>
+              <dd className="min-w-0 flex-1 text-right font-semibold break-all select-all">{v}</dd>
+            </div>
+          ))}
+        </dl>
+        <div className="flex justify-end gap-2">
+          <Button onClick={() => window.print()}>Print</Button>
+          <Button variant="primary" onClick={onClose}>Done</Button>
         </div>
       </div>
     </Modal>

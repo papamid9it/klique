@@ -422,7 +422,7 @@ function GiftTray({ target, anchor, initial, onClose, onSent }: { target: GiftTa
                     <button key={p.naira} type="button" role="radio" aria-checked={on} onClick={() => setPackNaira(p.naira)} className={cx("flex flex-col items-center justify-center gap-0.5 rounded-control border bg-raised/60 px-1 py-2.5 transition", on ? "border-2 border-ink" : "border-line hover:bg-raised")}>
                       <span className="flex items-center gap-1 font-mono text-[14px] font-semibold tabular-nums"><HypeCoin size={14} />{p.hype.toLocaleString("en-NG")}</span>
                       <span className="text-[12px] text-ink-muted">₦{p.naira.toLocaleString("en-NG")}</span>
-                      {covers?.naira === p.naira && <span className="text-[11px] font-semibold">Covers it</span>}
+
                     </button>
                   );
                 })}
