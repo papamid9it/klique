@@ -2338,6 +2338,8 @@ export interface GiftEarningsDTO {
   holdDays: number;
   minPayout: number;
   totals: { earned: number; onHold: number; available: number; requested: number; paid: number };
+  /** what awards earned them each of the last 12 months, oldest first ("2026-11"), for the chart */
+  monthly?: { month: string; amount: number }[];
   /** when the waiting request (or the next one) is paid: the 3rd of the month after it's made */
   nextPayoutOn: ISODate;
   waiting: PayoutDTO | null;

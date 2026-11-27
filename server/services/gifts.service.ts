@@ -650,6 +650,18 @@ export async function getEarnings(viewer: IUser, before?: string): Promise<GiftE
       },
     },
   ]);
+  // the last 12 months, month by month (Lagos time), for the chart: what awards earned them each month
+  const yearAgo = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 11, 1));
+  const byMonth = await GiftSend.aggregate<{ _id: string; amount: number }>([
+    { $match: { toId: viewer._id, status: "sent", receiverAmount: { $gt: 0 }, createdAt: { $gte: yearAgo } } },
+    { $group: { _id: { $dateToString: { format: "%Y-%m", date: "$createdAt", timezone: "Africa/Lagos" } }, amount: { $sum: "$receiverAmount" } } },
+  ]);
+  const got = new Map(byMonth.map((m) => [m._id, m.amount]));
+  const monthly = Array.from({ length: 12 }, (_, i) => {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 11 + i, 1));
+    const month = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+    return { month, amount: got.get(month) ?? 0 };
+  });
   const payouts = await payoutsOf(viewer._id);
   const requested = payouts.filter((p) => p.status === "requested").reduce((t, p) => t + p.amount, 0);
   const paid = payouts.filter((p) => p.status === "paid").reduce((t, p) => t + p.amount, 0);
@@ -669,6 +681,7 @@ export async function getEarnings(viewer: IUser, before?: string): Promise<GiftE
     holdDays: config.holdDays,
     minPayout: config.minPayout,
     totals: { earned: agg?.earned ?? 0, onHold: agg?.onHold ?? 0, available, requested, paid },
+    monthly,
     nextPayoutOn: (waiting?.dueOn ?? payoutDayFor(now).toISOString()),
     waiting,
     payouts,

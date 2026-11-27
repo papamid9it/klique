@@ -58,7 +58,7 @@ function PayoutRow({ p, onDone }: { p: PayoutDTO; onDone: (p: PayoutDTO) => void
                 {p.community?.name}
               </Link>
             )}{" "}
-            · asked by @{p.requestedBy?.handle} · {day(p.createdAt)}
+            · asked by @{p.requestedBy?.handle} · {day(p.createdAt)} · <span className="font-mono">receipt KLQ-{p.id.slice(-8).toUpperCase()}</span>
           </p>
         </div>
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 rounded-control border border-line bg-raised/40 px-3 py-2 text-[13px]">
