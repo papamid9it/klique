@@ -1270,6 +1270,8 @@ export interface ChannelMessageDTO {
   pollId?: Id | null;
   /** posted by a channel webhook (a bot): `author` is its name and picture, with no profile behind it */
   bot?: boolean;
+  /** a line from Klique itself ("Tobi was removed from the live"): drawn small and grey, no name or picture, nothing to tap */
+  notice?: boolean;
   /** cards a bot or webhook posted (the message may have no text then) */
   /** link previews, fetched by the server when it was sent (drawn at their size, no fetching or jumping) */
   embeds?: LinkPreviewDTO[];

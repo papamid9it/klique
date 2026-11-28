@@ -658,6 +658,7 @@ async function toMessages(rows: IChannelMessage[], viewer: IUser | null, access:
         massMention: r.deletedAt ? null : (r.massMention ?? null),
         pollId: r.deletedAt || !r.pollId ? null : sid(r.pollId),
         ...(bot ? { bot: true } : {}),
+        ...(r.notice ? { notice: true, canEdit: false } : {}),
         ...(r.cards?.length && !r.deletedAt ? { cards: r.cards } : {}),
         // link previews: saved with the message (drawn at their size), or on their way
         ...(r.embeds && !r.deletedAt ? { embeds: r.embeds } : {}),

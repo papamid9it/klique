@@ -454,12 +454,15 @@ export async function moderateLive(viewer: IUser, slug: string, input: { userId:
   // their messages in this chat go too (like a ban in Twitch's chat)
   const { Channel, ChannelMessage } = await import("../models/Channel");
   const chat = await Channel.findOne({ topicId: s._id }).select("_id communityId").lean<{ _id: Types.ObjectId; communityId: Types.ObjectId }>();
+  const who = await User.findById(target).select("displayName").lean<{ displayName: string }>();
   if (chat) {
     await ChannelMessage.updateMany({ channelId: chat._id, authorId: target, deletedAt: null }, { $set: { deletedAt: new Date(), deletedById: viewer._id, body: "", gone: true } });
+    // everyone watching sees it happen, like Twitch's "has been banned" line
+    const line = await ChannelMessage.create({ channelId: chat._id, communityId: chat.communityId, authorId: viewer._id, body: `${who?.displayName ?? "Someone"} was removed from the live`, images: [], mentions: [], notice: true });
+    await Channel.updateOne({ _id: chat._id }, { lastMessageId: line._id, lastMessageAt: line.createdAt });
     const { emitChannel } = await import("./realtime");
     emitChannel(chat.communityId, chat._id);
   }
-  const who = await User.findById(target).select("displayName").lean<{ displayName: string }>();
   const { ModAction } = await import("../models/ModAction");
   await ModAction.create({ communityId: space.community._id, actorId: viewer._id, action: "live.remove", targetType: "member", targetId: target, label: `${who?.displayName ?? "Someone"} from the live stream`, authorId: target }).catch(() => {});
   return { userId: input.userId, removed: true };

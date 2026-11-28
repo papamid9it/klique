@@ -160,6 +160,8 @@ export interface IChannelMessage {
   webhook?: { id: Types.ObjectId; name: string; avatarUrl: string | null } | null;
   /** cards a bot or webhook posted (lib/cards; checked by server/services/cards) */
   cards?: MessageCard[] | null;
+  /** a line from Klique itself (someone removed from a live): shown small and grey */
+  notice?: boolean;
   embeds?: LinkPreviewDTO[];
   embedsPending?: boolean;
   createdAt: Date;
@@ -187,6 +189,7 @@ const MessageSchema = new Schema<IChannelMessage>(
     thread: { type: new Schema({ channelId: Schema.Types.ObjectId, slug: String, name: String, count: { type: Number, default: 0 }, lastAt: { type: Date, default: null }, lastBy: { type: String, default: null } }, { _id: false }), default: null },
     webhook: { type: new Schema({ id: { type: Schema.Types.ObjectId }, name: { type: String, maxlength: 80 }, avatarUrl: { type: String, default: null } }, { _id: false }), default: null },
     cards: { type: [Schema.Types.Mixed], default: undefined },
+    notice: { type: Boolean, default: undefined },
     // link previews fetched when it was sent (LinkPreviewDTO); pending: still being fetched
     embeds: { type: [Schema.Types.Mixed], default: undefined },
     embedsPending: { type: Boolean, default: undefined },

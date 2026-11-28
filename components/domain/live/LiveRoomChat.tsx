@@ -163,6 +163,8 @@ export function LiveRoomChat({ slug, channel, isMember, communityName, canModera
         <ul className="space-y-0.5">
           {msgs.map((m) => {
             const gift = !!m.cards?.length && m.cards[0].color === "#F5B83D";
+            // "Tobi was removed from the live": a quiet grey line
+            if (m.notice) return <li key={m.id} className="px-1.5 py-1 text-[13px] italic text-ink-muted">{m.body}</li>;
             return (
               <li key={m.id} className={cx("group relative flex items-start gap-2 rounded-[8px] px-1.5 py-1 text-[14px] leading-[20px]", gift ? "my-1 border border-[#F5B83D]/50 bg-[#F5B83D]/10" : "hover:bg-raised/60", m.pending && "opacity-60")}>
                 {gift && m.cards?.[0].thumbnail ? (
