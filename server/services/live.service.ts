@@ -224,8 +224,10 @@ export async function leftStream(viewer: IUser | null, input: { liveId: string; 
   const key = viewer ? sid(viewer._id) : input.key && /^[A-Za-z0-9_-]{8,64}$/.test(input.key) ? `anon:${input.key}` : null;
   if (!key || !Types.ObjectId.isValid(input.liveId)) return { left: true };
   const { LiveViewer } = await import("../models/Live");
-  // the row stays (it remembers when they started, for counting as coming); it just stops counting as watching
-  await LiveViewer.updateOne({ liveId: new Types.ObjectId(input.liveId), key }, { $set: { seenAt: new Date(0) } });
+  // it just stops counting as watching: seen "a moment too long ago", not at 1970, which the 2-minute clean-up would
+  // delete at once (coming back soon after, e.g. from another app, would then count them as a new viewer and start
+  // their time for a streamed event again)
+  await LiveViewer.updateOne({ liveId: new Types.ObjectId(input.liveId), key }, { $set: { seenAt: new Date(Date.now() - WATCHING_MS - 1000) } });
   viewerCounts.delete(input.liveId);
   return { left: true };
 }
@@ -341,7 +343,7 @@ async function checkGuests(s: ILiveStream): Promise<ILiveStream> {
   for (const g of quiet) await LiveStream.updateOne({ _id: s._id, "guests.userId": g.userId }, { $set: { "guests.$.status": "waiting", "guests.$.waitingSince": new Date() } });
   if (quiet.length) {
     s = (await LiveStream.findById(s._id).lean<ILiveStream>()) ?? s;
-    emitLive(s.communityId, true);
+    emitTogether(s.communityId);
   }
   const { TwitchLink } = await import("../models/Live");
   for (const g of s.guests ?? []) {
@@ -358,7 +360,7 @@ async function checkGuests(s: ILiveStream): Promise<ILiveStream> {
     else if (!on && g.status === "live") await LiveStream.updateOne({ _id: s._id, "guests.userId": g.userId }, { $set: { "guests.$.status": "waiting", "guests.$.waitingSince": new Date() } });
     else continue;
     s = (await LiveStream.findById(s._id).lean<ILiveStream>()) ?? s;
-    emitLive(s.communityId, true);
+    emitTogether(s.communityId);
   }
   return s;
 }
@@ -397,6 +399,8 @@ export function youtubeId(link: string): string | null {
   }
 }
 
+/** live together: who's in it changed (not "went live": lists and rings don't need to reload for this) */
+export const emitTogether = (communityId: Types.ObjectId) => publish([rtChannel.community(communityId)], { type: "liveTogether", communityId: sid(communityId) });
 export const emitLive = (communityId: Types.ObjectId, on: boolean) => publish([rtChannel.community(communityId)], { type: "live", communityId: sid(communityId), on });
 
 /** Tells the community's members someone went live (bundled, so a busy community isn't a stream of buzzes). */
@@ -487,7 +491,7 @@ export async function onTwitchOnline(twitchId: string) {
   const asGuest = await LiveStream.findOne({ status: { $in: ["waiting", "live"] }, guests: { $elemMatch: { userId: link.userId, provider: "twitch", status: "waiting" } } }).lean<ILiveStream>();
   if (asGuest) {
     await guestOn(asGuest, link.userId);
-    emitLive(asGuest.communityId, true);
+    emitTogether(asGuest.communityId);
   }
   const s = await LiveStream.findOneAndUpdate({ hostId: link.userId, provider: "twitch", status: "waiting" }, { $set: { status: "live", startedAt: new Date() } }, { returnDocument: "after" }).lean<ILiveStream>();
   if (!s) return;
@@ -505,7 +509,7 @@ export async function onTwitchOffline(twitchId: string) {
   const asGuest = await LiveStream.find({ status: { $in: ["waiting", "live"] }, guests: { $elemMatch: { userId: link.userId, provider: "twitch", status: "live" } } }).select("_id communityId").lean<{ _id: Types.ObjectId; communityId: Types.ObjectId }[]>();
   for (const g of asGuest) {
     await LiveStream.updateOne({ _id: g._id, "guests.userId": link.userId }, { $set: { "guests.$.status": "waiting", "guests.$.waitingSince": new Date() } });
-    emitLive(g.communityId, true);
+    emitTogether(g.communityId);
   }
   const ending = await LiveStream.find({ hostId: link.userId, provider: "twitch", status: "live" }).lean<ILiveStream[]>();
   if (!ending.length) return;

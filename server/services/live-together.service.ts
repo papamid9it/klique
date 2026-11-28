@@ -8,8 +8,9 @@ import { Membership } from "../models/Membership";
 import { User, type IUser } from "../models/User";
 import { escapeRegex, sid } from "./helpers";
 import { loadBriefs } from "../serializers";
-import { emitLive, guestOn, guestsOf, INVITE_MS, liveNotice, MAX_GUESTS, mayModerate, staffOf, toLive, youtubeId } from "./live.service";
+import { emitTogether, guestOn, guestsOf, INVITE_MS, liveNotice, MAX_GUESTS, mayModerate, staffOf, toLive, youtubeId } from "./live.service";
 import { notify } from "./push.service";
+import { hiddenUserIds } from "./blocks";
 import { resolveSpaceFor } from "./spaces.service";
 import { ensureLiveSubscriptions, twitchIsLive, twitchLinkOf } from "./twitch.service";
 import { youtubeFinish, youtubeOwnsBroadcast } from "./youtube.service";
@@ -37,7 +38,7 @@ export async function liveTogether(viewer: IUser, slug: string, input: TogetherI
   const guests = guestsOf(s);
   const mine = guests.find((g) => sid(g.userId) === me);
   const done = async () => {
-    emitLive(community._id, true);
+    emitTogether(community._id);
     const now = (await LiveStream.findById(s._id).lean<ILiveStream>()) ?? s;
     return toLive(now, viewer, staffOf(access, viewer));
   };
@@ -55,6 +56,8 @@ export async function liveTogether(viewer: IUser, slug: string, input: TogetherI
     if ((s.kickedIds ?? []).some((k) => sid(k) === sid(target))) throw forbidden("They were removed from this live.");
     if (guests.some((g) => sid(g.userId) === sid(target))) throw conflict("They're in it already (or asked).");
     if (guests.length >= MAX_GUESTS) throw conflict(`Up to ${MAX_GUESTS} people can go live with you.`);
+    // someone you blocked, or who blocked you: no invite (and no notification from you)
+    if ((await hiddenUserIds(viewer._id)).some((h) => sid(h) === sid(target))) throw forbidden("You can't invite them.");
     const [member, tw, yt, busy] = await Promise.all([
       Membership.exists({ userId: target, communityId: community._id, subcommunityId: null, status: "active" }),
       TwitchLink.exists({ userId: target }),
@@ -65,6 +68,8 @@ export async function liveTogether(viewer: IUser, slug: string, input: TogetherI
     if (!tw && !yt) throw badRequest("They need to connect Twitch or YouTube first.");
     if (busy) throw conflict("They're live somewhere else right now.");
     rateLimit(`live-invite:${me}`, 30, 60 * 60 * 1000);
+    // asking the same person again and again (cancel, ask, cancel…) isn't a stream of notifications for them
+    rateLimit(`live-invite:${me}:${sid(target)}`, 3, 60 * 60 * 1000);
     // an old invite that lapsed goes first
     await LiveStream.updateOne({ _id: s._id }, { $pull: { guests: { userId: target } } });
     await LiveStream.updateOne({ _id: s._id }, { $push: { guests: { userId: target, status: "invited", invitedAt: new Date() } } });
@@ -164,11 +169,15 @@ export async function togetherCandidates(viewer: IUser, slug: string, q: string)
   const { space } = await resolveSpaceFor(viewer, slug);
   const s = await LiveStream.findOne({ communityId: space.community._id, status: ACTIVE }).lean<ILiveStream>();
   if (!s || sid(s.hostId) !== sid(viewer._id)) throw forbidden("Only the person streaming can ask people to join.");
-  const skip = new Set([sid(s.hostId), ...guestsOf(s).map((g) => sid(g.userId)), ...(s.kickedIds ?? []).map(sid)]);
+  rateLimit(`together-search:${sid(viewer._id)}`, 120, 60_000);
+  // not people you blocked or who blocked you
+  const hidden = await hiddenUserIds(viewer._id);
+  const skip = new Set([sid(s.hostId), ...guestsOf(s).map((g) => sid(g.userId)), ...(s.kickedIds ?? []).map(sid), ...hidden.map(sid)]);
   const text = q.trim().replace(/^@/, "").slice(0, 40);
   let ids: Types.ObjectId[];
   if (text) {
-    const re = new RegExp(escapeRegex(text), "i");
+    // the start of their name or @handle, like @mentions (quick on a big Klique)
+    const re = new RegExp(`^${escapeRegex(text)}`, "i");
     const users = await User.find({ $or: [{ displayName: re }, { handle: re }] }).select("_id").limit(300).lean<{ _id: Types.ObjectId }[]>();
     const ms = await Membership.find({ communityId: space.community._id, subcommunityId: null, status: "active", userId: { $in: users.map((u) => u._id) } }).select("userId").limit(60).lean<{ userId: Types.ObjectId }[]>();
     ids = ms.map((m) => m.userId);

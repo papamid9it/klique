@@ -43,14 +43,16 @@ export function LiveRoomChat({ slug, channel, isMember, communityName, canModera
   const lastId = useRef<string | null>(null);
   const busy = useRef(false);
 
-  const add = useCallback((items: ChannelMessageDTO[]) => {
+  // mine: your own message, shown at once without moving "new since" (others' messages just before it still come in)
+  const add = useCallback((items: ChannelMessageDTO[], mine = false) => {
     if (!items.length) return;
     setMsgs((cur) => {
       const seen = new Set(cur.map((m) => m.id));
-      const next = [...cur.filter((m) => !m.pending || !items.some((x) => x.author.id === m.author.id && x.body === m.body)), ...items.filter((m) => !seen.has(m.id))].slice(-KEEP);
+      // in time order (your own, shown at once, can come before others' sent just ahead of it)
+      const next = [...cur.filter((m) => !m.pending || !items.some((x) => x.author.id === m.author.id && x.body === m.body)), ...items.filter((m) => !seen.has(m.id))].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt)).slice(-KEEP);
       return next;
     });
-    lastId.current = items[items.length - 1].id;
+    if (!mine) lastId.current = items[items.length - 1].id;
     if (!pinned.current) setBehind((n) => n + items.length);
   }, []);
 
@@ -78,6 +80,11 @@ export function LiveRoomChat({ slug, channel, isMember, communityName, canModera
     busy.current = true;
     try {
       const r = await ChannelService.messages({ slug }, channel.slug, lastId.current ? { after: lastId.current } : {});
+      // deleted since (someone removed from the live, a moderator's delete): off the screen for everyone
+      if (r.data.removed?.length) {
+        const gone = new Set(r.data.removed);
+        setMsgs((cur) => (cur.some((m) => gone.has(m.id)) ? cur.filter((m) => !gone.has(m.id)) : cur));
+      }
       add(r.data.items.filter((m) => !m.deleted));
     } catch {
       /* next time */
@@ -121,7 +128,7 @@ export function LiveRoomChat({ slug, channel, isMember, communityName, canModera
     pinned.current = true;
     try {
       const r = await ChannelService.send(space, channel.slug, { body });
-      add([r.data]);
+      add([r.data], true);
     } catch (e) {
       setText(body);
       toast(errorMessage(e), "error");

@@ -687,7 +687,12 @@ export async function listMessages(viewer: IUser | null, space: Space, access: S
       .sort({ _id: 1 })
       .limit(NEW_LIMIT + 1)
       .lean<IChannelMessage[]>();
-    return { items: await toMessages(rows.slice(0, NEW_LIMIT), viewer, access, space), hasMore: rows.length > NEW_LIMIT };
+    // a live chat: what was deleted lately too (only the last half hour of messages is looked at)
+    const live = !!channel.topicId && channel.slug.startsWith("live-");
+    const removed = live
+      ? await ChannelMessage.find({ channelId: channel._id, _id: { $gte: Types.ObjectId.createFromTime(Math.floor((Date.now() - 30 * 60_000) / 1000)) }, deletedAt: { $gte: new Date(Date.now() - 3 * 60_000) } }).select("_id").limit(200).lean<{ _id: Types.ObjectId }[]>()
+      : [];
+    return { items: await toMessages(rows.slice(0, NEW_LIMIT), viewer, access, space), hasMore: rows.length > NEW_LIMIT, ...(removed.length ? { removed: removed.map((r) => sid(r._id)) } : {}) };
   }
 
   const filter = q.before ? { ...base, _id: { $lt: new Types.ObjectId(q.before) } } : base;

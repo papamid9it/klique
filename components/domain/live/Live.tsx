@@ -85,7 +85,7 @@ function WatchModal({ c, live: first, onClose, onEnded }: { c: Pick<CommunityDTO
         },
         () => {},
       ),
-    { filter: (e) => e.type === "live", debounceMs: 500 },
+    { filter: (e) => e.type === "live" || e.type === "liveTogether", debounceMs: 500 },
   );
   const people = togetherPeople(live);
   const together = people.length > 1;

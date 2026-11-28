@@ -1313,6 +1313,11 @@ export interface PollDTO {
 export interface ChatPage {
   items: ChannelMessageDTO[];
   hasMore: boolean;
+  /**
+   * A live stream's chat, asked for what's new (`after`): messages deleted in the last few minutes (someone removed from
+   * the live, a moderator's delete), to take off the screen. Live chats only add new lines otherwise.
+   */
+  removed?: Id[];
 }
 
 export interface StaffDTO {
@@ -1672,6 +1677,8 @@ export type RealtimeEvent =
   | { type: "removed"; what: "post" | "topic" | "event" | "klique"; id: Id }
   /** someone went live in a community (`on`), or its stream ended: open pages show or drop LIVE at once */
   | { type: "live"; communityId: Id; on: boolean }
+  /** live together: who's in a community's live changed (asked, joined, left, the big box): only its screens reload */
+  | { type: "liveTogether"; communityId: Id }
   /** a post's love, comments or comment reactions changed: open copies of it fetch it again */
   | { type: "post"; postId: Id }
   /** an award landed on something ("post:<id>", "comment:<id>"…: lib/gifts giftTargetKey): its award count refreshes */
