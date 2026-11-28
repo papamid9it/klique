@@ -58,8 +58,14 @@ async function stale(s: ILiveStream): Promise<boolean> {
 async function toLive(s: ILiveStream, viewer: IUser | null, staff: boolean): Promise<LiveDTO> {
   const [briefs, viewers] = await Promise.all([loadBriefs([s.hostId]), viewersOf(s._id)]);
   const host = briefs.get(sid(s.hostId)) ?? GHOST;
-  return { id: sid(s._id), provider: s.provider, channel: s.channel, title: s.title, status: s.status === "live" ? "live" : "waiting", host, startedAt: s.startedAt?.toISOString() ?? null, eventId: s.eventId ? sid(s.eventId) : null, canEnd: staff || (!!viewer && sid(viewer._id) === sid(s.hostId)), viewers, ...(s.ytBroadcast ? { phone: true } : {}) };
+  return { id: sid(s._id), provider: s.provider, channel: s.channel, title: s.title, status: s.status === "live" ? "live" : "waiting", host, startedAt: s.startedAt?.toISOString() ?? null, eventId: s.eventId ? sid(s.eventId) : null, canEnd: staff || (!!viewer && sid(viewer._id) === sid(s.hostId)), viewers, ...(fromPhone(s) ? { phone: true } : {}) };
 }
+
+/**
+ * Streamed upright from the Klique app's camera: a YouTube broadcast Klique made, or any Twitch stream (Twitch is only
+ * started from the app's camera now). Full screen fills the card with it, with no black strips above and below.
+ */
+const fromPhone = (s: Pick<ILiveStream, "provider" | "ytBroadcast">) => !!s.ytBroadcast || s.provider === "twitch";
 
 /** a player that hasn't said "still watching" for this long no longer counts */
 const WATCHING_MS = 45_000;
@@ -379,7 +385,7 @@ export async function liveNow(viewer: IUser): Promise<LiveNowDTO[]> {
   return fresh.flatMap((s) => {
     const c = byId.get(sid(s.communityId));
     if (!c || c.adult) return [];
-    return [{ community: { id: sid(c._id), slug: c.slug, name: c.name, coverImage: c.coverImage ?? null }, live: { id: sid(s._id), provider: s.provider, channel: s.channel, title: s.title, status: "live" as const, host: briefs.get(sid(s.hostId)) ?? GHOST, startedAt: s.startedAt?.toISOString() ?? null, eventId: s.eventId ? sid(s.eventId) : null, canEnd: sid(s.hostId) === sid(viewer._id), viewers: counts.get(sid(s._id)) ?? 0, ...(s.ytBroadcast ? { phone: true } : {}) } }];
+    return [{ community: { id: sid(c._id), slug: c.slug, name: c.name, coverImage: c.coverImage ?? null }, live: { id: sid(s._id), provider: s.provider, channel: s.channel, title: s.title, status: "live" as const, host: briefs.get(sid(s.hostId)) ?? GHOST, startedAt: s.startedAt?.toISOString() ?? null, eventId: s.eventId ? sid(s.eventId) : null, canEnd: sid(s.hostId) === sid(viewer._id), viewers: counts.get(sid(s._id)) ?? 0, ...(fromPhone(s) ? { phone: true } : {}) } }];
   });
 }
 
