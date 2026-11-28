@@ -172,7 +172,7 @@ function CommunityWorkspace({ slug }: { slug: string }) {
   const communityId = c?.id;
   useRealtimeEvent(() => void reloadChannels(), { filter: (e) => e.type === "channel" && e.communityId === communityId, debounceMs: 1200 });
   // someone went live here (or stopped): LIVE shows or goes without a refresh
-  useRealtimeEvent(() => void reload(), { filter: (e) => (e.type === "live" || e.type === "liveTogether") && e.communityId === communityId, debounceMs: 500 });
+  useRealtimeEvent(() => void reload(), { filter: (e) => e.type === "live" && e.communityId === communityId, debounceMs: 500 });
   // you were let in (or added to a group): the community opens up without a refresh
   useRealtimeEvent(
     () => {

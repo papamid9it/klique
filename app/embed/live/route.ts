@@ -17,7 +17,7 @@ export function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams;
   const p = q.get("p");
   const c = q.get("c") ?? "";
-  // m=1: starts with no sound (live together: only the box you're listening to has sound)
+  // m=1: starts with no sound
   const muted = q.get("m") === "1";
   const host = req.nextUrl.hostname;
   let src: string | null = null;

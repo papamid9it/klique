@@ -1677,8 +1677,6 @@ export type RealtimeEvent =
   | { type: "removed"; what: "post" | "topic" | "event" | "klique"; id: Id }
   /** someone went live in a community (`on`), or its stream ended: open pages show or drop LIVE at once */
   | { type: "live"; communityId: Id; on: boolean }
-  /** live together: who's in a community's live changed (asked, joined, left, the big box): only its screens reload */
-  | { type: "liveTogether"; communityId: Id }
   /** a post's love, comments or comment reactions changed: open copies of it fetch it again */
   | { type: "post"; postId: Id }
   /** an award landed on something ("post:<id>", "comment:<id>"…: lib/gifts giftTargetKey): its award count refreshes */
@@ -2441,27 +2439,8 @@ export interface LiveDTO {
   viewers?: number;
   /** streamed from the Klique app's camera (upright): full screen fills the card with it; anything else shows full width */
   phone?: boolean;
-  /**
-   * Live together: the people streaming with the host (up to 3), each a stream of their own shown beside the host's.
-   * Everyone sees the ones live; the host also sees who's invited or still starting.
-   */
-  guests?: LiveGuestDTO[];
-  /** who's in the big box (the host or a guest's user id); none: the host */
-  mainId?: Id | null;
-  /** the viewer was asked to go live with the host: until when they can say yes */
-  invitedMe?: ISODate | null;
-  /** the viewer is one of the guests (their own stream is in it) */
-  guestMe?: boolean;
-}
-
-export interface LiveGuestDTO {
-  user: UserBrief;
-  status: "invited" | "waiting" | "live";
-  provider: "twitch" | "youtube" | null;
-  channel: string | null;
-  /** invited: until when they can say yes */
-  until?: ISODate | null;
-  phone?: boolean;
+  /** the person streaming, on a live pass: when it runs out (the stream ends then); only they and staff see it */
+  passUntil?: ISODate | null;
 }
 
 /** "How it went", for the person streaming once it ends. */

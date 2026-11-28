@@ -1,5 +1,5 @@
 import ApiClient from "@/app/ApiCore";
-import type { ChannelDTO, CommunityDTO, Envelope, LiveDTO, LiveNowDTO, LiveSummaryDTO, TwitchStatusDTO, UserBrief } from "@/lib/types";
+import type { ChannelDTO, CommunityDTO, Envelope, LiveDTO, LiveNowDTO, LiveSummaryDTO, TwitchStatusDTO } from "@/lib/types";
 
 const api = new ApiClient();
 
@@ -28,14 +28,7 @@ export const LiveService = {
   left: (slug: string, liveId: string, key?: string) => api.delete<Envelope<{ left: boolean }>>(`/api/communities/${slug}/live/watching`, { liveId, ...(key ? { key } : {}) }),
   summary: (slug: string, liveId: string) => api.get<Envelope<LiveSummaryDTO>>(`/api/communities/${slug}/live/summary`, { id: liveId }),
   end: (slug: string) => api.delete<Envelope<{ ended: boolean }>>(`/api/communities/${slug}/live`),
-  /** live together: invite (or cancel, remove, put in the big box); say yes or no; join with your stream; leave */
-  together: (
-    slug: string,
-    input: { action: "invite" | "cancel" | "remove" | "main"; userId: string } | { action: "accept" | "decline" | "leave" } | { action: "join"; provider: "twitch" | "youtube"; broadcastId?: string; link?: string },
-  ) => api.post<Envelope<LiveDTO>>(`/api/communities/${slug}/live/together`, input),
-  /** who the host can ask to join */
-  togetherPeople: (slug: string, q?: string) => api.get<Envelope<{ user: UserBrief; can: boolean; note: string }[]>>(`/api/communities/${slug}/live/together`, q ? { q } : undefined),
-  /** the live as it is now (who's in it), without the page cache */
+  /** the live as it is now (still on?), without the page cache */
   current: (slug: string) => api.get<Envelope<CommunityDTO>>(`/api/communities/${slug}`),
   /** let a member go live for so many hours (0 takes it back) */
   pass: (slug: string, userId: string, hours: number) => api.post<Envelope<{ userId: string; until: string | null }>>(`/api/communities/${slug}/live/pass`, { userId, hours }),

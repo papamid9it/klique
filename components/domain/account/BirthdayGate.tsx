@@ -29,13 +29,15 @@ export function BirthdayGate() {
   const [place, setPlace] = useState<Place>({ country: user?.country || "NG", region: user?.region ?? "", city: user?.city ?? "" });
   const placeTouched = useRef(false);
   // only a brand-new account takes the guess; an older one keeps the place it has
-  const fresh = !!user && Date.now() - new Date(user.joinedAt).getTime() < 2 * 86_400_000;
+  // (worked out in the effect: reading the clock while drawing isn't allowed)
+  const joinedAt = user?.joinedAt;
   useEffect(() => {
+    const fresh = !!joinedAt && Date.now() - new Date(joinedAt).getTime() < 2 * 86_400_000;
     if (!fresh) return;
     void AuthService.placeGuess().then((r) => {
       if (r.data && !placeTouched.current) setPlace(r.data);
     }, () => {});
-  }, [fresh]);
+  }, [joinedAt]);
   const valid = /^\d{4}-\d{2}-\d{2}$/.test(dob) && dob < today && dob > "1900-01-01";
   const pretty = valid ? new Date(`${dob}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }) : "";
 
