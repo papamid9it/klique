@@ -20,6 +20,7 @@ import { Board, Topic, type IBoard, type ITopic } from "../models/Topic";
 import { User, type IUser } from "../models/User";
 import { Subcommunity } from "../models/Subcommunity";
 import { spaceAccess } from "../policies/access";
+import { hiddenUserIds } from "./blocks";
 import { GHOST, loadBriefs } from "../serializers";
 import type { giftConfigSchema, giftSaveSchema, giftSendSchema, giftStoreTopupSchema, giftTopupSchema, payoutRequestSchema } from "../validators/schemas";
 import { sid } from "./helpers";
@@ -158,6 +159,16 @@ async function move(userId: Types.ObjectId, amount: number, kind: HypeEntryKind,
   return balance;
 }
 
+/**
+ * Takes up to `hype` of someone's free Hype (see User.freeHype) after they spent that much, and says how much of what
+ * they spent was free: that part earns nobody money.
+ */
+export async function spendFree(userId: Types.ObjectId, hype: number): Promise<number> {
+  if (hype <= 0) return 0;
+  const before = await User.findOneAndUpdate({ _id: userId, freeHype: { $gt: 0 } }, [{ $set: { freeHype: { $max: [0, { $subtract: ["$freeHype", hype] }] } } }], { returnDocument: "before", updatePipeline: true }).select("freeHype").lean<Pick<IUser, "freeHype">>();
+  return Math.min(before?.freeHype ?? 0, hype);
+}
+
 const entryDto = (e: IHypeEntry): HypeEntryDTO => ({ id: sid(e._id), amount: e.amount, balanceAfter: e.balanceAfter, kind: e.kind, note: e.note, createdAt: e.createdAt.toISOString() });
 
 /** Ties an in-app Hype purchase to one person (a UUID: the only shape Apple accepts). */
@@ -264,7 +275,8 @@ async function credit(t: IHypeTopup) {
 
 /** The Hype and its history line for a top-up, inside the caller's transaction. */
 async function addTopupHype(t: IHypeTopup, session: mongoose.ClientSession) {
-  const u = await User.findOneAndUpdate({ _id: t.userId }, { $inc: { giftHype: t.hype } }, { returnDocument: "after", session }).select("giftHype").lean<Pick<IUser, "giftHype">>();
+  // a free test purchase (allowed for test builds and App Review): Hype to try things with, never money for anyone
+  const u = await User.findOneAndUpdate({ _id: t.userId }, { $inc: { giftHype: t.hype, ...(t.test ? { freeHype: t.hype } : {}) } }, { returnDocument: "after", session }).select("giftHype").lean<Pick<IUser, "giftHype">>();
   if (!u) throw new Error("The buyer's account is gone.");
   const where = t.platform === "web" ? "" : t.platform === "apple" ? " in the app (Apple)" : " in the app (Google)";
   await HypeEntry.create([{ userId: t.userId, amount: t.hype, balanceAfter: u.giftHype ?? 0, kind: "topup", note: `Bought ${t.hype.toLocaleString("en-NG")} Hype${where}`, ref: t.reference, byId: null }], { session });
@@ -401,6 +413,8 @@ export async function storeTopup(viewer: IUser, input: z.infer<typeof giftStoreT
     } catch (e) {
       if ((e as { code?: number })?.code !== 11000) throw e;
       row = await HypeTopup.findOne({ reference }).lean<IHypeTopup>();
+      // the same purchase sent from another account at the same moment: theirs, not this one's
+      if (row && sid(row.userId) !== sid(viewer._id)) throw new ApiError(409, "That purchase was already used.", { code: "store_used" });
     }
   }
   if (row && row.status === "pending") await credit(row);
@@ -506,6 +520,10 @@ export async function sendGift(viewer: IUser, input: z.infer<typeof giftSendSche
   if (input.target.type === "live" && (await (await import("../models/Live")).LiveStream.exists({ _id: input.target.id, kickedIds: viewer._id }))) throw forbidden("You were removed from this stream.");
   const access = await spaceAccess({ community: t.community, sub: null }, viewer);
   if (!access.canView) throw forbidden("You can't see that.");
+  // banned from the community: no awards in it
+  if (access.banned) throw forbidden("You can't send awards here.");
+  // someone you blocked, or who blocked you: no award (it would reach them as a notification)
+  if ((await hiddenUserIds(viewer._id)).some((h) => sid(h) === sid(t.authorId))) throw forbidden("You can't send them an award.");
   const receiver = await User.findById(t.authorId).select("_id suspendedAt points createdAt country").lean<Pick<IUser, "_id" | "suspendedAt" | "points" | "createdAt" | "country">>();
   if (!receiver || receiver.suspendedAt) throw badRequest("They can't get awards right now.");
 
@@ -551,7 +569,10 @@ export async function sendGift(viewer: IUser, input: z.infer<typeof giftSendSche
     await GiftSend.deleteOne({ _id: row._id, status: "pending" });
     throw new ApiError(402, `You need ${hype.toLocaleString("en-NG")} Hype for ${n > 1 ? `${n} ${gift.name}s` : `a ${gift.name}`}. Top up in Settings, Hype.`, { code: "not_enough_hype" });
   }
-  await GiftSend.updateOne({ _id: row._id }, { $set: { status: "sent" } });
+  // paid partly or wholly with free Hype: only the paid part earns them anything (the rest stays Klique's)
+  const free = await spendFree(viewer._id, hype);
+  const earned = free > 0 && toReceiver > 0 ? Math.floor((toReceiver * (hype - free)) / hype) : toReceiver;
+  await GiftSend.updateOne({ _id: row._id }, { $set: { status: "sent", ...(earned !== toReceiver ? { receiverAmount: earned, kliqueAmount: gift.price * n - earned, notEarnedReason: earned ? "partly paid with free Hype" : "paid with free Hype" } : {}) } });
 
   const who = input.anonymous ? "Someone" : viewer.displayName;
   // during a live: everyone watching sees it in the live chat
@@ -565,8 +586,8 @@ export async function sendGift(viewer: IUser, input: z.infer<typeof giftSendSche
   // open a stream that has ended by the time it's read. What it earned shows in Earnings as always.
   // what they earn, in their money: dollars outside Nigeria (Google Play's rate), naira at home
   const usdRate = receiver.country && receiver.country.toUpperCase() !== "NG" ? nairaPerUsd(config) : null;
-  const earnText = usdRate ? `$${toUsd(toReceiver, usdRate).toFixed(2)}` : naira(toReceiver);
-  if (input.target.type !== "live") notify([t.authorId], { title: `${who} sent you an award: ${gift.name}`, body: toReceiver > 0 ? `On ${t.label}. You earn ${earnText}.` : `On ${t.label}.`, data: { href: t.href } }, { category: "gifts", ref: `gift:${input.target.type}:${input.target.id}`, ...(input.anonymous ? {} : { actorId: viewer._id }) });
+  const earnText = usdRate ? `$${toUsd(earned, usdRate).toFixed(2)}` : naira(earned);
+  if (input.target.type !== "live") notify([t.authorId], { title: `${who} sent you an award: ${gift.name}`, body: earned > 0 ? `On ${t.label}. You earn ${earnText}.` : `On ${t.label}.`, data: { href: t.href } }, { category: "gifts", ref: `gift:${input.target.type}:${input.target.id}`, ...(input.anonymous ? {} : { actorId: viewer._id }) });
   return { balance, summary: (await summarise([input.target]))[giftTargetKey(input.target)] };
 }
 
@@ -673,8 +694,10 @@ export async function getEarnings(viewer: IUser, before?: string): Promise<GiftE
     return { month, amount: got.get(month) ?? 0 };
   });
   const payouts = await payoutsOf(viewer._id);
-  const requested = payouts.filter((p) => p.status === "requested").reduce((t, p) => t + p.amount, 0);
-  const paid = payouts.filter((p) => p.status === "paid").reduce((t, p) => t + p.amount, 0);
+  // the totals count every payout (the list shows the last 24)
+  const sums = await Payout.aggregate<{ _id: string; amount: number }>([{ $match: { kind: "gifts", requestedById: viewer._id, status: { $in: ["requested", "paid"] } } }, { $group: { _id: "$status", amount: { $sum: "$amount" } } }]);
+  const requested = sums.find((x) => x._id === "requested")?.amount ?? 0;
+  const paid = sums.find((x) => x._id === "paid")?.amount ?? 0;
   // only awards that earned them something (awards received before they qualified are Klique's and aren't listed here)
   const q: Record<string, unknown> = { toId: viewer._id, status: "sent", receiverAmount: { $gt: 0 } };
   if (before) q.createdAt = { $lt: new Date(before) };
@@ -813,6 +836,9 @@ export async function adminGrantHype(admin: IUser, userId: string, amount: numbe
   if (!u) throw notFound("No such person.");
   const balance = await move(u._id as Types.ObjectId, Math.round(amount), amount >= 0 ? "grant" : "revoke", note || (amount >= 0 ? "Given by Klique" : "Taken back by Klique"), null, admin._id);
   if (balance === null) throw badRequest("They don't have that much Hype.");
+  // Hype Klique gives is free Hype (it never becomes money for whoever gets their awards); taking some back takes that first
+  if (amount > 0) await User.updateOne({ _id: u._id }, { $inc: { freeHype: Math.round(amount) } });
+  else await spendFree(u._id as Types.ObjectId, Math.round(-amount));
   return { balance };
 }
 

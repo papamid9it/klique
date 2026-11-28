@@ -64,6 +64,11 @@ export interface IUser {
   points?: number;
   /** Hype for gifts (lib/gifts), a separate balance from the old `hype` so the Hype-to-Lite migration never touches it; changed only with atomic $inc next to a HypeEntry */
   giftHype?: number;
+  /**
+   * How much of giftHype nobody paid for (a free test purchase while test purchases are allowed, or Hype a Klique admin
+   * gave): spent first, and what it pays for earns the receiver (or a cause) nothing, so free Hype never becomes money.
+   */
+  freeHype?: number;
   /** where gift earnings are paid (set with their first payout request) */
   payoutBank?: { bankCode: string; bankName: string; accountNumber: string; accountName: string } | null;
   /** set by a site admin: the account can't sign in or use the API */
@@ -138,6 +143,7 @@ const UserSchema = new Schema<IUser>(
     hype: { type: Number, default: 0, min: 0 },
     points: { type: Number, default: 0, min: 0 },
     giftHype: { type: Number, default: 0, min: 0 },
+    freeHype: { type: Number, default: 0, min: 0 },
     payoutBank: { type: Schema.Types.Mixed, default: null },
     pins: { type: { chats: [Schema.Types.ObjectId], communities: [Schema.Types.ObjectId], _id: false }, default: undefined },
     suspendedAt: { type: Date, default: null },

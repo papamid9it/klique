@@ -163,7 +163,10 @@ export async function giveToCause(viewer: IUser, slug: string, id: string, input
     throw new ApiError(402, `You need ${input.hype.toLocaleString("en-NG")} Hype for that.`, { code: "not_enough_hype" });
   }
   const first = !(await Payment.exists({ buttonId: cause._id, userId: viewer._id, status: "paid" }));
-  await Payment.updateOne({ _id: row._id }, { $set: { status: "paid", paidAt: new Date() } });
+  // paid partly or wholly with free Hype (a test purchase, Hype Klique gave): only the paid part is the community's
+  const free = await (await import("./gifts.service")).spendFree(viewer._id, input.hype);
+  const net = free > 0 ? Math.floor(((amount - fee) * (input.hype - free)) / input.hype) : amount - fee;
+  await Payment.updateOne({ _id: row._id }, { $set: { status: "paid", paidAt: new Date(), ...(net !== amount - fee ? { net } : {}) } });
   const after = await DonationButton.findOneAndUpdate({ _id: cause._id }, { $inc: { raisedHype: input.hype, raised: amount, ...(first ? { donors: 1 } : {}) } }, { returnDocument: "after" }).lean<IDonationButton>();
 
   // the people who run it hear about it, bundled; the giver gets a thank-you
