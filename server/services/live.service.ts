@@ -2,12 +2,12 @@ import "server-only";
 import { nairaPerUsd } from "@/lib/gifts";
 import { youtubeFinish, youtubeOwnsBroadcast } from "./youtube.service";
 import { Types } from "mongoose";
-import type { LiveDTO, LiveNowDTO, LiveSummaryDTO } from "@/lib/types";
+import type { LiveDTO, LiveGuestDTO, LiveNowDTO, LiveSummaryDTO, UserBrief } from "@/lib/types";
 import { badRequest, conflict, forbidden, notFound } from "../http/errors";
 import { rateLimit } from "../http/rate-limit";
 import type { ICommunity } from "../models/Community";
 import { Event } from "../models/Event";
-import { LiveStream, type ILiveStream } from "../models/Live";
+import { LiveStream, type ILiveGuest, type ILiveStream } from "../models/Live";
 import { Membership, type IMembership } from "../models/Membership";
 import { Rsvp } from "../models/Rsvp";
 import { User, type IUser } from "../models/User";
@@ -19,7 +19,7 @@ import { sid } from "./helpers";
 import { notify } from "./push.service";
 import { publish, rtChannel } from "./realtime";
 import { resolveSpaceFor } from "./spaces.service";
-import { ensureLiveSubscriptions, twitchIsLive, twitchLinkOf, twitchSetTitle } from "./twitch.service";
+import { ensureLiveSubscriptions, twitchIsLive, twitchLinkOf, twitchLiveState, twitchSetTitle } from "./twitch.service";
 
 /**
  * Live streams in communities: one at a time per community (or from one of its events), streamed on Twitch or
@@ -34,7 +34,7 @@ import { ensureLiveSubscriptions, twitchIsLive, twitchLinkOf, twitchSetTitle } f
 const WAIT_MS = 2 * 60 * 60 * 1000;
 const YOUTUBE_MAX_MS = 24 * 60 * 60 * 1000;
 
-const staffOf = (access: SpaceAccess, viewer: IUser | null) => access.canManage || (!!viewer && isSiteAdmin(viewer));
+export const staffOf = (access: SpaceAccess, viewer: IUser | null) => access.canManage || (!!viewer && isSiteAdmin(viewer));
 
 /** May go live here: staff, a role with "Go live", or a pass still running (and the community allows it). */
 export async function canGoLive(viewer: IUser | null, community: ICommunity, access: SpaceAccess): Promise<boolean> {
@@ -47,18 +47,85 @@ export async function canGoLive(viewer: IUser | null, community: ICommunity, acc
 
 /** Over by now: a Twitch stream that never started, or a YouTube one a day old. Ended on the spot. */
 async function stale(s: ILiveStream): Promise<boolean> {
-  const old = (s.status === "waiting" && Date.now() - +s.createdAt > WAIT_MS) || (s.provider === "youtube" && s.startedAt && Date.now() - +s.startedAt > YOUTUBE_MAX_MS);
+  // a camera stream on YouTube whose phone stopped checking in (the app closed or crashed): over, not live for a day
+  // (only streams that keep that time: ones started before it was kept fall back to the day)
+  const gone = s.status === "live" && !!s.ytBroadcast && !!s.hostSeenAt && Date.now() - +s.hostSeenAt > PHONE_GONE_MS;
+  const old = gone || (s.status === "waiting" && Date.now() - +s.createdAt > WAIT_MS) || (s.provider === "youtube" && s.startedAt && Date.now() - +s.startedAt > YOUTUBE_MAX_MS);
   if (old) {
-    await LiveStream.updateOne({ _id: s._id, status: s.status }, { $set: { status: "ended", endedAt: new Date() } });
-    if (s.status === "live") emitLive(s.communityId, false);
+    const r = await LiveStream.updateOne({ _id: s._id, status: s.status }, { $set: { status: "ended", endedAt: new Date() } });
+    if (r.modifiedCount) ended(s);
   }
   return !!old;
 }
 
-async function toLive(s: ILiveStream, viewer: IUser | null, staff: boolean): Promise<LiveDTO> {
-  const [briefs, viewers] = await Promise.all([loadBriefs([s.hostId]), viewersOf(s._id)]);
+/** a phone that hasn't checked in for this long has stopped streaming */
+const PHONE_GONE_MS = 5 * 60 * 1000;
+
+/**
+ * Over: everyone's page hears it, and the YouTube broadcasts Klique made for it (the host's, the guests') are finished
+ * on YouTube too. However it ended (End, Twitch going off, the phone gone, a day passing).
+ */
+function ended(s: Pick<ILiveStream, "communityId" | "status" | "provider" | "ytBroadcast" | "hostId" | "channel" | "guests">) {
+  if (s.status === "live") emitLive(s.communityId, false);
+  if (s.provider === "youtube" && s.ytBroadcast) void youtubeFinish(s.hostId, s.channel);
+  for (const g of s.guests ?? []) if (g.provider === "youtube" && g.ytBroadcast && g.channel) void youtubeFinish(g.userId, g.channel);
+}
+
+/** when each phone last checked in, per server (written at most every 20 seconds) */
+const seenWrite = new Map<string, number>();
+/** The host's or a guest's go-live screen asked for the stream: their phone is still there (see PHONE_GONE_MS). */
+async function phoneSeen(s: ILiveStream, viewer: IUser | null) {
+  if (!viewer) return;
+  const me = sid(viewer._id);
+  const host = me === sid(s.hostId) && !!s.ytBroadcast;
+  const guest = (s.guests ?? []).find((g) => sid(g.userId) === me && g.ytBroadcast && g.status === "live");
+  if (!host && !guest) return;
+  const key = `${sid(s._id)}:${me}`;
+  if (Date.now() - (seenWrite.get(key) ?? 0) < 20_000) return;
+  seenWrite.set(key, Date.now());
+  if (seenWrite.size > 2000) seenWrite.clear();
+  if (host) await LiveStream.updateOne({ _id: s._id }, { $set: { hostSeenAt: new Date() } });
+  else await LiveStream.updateOne({ _id: s._id, "guests.userId": viewer._id }, { $set: { "guests.$.seenAt": new Date() } });
+}
+
+/** Live together: an invite is good for this long */
+export const INVITE_MS = 2 * 60 * 1000;
+/** a guest who said yes but isn't streaming yet (or whose stream dropped) is taken off after this */
+export const GUEST_WAIT_MS = 5 * 60 * 1000;
+/** at most this many people with the host */
+export const MAX_GUESTS = 3;
+/** the guests still in it (an invite nobody answered in time has lapsed) */
+export const guestsOf = (s: Pick<ILiveStream, "guests">): ILiveGuest[] => (s.guests ?? []).filter((g) => g.status !== "invited" || Date.now() - +g.invitedAt < INVITE_MS);
+
+/** The guests as a viewer sees them: everyone sees the ones streaming (and ones coming back); the host and staff see all. */
+function guestsFor(s: ILiveStream, viewer: IUser | null, staff: boolean, briefs: Map<string, UserBrief>): Pick<LiveDTO, "guests" | "mainId" | "invitedMe" | "guestMe"> {
+  const all = guestsOf(s);
+  const me = viewer ? sid(viewer._id) : "";
+  const runs = staff || me === sid(s.hostId);
+  const shown = all.filter((g) => runs || sid(g.userId) === me || g.status === "live" || (g.status === "waiting" && !!g.joinedAt));
+  const mine = all.find((g) => sid(g.userId) === me);
+  const mainId = s.mainId;
+  const main = mainId && all.some((g) => sid(g.userId) === sid(mainId) && g.status === "live") ? sid(mainId) : null;
+  const guests: LiveGuestDTO[] = shown.map((g) => ({
+    user: briefs.get(sid(g.userId)) ?? GHOST,
+    status: g.status,
+    provider: g.provider ?? null,
+    channel: g.channel ?? null,
+    ...(g.status === "invited" ? { until: new Date(+g.invitedAt + INVITE_MS).toISOString() } : {}),
+    ...(g.provider === "twitch" || g.ytBroadcast ? { phone: true } : {}),
+  }));
+  return {
+    ...(guests.length ? { guests } : {}),
+    ...(main ? { mainId: main } : {}),
+    ...(mine?.status === "invited" ? { invitedMe: new Date(+mine.invitedAt + INVITE_MS).toISOString() } : {}),
+    ...(mine && mine.status !== "invited" ? { guestMe: true } : {}),
+  };
+}
+
+export async function toLive(s: ILiveStream, viewer: IUser | null, staff: boolean): Promise<LiveDTO> {
+  const [briefs, viewers] = await Promise.all([loadBriefs([s.hostId, ...guestsOf(s).map((g) => g.userId)]), viewersOf(s._id)]);
   const host = briefs.get(sid(s.hostId)) ?? GHOST;
-  return { id: sid(s._id), provider: s.provider, channel: s.channel, title: s.title, status: s.status === "live" ? "live" : "waiting", host, startedAt: s.startedAt?.toISOString() ?? null, eventId: s.eventId ? sid(s.eventId) : null, canEnd: staff || (!!viewer && sid(viewer._id) === sid(s.hostId)), viewers, ...(fromPhone(s) ? { phone: true } : {}) };
+  return { id: sid(s._id), provider: s.provider, channel: s.channel, title: s.title, status: s.status === "live" ? "live" : "waiting", host, startedAt: s.startedAt?.toISOString() ?? null, eventId: s.eventId ? sid(s.eventId) : null, canEnd: staff || (!!viewer && sid(viewer._id) === sid(s.hostId)), viewers, ...(fromPhone(s) ? { phone: true } : {}), ...guestsFor(s, viewer, staff, briefs) };
 }
 
 /**
@@ -101,8 +168,10 @@ export async function watching(viewer: IUser | null, slug: string, input: { live
   if (!access.canView || !Types.ObjectId.isValid(input.liveId)) throw notFound("We couldn't find that stream.");
   const key = viewer ? sid(viewer._id) : input.key && /^[A-Za-z0-9_-]{8,64}$/.test(input.key) ? `anon:${input.key}` : null;
   const liveId = new Types.ObjectId(input.liveId);
-  const s = await LiveStream.findOne({ _id: liveId, communityId: space.community._id, status: "live" }).select("_id hostId eventId").lean<{ _id: Types.ObjectId; hostId: Types.ObjectId; eventId: Types.ObjectId | null }>();
+  const s = await LiveStream.findOne({ _id: liveId, communityId: space.community._id, status: "live" }).select("_id hostId eventId kickedIds").lean<{ _id: Types.ObjectId; hostId: Types.ObjectId; eventId: Types.ObjectId | null; kickedIds?: Types.ObjectId[] }>();
   if (!s) return { viewers: 0, live: false };
+  // removed from it: not counted, and no "joined"
+  if (viewer && (s.kickedIds ?? []).some((k) => sid(k) === sid(viewer._id))) return { viewers: 0, live: false };
   // the person streaming isn't one of their own viewers
   if (key && key !== sid(s.hostId)) {
     rateLimit(`watching:${key}`, 20, 60_000);
@@ -171,7 +240,8 @@ export async function liveSummary(viewer: IUser, slug: string, liveId: string): 
   const [{ Channel, ChannelMessage }, { GiftSend }] = await Promise.all([import("../models/Channel"), import("../models/Gift")]);
   const chat = await Channel.findOne({ topicId: s._id }).select("_id").lean<{ _id: Types.ObjectId }>();
   const [messages, gifts] = await Promise.all([
-    chat ? ChannelMessage.countDocuments({ channelId: chat._id, deletedAt: null, webhook: null }) : 0,
+    // what people wrote: not the gift lines or Klique's own ("… joined the live")
+    chat ? ChannelMessage.countDocuments({ channelId: chat._id, deletedAt: null, webhook: null, notice: { $ne: true }, "cards.0": { $exists: false } }) : 0,
     GiftSend.aggregate<{ hype: number; earned: number; givers: Types.ObjectId[] }>([{ $match: { "target.type": "live", "target.id": s._id, status: "sent" } }, { $group: { _id: null, hype: { $sum: "$hype" }, earned: { $sum: "$receiverAmount" }, givers: { $addToSet: "$fromId" } } }]),
   ]);
   const from = s.startedAt ?? s.createdAt;
@@ -193,6 +263,8 @@ export async function liveOf(viewer: IUser | null, community: ICommunity, access
     s = await checkTwitch(s);
     if (!s) return null;
   }
+  if (s.guests?.length) s = await checkGuests(s);
+  await phoneSeen(s, viewer);
   const staff = staffOf(access, viewer);
   // removed from this stream: it doesn't show for them
   if (viewer && (s.kickedIds ?? []).some((k) => sid(k) === sid(viewer._id))) return null;
@@ -220,7 +292,9 @@ async function checkTwitch(s: ILiveStream): Promise<ILiveStream | null> {
   if (lastCheck.size > 500) lastCheck.clear();
   const link = await (await import("../models/Live")).TwitchLink.findOne({ userId: s.hostId }).select("twitchId").lean<{ twitchId: string }>();
   if (!link) return s;
-  const on = await twitchIsLive(link.twitchId);
+  const on = await twitchLiveState(link.twitchId);
+  // Twitch didn't answer: nothing changes (never ended for that)
+  if (on === null) return s;
   if (s.status === "waiting" && on) {
     const now = await LiveStream.findOneAndUpdate({ _id: s._id, status: "waiting" }, { $set: { status: "live", startedAt: new Date() } }, { returnDocument: "after" }).lean<ILiveStream>();
     if (now) {
@@ -238,13 +312,77 @@ async function checkTwitch(s: ILiveStream): Promise<ILiveStream | null> {
       offSince.set(key, since);
       if (Date.now() - since > OFF_GRACE_MS) {
         offSince.delete(key);
-        await LiveStream.updateOne({ _id: s._id, status: "live" }, { $set: { status: "ended", endedAt: new Date() } });
-        emitLive(s.communityId, false);
+        const r = await LiveStream.updateOne({ _id: s._id, status: "live" }, { $set: { status: "ended", endedAt: new Date() } });
+        if (r.modifiedCount) ended(s);
         return null;
       }
     }
   }
   return s;
+}
+
+/** when each guest's Twitch was last checked */
+const guestCheck = new Map<string, number>();
+
+/**
+ * Live together, on reading the stream: lapsed invites and guests who never started (or dropped and didn't come back)
+ * are taken off; a guest on Twitch goes live once Twitch says they're on (every 3 seconds while starting, every minute
+ * while live: off means "coming back", for a few minutes).
+ */
+async function checkGuests(s: ILiveStream): Promise<ILiveStream> {
+  const now = Date.now();
+  const gone = (s.guests ?? []).filter((g) => (g.status === "invited" && now - +g.invitedAt >= INVITE_MS) || (g.status === "waiting" && g.waitingSince && now - +g.waitingSince > GUEST_WAIT_MS));
+  if (gone.length) {
+    await LiveStream.updateOne({ _id: s._id }, { $pull: { guests: { userId: { $in: gone.map((g) => g.userId) } } } });
+    for (const g of gone) if (g.provider === "youtube" && g.ytBroadcast && g.channel) void youtubeFinish(g.userId, g.channel);
+    s = { ...s, guests: (s.guests ?? []).filter((g) => !gone.includes(g)) };
+  }
+  const quiet = (s.guests ?? []).filter((g) => g.status === "live" && g.ytBroadcast && now - +(g.seenAt ?? g.joinedAt ?? g.invitedAt) > 2 * 60_000);
+  for (const g of quiet) await LiveStream.updateOne({ _id: s._id, "guests.userId": g.userId }, { $set: { "guests.$.status": "waiting", "guests.$.waitingSince": new Date() } });
+  if (quiet.length) {
+    s = (await LiveStream.findById(s._id).lean<ILiveStream>()) ?? s;
+    emitLive(s.communityId, true);
+  }
+  const { TwitchLink } = await import("../models/Live");
+  for (const g of s.guests ?? []) {
+    if (g.provider !== "twitch" || g.status === "invited") continue;
+    const key = `${sid(s._id)}:${sid(g.userId)}`;
+    if (now - (guestCheck.get(key) ?? 0) < (g.status === "waiting" ? 3_000 : 60_000)) continue;
+    guestCheck.set(key, now);
+    if (guestCheck.size > 2000) guestCheck.clear();
+    const link = await TwitchLink.findOne({ userId: g.userId }).select("twitchId").lean<{ twitchId: string }>();
+    if (!link) continue;
+    const on = await twitchLiveState(link.twitchId);
+    if (on === null) continue;
+    if (on && g.status === "waiting") await guestOn(s, g.userId);
+    else if (!on && g.status === "live") await LiveStream.updateOne({ _id: s._id, "guests.userId": g.userId }, { $set: { "guests.$.status": "waiting", "guests.$.waitingSince": new Date() } });
+    else continue;
+    s = (await LiveStream.findById(s._id).lean<ILiveStream>()) ?? s;
+    emitLive(s.communityId, true);
+  }
+  return s;
+}
+
+/** A guest's stream is on: in the boxes for everyone, and (the first time) "Amara joined the live with Tobi" in the chat. */
+export async function guestOn(s: Pick<ILiveStream, "_id" | "hostId" | "guests">, userId: Types.ObjectId) {
+  const g = (s.guests ?? []).find((x) => sid(x.userId) === sid(userId));
+  const first = !g?.joinedAt;
+  await LiveStream.updateOne({ _id: s._id, "guests.userId": userId }, { $set: { "guests.$.status": "live", "guests.$.waitingSince": null, ...(first ? { "guests.$.joinedAt": new Date() } : {}) } });
+  if (first) {
+    const [who, host] = await Promise.all([User.findById(userId).select("displayName").lean<{ displayName: string }>(), User.findById(s.hostId).select("displayName").lean<{ displayName: string }>()]);
+    await liveNotice(s._id, s.hostId, `${who?.displayName ?? "Someone"} joined the live with ${host?.displayName ?? "the host"}`);
+  }
+}
+
+/** A grey line from Klique in the stream's chat ("Amara joined the live with Tobi", "… was removed from the live"). */
+export async function liveNotice(liveId: Types.ObjectId, authorId: Types.ObjectId, body: string) {
+  const { Channel, ChannelMessage } = await import("../models/Channel");
+  const chat = await Channel.findOne({ topicId: liveId }).select("_id communityId").lean<{ _id: Types.ObjectId; communityId: Types.ObjectId }>();
+  if (!chat) return;
+  const line = await ChannelMessage.create({ channelId: chat._id, communityId: chat.communityId, authorId, body: body.slice(0, 300), images: [], mentions: [], notice: true });
+  await Channel.updateOne({ _id: chat._id }, { lastMessageId: line._id, lastMessageAt: line.createdAt });
+  const { emitChannel } = await import("./realtime");
+  emitChannel(chat.communityId, chat._id);
 }
 
 /** The id of a YouTube video from any link to it (watch, youtu.be, /live/, /shorts/, an embed), or null. */
@@ -259,7 +397,7 @@ export function youtubeId(link: string): string | null {
   }
 }
 
-const emitLive = (communityId: Types.ObjectId, on: boolean) => publish([rtChannel.community(communityId)], { type: "live", communityId: sid(communityId), on });
+export const emitLive = (communityId: Types.ObjectId, on: boolean) => publish([rtChannel.community(communityId)], { type: "live", communityId: sid(communityId), on });
 
 /** Tells the community's members someone went live (bundled, so a busy community isn't a stream of buzzes). */
 async function tellMembers(s: ILiveStream, community: ICommunity, host: Pick<IUser, "_id" | "displayName">) {
@@ -308,7 +446,7 @@ export async function startLive(viewer: IUser, slug: string, input: { provider: 
   if (input.provider === "youtube" && input.broadcastId) {
     // the phone's camera, to a broadcast Klique just made on their own channel: live as soon as it's posted
     if (!(await youtubeOwnsBroadcast(viewer._id, input.broadcastId))) throw badRequest("That YouTube broadcast isn't yours. Try going live again.");
-    row = (await LiveStream.create({ communityId: community._id, eventId, hostId: viewer._id, provider: "youtube", channel: input.broadcastId, title, status: "live", startedAt: new Date(), ytBroadcast: true })).toObject() as ILiveStream;
+    row = (await LiveStream.create({ communityId: community._id, eventId, hostId: viewer._id, provider: "youtube", channel: input.broadcastId, title, status: "live", startedAt: new Date(), ytBroadcast: true, hostSeenAt: new Date() })).toObject() as ILiveStream;
     await tellMembers(row, community, viewer);
   } else if (input.provider === "youtube") {
     const id = youtubeId(input.link ?? "");
@@ -334,10 +472,9 @@ export async function endLive(viewer: IUser, slug: string) {
   const s = await LiveStream.findOne({ communityId: space.community._id, status: { $in: ["waiting", "live"] } }).lean<ILiveStream>();
   if (!s) return { ended: true };
   if (sid(s.hostId) !== sid(viewer._id) && !staffOf(access, viewer)) throw forbidden("Only its host and the community's admins can end it.");
-  await LiveStream.updateOne({ _id: s._id }, { $set: { status: "ended", endedAt: new Date(), endedById: viewer._id } });
-  if (s.status === "live") emitLive(s.communityId, false);
-  // a broadcast Klique made on their channel: finished on YouTube too
-  if (s.provider === "youtube" && s.ytBroadcast) void youtubeFinish(s.hostId, s.channel);
+  const r = await LiveStream.updateOne({ _id: s._id, status: { $in: ["waiting", "live"] } }, { $set: { status: "ended", endedAt: new Date(), endedById: viewer._id } });
+  // broadcasts Klique made on their channels: finished on YouTube too
+  if (r.modifiedCount) ended(s);
   return { ended: true };
 }
 
@@ -346,6 +483,12 @@ export async function onTwitchOnline(twitchId: string) {
   const { TwitchLink } = await import("../models/Live");
   const link = await TwitchLink.findOne({ twitchId }).select("userId").lean<{ userId: Types.ObjectId }>();
   if (!link) return;
+  // a guest on Twitch: their box goes live
+  const asGuest = await LiveStream.findOne({ status: { $in: ["waiting", "live"] }, guests: { $elemMatch: { userId: link.userId, provider: "twitch", status: "waiting" } } }).lean<ILiveStream>();
+  if (asGuest) {
+    await guestOn(asGuest, link.userId);
+    emitLive(asGuest.communityId, true);
+  }
   const s = await LiveStream.findOneAndUpdate({ hostId: link.userId, provider: "twitch", status: "waiting" }, { $set: { status: "live", startedAt: new Date() } }, { returnDocument: "after" }).lean<ILiveStream>();
   if (!s) return;
   const [{ Community }, host] = await Promise.all([import("../models/Community"), User.findById(link.userId).select("displayName").lean<Pick<IUser, "_id" | "displayName">>()]);
@@ -358,10 +501,16 @@ export async function onTwitchOffline(twitchId: string) {
   const { TwitchLink } = await import("../models/Live");
   const link = await TwitchLink.findOne({ twitchId }).select("userId").lean<{ userId: Types.ObjectId }>();
   if (!link) return;
-  const ending = await LiveStream.find({ hostId: link.userId, provider: "twitch", status: "live" }).select("communityId").lean<{ _id: Types.ObjectId; communityId: Types.ObjectId }[]>();
+  // a guest on Twitch went off: "coming back" for a few minutes
+  const asGuest = await LiveStream.find({ status: { $in: ["waiting", "live"] }, guests: { $elemMatch: { userId: link.userId, provider: "twitch", status: "live" } } }).select("_id communityId").lean<{ _id: Types.ObjectId; communityId: Types.ObjectId }[]>();
+  for (const g of asGuest) {
+    await LiveStream.updateOne({ _id: g._id, "guests.userId": link.userId }, { $set: { "guests.$.status": "waiting", "guests.$.waitingSince": new Date() } });
+    emitLive(g.communityId, true);
+  }
+  const ending = await LiveStream.find({ hostId: link.userId, provider: "twitch", status: "live" }).lean<ILiveStream[]>();
   if (!ending.length) return;
   await LiveStream.updateMany({ _id: { $in: ending.map((e) => e._id) } }, { $set: { status: "ended", endedAt: new Date() } });
-  for (const e of ending) emitLive(e.communityId, false);
+  for (const e of ending) ended(e);
 }
 
 /** Live rings on Home: streams on right now in your communities, the busiest first (then the newest). */
@@ -376,7 +525,7 @@ export async function liveNow(viewer: IUser): Promise<LiveNowDTO[]> {
   const { Community } = await import("../models/Community");
   const [communities, briefs] = await Promise.all([
     Community.find({ _id: { $in: fresh.map((r) => r.communityId) } }).select("slug name coverImage adult").lean<Pick<ICommunity, "_id" | "slug" | "name" | "coverImage" | "adult">[]>(),
-    loadBriefs(fresh.map((r) => r.hostId)),
+    loadBriefs(fresh.flatMap((r) => [r.hostId, ...guestsOf(r).filter((g) => g.status === "live").map((g) => g.userId)])),
   ]);
   const byId = new Map(communities.map((c) => [sid(c._id), c]));
   const counts = new Map(await Promise.all(fresh.map(async (s) => [sid(s._id), await viewersOf(s._id)] as const)));
@@ -385,7 +534,7 @@ export async function liveNow(viewer: IUser): Promise<LiveNowDTO[]> {
   return fresh.flatMap((s) => {
     const c = byId.get(sid(s.communityId));
     if (!c || c.adult) return [];
-    return [{ community: { id: sid(c._id), slug: c.slug, name: c.name, coverImage: c.coverImage ?? null }, live: { id: sid(s._id), provider: s.provider, channel: s.channel, title: s.title, status: "live" as const, host: briefs.get(sid(s.hostId)) ?? GHOST, startedAt: s.startedAt?.toISOString() ?? null, eventId: s.eventId ? sid(s.eventId) : null, canEnd: sid(s.hostId) === sid(viewer._id), viewers: counts.get(sid(s._id)) ?? 0, ...(fromPhone(s) ? { phone: true } : {}) } }];
+    return [{ community: { id: sid(c._id), slug: c.slug, name: c.name, coverImage: c.coverImage ?? null }, live: { id: sid(s._id), provider: s.provider, channel: s.channel, title: s.title, status: "live" as const, host: briefs.get(sid(s.hostId)) ?? GHOST, startedAt: s.startedAt?.toISOString() ?? null, eventId: s.eventId ? sid(s.eventId) : null, canEnd: sid(s.hostId) === sid(viewer._id), viewers: counts.get(sid(s._id)) ?? 0, ...(fromPhone(s) ? { phone: true } : {}), ...guestsFor(s, viewer, false, briefs) } }];
   });
 }
 
@@ -418,7 +567,7 @@ export async function liveChat(viewer: IUser | null, slug: string) {
 }
 
 /** Who moderates a stream: its host, the people who run the community, and roles that delete messages, time out or remove members. */
-function mayModerate(viewer: IUser | null, access: SpaceAccess, s: Pick<ILiveStream, "hostId">): boolean {
+export function mayModerate(viewer: IUser | null, access: SpaceAccess, s: Pick<ILiveStream, "hostId">): boolean {
   if (!viewer) return false;
   return sid(viewer._id) === sid(s.hostId) || staffOf(access, viewer) || can(access, "kick") || can(access, "timeout") || can(access, "deleteMessages");
 }
@@ -450,7 +599,8 @@ export async function moderateLive(viewer: IUser, slug: string, input: { userId:
     await LiveStream.updateOne({ _id: s._id }, { $pull: { kickedIds: target } });
     return { userId: input.userId, removed: false };
   }
-  await LiveStream.updateOne({ _id: s._id }, { $addToSet: { kickedIds: target } });
+  // a guest streaming in it comes off too
+  await LiveStream.updateOne({ _id: s._id }, { $addToSet: { kickedIds: target }, $pull: { guests: { userId: target } } });
   // their messages in this chat go too (like a ban in Twitch's chat)
   const { Channel, ChannelMessage } = await import("../models/Channel");
   const chat = await Channel.findOne({ topicId: s._id }).select("_id communityId").lean<{ _id: Types.ObjectId; communityId: Types.ObjectId }>();

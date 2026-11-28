@@ -102,8 +102,50 @@ export interface ILiveStream {
   /** the most people watching at once, and how many different people watched (for the "how it went" summary) */
   peakViewers?: number;
   watched?: number;
+  /**
+   * Live together: up to 3 members the host invited, each streaming from their own phone to their own Twitch or
+   * YouTube, shown beside the host's stream in Klique. "invited" (2 minutes to say yes), "waiting" (Twitch hasn't said
+   * they're on yet, or their stream dropped), "live".
+   */
+  guests?: ILiveGuest[];
+  /**
+   * the host's phone last checked in (its go-live screen asks every few seconds): a camera stream on YouTube whose
+   * phone stopped asking (the app closed or crashed) is ended here instead of showing as live for a day
+   */
+  hostSeenAt?: Date | null;
+  /** who's in the big box for everyone (the host picks; none: the host) */
+  mainId?: Types.ObjectId | null;
   createdAt: Date;
 }
+
+export interface ILiveGuest {
+  userId: Types.ObjectId;
+  status: "invited" | "waiting" | "live";
+  invitedAt: Date;
+  /** since when it's been waiting (for Twitch to say they're on, or to come back after a drop) */
+  waitingSince?: Date | null;
+  joinedAt?: Date | null;
+  provider?: "twitch" | "youtube" | null;
+  channel?: string | null;
+  ytBroadcast?: boolean;
+  /** their phone last checked in (as hostSeenAt, for a guest's camera stream on YouTube) */
+  seenAt?: Date | null;
+}
+
+const LiveGuestSchema = new Schema<ILiveGuest>(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    status: { type: String, enum: ["invited", "waiting", "live"], default: "invited" },
+    invitedAt: { type: Date, required: true },
+    waitingSince: { type: Date, default: null },
+    joinedAt: { type: Date, default: null },
+    provider: { type: String, enum: ["twitch", "youtube", null], default: null },
+    channel: { type: String, default: null, maxlength: 64 },
+    ytBroadcast: { type: Boolean, default: undefined },
+    seenAt: { type: Date, default: null },
+  },
+  { _id: false },
+);
 
 const LiveStreamSchema = new Schema<ILiveStream>(
   {
@@ -121,12 +163,17 @@ const LiveStreamSchema = new Schema<ILiveStream>(
     ytBroadcast: { type: Boolean, default: undefined },
     peakViewers: { type: Number, default: 0 },
     watched: { type: Number, default: 0 },
+    guests: { type: [LiveGuestSchema], default: undefined },
+    mainId: { type: Schema.Types.ObjectId, default: null },
+    hostSeenAt: { type: Date, default: null },
   },
   { timestamps: { createdAt: true, updatedAt: false } },
 );
 // one stream at a time in a community
 LiveStreamSchema.index({ communityId: 1 }, { unique: true, partialFilterExpression: { status: { $in: ["waiting", "live"] } }, name: "one_live_per_community" });
 LiveStreamSchema.index({ hostId: 1, status: 1 });
+// a guest's live (one at a time), and Twitch's "went live" for a guest
+LiveStreamSchema.index({ "guests.userId": 1, status: 1 }, { partialFilterExpression: { status: { $in: ["waiting", "live"] } } });
 // a streamed event: is it live now
 LiveStreamSchema.index({ eventId: 1, status: 1 }, { partialFilterExpression: { eventId: { $type: "objectId" } } });
 

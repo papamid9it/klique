@@ -199,14 +199,22 @@ export function verifyEventSub(headers: Headers, raw: string): boolean {
 
 /** Is this channel live on Twitch right now (for going live in Klique after already starting on Twitch)? */
 export async function twitchIsLive(twitchId: string): Promise<boolean> {
+  return (await twitchLiveState(twitchId)) === true;
+}
+
+/**
+ * On, off, or null when Twitch couldn't be asked (no answer, an error, too many requests): a live stream is never
+ * ended because Twitch didn't answer, only because it said the channel is off.
+ */
+export async function twitchLiveState(twitchId: string): Promise<boolean | null> {
   const c = twitchConfig();
-  if (!c) return false;
+  if (!c) return null;
   const token = await appToken().catch(() => null);
-  if (!token) return false;
-  const res = await fetch(`${HELIX}/streams?user_id=${encodeURIComponent(twitchId)}`, { headers: { Authorization: `Bearer ${token}`, "Client-Id": c.clientId } }).catch(() => null);
-  if (!res?.ok) return false;
-  const j = (await res.json()) as { data?: unknown[] };
-  return !!j.data?.length;
+  if (!token) return null;
+  const res = await fetch(`${HELIX}/streams?user_id=${encodeURIComponent(twitchId)}`, { headers: { Authorization: `Bearer ${token}`, "Client-Id": c.clientId }, signal: AbortSignal.timeout(5000) }).catch(() => null);
+  if (!res?.ok) return null;
+  const j = (await res.json().catch(() => null)) as { data?: unknown[] } | null;
+  return j ? !!j.data?.length : null;
 }
 
 /**

@@ -8,6 +8,7 @@ import { LiveService } from "@/app/services/LiveService";
 import { ReportDialog } from "@/components/domain/ReportDialog";
 import { LiveRoomChat } from "./LiveRoomChat";
 import { LivePlayer, warmLivePlayer } from "./LivePlayer";
+import { InviteBanner, InviteDialog, TogetherPlayers, togetherPeople, type TogetherPerson } from "./Together";
 import { GiftButton } from "@/components/domain/gifts/Gifts";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useConfirm } from "@/components/providers/ConfirmProvider";
@@ -64,8 +65,47 @@ export function LiveRow({ c, onChanged }: { c: CommunityDTO; onChanged: () => vo
  * Watching, like YouTube: the player with who's on under it, and the live chat beside it (under it on a narrow
  * screen). Full screen over the page; Escape or the arrow closes it.
  */
-function WatchModal({ c, live, onClose, onEnded }: { c: Pick<CommunityDTO, "slug" | "name">; live: LiveDTO; onClose: () => void; onEnded: () => void }) {
+function WatchModal({ c, live: first, onClose, onEnded }: { c: Pick<CommunityDTO, "slug" | "name">; live: LiveDTO; onClose: () => void; onEnded: () => void }) {
   const { user } = useAuth();
+  const toast = useToast();
+  const confirm = useConfirm();
+  // live together: who's in it changes while you watch (someone joins, leaves, moves to the big box)
+  const [live, setLive] = useState(first);
+  useEffect(() => setLive(first), [first]);
+  useRealtimeEvent(
+    () =>
+      void LiveService.current(c.slug).then(
+        (r) => {
+          if (r.data.live?.status === "live" && r.data.live.id === first.id) return setLive(r.data.live);
+          // it ended while you watched (or you were removed from it): say so and close
+          if (!r.data.live || r.data.live.id !== first.id) {
+            toast("The live has ended");
+            onEnded();
+          }
+        },
+        () => {},
+      ),
+    { filter: (e) => e.type === "live", debounceMs: 500 },
+  );
+  const people = togetherPeople(live);
+  const together = people.length > 1;
+  const [inviting, setInviting] = useState(false);
+  const removeGuest = async (p: TogetherPerson) => {
+    if (!(await confirm({ title: `Remove ${p.user.displayName} from the live?`, body: "Their stream comes out of it for everyone.", confirmLabel: "Remove", danger: true }))) return;
+    try {
+      setLive((await LiveService.together(c.slug, { action: "remove", userId: p.id })).data);
+    } catch (e) {
+      toast(errorMessage(e), "error");
+    }
+  };
+  const leave = async () => {
+    if (!(await confirm({ title: "Leave the live?", body: `You come off ${live.host.displayName}’s live. Stop streaming on YouTube too.`, confirmLabel: "Leave", danger: true }))) return;
+    try {
+      setLive((await LiveService.together(c.slug, { action: "leave" })).data);
+    } catch (e) {
+      toast(errorMessage(e), "error");
+    }
+  };
   const [reporting, setReporting] = useState(false);
   const chat = useApi(() => LiveService.chat(c.slug), [c.slug, live.id], { key: `live-chat:${live.id}` });
   // "still watching" every 30 seconds: counts you, and shows how many are watching
@@ -127,14 +167,25 @@ function WatchModal({ c, live, onClose, onEnded }: { c: Pick<CommunityDTO, "slug
         </div>
         <div className="px-0 sm:px-4">
           <div className="aspect-video w-full overflow-hidden bg-black sm:rounded-card">
-            <LivePlayer live={live} onStarted={() => setStarted(true)} />
+            {together ? <TogetherPlayers people={people} onStarted={() => setStarted(true)} onRemove={live.canEnd ? (p) => void removeGuest(p) : undefined} /> : <LivePlayer live={live} onStarted={() => setStarted(true)} />}
           </div>
         </div>
         <div className="space-y-3 px-4 py-4">
           {live.title && <h2 className="text-[18px] font-bold leading-snug">{live.title}</h2>}
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
             <Avatar name={live.host.displayName} src={live.host.avatarUrl} size={36} />
-            <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{live.host.displayName}</span>
+            <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{together ? `${live.host.displayName} with ${people.filter((p) => !p.host).map((p) => p.user.displayName).join(", ")}` : live.host.displayName}</span>
+            {/* the host: ask people to go live with them */}
+            {user && user.id === live.host.id && live.status === "live" && (
+              <Button size="sm" onClick={() => setInviting(true)}>
+                <Icon name="plus" size={14} /> Invite
+              </Button>
+            )}
+            {live.guestMe && (
+              <Button size="sm" onClick={() => void leave()}>
+                Leave the live
+              </Button>
+            )}
             {/* an award for the person streaming (shows in the live chat for everyone) */}
             {/* gifting, like chatting, waits until the stream is playing here */}
             {user && user.id !== live.host.id && live.status === "live" && started && <GiftButton target={{ type: "live", id: live.id }} authorId={live.host.id} variant="pill" />}
@@ -162,6 +213,7 @@ function WatchModal({ c, live, onClose, onEnded }: { c: Pick<CommunityDTO, "slug
         </div>
       </aside>
       {reporting && <ReportDialog open onClose={() => setReporting(false)} targetType="live" targetId={live.id} subject="this live stream" />}
+      {inviting && <InviteDialog c={c} live={live} onClose={() => setInviting(false)} onChange={setLive} />}
     </div>
   );
 }
@@ -340,11 +392,14 @@ export function LiveBar({ c, onChanged }: { c: CommunityDTO; onChanged: () => vo
   const live = c.live?.status === "live" ? c.live : null;
   // your own stream isn't announced to you (you're the one streaming)
   if (!live || hidden === live.id || live.host.id === user?.id) return null;
+  const others = (live.guests ?? []).filter((g) => g.status === "live").length;
   return (
+    <>
+    {live.invitedMe && <InviteBanner c={c} live={live} onChanged={onChanged} />}
     <div role="status" className="flex items-center gap-3 border-b border-line bg-surface px-3 py-2 sm:px-5">
       <span className="rounded-[5px] bg-danger px-1.5 py-px font-mono text-[11px] font-bold text-white">LIVE</span>
       <p className="min-w-0 flex-1 truncate text-[13.5px]">
-        <b>{live.host.displayName}</b> is live{live.title ? `: ${live.title}` : ""}
+        <b>{live.host.displayName}</b>{others ? ` + ${others} are live` : " is live"}{live.title ? `: ${live.title}` : ""}
       </p>
       <Button size="sm" variant="primary" onClick={() => setOpen(true)}>
         Watch
@@ -354,6 +409,7 @@ export function LiveBar({ c, onChanged }: { c: CommunityDTO; onChanged: () => vo
       </button>
       {open && <WatchModal c={c} live={live} onClose={() => setOpen(false)} onEnded={() => (setOpen(false), onChanged())} />}
     </div>
+    </>
   );
 }
 

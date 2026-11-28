@@ -502,6 +502,8 @@ export async function sendGift(viewer: IUser, input: z.infer<typeof giftSendSche
   if (!gift) throw notFound("That award isn't available any more.");
   const t = await resolveTarget(input.target.type, input.target.id);
   if (sid(t.authorId) === sid(viewer._id)) throw badRequest("You can't send an award to yourself.");
+  // removed from a live: no gifting in it either
+  if (input.target.type === "live" && (await (await import("../models/Live")).LiveStream.exists({ _id: input.target.id, kickedIds: viewer._id }))) throw forbidden("You were removed from this stream.");
   const access = await spaceAccess({ community: t.community, sub: null }, viewer);
   if (!access.canView) throw forbidden("You can't see that.");
   const receiver = await User.findById(t.authorId).select("_id suspendedAt points createdAt country").lean<Pick<IUser, "_id" | "suspendedAt" | "points" | "createdAt" | "country">>();

@@ -2434,6 +2434,27 @@ export interface LiveDTO {
   viewers?: number;
   /** streamed from the Klique app's camera (upright): full screen fills the card with it; anything else shows full width */
   phone?: boolean;
+  /**
+   * Live together: the people streaming with the host (up to 3), each a stream of their own shown beside the host's.
+   * Everyone sees the ones live; the host also sees who's invited or still starting.
+   */
+  guests?: LiveGuestDTO[];
+  /** who's in the big box (the host or a guest's user id); none: the host */
+  mainId?: Id | null;
+  /** the viewer was asked to go live with the host: until when they can say yes */
+  invitedMe?: ISODate | null;
+  /** the viewer is one of the guests (their own stream is in it) */
+  guestMe?: boolean;
+}
+
+export interface LiveGuestDTO {
+  user: UserBrief;
+  status: "invited" | "waiting" | "live";
+  provider: "twitch" | "youtube" | null;
+  channel: string | null;
+  /** invited: until when they can say yes */
+  until?: ISODate | null;
+  phone?: boolean;
 }
 
 /** "How it went", for the person streaming once it ends. */

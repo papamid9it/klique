@@ -707,7 +707,10 @@ export async function postMessage(viewer: IUser, space: Space, access: SpaceAcce
   // a live stream's chat: not for people removed from the stream
   if (channel.topicId && channel.slug.startsWith("live-")) {
     const { LiveStream } = await import("../models/Live");
-    if (await LiveStream.exists({ _id: channel.topicId, kickedIds: viewer._id })) throw forbidden("You were removed from this stream.");
+    const live = await LiveStream.findById(channel.topicId).select("status kickedIds").lean<{ status: string; kickedIds?: Types.ObjectId[] }>();
+    if ((live?.kickedIds ?? []).some((k) => sid(k) === sid(viewer._id))) throw forbidden("You were removed from this stream.");
+    // over: the chat is kept a week to look at, but nobody writes in it any more
+    if (!live || live.status === "ended") throw forbidden("This live has ended.");
   }
   // replies on a board post live in its chat: stopped from Boards means these too, not ordinary chat
   else if (channel.topicId) assertNotPostBanned(access);
