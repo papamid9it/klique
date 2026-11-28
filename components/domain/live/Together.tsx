@@ -135,6 +135,18 @@ export function InviteDialog({ c, live, onClose, onChange }: { c: Pick<Community
   return (
     <Modal open onClose={onClose} title="Go live together" description={`Up to 3 people from ${c.name} can join you. Gifts still come to you.`} size="md">
       <div className="space-y-4">
+        {/* you, the guests, and the places left */}
+        <ul className="flex gap-4">
+          {[{ id: "me", user: live.host, label: "You", on: true }, ...guests.map((g) => ({ id: g.user.id, user: g.user, label: g.user.displayName, on: g.status === "live" })), ...Array.from({ length: Math.max(0, 3 - guests.length) }, (_, i) => ({ id: `empty-${i}`, user: null as UserBrief | null, label: "Empty", on: false }))].map((x) => (
+            <li key={x.id} className="flex w-14 flex-col items-center gap-1">
+              <span className={cx("flex size-12 items-center justify-center rounded-full border-2", x.user && x.on ? "border-danger" : "border-dashed border-line")}>
+                {x.user ? <span className={x.on ? "" : "opacity-50"}><Avatar name={x.user.displayName} src={x.user.avatarUrl} size={40} /></span> : <Icon name="plus" size={16} className="text-ink-muted" />}
+              </span>
+              <span className={cx("w-full truncate text-center text-[12px]", x.user ? "text-ink" : "text-ink-muted")}>{x.label}</span>
+            </li>
+          ))}
+        </ul>
+        <TextField label="Search members" value={q} onChange={(e) => setQ(e.target.value)} maxLength={40} placeholder="Name or @handle" />
         {guests.length > 0 && (
           <ul className="space-y-1">
             {guests.map((g) => (
@@ -151,8 +163,8 @@ export function InviteDialog({ c, live, onClose, onChange }: { c: Pick<Community
             ))}
           </ul>
         )}
-        <TextField label="Search members" value={q} onChange={(e) => setQ(e.target.value)} maxLength={40} placeholder="Name or @handle" />
-        <ul className="max-h-[340px] space-y-1 overflow-y-auto">
+        {/* scrolls, without a scrollbar */}
+        <ul className="max-h-[340px] space-y-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {rows === null ? (
             <li className="py-3 text-center text-[13px] text-ink-muted">Loading…</li>
           ) : rows.length === 0 ? (
