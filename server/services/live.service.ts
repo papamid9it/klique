@@ -207,7 +207,8 @@ const offSince = new Map<string, number>();
  */
 async function checkTwitch(s: ILiveStream): Promise<ILiveStream | null> {
   const key = sid(s._id);
-  const every = s.status === "waiting" ? 8_000 : 60_000;
+  // just pressed Go live: ask Twitch every 3 seconds, so LIVE shows as soon as it's on (one small request each)
+  const every = s.status === "waiting" ? 3_000 : 60_000;
   if (Date.now() - (lastCheck.get(key) ?? 0) < every) return s;
   lastCheck.set(key, Date.now());
   if (lastCheck.size > 500) lastCheck.clear();
@@ -274,9 +275,6 @@ async function tellMembers(s: ILiveStream, community: ICommunity, host: Pick<IUs
 }
 
 export async function startLive(viewer: IUser, slug: string, input: { provider: "twitch" | "youtube"; link?: string; broadcastId?: string; title: string; eventId?: string | null }): Promise<LiveDTO> {
-  // Twitch was too slow (a long delay before people see you): going live is on YouTube now. Streams already on Twitch
-  // play on until they end.
-  if (input.provider === "twitch") throw badRequest("Going live on Twitch has stopped. Connect YouTube in Settings, Connections, and go live from there.");
   const { space, access } = await resolveSpaceFor(viewer, slug);
   if (space.sub) throw badRequest("Go live in the community, not a group.");
   const community = space.community;
